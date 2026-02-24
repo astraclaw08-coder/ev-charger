@@ -48,7 +48,8 @@
 - [x] `GET /sites/:id/analytics` — sessions count, kWh delivered, revenue, uptime % (last 30 days)
 - [x] `POST /chargers/:id/reset` — operator sends Reset command via OCPP
 - [x] Stripe: `POST /payments/setup-intent` — create SetupIntent for saving a card
-- [x] Stripe webhook: capture payment after session stops (kWh × rate)
+- [ ] Stripe webhook: capture payment after session stops (kWh × rate)
+  <!-- ⚠️ INCOMPLETE: triggerBillingHook() in packages/ocpp-server/src/handlers/stopTransaction.ts is a stub — only logs the amount, never creates a Stripe PaymentIntent. Webhook endpoint exists at POST /payments/webhook but never fires. Need to implement: look up session.payment.stripeCustomerId, create a PaymentIntent for (kwhDelivered × ratePerKwh) cents, then the webhook handles capture/failure. -->
 
 **Done when:** All endpoints tested with Bruno/Postman collection, Stripe test payment captured after a simulated session.
 
