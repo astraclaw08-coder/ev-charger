@@ -11,8 +11,8 @@
     "build:production": "eas build --profile production"
   },
   "dependencies": {
-    "@clerk/clerk-expo": "^1.5.0",
-    "@gorhom/bottom-sheet": "^4.7.1",
+    "@clerk/clerk-expo": "^1.2.9",
+    "@gorhom/bottom-sheet": "^4.6.4",
     "@rnmapbox/maps": "^10.1.30",
     "@stripe/stripe-react-native": "0.38.6",
     "@tanstack/react-query": "^5.62.0",
