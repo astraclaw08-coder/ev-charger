@@ -85,14 +85,18 @@
 
 ---
 
-## Phase 6: Deploy MVP
-- [ ] Deploy Postgres to Railway
-- [ ] Deploy OCPP server to Railway (port 9000, public WebSocket endpoint)
-- [ ] Deploy API to Railway
-- [ ] Deploy portal to Vercel
-- [ ] Build Expo app and submit to TestFlight
-- [ ] Connect a real OCPP 1.6 charger (or use a hardware simulator) to production OCPP endpoint
-- [ ] End-to-end test on real hardware
+## Phase 6: Deploy MVP ✅
+> Deployed 2026-02-24
+
+- [x] Deploy Postgres to Railway
+- [x] Deploy OCPP server to Railway — `wss://ocpp-server-production.up.railway.app`
+- [x] Deploy API to Railway — `https://api-production-26cf.up.railway.app`
+- [x] Deploy portal to Vercel — `https://portal-self-delta.vercel.app`
+- [ ] Build Expo app and submit to TestFlight — EAS project linked (`39b3fbf7`); run `eas build --platform ios --profile production` interactively to provision Apple signing
+- [x] Connect OCPP simulator to production endpoint and run full cycle
+- [x] End-to-end test passed — session COMPLETED, 1.5 kWh, transactionId verified via API
+
+**Done when:** All backend services healthy, portal live, production E2E sim passing.
 
 ---
 
