@@ -19,6 +19,15 @@ import { api, type Charger } from '@/lib/api';
 
 const MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN;
 
+// Detect whether @rnmapbox/maps native code is actually available (not in Expo Go)
+let mapboxAvailable = false;
+try {
+  const Mapbox = require('@rnmapbox/maps');
+  if (Mapbox?.MapView) mapboxAvailable = true;
+} catch (_) {
+  mapboxAvailable = false;
+}
+
 // ── Status → map pin color mapping ───────────────────────────────────────────
 
 function statusColor(charger: Charger): string {
@@ -41,7 +50,7 @@ function statusLabel(charger: Charger): string {
 
 function MapboxView({ chargers }: { chargers: Charger[] }) {
   const router = useRouter();
-  const Mapbox = require('@rnmapbox/maps');
+  const Mapbox = require('@rnmapbox/maps'); // safe — only called when mapboxAvailable is true
 
   const geojson: GeoJSON.FeatureCollection = {
     type: 'FeatureCollection',
@@ -184,14 +193,23 @@ export default function MapScreen() {
     );
   }
 
-  if (!MAPBOX_TOKEN) {
+  if (!MAPBOX_TOKEN || !mapboxAvailable) {
     return (
       <View style={styles.container}>
-        <View style={styles.noBanner}>
-          <Text style={styles.noBannerText}>
-            Set EXPO_PUBLIC_MAPBOX_TOKEN in .env to enable the map
-          </Text>
-        </View>
+        {MAPBOX_TOKEN && !mapboxAvailable && (
+          <View style={styles.noBanner}>
+            <Text style={styles.noBannerText}>
+              Map requires a development build — showing list view
+            </Text>
+          </View>
+        )}
+        {!MAPBOX_TOKEN && (
+          <View style={styles.noBanner}>
+            <Text style={styles.noBannerText}>
+              Set EXPO_PUBLIC_MAPBOX_TOKEN in .env to enable the map
+            </Text>
+          </View>
+        )}
         <ChargerListView
           chargers={chargers}
           onRefresh={refetch}

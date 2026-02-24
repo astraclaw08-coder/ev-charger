@@ -40,17 +40,9 @@
     "plugins": [
       "expo-router",
       [
-        "@rnmapbox/maps",
-        {
-          "RNMapboxMapsDownloadToken": "MAPBOX_DOWNLOAD_TOKEN_PLACEHOLDER"
-        }
-      ],
-      [
         "expo-build-properties",
         {
-          "ios": {
-            "useFrameworks": "static"
-          }
+          "ios": {}
         }
       ],
       [
