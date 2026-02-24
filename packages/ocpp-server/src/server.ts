@@ -1,3 +1,4 @@
+import http from 'http';
 import { createHash } from 'crypto';
 import { prisma } from '@ev-charger/shared';
 import { clientRegistry } from './clientRegistry';
@@ -13,7 +14,12 @@ import { handleMeterValues } from './handlers/meterValues';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { RPCServer } = require('ocpp-rpc');
 
-export async function startServer(port: number): Promise<any> {
+export interface OcppServerHandle {
+  rpcServer: any;
+  httpServer: http.Server;
+}
+
+export async function startServer(port: number): Promise<OcppServerHandle> {
   const server = new RPCServer({
     protocols: ['ocpp1.6'],
     strictMode: false,  // lenient for real-world charger quirks
@@ -74,10 +80,35 @@ export async function startServer(port: number): Promise<any> {
     client.handle('MeterValues', async ({ params }: any) =>
       handleMeterValues(client, chargerId, params));
 
-    // Catch-all for unhandled actions
-    client.handle(({ method }: any) => {
-      console.warn(`[Server] Unhandled action: ${method}`);
-      throw new Error(`NotImplemented: ${method}`);
+    // ── Stub handlers for common vendor messages ──────────────────────────────
+    // Real chargers often send these; return sensible defaults to avoid CALLERROR.
+
+    client.handle('GetConfiguration', async ({ params }: any) => {
+      const keys: string[] = params?.key ?? [];
+      console.log(`[GetConfiguration] chargerId=${chargerId} keys=${keys.join(',') || '*'}`);
+      return { configurationKey: [], unknownKey: keys };
+    });
+
+    client.handle('DataTransfer', async ({ params }: any) => {
+      console.log(`[DataTransfer] chargerId=${chargerId} vendorId=${params?.vendorId} messageId=${params?.messageId}`);
+      return { status: 'Accepted' };
+    });
+
+    client.handle('FirmwareStatusNotification', async ({ params }: any) => {
+      console.log(`[FirmwareStatusNotification] chargerId=${chargerId} status=${params?.status}`);
+      return {};
+    });
+
+    client.handle('DiagnosticsStatusNotification', async ({ params }: any) => {
+      console.log(`[DiagnosticsStatusNotification] chargerId=${chargerId} status=${params?.status}`);
+      return {};
+    });
+
+    // Catch-all: log and return empty object — never throw (would send CALLERROR
+    // which can cause real chargers to disconnect or log faults).
+    client.handle(({ method, params }: any) => {
+      console.warn(`[Server] Unhandled action: ${method}`, JSON.stringify(params));
+      return {};
     });
 
     // ── Disconnect ────────────────────────────────────────────────────────────
@@ -92,9 +123,19 @@ export async function startServer(port: number): Promise<any> {
     });
   });
 
-  await server.listen(port);
-  console.log(`[Server] OCPP 1.6J server listening on port ${port}`);
-  console.log(`[Server] Chargers connect to: ws://HOST:${port}/ENDPOINT/{chargerIdentity}`);
+  // Create our own http.Server so management REST routes can share the same
+  // port as the OCPP WebSocket server. This is required on Railway where only
+  // the single declared PORT is reachable on the private network.
+  const httpServer = http.createServer();
+  httpServer.on('upgrade', server.handleUpgrade);
 
-  return server;
+  const host = '::'; // IPv6 dual-stack — required for Railway private network
+  await new Promise<void>((resolve, reject) => {
+    httpServer.listen({ port, host }, (err?: Error) => err ? reject(err) : resolve());
+  });
+
+  console.log(`[Server] OCPP 1.6J server listening on port ${port} (${host})`);
+  console.log(`[Server] Chargers connect to: wss://HOST/${'{chargerIdentity}'}`);
+
+  return { rpcServer: server, httpServer };
 }

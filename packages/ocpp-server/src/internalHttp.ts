@@ -19,8 +19,16 @@ function sendJson(res: http.ServerResponse, status: number, body: unknown): void
   res.end(json);
 }
 
-export function startInternalHttpServer(port: number): http.Server {
-  const server = http.createServer(async (req, res) => {
+/**
+ * Attach internal management REST routes to an existing http.Server.
+ * Routes are mounted via prependListener so they run before any default handler.
+ *
+ * The OCPP WebSocket server and the management API share the same port —
+ * required on Railway where only the declared PORT is reachable on the
+ * private network.
+ */
+export function attachInternalRoutes(httpServer: http.Server): void {
+  httpServer.prependListener('request', async (req: http.IncomingMessage, res: http.ServerResponse) => {
     const url = req.url ?? '';
     const method = req.method ?? '';
 
@@ -28,50 +36,46 @@ export function startInternalHttpServer(port: number): http.Server {
       return sendJson(res, 200, { status: 'ok' });
     }
 
-    if (method !== 'POST') {
-      return sendJson(res, 405, { error: 'Method not allowed' });
+    if (url === '/remote-start' || url === '/remote-stop' || url === '/reset') {
+      if (method !== 'POST') {
+        return sendJson(res, 405, { error: 'Method not allowed' });
+      }
+
+      try {
+        const body = await parseBody(req);
+
+        if (url === '/remote-start') {
+          const { ocppId, connectorId, idTag } = body as {
+            ocppId: string; connectorId: number; idTag: string;
+          };
+          const status = await remoteStartTransaction(ocppId, connectorId, idTag);
+          return sendJson(res, 200, { status });
+        }
+
+        if (url === '/remote-stop') {
+          const { ocppId, transactionId } = body as {
+            ocppId: string; transactionId: number;
+          };
+          const status = await remoteStopTransaction(ocppId, transactionId);
+          return sendJson(res, 200, { status });
+        }
+
+        if (url === '/reset') {
+          const { ocppId, type } = body as {
+            ocppId: string; type?: 'Soft' | 'Hard';
+          };
+          const status = await remoteReset(ocppId, type ?? 'Soft');
+          return sendJson(res, 200, { status });
+        }
+      } catch (err: unknown) {
+        console.error('[InternalHTTP] Error:', err);
+        return sendJson(res, 500, { error: 'Internal server error' });
+      }
     }
 
-    try {
-      const body = await parseBody(req);
-
-      if (url === '/remote-start') {
-        const { ocppId, connectorId, idTag } = body as {
-          ocppId: string; connectorId: number; idTag: string;
-        };
-        const status = await remoteStartTransaction(ocppId, connectorId, idTag);
-        return sendJson(res, 200, { status });
-      }
-
-      if (url === '/remote-stop') {
-        const { ocppId, transactionId } = body as {
-          ocppId: string; transactionId: number;
-        };
-        const status = await remoteStopTransaction(ocppId, transactionId);
-        return sendJson(res, 200, { status });
-      }
-
-      if (url === '/reset') {
-        const { ocppId, type } = body as {
-          ocppId: string; type?: 'Soft' | 'Hard';
-        };
-        const status = await remoteReset(ocppId, type ?? 'Soft');
-        return sendJson(res, 200, { status });
-      }
-
-      return sendJson(res, 404, { error: 'Not found' });
-    } catch (err: unknown) {
-      console.error('[InternalHTTP] Error:', err);
-      return sendJson(res, 500, { error: 'Internal server error' });
-    }
+    // Not a management route — fall through (no response written here).
+    // The OCPP server returns 404 for non-WebSocket HTTP requests.
   });
 
-  // Default to '::' (IPv6 dual-stack) so Railway's private network (IPv6) can reach us.
-  // Falls back to '0.0.0.0' for environments that don't support IPv6.
-  const host = process.env.OCPP_INTERNAL_HOST ?? '::';
-  server.listen(port, host, () => {
-    console.log(`[InternalHTTP] Listening on http://${host}:${port}`);
-  });
-
-  return server;
+  console.log('[InternalHTTP] Management routes attached (/health, /remote-start, /remote-stop, /reset)');
 }
