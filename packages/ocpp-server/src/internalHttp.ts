@@ -66,7 +66,9 @@ export function startInternalHttpServer(port: number): http.Server {
     }
   });
 
-  const host = process.env.OCPP_INTERNAL_HOST ?? '127.0.0.1';
+  // Default to '::' (IPv6 dual-stack) so Railway's private network (IPv6) can reach us.
+  // Falls back to '0.0.0.0' for environments that don't support IPv6.
+  const host = process.env.OCPP_INTERNAL_HOST ?? '::';
   server.listen(port, host, () => {
     console.log(`[InternalHTTP] Listening on http://${host}:${port}`);
   });
