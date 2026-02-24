@@ -1,0 +1,165 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum ChargerStatus {
+  OFFLINE
+  ONLINE
+  FAULTED
+}
+
+enum ConnectorStatus {
+  AVAILABLE
+  PREPARING
+  CHARGING
+  SUSPENDED_EVSE
+  SUSPENDED_EV
+  FINISHING
+  RESERVED
+  UNAVAILABLE
+  FAULTED
+}
+
+enum SessionStatus {
+  ACTIVE
+  COMPLETED
+  FAILED
+}
+
+enum PaymentStatus {
+  PENDING
+  AUTHORIZED
+  CAPTURED
+  FAILED
+  REFUNDED
+}
+
+enum OcppDirection {
+  INBOUND
+  OUTBOUND
+}
+
+// ─── Models ───────────────────────────────────────────────────────────────────
+
+model Site {
+  id         String    @id @default(uuid())
+  name       String
+  address    String
+  lat        Float
+  lng        Float
+  operatorId String
+  chargers   Charger[]
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([operatorId])
+}
+
+model Charger {
+  id            String        @id @default(uuid())
+  siteId        String
+  site          Site          @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  ocppId        String        @unique  // used in OCPP WebSocket path: /ocpp/{ocppId}
+  serialNumber  String        @unique
+  model         String
+  vendor        String
+  password      String        // OCPP basic auth password (hashed)
+  status        ChargerStatus @default(OFFLINE)
+  lastHeartbeat DateTime?
+  connectors    Connector[]
+  ocppLogs      OcppLog[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([siteId])
+  @@index([status])
+}
+
+model Connector {
+  id          String          @id @default(uuid())
+  chargerId   String
+  charger     Charger         @relation(fields: [chargerId], references: [id], onDelete: Cascade)
+  connectorId Int             // OCPP connector number (1-indexed per charger)
+  status      ConnectorStatus @default(UNAVAILABLE)
+  sessions    Session[]
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@unique([chargerId, connectorId])
+  @@index([status])
+}
+
+model Session {
+  id            String        @id @default(uuid())
+  connectorId   String
+  connector     Connector     @relation(fields: [connectorId], references: [id])
+  userId        String
+  user          User          @relation(fields: [userId], references: [id])
+  transactionId Int?          @unique  // OCPP transactionId assigned by server
+  idTag         String        // OCPP idTag used to start session
+  startedAt     DateTime      @default(now())
+  stoppedAt     DateTime?
+  meterStart    Float?        // Wh at session start
+  meterStop     Float?        // Wh at session end
+  kwhDelivered  Float?        // computed: (meterStop - meterStart) / 1000
+  ratePerKwh    Float?        // price locked at session start (USD)
+  status        SessionStatus @default(ACTIVE)
+  payment       Payment?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([userId])
+  @@index([connectorId])
+  @@index([status])
+}
+
+model User {
+  id        String    @id @default(uuid())
+  clerkId   String    @unique
+  email     String    @unique
+  name      String?
+  idTag     String    @unique  // OCPP idTag for this driver (max 20 chars)
+  sessions  Session[]
+  payments  Payment[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model Payment {
+  id               String        @id @default(uuid())
+  sessionId        String        @unique
+  session          Session       @relation(fields: [sessionId], references: [id])
+  userId           String
+  user             User          @relation(fields: [userId], references: [id])
+  stripeIntentId   String?
+  stripeCustomerId String?
+  amountCents      Int?          // in USD cents
+  status           PaymentStatus @default(PENDING)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  @@index([userId])
+  @@index([status])
+}
+
+model OcppLog {
+  id          String        @id @default(uuid())
+  chargerId   String
+  charger     Charger       @relation(fields: [chargerId], references: [id], onDelete: Cascade)
+  direction   OcppDirection
+  messageType Int           // 2=CALL, 3=CALLRESULT, 4=CALLERROR
+  messageId   String
+  action      String?       // e.g., "BootNotification" (null for CALLRESULT/CALLERROR)
+  payload     Json
+  createdAt   DateTime      @default(now())
+
+  @@index([chargerId])
+  @@index([createdAt])
+}

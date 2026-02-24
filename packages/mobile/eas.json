@@ -1,0 +1,16 @@
+{
+  "cli": { "version": ">= 18.0.0" },
+  "build": {
+    "preview": { "distribution": "internal", "ios": { "simulator": false } },
+    "production": { "ios": { "resourceClass": "m-medium" } }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "appleId": "astraclaw08@gmail.com",
+        "ascAppId": "PLACEHOLDER",
+        "appleTeamId": "PLACEHOLDER"
+      }
+    }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "ev-charger",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:ocpp\" \"npm run dev:api\" \"npm run dev:portal\"",
+    "dev:ocpp": "npm run dev --workspace=packages/ocpp-server",
+    "dev:api": "npm run dev --workspace=packages/api",
+    "dev:portal": "npm run dev --workspace=packages/portal",
+    "dev:mobile": "npm run dev --workspace=packages/mobile",
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "test:ocpp-sim": "npm run build --workspace=packages/shared && npm run test:ocpp-sim --workspace=packages/ocpp-server",
+    "test:e2e": "npm run test:e2e --workspace=packages/api"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "concurrently": "^9.0.0",
+    "typescript": "^5.6.0"
+  }
+}

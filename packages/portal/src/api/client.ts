@@ -1,0 +1,176 @@
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+export interface SiteListItem {
+  id: string;
+  name: string;
+  address: string;
+  lat: number;
+  lng: number;
+  createdAt: string;
+  chargerCount: number;
+  statusSummary: { online: number; offline: number; faulted: number };
+}
+
+export interface ConnectorInfo {
+  id: string;
+  connectorId: number;
+  status: string;
+  chargerId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ChargerInfo {
+  id: string;
+  ocppId: string;
+  serialNumber: string;
+  model: string;
+  vendor: string;
+  status: 'ONLINE' | 'OFFLINE' | 'FAULTED';
+  lastHeartbeat: string | null;
+  siteId: string;
+  connectors: ConnectorInfo[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SiteDetail {
+  id: string;
+  name: string;
+  address: string;
+  lat: number;
+  lng: number;
+  createdAt: string;
+  chargers: ChargerInfo[];
+}
+
+export interface DailyEntry {
+  date: string;
+  sessions: number;
+  kwhDelivered: number;
+  revenueCents: number;
+}
+
+export interface Analytics {
+  siteId: string;
+  siteName: string;
+  periodDays: number;
+  sessionsCount: number;
+  kwhDelivered: number;
+  revenueCents: number;
+  revenueUsd: number;
+  uptimePct: number;
+  daily: DailyEntry[];
+}
+
+export interface ActiveSession {
+  id: string;
+  idTag: string;
+  startedAt: string;
+  user?: { id: string; name: string | null; email: string };
+}
+
+export interface ConnectorStatus {
+  connectorId: number;
+  status: string;
+  activeSession: ActiveSession | null;
+}
+
+export interface ChargerStatus {
+  id: string;
+  ocppId: string;
+  status: string;
+  lastHeartbeat: string | null;
+  connectors: ConnectorStatus[];
+}
+
+export interface SessionRecord {
+  id: string;
+  startedAt: string;
+  stoppedAt: string | null;
+  status: string;
+  kwhDelivered: number | null;
+  ratePerKwh: number | null;
+  idTag: string;
+  connector: { connectorId: number };
+  user: { name: string | null; email: string } | null;
+  payment: { status: string; amountCents: number | null } | null;
+}
+
+export interface CreatedCharger {
+  id: string;
+  ocppId: string;
+  serialNumber: string;
+  ocppEndpoint: string;
+  password: string;
+}
+
+// ─── Client ──────────────────────────────────────────────────────────────────
+
+const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
+const DEV_OPERATOR_ID = import.meta.env.VITE_DEV_OPERATOR_ID ?? 'operator-001';
+const IS_DEV_MODE = !import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
+
+async function request<T>(
+  path: string,
+  token: string | null | undefined,
+  options?: RequestInit,
+): Promise<T> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+
+  if (IS_DEV_MODE) {
+    headers['x-dev-operator-id'] = DEV_OPERATOR_ID;
+  } else if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  const res = await fetch(`${API_URL}${path}`, {
+    ...options,
+    headers: { ...headers, ...(options?.headers as Record<string, string> ?? {}) },
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error((err as { error?: string }).error ?? `HTTP ${res.status}`);
+  }
+
+  return res.json() as Promise<T>;
+}
+
+export function createApiClient(token: string | null | undefined) {
+  return {
+    getSites: () => request<SiteListItem[]>('/sites', token),
+    getSite: (id: string) => request<SiteDetail>(`/sites/${id}`, token),
+    getAnalytics: (siteId: string) => request<Analytics>(`/sites/${siteId}/analytics`, token),
+
+    getChargerStatus: (id: string) => request<ChargerStatus>(`/chargers/${id}/status`, token),
+    getChargerSessions: (id: string) =>
+      request<SessionRecord[]>(`/chargers/${id}/sessions`, token),
+
+    createSite: (body: { name: string; address: string; lat: number; lng: number }) =>
+      request<{ id: string; name: string }>('/sites', token, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+
+    createCharger: (body: {
+      siteId: string;
+      ocppId: string;
+      serialNumber: string;
+      model: string;
+      vendor: string;
+    }) =>
+      request<CreatedCharger>('/chargers', token, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+
+    resetCharger: (id: string, type: 'Soft' | 'Hard' = 'Soft') =>
+      request<{ status: string }>(`/chargers/${id}/reset`, token, {
+        method: 'POST',
+        body: JSON.stringify({ type }),
+      }),
+  };
+}

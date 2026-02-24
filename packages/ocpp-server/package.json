@@ -1,0 +1,22 @@
+{
+  "name": "@ev-charger/ocpp-server",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "dev": "ts-node-dev --respawn src/index.ts",
+    "start": "node dist/index.js",
+    "test:ocpp-sim": "ts-node src/scripts/simulator.ts"
+  },
+  "dependencies": {
+    "@ev-charger/shared": "*",
+    "dotenv": "^16.4.0",
+    "ocpp-rpc": "^2.2.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "ts-node": "^10.9.0",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.6.0"
+  }
+}

@@ -3,5 +3,5 @@ dist/
 .env
 .env.local
 *.log
+.claude/
 .DS_Store
-prisma/migrations/dev.db
