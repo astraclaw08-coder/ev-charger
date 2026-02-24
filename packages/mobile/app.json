@@ -17,7 +17,8 @@
       "bundleIdentifier": "dev.evcharger.app",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "We use your location to show nearby chargers.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "We use your location to show nearby chargers."
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "We use your location to show nearby chargers.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -25,7 +26,11 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "dev.evcharger.app"
+      "package": "dev.evcharger.app",
+      "permissions": [
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -60,8 +65,9 @@
     },
     "extra": {
       "eas": {
-        "projectId": "ev-charger-app"
+        "projectId": "39b3fbf7-b459-4a59-99ad-1c224595c1a6"
       }
-    }
+    },
+    "owner": "astraclaw08"
   }
 }
