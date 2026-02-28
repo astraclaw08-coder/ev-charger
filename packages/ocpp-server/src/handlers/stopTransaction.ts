@@ -25,14 +25,18 @@ export async function handleStopTransaction(
     return {};
   }
 
+  // Some chargers report a stale/rounded StopTransaction.meterStop while
+  // MeterValues already carried higher precision. Preserve the highest reading.
+  const finalMeterStop = Math.max(meterStop, session.meterStop ?? meterStop);
+
   const kwhDelivered = session.meterStart != null
-    ? (meterStop - session.meterStart) / 1000
+    ? Math.max(0, (finalMeterStop - session.meterStart) / 1000)
     : 0;
 
   await prisma.session.update({
     where: { id: session.id },
     data: {
-      meterStop,
+      meterStop: finalMeterStop,
       stoppedAt: new Date(timestamp),
       kwhDelivered,
       status: 'COMPLETED',
