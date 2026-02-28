@@ -132,7 +132,22 @@ export default function MapScreen() {
     if (!q || filteredChargers.length === 0 || !mapRef.current) return;
 
     const coords = filteredChargers.map((c) => ({ latitude: c.site.lat, longitude: c.site.lng }));
-    mapRef.current.fitToCoordinates(coords, {
+    const unique = Array.from(new Map(coords.map((c) => [`${c.latitude.toFixed(6)},${c.longitude.toFixed(6)}`, c])).values());
+
+    if (unique.length === 1) {
+      mapRef.current.animateToRegion(
+        {
+          latitude: unique[0].latitude,
+          longitude: unique[0].longitude,
+          latitudeDelta: 0.03,
+          longitudeDelta: 0.03,
+        },
+        350,
+      );
+      return;
+    }
+
+    mapRef.current.fitToCoordinates(unique, {
       edgePadding: { top: 70, right: 70, bottom: 120, left: 70 },
       animated: true,
     });
