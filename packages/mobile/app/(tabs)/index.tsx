@@ -176,15 +176,7 @@ export default function MapScreen() {
   function applySearch(ch: Charger) {
     setSearch(ch.site.name);
     setCommittedSearch(ch.site.name);
-    mapRef.current?.animateToRegion(
-      {
-        latitude: ch.site.lat,
-        longitude: ch.site.lng,
-        latitudeDelta: 0.03,
-        longitudeDelta: 0.03,
-      },
-      300,
-    );
+    router.push(`/charger/${ch.id}`);
   }
 
   if (isLoading) {
