@@ -57,6 +57,7 @@ export default function MapScreen() {
   const [userLocation, setUserLocation] = useState<Coord | null>(null);
   const [search, setSearch] = useState('');
   const [committedSearch, setCommittedSearch] = useState('');
+  const [mapZoom, setMapZoom] = useState(12);
 
   const { data: chargers = [], isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['chargers'],
@@ -83,6 +84,15 @@ export default function MapScreen() {
     return chargers.filter((c) =>
       c.site.name.toLowerCase().includes(q) || c.site.address.toLowerCase().includes(q),
     );
+  }, [chargers, search]);
+
+
+  const suggestions = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return [] as Charger[];
+    return chargers
+      .filter((c) => c.site.name.toLowerCase().includes(q) || c.site.address.toLowerCase().includes(q))
+      .slice(0, 5);
   }, [chargers, search]);
 
   const initialCenter = useMemo(() => {
@@ -153,6 +163,30 @@ export default function MapScreen() {
     });
   }, [committedSearch, filteredChargers]);
 
+
+  function zoomBy(delta: number) {
+    if (!mapRef.current) return;
+    const next = Math.max(3, Math.min(20, mapZoom + delta));
+    setMapZoom(next);
+    mapRef.current.getCamera().then((camera) => {
+      mapRef.current?.animateCamera({ ...camera, zoom: next }, { duration: 250 });
+    }).catch(() => {});
+  }
+
+  function applySearch(ch: Charger) {
+    setSearch(ch.site.name);
+    setCommittedSearch(ch.site.name);
+    mapRef.current?.animateToRegion(
+      {
+        latitude: ch.site.lat,
+        longitude: ch.site.lng,
+        latitudeDelta: 0.03,
+        longitudeDelta: 0.03,
+      },
+      300,
+    );
+  }
+
   if (isLoading) {
     return (
       <View style={styles.centered}>
@@ -180,6 +214,11 @@ export default function MapScreen() {
           scrollEnabled
           rotateEnabled
           pitchEnabled
+          userInterfaceStyle={isDark ? 'dark' : 'light'}
+          onRegionChangeComplete={(r) => {
+            const approxZoom = Math.log2(360 / Math.max(r.longitudeDelta, 0.0001));
+            if (Number.isFinite(approxZoom)) setMapZoom(Math.max(3, Math.min(20, approxZoom)));
+          }}
         >
           {filteredChargers.map((c) => (
             <Marker
@@ -193,20 +232,35 @@ export default function MapScreen() {
           ))}
         </MapView>
 
-        <TouchableOpacity style={styles.locateBtn} onPress={recenterToUser}>
-          <Text style={styles.locateText}>◎</Text>
-        </TouchableOpacity>
+        <View pointerEvents="box-none" style={styles.mapControls}>
+          <TouchableOpacity style={styles.locateBtn} onPress={recenterToUser}>
+            <Text style={styles.locateText}>◎</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.zoomBtn} onPress={() => zoomBy(1)}><Text style={styles.zoomText}>＋</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.zoomBtn} onPress={() => zoomBy(-1)}><Text style={styles.zoomText}>－</Text></TouchableOpacity>
+        </View>
 
-        <View style={[styles.searchWrap, { backgroundColor: isDark ? '#111827cc' : '#ffffffe6' }]}>
+        <View style={[styles.searchWrap, { backgroundColor: isDark ? '#111827cc' : '#ffffffe6' }]} pointerEvents="box-none">
           <TextInput
             value={search}
             onChangeText={setSearch}
             onSubmitEditing={() => setCommittedSearch(search.trim())}
-            placeholder="Search site or address, then press return"
+            placeholder="Search site or address"
             placeholderTextColor={isDark ? '#9ca3af' : '#6b7280'}
             style={[styles.searchInput, { color: isDark ? '#f9fafb' : '#111827' }]}
           />
         </View>
+
+        {suggestions.length > 0 && (
+          <View style={[styles.suggestWrap, { backgroundColor: isDark ? '#111827ee' : '#fffffff0' }]}>
+            {suggestions.map((sug) => (
+              <TouchableOpacity key={sug.id} style={styles.suggestRow} onPress={() => applySearch(sug)}>
+                <Text style={[styles.suggestName, { color: isDark ? '#f9fafb' : '#111827' }]} numberOfLines={1}>{sug.site.name}</Text>
+                <Text style={[styles.suggestAddr, { color: isDark ? '#9ca3af' : '#6b7280' }]} numberOfLines={1}>{sug.site.address}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
       </View>
 
       {/* 1/4 screen nearest list */}
@@ -248,18 +302,11 @@ const styles = StyleSheet.create({
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   mapSection: { flex: 3, position: 'relative' },
   map: { flex: 1 },
-  locateBtn: {
-    position: 'absolute',
-    right: 12,
-    top: 12,
-    width: 40,
-    height: 40,
-    backgroundColor: '#111827cc',
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  mapControls: { position: 'absolute', right: 12, top: 12, gap: 8 },
+  locateBtn: { width: 40, height: 40, backgroundColor: '#111827cc', borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
   locateText: { color: '#fff', fontWeight: '800', fontSize: 18 },
+  zoomBtn: { width: 40, height: 40, backgroundColor: '#111827cc', borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  zoomText: { color: '#fff', fontSize: 22, fontWeight: '700', lineHeight: 22 },
   searchWrap: {
     position: 'absolute',
     left: 12,
@@ -272,6 +319,10 @@ const styles = StyleSheet.create({
     borderColor: '#ffffff33',
   },
   searchInput: { fontSize: 14, fontWeight: '600' },
+  suggestWrap: { position: 'absolute', left: 12, right: 12, bottom: 64, borderRadius: 12, borderWidth: 1, borderColor: '#ffffff22', overflow: 'hidden' },
+  suggestRow: { paddingHorizontal: 10, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#ffffff1f' },
+  suggestName: { fontSize: 13, fontWeight: '700' },
+  suggestAddr: { fontSize: 11, marginTop: 2 },
   bottomSheet: { flex: 1, paddingHorizontal: 12, paddingTop: 10 },
   sectionTitle: { fontSize: 17, fontWeight: '800' },
   sectionSubtitle: { fontSize: 12, marginTop: 2, marginBottom: 8 },
