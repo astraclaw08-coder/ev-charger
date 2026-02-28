@@ -31,7 +31,7 @@ export default function SignInScreen() {
           </Text>
           <TouchableOpacity
             style={styles.button}
-            onPress={() => router.replace('/(tabs)/')}
+            onPress={() => router.replace('/(tabs)/index' as any)}
           >
             <Text style={styles.buttonText}>Continue to App</Text>
           </TouchableOpacity>
@@ -120,7 +120,7 @@ export function ClerkSignInForm() {
       const result = await signIn.create({ identifier: email, password });
       if (result.status === 'complete') {
         await setActive({ session: result.createdSessionId });
-        router.replace('/(tabs)/');
+        router.replace('/(tabs)/index' as any);
       }
     } catch (err: unknown) {
       Alert.alert('Sign In Failed', (err as Error).message);

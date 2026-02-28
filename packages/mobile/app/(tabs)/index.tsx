@@ -2,7 +2,7 @@
  * Map screen — shows charger pins color-coded by status.
  * Shows interactive charger map + list view.
  */
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -11,7 +11,7 @@ import {
   FlatList,
   TouchableOpacity,
   RefreshControl,
-  Dimensions,
+  useColorScheme,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
@@ -85,10 +85,12 @@ function ChargerListView({
   chargers,
   onRefresh,
   refreshing,
+  isDark,
 }: {
   chargers: Charger[];
   onRefresh: () => void;
   refreshing: boolean;
+  isDark: boolean;
 }) {
   const router = useRouter();
 
@@ -107,14 +109,14 @@ function ChargerListView({
         const available = item.connectors.filter((c) => c.status === 'AVAILABLE').length;
         return (
           <TouchableOpacity
-            style={styles.chargerCard}
+            style={[styles.chargerCard, { backgroundColor: isDark ? '#111827' : '#fff' }]}
             onPress={() => router.push(`/charger/${item.id}`)}
           >
             <View style={[styles.statusDot, { backgroundColor: color }]} />
             <View style={styles.chargerInfo}>
-              <Text style={styles.chargerName}>{item.site.name}</Text>
-              <Text style={styles.chargerAddress}>{item.site.address}</Text>
-              <Text style={styles.chargerMeta}>
+              <Text style={[styles.chargerName, { color: isDark ? '#f9fafb' : '#111827' }]}>{item.site.name}</Text>
+              <Text style={[styles.chargerAddress, { color: isDark ? '#9ca3af' : '#6b7280' }]}>{item.site.address}</Text>
+              <Text style={[styles.chargerMeta, { color: isDark ? '#6b7280' : '#9ca3af' }]}>
                 {item.vendor} {item.model} · {available}/{item.connectors.length} available
               </Text>
             </View>
@@ -132,6 +134,7 @@ function ChargerListView({
 
 export default function MapScreen() {
   const [hasLocation, setHasLocation] = useState(false);
+  const isDark = useColorScheme() === 'dark';
 
   const { data: chargers = [], isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['chargers'],
@@ -154,7 +157,7 @@ export default function MapScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: isDark ? '#030712' : '#f9fafb' }]}>
       <View style={styles.interactiveMapWrap}>
         <InteractiveMapView chargers={chargers} hasLocation={hasLocation} />
       </View>
@@ -162,6 +165,7 @@ export default function MapScreen() {
         chargers={chargers}
         onRefresh={refetch}
         refreshing={isRefetching}
+        isDark={isDark}
       />
     </View>
   );

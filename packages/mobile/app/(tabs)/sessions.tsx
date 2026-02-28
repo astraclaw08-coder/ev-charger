@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
+  useColorScheme,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
@@ -38,7 +39,7 @@ function formatKwh(value: number): string {
   return value.toFixed(4).replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1');
 }
 
-function SessionCard({ session, onPress }: { session: Session; onPress: () => void }) {
+function SessionCard({ session, onPress, isDark }: { session: Session; onPress: () => void; isDark: boolean }) {
   const isActive = session.status === 'ACTIVE';
   const charger = session.connector.charger;
   const kwh = session.kwhDelivered ?? 0;
@@ -50,10 +51,10 @@ function SessionCard({ session, onPress }: { session: Session; onPress: () => vo
         : null;
 
   return (
-    <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.7}>
+    <TouchableOpacity style={[styles.card, { backgroundColor: isDark ? '#111827' : '#fff' }]} onPress={onPress} activeOpacity={0.7}>
       {/* Header row */}
       <View style={styles.cardHeader}>
-        <Text style={styles.siteName}>{charger.site.name}</Text>
+        <Text style={[styles.siteName, { color: isDark ? '#f9fafb' : '#111827' }]}>{charger.site.name}</Text>
         {isActive && (
           <View style={styles.activeBadge}>
             <Text style={styles.activeBadgeText}>Live</Text>
@@ -62,7 +63,7 @@ function SessionCard({ session, onPress }: { session: Session; onPress: () => vo
       </View>
 
       {/* Address */}
-      <Text style={styles.address}>{charger.site.address}</Text>
+      <Text style={[styles.address, { color: isDark ? '#9ca3af' : '#6b7280' }]}>{charger.site.address}</Text>
 
       {/* Stats row */}
       <View style={styles.statsRow}>
@@ -105,8 +106,9 @@ function StatItem({
 
 export default function SessionsScreen() {
   const router = useRouter();
+  const isDark = useColorScheme() === 'dark';
 
-  const { data, isLoading, refetch, isRefetching, fetchNextPage, hasNextPage } = useQuery({
+  const { data, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['sessions'],
     queryFn: () => api.sessions.list(20, 0),
     refetchInterval: 15_000,
@@ -114,7 +116,7 @@ export default function SessionsScreen() {
 
   if (isLoading) {
     return (
-      <View style={styles.centered}>
+      <View style={[styles.centered, { backgroundColor: isDark ? '#030712' : '#f9fafb' }]}>
         <ActivityIndicator size="large" color="#10b981" />
       </View>
     );
@@ -123,14 +125,14 @@ export default function SessionsScreen() {
   const sessions = data?.sessions ?? [];
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: isDark ? '#030712' : '#f9fafb' }]}>
       <FlatList
         data={sessions}
         keyExtractor={(s) => s.id}
         contentContainerStyle={styles.listContent}
         refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}
         ListHeaderComponent={
-          <Text style={styles.heading}>
+          <Text style={[styles.heading, { color: isDark ? '#f9fafb' : '#111827' }]}>
             {sessions.length} session{sessions.length !== 1 ? 's' : ''}
           </Text>
         }
@@ -139,13 +141,14 @@ export default function SessionsScreen() {
             <Text style={styles.emptyIcon}>⚡</Text>
             <Text style={styles.emptyTitle}>No sessions yet</Text>
             <Text style={styles.emptySubtitle}>
-              Find a charger on the Map tab to get started.
+              Find a charger on the Find Charger tab to get started.
             </Text>
           </View>
         }
         renderItem={({ item }) => (
           <SessionCard
             session={item}
+            isDark={isDark}
             onPress={() =>
               item.status === 'ACTIVE'
                 ? router.push(`/session/${item.id}`)

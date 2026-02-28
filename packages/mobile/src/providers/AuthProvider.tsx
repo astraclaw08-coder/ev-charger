@@ -52,7 +52,7 @@ function ClerkAuthGuard({ children }: { children: React.ReactNode }) {
     if (!auth.isSignedIn && !inAuth) {
       router.replace('/(auth)/sign-in');
     } else if (auth.isSignedIn && inAuth) {
-      router.replace('/(tabs)/');
+      router.replace('/(tabs)/index' as any);
     }
   }, [auth.isSignedIn, segments]);
 

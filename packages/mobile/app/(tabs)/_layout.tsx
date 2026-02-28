@@ -1,18 +1,24 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
+import { useColorScheme } from 'react-native';
 
 export default function TabsLayout() {
+  const scheme = useColorScheme();
+  const isDark = scheme === 'dark';
+
   return (
     <Tabs
       screenOptions={{
         tabBarActiveTintColor: '#10b981',
-        tabBarInactiveTintColor: '#9ca3af',
+        tabBarInactiveTintColor: isDark ? '#9ca3af' : '#6b7280',
         tabBarStyle: {
-          borderTopColor: '#e5e7eb',
+          borderTopColor: isDark ? '#1f2937' : '#e5e7eb',
+          backgroundColor: isDark ? '#0b1220' : '#ffffff',
           paddingBottom: 4,
         },
-        headerStyle: { backgroundColor: '#fff' },
-        headerTintColor: '#111827',
+        sceneStyle: { backgroundColor: isDark ? '#030712' : '#f9fafb' },
+        headerStyle: { backgroundColor: isDark ? '#0b1220' : '#fff' },
+        headerTintColor: isDark ? '#f9fafb' : '#111827',
         headerShadowVisible: false,
       }}
     >
@@ -20,11 +26,8 @@ export default function TabsLayout() {
         name="index"
         options={{
           title: 'Find Chargers',
-          tabBarLabel: 'Map',
-          tabBarIcon: ({ color, size }) => (
-            // Simple map icon using Text (no icon library dependency)
-            <TabIcon icon="🗺️" size={size} />
-          ),
+          tabBarLabel: 'Find Charger',
+          tabBarIcon: ({ size }) => <TabIcon icon="🗺️" size={size} />,
         }}
       />
       <Tabs.Screen
@@ -32,9 +35,15 @@ export default function TabsLayout() {
         options={{
           title: 'Session History',
           tabBarLabel: 'History',
-          tabBarIcon: ({ color, size }) => (
-            <TabIcon icon="📋" size={size} />
-          ),
+          tabBarIcon: ({ size }) => <TabIcon icon="📋" size={size} />,
+        }}
+      />
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: 'Profile',
+          tabBarLabel: 'Profile',
+          tabBarIcon: ({ size }) => <TabIcon icon="👤" size={size} />,
         }}
       />
     </Tabs>
