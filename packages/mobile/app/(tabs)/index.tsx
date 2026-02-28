@@ -1,6 +1,6 @@
 /**
  * Map screen — shows charger pins color-coded by status.
- * Uses Mapbox when EXPO_PUBLIC_MAPBOX_TOKEN is set, falls back to a list view.
+ * Shows interactive charger map + list view.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -17,20 +17,8 @@ import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import * as Location from 'expo-location';
 import { api, type Charger } from '@/lib/api';
+import MapView, { Marker } from 'react-native-maps';
 
-const MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN;
-
-// Detect whether @rnmapbox/maps native code is actually available (not in Expo Go)
-const getMapbox = () => {
-  try {
-    const req = (0, eval)('require');
-    return req('@rnmapbox/maps');
-  } catch {
-    return null;
-  }
-};
-
-const mapboxAvailable = !!getMapbox()?.MapView;
 
 // ── Status → map pin color mapping ───────────────────────────────────────────
 
@@ -50,125 +38,48 @@ function statusLabel(charger: Charger): string {
   return 'Offline';
 }
 
-// ── Mapbox map view (when token present) ─────────────────────────────────────
+// ── Interactive native map view ────────────────────────────────────────────────
 
-function MapboxView({ chargers }: { chargers: Charger[] }) {
+function InteractiveMapView({ chargers, hasLocation }: { chargers: Charger[]; hasLocation: boolean }) {
   const router = useRouter();
-  const Mapbox = getMapbox(); // safe — only called when mapboxAvailable is true
-  if (!Mapbox) return null;
-
-  const geojson: GeoJSON.FeatureCollection = {
-    type: 'FeatureCollection',
-    features: chargers.map((c) => ({
-      type: 'Feature',
-      id: c.id,
-      geometry: {
-        type: 'Point',
-        coordinates: [c.site.lng, c.site.lat],
-      },
-      properties: {
-        id: c.id,
-        name: c.site.name,
-        address: c.site.address,
-        color: statusColor(c),
-        label: statusLabel(c),
-      },
-    })),
-  };
-
-  return (
-    <Mapbox.MapView style={styles.map} styleURL={Mapbox.StyleURL.Street}>
-      <Mapbox.Camera
-        zoomLevel={11}
-        centerCoordinate={
-          chargers.length > 0
-            ? [chargers[0].site.lng, chargers[0].site.lat]
-            : [-118.3526, 33.9164]
-        }
-        animationMode="none"
-      />
-
-      <Mapbox.ShapeSource
-        id="chargers"
-        shape={geojson}
-        onPress={(e: { features: Array<{ properties: { id: string } }> }) => {
-          const feature = e.features[0];
-          if (feature?.properties?.id) {
-            router.push(`/charger/${feature.properties.id}`);
-          }
-        }}
-      >
-        <Mapbox.CircleLayer
-          id="charger-circles"
-          style={{
-            circleRadius: 14,
-            circleColor: ['get', 'color'],
-            circleStrokeWidth: 2,
-            circleStrokeColor: '#fff',
-          }}
-        />
-        <Mapbox.SymbolLayer
-          id="charger-labels"
-          style={{
-            textField: ['get', 'label'],
-            textSize: 10,
-            textOffset: [0, 2],
-            textAnchor: 'top',
-            textColor: '#111827',
-            textHaloColor: '#fff',
-            textHaloWidth: 1,
-          }}
-        />
-      </Mapbox.ShapeSource>
-    </Mapbox.MapView>
-  );
-}
-
-
-
-function MapPreviewFallback({ chargers }: { chargers: Charger[] }) {
-  const router = useRouter();
-  const width = Dimensions.get('window').width - 24;
-  const height = 230;
-
-  if (chargers.length === 0) {
-    return (
-      <View style={[styles.fallbackMap, { height }]}>
-        <Text style={styles.fallbackEmpty}>No charger locations to display.</Text>
-      </View>
-    );
-  }
 
   const lats = chargers.map((c) => c.site.lat);
   const lngs = chargers.map((c) => c.site.lng);
-  const minLat = Math.min(...lats);
-  const maxLat = Math.max(...lats);
-  const minLng = Math.min(...lngs);
-  const maxLng = Math.max(...lngs);
+  const minLat = lats.length ? Math.min(...lats) : 33.9164;
+  const maxLat = lats.length ? Math.max(...lats) : 33.9164;
+  const minLng = lngs.length ? Math.min(...lngs) : -118.3526;
+  const maxLng = lngs.length ? Math.max(...lngs) : -118.3526;
 
-  const latSpan = Math.max(maxLat - minLat, 0.01);
-  const lngSpan = Math.max(maxLng - minLng, 0.01);
+  const centerLat = (minLat + maxLat) / 2;
+  const centerLng = (minLng + maxLng) / 2;
 
   return (
-    <View style={[styles.fallbackMap, { width, height }]}>
-      <Text style={styles.fallbackMapTitle}>Site Map (fallback)</Text>
-      {chargers.map((c) => {
-        const x = ((c.site.lng - minLng) / lngSpan) * (width - 36) + 18;
-        const y = (1 - (c.site.lat - minLat) / latSpan) * (height - 56) + 32;
-        const color = statusColor(c);
-        return (
-          <TouchableOpacity
-            key={c.id}
-            style={[styles.fallbackPin, { left: x - 8, top: y - 8, backgroundColor: color }]}
-            onPress={() => router.push(`/charger/${c.id}`)}
-          />
-        );
-      })}
-    </View>
+    <MapView
+      style={styles.map}
+      initialRegion={{
+        latitude: centerLat,
+        longitude: centerLng,
+        latitudeDelta: Math.max(0.05, (maxLat - minLat) * 1.8),
+        longitudeDelta: Math.max(0.05, (maxLng - minLng) * 1.8),
+      }}
+      showsUserLocation={hasLocation}
+      showsMyLocationButton
+    >
+      {chargers.map((c) => (
+        <Marker
+          key={c.id}
+          coordinate={{ latitude: c.site.lat, longitude: c.site.lng }}
+          title={c.site.name}
+          description={`${c.vendor} ${c.model} · ${statusLabel(c)}`}
+          pinColor={statusColor(c)}
+          onCalloutPress={() => router.push(`/charger/${c.id}`)}
+        />
+      ))}
+    </MapView>
   );
 }
 
-// ── Fallback list view (when no Mapbox token) ─────────────────────────────────
+// ── Charger list view ─────────────────────────────────
 
 function ChargerListView({
   chargers,
@@ -242,38 +153,16 @@ export default function MapScreen() {
     );
   }
 
-  if (!MAPBOX_TOKEN || !mapboxAvailable) {
-    return (
-      <View style={styles.container}>
-        {MAPBOX_TOKEN && !mapboxAvailable && (
-          <View style={styles.noBanner}>
-            <Text style={styles.noBannerText}>
-              Map requires a development build — showing list view
-            </Text>
-          </View>
-        )}
-        {!MAPBOX_TOKEN && (
-          <View style={styles.noBanner}>
-            <Text style={styles.noBannerText}>
-              Set EXPO_PUBLIC_MAPBOX_TOKEN in .env to enable the map
-            </Text>
-          </View>
-        )}
-        <View style={styles.fallbackMapWrap}>
-          <MapPreviewFallback chargers={chargers} />
-        </View>
-        <ChargerListView
-          chargers={chargers}
-          onRefresh={refetch}
-          refreshing={isRefetching}
-        />
-      </View>
-    );
-  }
-
   return (
     <View style={styles.container}>
-      <MapboxView chargers={chargers} />
+      <View style={styles.interactiveMapWrap}>
+        <InteractiveMapView chargers={chargers} hasLocation={hasLocation} />
+      </View>
+      <ChargerListView
+        chargers={chargers}
+        onRefresh={refetch}
+        refreshing={isRefetching}
+      />
     </View>
   );
 }
@@ -282,6 +171,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f9fafb' },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   map: { flex: 1 },
+  interactiveMapWrap: { height: 300, margin: 12, borderRadius: 12, overflow: 'hidden' },
   listContent: { padding: 16, gap: 12 },
   emptyText: { textAlign: 'center', color: '#9ca3af', marginTop: 40, fontSize: 15 },
   chargerCard: {
