@@ -1,5 +1,7 @@
 {
   "expo.jsEngine": "hermes",
+  "newArchEnabled": "true",
+  "ios.deploymentTarget": "15.1",
   "EX_DEV_CLIENT_NETWORK_INSPECTOR": "true",
   "apple.extraPods": "[]",
   "apple.ccacheEnabled": "false",

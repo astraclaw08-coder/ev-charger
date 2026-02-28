@@ -20,13 +20,16 @@ import { api, type Charger } from '@/lib/api';
 const MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN;
 
 // Detect whether @rnmapbox/maps native code is actually available (not in Expo Go)
-let mapboxAvailable = false;
-try {
-  const Mapbox = require('@rnmapbox/maps');
-  if (Mapbox?.MapView) mapboxAvailable = true;
-} catch (_) {
-  mapboxAvailable = false;
-}
+const getMapbox = () => {
+  try {
+    const req = (0, eval)('require');
+    return req('@rnmapbox/maps');
+  } catch {
+    return null;
+  }
+};
+
+const mapboxAvailable = !!getMapbox()?.MapView;
 
 // ── Status → map pin color mapping ───────────────────────────────────────────
 
@@ -50,7 +53,8 @@ function statusLabel(charger: Charger): string {
 
 function MapboxView({ chargers }: { chargers: Charger[] }) {
   const router = useRouter();
-  const Mapbox = require('@rnmapbox/maps'); // safe — only called when mapboxAvailable is true
+  const Mapbox = getMapbox(); // safe — only called when mapboxAvailable is true
+  if (!Mapbox) return null;
 
   const geojson: GeoJSON.FeatureCollection = {
     type: 'FeatureCollection',
