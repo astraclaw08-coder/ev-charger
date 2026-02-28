@@ -1,33 +1,28 @@
-/**
- * Map screen — shows charger pins color-coded by status.
- * Shows interactive charger map + list view.
- */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ActivityIndicator,
-  FlatList,
   TouchableOpacity,
   RefreshControl,
-  } from 'react-native';
+  ScrollView,
+} from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import * as Location from 'expo-location';
+import MapView, { Marker } from 'react-native-maps';
 import { api, type Charger } from '@/lib/api';
 import { useAppTheme } from '@/theme';
-import MapView, { Marker } from 'react-native-maps';
 
-
-// ── Status → map pin color mapping ───────────────────────────────────────────
+type Coord = { latitude: number; longitude: number };
 
 function statusColor(charger: Charger): string {
   const statuses = charger.connectors.map((c) => c.status);
-  if (statuses.some((s) => s === 'AVAILABLE')) return '#10b981'; // green
-  if (statuses.some((s) => s === 'CHARGING' || s === 'PREPARING' || s === 'FINISHING')) return '#f59e0b'; // yellow
-  if (statuses.some((s) => s === 'FAULTED')) return '#ef4444'; // red
-  return '#9ca3af'; // grey — offline / unavailable
+  if (statuses.some((s) => s === 'AVAILABLE')) return '#10b981';
+  if (statuses.some((s) => s === 'CHARGING' || s === 'PREPARING' || s === 'FINISHING')) return '#f59e0b';
+  if (statuses.some((s) => s === 'FAULTED')) return '#ef4444';
+  return '#9ca3af';
 }
 
 function statusLabel(charger: Charger): string {
@@ -38,112 +33,27 @@ function statusLabel(charger: Charger): string {
   return 'Offline';
 }
 
+function distanceKm(a: Coord, b: Coord): number {
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const R = 6371;
+  const dLat = toRad(b.latitude - a.latitude);
+  const dLng = toRad(b.longitude - a.longitude);
+  const lat1 = toRad(a.latitude);
+  const lat2 = toRad(b.latitude);
 
-function rankScore(charger: Charger): number {
-  const statuses = charger.connectors.map((c) => c.status);
-  if (statuses.some((s) => s === 'AVAILABLE')) return 3;
-  if (statuses.some((s) => s === 'PREPARING' || s === 'SUSPENDED_EV')) return 2;
-  if (statuses.some((s) => s === 'CHARGING' || s === 'FINISHING')) return 1;
-  return 0;
+  const sinDlat = Math.sin(dLat / 2);
+  const sinDlng = Math.sin(dLng / 2);
+  const h = sinDlat * sinDlat + Math.cos(lat1) * Math.cos(lat2) * sinDlng * sinDlng;
+  return 2 * R * Math.asin(Math.sqrt(h));
 }
-
-// ── Interactive native map view ────────────────────────────────────────────────
-
-function InteractiveMapView({ chargers, hasLocation }: { chargers: Charger[]; hasLocation: boolean }) {
-  const router = useRouter();
-
-  const lats = chargers.map((c) => c.site.lat);
-  const lngs = chargers.map((c) => c.site.lng);
-  const minLat = lats.length ? Math.min(...lats) : 33.9164;
-  const maxLat = lats.length ? Math.max(...lats) : 33.9164;
-  const minLng = lngs.length ? Math.min(...lngs) : -118.3526;
-  const maxLng = lngs.length ? Math.max(...lngs) : -118.3526;
-
-  const centerLat = (minLat + maxLat) / 2;
-  const centerLng = (minLng + maxLng) / 2;
-
-  return (
-    <MapView
-      style={styles.map}
-      initialRegion={{
-        latitude: centerLat,
-        longitude: centerLng,
-        latitudeDelta: Math.max(0.05, (maxLat - minLat) * 1.8),
-        longitudeDelta: Math.max(0.05, (maxLng - minLng) * 1.8),
-      }}
-      showsUserLocation={hasLocation}
-      showsMyLocationButton
-    >
-      {chargers.map((c) => (
-        <Marker
-          key={c.id}
-          coordinate={{ latitude: c.site.lat, longitude: c.site.lng }}
-          title={c.site.name}
-          description={`${c.vendor} ${c.model} · ${statusLabel(c)}`}
-          pinColor={statusColor(c)}
-          onCalloutPress={() => router.push(`/charger/${c.id}`)}
-        />
-      ))}
-    </MapView>
-  );
-}
-
-// ── Charger list view ─────────────────────────────────
-
-function ChargerListView({
-  chargers,
-  onRefresh,
-  refreshing,
-  isDark,
-}: {
-  chargers: Charger[];
-  onRefresh: () => void;
-  refreshing: boolean;
-  isDark: boolean;
-}) {
-  const router = useRouter();
-
-  return (
-    <FlatList
-      data={chargers}
-      keyExtractor={(item) => item.id}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-      contentContainerStyle={styles.listContent}
-      ListEmptyComponent={
-        <Text style={styles.emptyText}>No chargers found in your area.</Text>
-      }
-      renderItem={({ item }) => {
-        const color = statusColor(item);
-        const label = statusLabel(item);
-        const available = item.connectors.filter((c) => c.status === 'AVAILABLE').length;
-        return (
-          <TouchableOpacity
-            style={[styles.chargerCard, { backgroundColor: isDark ? '#111827' : '#fff' }]}
-            onPress={() => router.push(`/charger/${item.id}`)}
-          >
-            <View style={[styles.statusDot, { backgroundColor: color }]} />
-            <View style={styles.chargerInfo}>
-              <Text style={[styles.chargerName, { color: isDark ? '#f9fafb' : '#111827' }]}>{item.site.name}</Text>
-              <Text style={[styles.chargerAddress, { color: isDark ? '#9ca3af' : '#6b7280' }]}>{item.site.address}</Text>
-              <Text style={[styles.chargerMeta, { color: isDark ? '#6b7280' : '#9ca3af' }]}>
-                {item.vendor} {item.model} · {available}/{item.connectors.length} available
-              </Text>
-            </View>
-            <View style={[styles.statusBadge, { backgroundColor: color + '22' }]}>
-              <Text style={[styles.statusBadgeText, { color }]}>{label}</Text>
-            </View>
-          </TouchableOpacity>
-        );
-      }}
-    />
-  );
-}
-
-// ── Screen ────────────────────────────────────────────────────────────────────
 
 export default function MapScreen() {
-  const [hasLocation, setHasLocation] = useState(false);
+  const router = useRouter();
+  const mapRef = useRef<MapView | null>(null);
   const { isDark } = useAppTheme();
+
+  const [hasLocation, setHasLocation] = useState(false);
+  const [userLocation, setUserLocation] = useState<Coord | null>(null);
 
   const { data: chargers = [], isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['chargers'],
@@ -152,10 +62,57 @@ export default function MapScreen() {
   });
 
   useEffect(() => {
-    Location.requestForegroundPermissionsAsync()
-      .then(({ status }) => setHasLocation(status === 'granted'))
-      .catch(() => setHasLocation(false));
+    (async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      const granted = status === 'granted';
+      setHasLocation(granted);
+      if (!granted) return;
+
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      setUserLocation({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
+    })().catch(() => setHasLocation(false));
   }, []);
+
+  const initialCenter = useMemo(() => {
+    if (userLocation) return userLocation;
+    if (chargers.length > 0) {
+      return { latitude: chargers[0].site.lat, longitude: chargers[0].site.lng };
+    }
+    return { latitude: 33.9164, longitude: -118.3526 };
+  }, [chargers, userLocation]);
+
+  const nearest = useMemo(() => {
+    if (chargers.length === 0) return [] as Array<Charger & { distanceKm?: number }>;
+
+    const withDistance = chargers.map((c) => {
+      const d = userLocation
+        ? distanceKm(userLocation, { latitude: c.site.lat, longitude: c.site.lng })
+        : undefined;
+      return { ...c, distanceKm: d };
+    });
+
+    return withDistance
+      .sort((a, b) => (a.distanceKm ?? 9999) - (b.distanceKm ?? 9999))
+      .slice(0, 3);
+  }, [chargers, userLocation]);
+
+  async function recenterToUser() {
+    try {
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      const target = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
+      setUserLocation(target);
+      mapRef.current?.animateToRegion(
+        {
+          ...target,
+          latitudeDelta: 0.03,
+          longitudeDelta: 0.03,
+        },
+        400,
+      );
+    } catch {
+      // no-op
+    }
+  }
 
   if (isLoading) {
     return (
@@ -165,94 +122,100 @@ export default function MapScreen() {
     );
   }
 
-  const ranked = [...chargers].sort((a, b) => rankScore(b) - rankScore(a));
-
   return (
     <View style={[styles.container, { backgroundColor: isDark ? '#030712' : '#f9fafb' }]}>
-      <View style={[styles.quickStart, { backgroundColor: isDark ? '#111827' : '#ecfdf5', borderColor: isDark ? '#1f2937' : '#a7f3d0' }]}>
-        <Text style={[styles.quickTitle, { color: isDark ? '#d1fae5' : '#065f46' }]}>New here? 1) Pick an Available charger 2) Plug in 3) Tap Start</Text>
+      {/* 3/4 screen map */}
+      <View style={styles.mapSection}>
+        <MapView
+          ref={mapRef}
+          style={styles.map}
+          initialRegion={{
+            latitude: initialCenter.latitude,
+            longitude: initialCenter.longitude,
+            latitudeDelta: 0.06,
+            longitudeDelta: 0.06,
+          }}
+          showsUserLocation={hasLocation}
+          showsMyLocationButton={false}
+        >
+          {chargers.map((c) => (
+            <Marker
+              key={c.id}
+              coordinate={{ latitude: c.site.lat, longitude: c.site.lng }}
+              title={c.site.name}
+              description={`${c.vendor} ${c.model} · ${statusLabel(c)}`}
+              pinColor={statusColor(c)}
+              onCalloutPress={() => router.push(`/charger/${c.id}`)}
+            />
+          ))}
+        </MapView>
+
+        <TouchableOpacity style={styles.locateBtn} onPress={recenterToUser}>
+          <Text style={styles.locateText}>📍 Locate Me</Text>
+        </TouchableOpacity>
       </View>
-      <View style={styles.interactiveMapWrap}>
-        <InteractiveMapView chargers={ranked} hasLocation={hasLocation} />
-      </View>
-      <ChargerListView
-        chargers={ranked}
-        onRefresh={refetch}
-        refreshing={isRefetching}
-        isDark={isDark}
-      />
+
+      {/* 1/4 screen nearest list */}
+      <ScrollView
+        style={[styles.bottomSheet, { backgroundColor: isDark ? '#0b1220' : '#ffffff' }]}
+        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}
+      >
+        <Text style={[styles.sectionTitle, { color: isDark ? '#f9fafb' : '#111827' }]}>Closest chargers</Text>
+        <Text style={[styles.sectionSubtitle, { color: isDark ? '#9ca3af' : '#6b7280' }]}>Top 2–3 stations nearest your current location</Text>
+
+        {nearest.map((item) => {
+          const color = statusColor(item);
+          const available = item.connectors.filter((c) => c.status === 'AVAILABLE').length;
+          return (
+            <TouchableOpacity
+              key={item.id}
+              style={[styles.card, { backgroundColor: isDark ? '#111827' : '#f9fafb' }]}
+              onPress={() => router.push(`/charger/${item.id}`)}
+            >
+              <View style={[styles.dot, { backgroundColor: color }]} />
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.name, { color: isDark ? '#f9fafb' : '#111827' }]}>{item.site.name}</Text>
+                <Text style={[styles.meta, { color: isDark ? '#9ca3af' : '#6b7280' }]}>
+                  {item.distanceKm != null ? `${item.distanceKm.toFixed(2)} km • ` : ''}
+                  {available}/{item.connectors.length} available
+                </Text>
+              </View>
+              <Text style={{ color, fontWeight: '700', fontSize: 12 }}>{statusLabel(item)}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f9fafb' },
+  container: { flex: 1 },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  mapSection: { flex: 3, position: 'relative' },
   map: { flex: 1 },
-  quickStart: { marginHorizontal: 12, marginTop: 12, borderRadius: 10, borderWidth: 1, padding: 10 },
-  quickTitle: { fontSize: 12, fontWeight: '700' },
-  interactiveMapWrap: { height: 300, margin: 12, borderRadius: 12, overflow: 'hidden' },
-  listContent: { padding: 16, gap: 12 },
-  emptyText: { textAlign: 'center', color: '#9ca3af', marginTop: 40, fontSize: 15 },
-  chargerCard: {
-    backgroundColor: '#fff',
-    borderRadius: 14,
-    padding: 16,
+  locateBtn: {
+    position: 'absolute',
+    right: 12,
+    bottom: 12,
+    backgroundColor: '#111827',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  locateText: { color: '#fff', fontWeight: '700', fontSize: 13 },
+  bottomSheet: { flex: 1, paddingHorizontal: 12, paddingTop: 10 },
+  sectionTitle: { fontSize: 17, fontWeight: '800' },
+  sectionSubtitle: { fontSize: 12, marginTop: 2, marginBottom: 8 },
+  card: {
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 8,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 2,
+    gap: 10,
   },
-  statusDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    flexShrink: 0,
-  },
-  chargerInfo: { flex: 1 },
-  chargerName: { fontSize: 15, fontWeight: '600', color: '#111827' },
-  chargerAddress: { fontSize: 12, color: '#6b7280', marginTop: 2 },
-  chargerMeta: { fontSize: 12, color: '#9ca3af', marginTop: 4 },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  statusBadgeText: { fontSize: 12, fontWeight: '600' },
-  noBanner: {
-    backgroundColor: '#fef3c7',
-    padding: 10,
-    margin: 12,
-    borderRadius: 8,
-  },
-  noBannerText: { fontSize: 12, color: '#92400e', textAlign: 'center' },
-  fallbackMapWrap: { paddingHorizontal: 12, paddingBottom: 4 },
-  fallbackMap: {
-    backgroundColor: '#e5e7eb',
-    borderRadius: 12,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    position: 'relative',
-  },
-  fallbackMapTitle: {
-    position: 'absolute',
-    top: 8,
-    left: 10,
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#374151',
-  },
-  fallbackPin: {
-    position: 'absolute',
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    borderWidth: 2,
-    borderColor: '#fff',
-  },
-  fallbackEmpty: { textAlign: 'center', color: '#6b7280', marginTop: 100 },
+  dot: { width: 10, height: 10, borderRadius: 5 },
+  name: { fontSize: 14, fontWeight: '700' },
+  meta: { fontSize: 12, marginTop: 2 },
 });
