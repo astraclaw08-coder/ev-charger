@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,8 @@ import {
   Alert,
   useColorScheme,
 } from 'react-native';
-import * as SecureStore from 'expo-secure-store';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { api } from '@/lib/api';
 
 type DriverProfile = {
   name: string;
@@ -18,8 +19,6 @@ type DriverProfile = {
   homeAddress: string;
   paymentProfile: string;
 };
-
-const STORAGE_KEY = 'ev_driver_profile_v1';
 
 const EMPTY: DriverProfile = {
   name: '',
@@ -34,20 +33,41 @@ export default function ProfileScreen() {
   const isDark = scheme === 'dark';
   const [profile, setProfile] = useState<DriverProfile>(EMPTY);
 
-  useEffect(() => {
-    SecureStore.getItemAsync(STORAGE_KEY).then((raw) => {
-      if (!raw) return;
-      try {
-        setProfile({ ...EMPTY, ...(JSON.parse(raw) as DriverProfile) });
-      } catch {
-        // ignore invalid old payloads
-      }
+  const queryClient = useQueryClient();
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['me-profile'],
+    queryFn: () => api.profile.get(),
+  });
+
+  React.useEffect(() => {
+    if (!data) return;
+    setProfile({
+      name: data.name ?? '',
+      email: data.email ?? '',
+      phone: data.phone ?? '',
+      homeAddress: data.homeAddress ?? '',
+      paymentProfile: data.paymentProfile ?? '',
     });
-  }, []);
+  }, [data]);
+
+  const saveMutation = useMutation({
+    mutationFn: () => api.profile.update({
+      name: profile.name,
+      email: profile.email,
+      phone: profile.phone,
+      homeAddress: profile.homeAddress,
+      paymentProfile: profile.paymentProfile,
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['me-profile'] });
+      Alert.alert('Saved', 'Your driver profile sync is updated.');
+    },
+    onError: (err: Error) => Alert.alert('Save failed', err.message),
+  });
 
   async function save() {
-    await SecureStore.setItemAsync(STORAGE_KEY, JSON.stringify(profile));
-    Alert.alert('Saved', 'Your driver profile was updated.');
+    saveMutation.mutate();
   }
 
   function set<K extends keyof DriverProfile>(k: K, v: DriverProfile[K]) {
@@ -71,7 +91,7 @@ export default function ProfileScreen() {
         placeholder="Visa •••• 4242 / Apple Pay"
       />
 
-      <TouchableOpacity style={styles.saveBtn} onPress={save}>
+      <TouchableOpacity style={[styles.saveBtn, (isLoading || saveMutation.isPending) && { opacity: 0.6 }]} onPress={save} disabled={isLoading || saveMutation.isPending}>
         <Text style={styles.saveText}>Save Profile</Text>
       </TouchableOpacity>
     </ScrollView>

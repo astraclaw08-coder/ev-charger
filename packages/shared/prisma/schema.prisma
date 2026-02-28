@@ -124,8 +124,11 @@ model User {
   id        String    @id @default(uuid())
   clerkId   String    @unique
   email     String    @unique
-  name      String?
-  idTag     String    @unique  // OCPP idTag for this driver (max 20 chars)
+  name           String?
+  phone          String?
+  homeAddress    String?
+  paymentProfile String?
+  idTag          String    @unique  // OCPP idTag for this driver (max 20 chars)
   sessions  Session[]
   payments  Payment[]
   createdAt DateTime  @default(now())

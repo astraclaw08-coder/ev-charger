@@ -115,6 +115,16 @@ export interface ActiveSession {
   status: string;
 }
 
+
+export interface UserProfile {
+  id: string;
+  name: string | null;
+  email: string;
+  phone: string | null;
+  homeAddress: string | null;
+  paymentProfile: string | null;
+}
+
 export interface Payment {
   id: string;
   status: string;
@@ -164,6 +174,18 @@ export const api = {
     setupIntent() {
       return request<{ clientSecret: string; stripeCustomerId: string }>('/payments/setup-intent', {
         method: 'POST',
+      });
+    },
+  },
+
+  profile: {
+    get() {
+      return request<UserProfile>('/me/profile');
+    },
+    update(input: Partial<Pick<UserProfile, 'name' | 'email' | 'phone' | 'homeAddress' | 'paymentProfile'>>) {
+      return request<UserProfile>('/me/profile', {
+        method: 'PUT',
+        body: JSON.stringify(input),
       });
     },
   },
