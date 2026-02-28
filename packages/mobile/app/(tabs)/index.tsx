@@ -125,6 +125,31 @@ export default function MapScreen() {
     }
   }
 
+
+  useEffect(() => {
+    const q = search.trim();
+    if (!q || filteredChargers.length === 0 || !mapRef.current) return;
+
+    const coords = filteredChargers.map((c) => ({ latitude: c.site.lat, longitude: c.site.lng }));
+    if (coords.length === 1) {
+      mapRef.current.animateToRegion(
+        {
+          latitude: coords[0].latitude,
+          longitude: coords[0].longitude,
+          latitudeDelta: 0.02,
+          longitudeDelta: 0.02,
+        },
+        350,
+      );
+      return;
+    }
+
+    mapRef.current.fitToCoordinates(coords, {
+      edgePadding: { top: 80, right: 80, bottom: 140, left: 80 },
+      animated: true,
+    });
+  }, [search, filteredChargers]);
+
   if (isLoading) {
     return (
       <View style={styles.centered}>
