@@ -56,6 +56,7 @@ export default function MapScreen() {
   const [hasLocation, setHasLocation] = useState(false);
   const [userLocation, setUserLocation] = useState<Coord | null>(null);
   const [search, setSearch] = useState('');
+  const [committedSearch, setCommittedSearch] = useState('');
 
   const { data: chargers = [], isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['chargers'],
@@ -127,28 +128,15 @@ export default function MapScreen() {
 
 
   useEffect(() => {
-    const q = search.trim();
+    const q = committedSearch.trim();
     if (!q || filteredChargers.length === 0 || !mapRef.current) return;
 
     const coords = filteredChargers.map((c) => ({ latitude: c.site.lat, longitude: c.site.lng }));
-    if (coords.length === 1) {
-      mapRef.current.animateToRegion(
-        {
-          latitude: coords[0].latitude,
-          longitude: coords[0].longitude,
-          latitudeDelta: 0.02,
-          longitudeDelta: 0.02,
-        },
-        350,
-      );
-      return;
-    }
-
     mapRef.current.fitToCoordinates(coords, {
-      edgePadding: { top: 80, right: 80, bottom: 140, left: 80 },
+      edgePadding: { top: 70, right: 70, bottom: 120, left: 70 },
       animated: true,
     });
-  }, [search, filteredChargers]);
+  }, [committedSearch, filteredChargers]);
 
   if (isLoading) {
     return (
@@ -173,6 +161,10 @@ export default function MapScreen() {
           }}
           showsUserLocation={hasLocation}
           showsMyLocationButton={false}
+          zoomEnabled
+          scrollEnabled
+          rotateEnabled
+          pitchEnabled
         >
           {filteredChargers.map((c) => (
             <Marker
@@ -194,7 +186,8 @@ export default function MapScreen() {
           <TextInput
             value={search}
             onChangeText={setSearch}
-            placeholder="Search by site name or address"
+            onSubmitEditing={() => setCommittedSearch(search.trim())}
+            placeholder="Search site or address, then press return"
             placeholderTextColor={isDark ? '#9ca3af' : '#6b7280'}
             style={[styles.searchInput, { color: isDark ? '#f9fafb' : '#111827' }]}
           />
