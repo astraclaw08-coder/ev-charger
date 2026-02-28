@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   RefreshControl,
   ScrollView,
+  TextInput,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
@@ -54,6 +55,7 @@ export default function MapScreen() {
 
   const [hasLocation, setHasLocation] = useState(false);
   const [userLocation, setUserLocation] = useState<Coord | null>(null);
+  const [search, setSearch] = useState('');
 
   const { data: chargers = [], isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['chargers'],
@@ -73,18 +75,27 @@ export default function MapScreen() {
     })().catch(() => setHasLocation(false));
   }, []);
 
+
+  const filteredChargers = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return chargers;
+    return chargers.filter((c) =>
+      c.site.name.toLowerCase().includes(q) || c.site.address.toLowerCase().includes(q),
+    );
+  }, [chargers, search]);
+
   const initialCenter = useMemo(() => {
     if (userLocation) return userLocation;
-    if (chargers.length > 0) {
-      return { latitude: chargers[0].site.lat, longitude: chargers[0].site.lng };
+    if (filteredChargers.length > 0) {
+      return { latitude: filteredChargers[0].site.lat, longitude: filteredChargers[0].site.lng };
     }
     return { latitude: 33.9164, longitude: -118.3526 };
-  }, [chargers, userLocation]);
+  }, [filteredChargers, userLocation]);
 
   const nearest = useMemo(() => {
-    if (chargers.length === 0) return [] as Array<Charger & { distanceKm?: number }>;
+    if (filteredChargers.length === 0) return [] as Array<Charger & { distanceKm?: number }>;
 
-    const withDistance = chargers.map((c) => {
+    const withDistance = filteredChargers.map((c) => {
       const d = userLocation
         ? distanceKm(userLocation, { latitude: c.site.lat, longitude: c.site.lng })
         : undefined;
@@ -94,7 +105,7 @@ export default function MapScreen() {
     return withDistance
       .sort((a, b) => (a.distanceKm ?? 9999) - (b.distanceKm ?? 9999))
       .slice(0, 3);
-  }, [chargers, userLocation]);
+  }, [filteredChargers, userLocation]);
 
   async function recenterToUser() {
     try {
@@ -138,7 +149,7 @@ export default function MapScreen() {
           showsUserLocation={hasLocation}
           showsMyLocationButton={false}
         >
-          {chargers.map((c) => (
+          {filteredChargers.map((c) => (
             <Marker
               key={c.id}
               coordinate={{ latitude: c.site.lat, longitude: c.site.lng }}
@@ -151,8 +162,18 @@ export default function MapScreen() {
         </MapView>
 
         <TouchableOpacity style={styles.locateBtn} onPress={recenterToUser}>
-          <Text style={styles.locateText}>📍 Locate Me</Text>
+          <Text style={styles.locateText}>◎</Text>
         </TouchableOpacity>
+
+        <View style={[styles.searchWrap, { backgroundColor: isDark ? '#111827cc' : '#ffffffe6' }]}>
+          <TextInput
+            value={search}
+            onChangeText={setSearch}
+            placeholder="Search by site name or address"
+            placeholderTextColor={isDark ? '#9ca3af' : '#6b7280'}
+            style={[styles.searchInput, { color: isDark ? '#f9fafb' : '#111827' }]}
+          />
+        </View>
       </View>
 
       {/* 1/4 screen nearest list */}
@@ -197,13 +218,27 @@ const styles = StyleSheet.create({
   locateBtn: {
     position: 'absolute',
     right: 12,
-    bottom: 12,
-    backgroundColor: '#111827',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 10,
+    top: 12,
+    width: 40,
+    height: 40,
+    backgroundColor: '#111827cc',
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  locateText: { color: '#fff', fontWeight: '700', fontSize: 13 },
+  locateText: { color: '#fff', fontWeight: '800', fontSize: 18 },
+  searchWrap: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    bottom: 12,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: '#ffffff33',
+  },
+  searchInput: { fontSize: 14, fontWeight: '600' },
   bottomSheet: { flex: 1, paddingHorizontal: 12, paddingTop: 10 },
   sectionTitle: { fontSize: 17, fontWeight: '800' },
   sectionSubtitle: { fontSize: 12, marginTop: 2, marginBottom: 8 },

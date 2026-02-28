@@ -15,6 +15,7 @@ import {
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, type Session } from '@/lib/api';
+import { useAppTheme } from '@/theme';
 
 const RATE_PER_KWH = 0.35;
 
@@ -228,6 +229,7 @@ function LiveSessionView({
 
 export default function SessionScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { isDark } = useAppTheme();
   const router = useRouter();
   const queryClient = useQueryClient();
 
@@ -258,7 +260,7 @@ export default function SessionScreen() {
 
   if (isLoading) {
     return (
-      <View style={styles.centered}>
+      <View style={[styles.centered, { backgroundColor: isDark ? '#030712' : '#f9fafb' }]}> 
         <ActivityIndicator size="large" color="#10b981" />
       </View>
     );
@@ -266,7 +268,7 @@ export default function SessionScreen() {
 
   if (!session) {
     return (
-      <View style={styles.centered}>
+      <View style={[styles.centered, { backgroundColor: isDark ? '#030712' : '#f9fafb' }]}> 
         <Text style={styles.errorText}>Session not found.</Text>
       </View>
     );
@@ -280,7 +282,7 @@ export default function SessionScreen() {
           headerShown: true,
         }}
       />
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView contentContainerStyle={[styles.scrollContent, { backgroundColor: isDark ? '#030712' : '#f9fafb' }]}> 
         {session.status === 'ACTIVE' ? (
           <LiveSessionView
             session={session}

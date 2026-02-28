@@ -17,12 +17,13 @@ import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, type Charger, type Connector } from '@/lib/api';
 import { ConnectorStatusBadge } from '@/components/ConnectorStatusBadge';
+import { useAppTheme } from '@/theme';
 
 const RATE_PER_KWH = 0.35; // $/kWh (matches hardcoded server value)
 
 // ── Payment Setup Modal ───────────────────────────────────────────────────────
 
-function PaymentSetupBanner({ onSetupComplete }: { onSetupComplete: () => void }) {
+function PaymentSetupBanner({ onSetupComplete, isDark }: { onSetupComplete: () => void; isDark: boolean }) {
   const [loading, setLoading] = useState(false);
   const STRIPE_KEY = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY;
 
@@ -58,9 +59,9 @@ function PaymentSetupBanner({ onSetupComplete }: { onSetupComplete: () => void }
   }
 
   return (
-    <View style={styles.paymentBanner}>
-      <Text style={styles.paymentBannerTitle}>Save a payment method</Text>
-      <Text style={styles.paymentBannerSubtitle}>
+    <View style={[styles.paymentBanner, { backgroundColor: isDark ? '#1f2937' : '#fffbeb', borderColor: isDark ? '#374151' : '#fde68a' }]}> 
+      <Text style={[styles.paymentBannerTitle, { color: isDark ? '#f9fafb' : '#92400e' }]}>Save a payment method</Text>
+      <Text style={[styles.paymentBannerSubtitle, { color: isDark ? '#d1d5db' : '#78350f' }]}>
         Add a card to start charging. You'll only be charged for energy used.
       </Text>
       <TouchableOpacity
@@ -84,20 +85,22 @@ function ConnectorRow({
   connector,
   chargerId,
   onSessionStarted,
+  isDark,
 }: {
   connector: Connector;
   chargerId: string;
   onSessionStarted: (chargerId: string, connectorId: number) => void;
+  isDark: boolean;
 }) {
   const isStartable = connector.status === 'AVAILABLE' || connector.status === 'PREPARING' || connector.status === 'SUSPENDED_EV';
   const isCharging = connector.status === 'CHARGING' || connector.status === 'FINISHING';
 
   return (
-    <View style={styles.connectorRow}>
+    <View style={[styles.connectorRow, { borderTopColor: isDark ? '#1f2937' : '#f3f4f6' }]}> 
       <View style={styles.connectorLeft}>
-        <Text style={styles.connectorLabel}>Connector {connector.connectorId}</Text>
+        <Text style={[styles.connectorLabel, { color: isDark ? '#e5e7eb' : '#374151' }]}>Connector {connector.connectorId}</Text>
         <ConnectorStatusBadge status={connector.status} />
-        <Text style={styles.rateText}>${RATE_PER_KWH.toFixed(2)}/kWh</Text>
+        <Text style={[styles.rateText, { color: isDark ? '#9ca3af' : '#9ca3af' }]}>${RATE_PER_KWH.toFixed(2)}/kWh</Text>
       </View>
 
       {isStartable && (
@@ -125,6 +128,7 @@ export default function ChargerDetailScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [startingConnector, setStartingConnector] = useState<number | null>(null);
+  const { isDark } = useAppTheme();
 
   const { data: charger, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['charger', id],
@@ -195,35 +199,36 @@ export default function ChargerDetailScreen() {
     <>
       <Stack.Screen options={{ title: charger.site.name, headerShown: true }} />
       <ScrollView
-        style={styles.container}
+        style={[styles.container, { backgroundColor: isDark ? '#030712' : '#f9fafb' }]}
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}
       >
         {/* Site info */}
-        <View style={styles.siteCard}>
-          <Text style={styles.siteName}>{charger.site.name}</Text>
-          <Text style={styles.siteAddress}>{charger.site.address}</Text>
+        <View style={[styles.siteCard, { backgroundColor: isDark ? '#111827' : '#fff' }]}> 
+          <Text style={[styles.siteName, { color: isDark ? '#f9fafb' : '#111827' }]}>{charger.site.name}</Text>
+          <Text style={[styles.siteAddress, { color: isDark ? '#9ca3af' : '#6b7280' }]}>{charger.site.address}</Text>
           <View style={styles.siteMetaRow}>
-            <Text style={styles.chargerModel}>
+            <Text style={[styles.chargerModel, { color: isDark ? '#d1d5db' : '#374151' }]}>
               {charger.vendor} {charger.model}
             </Text>
-            <Text style={styles.availCount}>
+            <Text style={[styles.availCount, { color: '#10b981' }]}>
               {availableCount}/{charger.connectors.length} available
             </Text>
           </View>
         </View>
 
         {/* Payment setup (dev mode: skipped silently) */}
-        <PaymentSetupBanner onSetupComplete={() => {}} />
+        <PaymentSetupBanner onSetupComplete={() => {}} isDark={isDark} />
 
         {/* Connectors */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Connectors</Text>
+        <View style={[styles.section, { backgroundColor: isDark ? '#111827' : '#fff' }]}> 
+          <Text style={[styles.sectionTitle, { color: isDark ? '#f9fafb' : '#111827' }]}>Connectors</Text>
           {charger.connectors.map((connector) => (
             <ConnectorRow
               key={connector.id}
               connector={connector}
               chargerId={charger.id}
+              isDark={isDark}
               onSessionStarted={(cid, connId) => {
                 if (startMutation.isPending) return;
                 handleStartSession(cid, connId);
@@ -233,17 +238,17 @@ export default function ChargerDetailScreen() {
         </View>
 
         {startMutation.isPending && (
-          <View style={styles.startingOverlay}>
+          <View style={[styles.startingOverlay, { backgroundColor: isDark ? '#052e2b' : '#ecfdf5' }]}> 
             <ActivityIndicator color="#10b981" />
-            <Text style={styles.startingText}>
+            <Text style={[styles.startingText, { color: isDark ? '#a7f3d0' : '#065f46' }]}>
               Sending start command to connector {startingConnector}…
             </Text>
           </View>
         )}
 
         {/* Price info */}
-        <View style={styles.priceNote}>
-          <Text style={styles.priceNoteText}>
+        <View style={[styles.priceNote, { backgroundColor: isDark ? '#1f2937' : '#f3f4f6' }]}> 
+          <Text style={[styles.priceNoteText, { color: isDark ? '#d1d5db' : '#6b7280' }]}>
             ⚡ Rate: ${RATE_PER_KWH.toFixed(2)}/kWh · Billed based on energy delivered
           </Text>
         </View>
