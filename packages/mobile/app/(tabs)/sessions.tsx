@@ -33,6 +33,11 @@ function formatDate(iso: string): string {
   });
 }
 
+
+function formatKwh(value: number): string {
+  return value.toFixed(4).replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1');
+}
+
 function SessionCard({ session, onPress }: { session: Session; onPress: () => void }) {
   const isActive = session.status === 'ACTIVE';
   const charger = session.connector.charger;
@@ -63,7 +68,7 @@ function SessionCard({ session, onPress }: { session: Session; onPress: () => vo
       <View style={styles.statsRow}>
         <StatItem label="Date" value={formatDate(session.startedAt)} />
         <StatItem label="Duration" value={formatDuration(session.startedAt, session.endedAt)} />
-        <StatItem label="kWh" value={kwh > 0 ? kwh.toFixed(2) : '—'} />
+        <StatItem label="kWh" value={kwh > 0 ? formatKwh(kwh) : '—'} />
         {cost && <StatItem label="Cost" value={cost} highlight />}
       </View>
 
