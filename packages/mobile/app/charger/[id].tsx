@@ -89,8 +89,8 @@ function ConnectorRow({
   chargerId: string;
   onSessionStarted: (chargerId: string, connectorId: number) => void;
 }) {
-  const isAvailable = connector.status === 'AVAILABLE';
-  const isCharging = connector.status === 'CHARGING' || connector.status === 'PREPARING' || connector.status === 'FINISHING';
+  const isStartable = connector.status === 'AVAILABLE' || connector.status === 'PREPARING';
+  const isCharging = connector.status === 'CHARGING' || connector.status === 'FINISHING';
 
   return (
     <View style={styles.connectorRow}>
@@ -100,7 +100,7 @@ function ConnectorRow({
         <Text style={styles.rateText}>${RATE_PER_KWH.toFixed(2)}/kWh</Text>
       </View>
 
-      {isAvailable && (
+      {isStartable && (
         <TouchableOpacity
           style={styles.startButton}
           onPress={() => onSessionStarted(chargerId, connector.connectorId)}
