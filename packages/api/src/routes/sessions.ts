@@ -23,10 +23,10 @@ export async function sessionRoutes(app: FastifyInstance) {
     const connector = charger.connectors[0];
     if (!connector) return reply.status(404).send({ error: 'Connector not found' });
 
-    const startableStates = new Set(['AVAILABLE', 'PREPARING']);
+    const startableStates = new Set(['AVAILABLE', 'PREPARING', 'SUSPENDED_EV']);
     if (!startableStates.has(connector.status)) {
       return reply.status(409).send({
-        error: `Connector is ${connector.status}, not startable (requires AVAILABLE or PREPARING)`,
+        error: `Connector is ${connector.status}, not startable (requires AVAILABLE, PREPARING, or SUSPENDED_EV)`,
       });
     }
 

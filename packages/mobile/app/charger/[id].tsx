@@ -89,7 +89,7 @@ function ConnectorRow({
   chargerId: string;
   onSessionStarted: (chargerId: string, connectorId: number) => void;
 }) {
-  const isStartable = connector.status === 'AVAILABLE' || connector.status === 'PREPARING';
+  const isStartable = connector.status === 'AVAILABLE' || connector.status === 'PREPARING' || connector.status === 'SUSPENDED_EV';
   const isCharging = connector.status === 'CHARGING' || connector.status === 'FINISHING';
 
   return (
