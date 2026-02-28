@@ -197,7 +197,15 @@ export default function ChargerDetailScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ title: charger.site.name, headerShown: true }} />
+      <Stack.Screen
+        options={{
+          title: charger.site.name,
+          headerShown: true,
+          headerStyle: { backgroundColor: isDark ? '#0b1220' : '#ffffff' },
+          headerTintColor: isDark ? '#f9fafb' : '#111827',
+          headerShadowVisible: false,
+        }}
+      />
       <ScrollView
         style={[styles.container, { backgroundColor: isDark ? '#030712' : '#f9fafb' }]}
         contentContainerStyle={styles.content}
@@ -205,7 +213,6 @@ export default function ChargerDetailScreen() {
       >
         {/* Site info */}
         <View style={[styles.siteCard, { backgroundColor: isDark ? '#111827' : '#fff' }]}> 
-          <Text style={[styles.siteName, { color: isDark ? '#f9fafb' : '#111827' }]}>{charger.site.name}</Text>
           <Text style={[styles.siteAddress, { color: isDark ? '#9ca3af' : '#6b7280' }]}>{charger.site.address}</Text>
           <View style={styles.siteMetaRow}>
             <Text style={[styles.chargerModel, { color: isDark ? '#d1d5db' : '#374151' }]}>
@@ -273,7 +280,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   siteName: { fontSize: 18, fontWeight: '700', color: '#111827' },
-  siteAddress: { fontSize: 13, color: '#6b7280', marginTop: 4 },
+  siteAddress: { fontSize: 13, color: '#6b7280' },
   siteMetaRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 },
   chargerModel: { fontSize: 13, color: '#374151' },
   availCount: { fontSize: 13, fontWeight: '600', color: '#10b981' },
