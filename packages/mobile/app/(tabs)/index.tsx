@@ -11,12 +11,12 @@ import {
   FlatList,
   TouchableOpacity,
   RefreshControl,
-  useColorScheme,
-} from 'react-native';
+  } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import * as Location from 'expo-location';
 import { api, type Charger } from '@/lib/api';
+import { useAppTheme } from '@/theme';
 import MapView, { Marker } from 'react-native-maps';
 
 
@@ -36,6 +36,15 @@ function statusLabel(charger: Charger): string {
   if (statuses.some((s) => s === 'CHARGING')) return 'In Use';
   if (statuses.some((s) => s === 'FAULTED')) return 'Faulted';
   return 'Offline';
+}
+
+
+function rankScore(charger: Charger): number {
+  const statuses = charger.connectors.map((c) => c.status);
+  if (statuses.some((s) => s === 'AVAILABLE')) return 3;
+  if (statuses.some((s) => s === 'PREPARING' || s === 'SUSPENDED_EV')) return 2;
+  if (statuses.some((s) => s === 'CHARGING' || s === 'FINISHING')) return 1;
+  return 0;
 }
 
 // ── Interactive native map view ────────────────────────────────────────────────
@@ -134,7 +143,7 @@ function ChargerListView({
 
 export default function MapScreen() {
   const [hasLocation, setHasLocation] = useState(false);
-  const isDark = useColorScheme() === 'dark';
+  const { isDark } = useAppTheme();
 
   const { data: chargers = [], isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['chargers'],
@@ -156,13 +165,18 @@ export default function MapScreen() {
     );
   }
 
+  const ranked = [...chargers].sort((a, b) => rankScore(b) - rankScore(a));
+
   return (
     <View style={[styles.container, { backgroundColor: isDark ? '#030712' : '#f9fafb' }]}>
+      <View style={[styles.quickStart, { backgroundColor: isDark ? '#111827' : '#ecfdf5', borderColor: isDark ? '#1f2937' : '#a7f3d0' }]}>
+        <Text style={[styles.quickTitle, { color: isDark ? '#d1fae5' : '#065f46' }]}>New here? 1) Pick an Available charger 2) Plug in 3) Tap Start</Text>
+      </View>
       <View style={styles.interactiveMapWrap}>
-        <InteractiveMapView chargers={chargers} hasLocation={hasLocation} />
+        <InteractiveMapView chargers={ranked} hasLocation={hasLocation} />
       </View>
       <ChargerListView
-        chargers={chargers}
+        chargers={ranked}
         onRefresh={refetch}
         refreshing={isRefetching}
         isDark={isDark}
@@ -175,6 +189,8 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f9fafb' },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   map: { flex: 1 },
+  quickStart: { marginHorizontal: 12, marginTop: 12, borderRadius: 10, borderWidth: 1, padding: 10 },
+  quickTitle: { fontSize: 12, fontWeight: '700' },
   interactiveMapWrap: { height: 300, margin: 12, borderRadius: 12, overflow: 'hidden' },
   listContent: { padding: 16, gap: 12 },
   emptyText: { textAlign: 'center', color: '#9ca3af', marginTop: 40, fontSize: 15 },

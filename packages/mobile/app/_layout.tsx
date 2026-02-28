@@ -1,12 +1,12 @@
 import React from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StripeProvider } from '@stripe/stripe-react-native';
 
 import { AuthProvider } from '@/providers/AuthProvider';
+import { ThemeProvider, useAppTheme } from '@/theme';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -15,9 +15,9 @@ const queryClient = new QueryClient({
 });
 
 const STRIPE_KEY = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? '';
-export default function RootLayout() {
-  const isDark = useColorScheme() === 'dark';
 
+function AppShell() {
+  const { isDark } = useAppTheme();
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <QueryClientProvider client={queryClient}>
@@ -29,5 +29,13 @@ export default function RootLayout() {
         </StripeProvider>
       </QueryClientProvider>
     </GestureHandlerRootView>
+  );
+}
+
+export default function RootLayout() {
+  return (
+    <ThemeProvider>
+      <AppShell />
+    </ThemeProvider>
   );
 }

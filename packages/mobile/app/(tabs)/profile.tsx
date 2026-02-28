@@ -7,10 +7,11 @@ import {
   TextInput,
   TouchableOpacity,
   Alert,
-  useColorScheme,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
+import { useAppTheme } from '@/theme';
 
 type DriverProfile = {
   name: string;
@@ -29,10 +30,9 @@ const EMPTY: DriverProfile = {
 };
 
 export default function ProfileScreen() {
-  const scheme = useColorScheme();
-  const isDark = scheme === 'dark';
+  const { isDark, mode, setMode } = useAppTheme();
+  const router = useRouter();
   const [profile, setProfile] = useState<DriverProfile>(EMPTY);
-
   const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery({
@@ -52,23 +52,20 @@ export default function ProfileScreen() {
   }, [data]);
 
   const saveMutation = useMutation({
-    mutationFn: () => api.profile.update({
-      name: profile.name,
-      email: profile.email,
-      phone: profile.phone,
-      homeAddress: profile.homeAddress,
-      paymentProfile: profile.paymentProfile,
-    }),
+    mutationFn: () =>
+      api.profile.update({
+        name: profile.name,
+        email: profile.email,
+        phone: profile.phone,
+        homeAddress: profile.homeAddress,
+        paymentProfile: profile.paymentProfile,
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['me-profile'] });
-      Alert.alert('Saved', 'Your driver profile sync is updated.');
+      Alert.alert('Saved', 'Your profile sync is updated.');
     },
     onError: (err: Error) => Alert.alert('Save failed', err.message),
   });
-
-  async function save() {
-    saveMutation.mutate();
-  }
 
   function set<K extends keyof DriverProfile>(k: K, v: DriverProfile[K]) {
     setProfile((prev) => ({ ...prev, [k]: v }));
@@ -77,33 +74,52 @@ export default function ProfileScreen() {
   return (
     <ScrollView style={[styles.container, { backgroundColor: isDark ? '#030712' : '#f9fafb' }]} contentContainerStyle={styles.content}>
       <Text style={[styles.title, { color: isDark ? '#f9fafb' : '#111827' }]}>Driver Profile</Text>
-      <Text style={[styles.subtitle, { color: isDark ? '#9ca3af' : '#6b7280' }]}>Used for charging receipts, support, and faster checkout.</Text>
+      <Text style={[styles.subtitle, { color: isDark ? '#9ca3af' : '#6b7280' }]}>Set your details once and use them across devices.</Text>
+
+      <View style={[styles.card, { backgroundColor: isDark ? '#111827' : '#fff', borderColor: isDark ? '#374151' : '#e5e7eb' }]}> 
+        <Text style={[styles.sectionTitle, { color: isDark ? '#f9fafb' : '#111827' }]}>Appearance</Text>
+        <View style={styles.themeRow}>
+          {(['system', 'light', 'dark'] as const).map((m) => (
+            <TouchableOpacity
+              key={m}
+              onPress={() => setMode(m)}
+              style={[
+                styles.modeBtn,
+                {
+                  backgroundColor: mode === m ? '#10b981' : isDark ? '#1f2937' : '#f3f4f6',
+                },
+              ]}
+            >
+              <Text style={{ color: mode === m ? '#fff' : isDark ? '#d1d5db' : '#374151', fontWeight: '600' }}>
+                {m[0].toUpperCase() + m.slice(1)}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
 
       <Field label="Name" value={profile.name} onChangeText={(v) => set('name', v)} isDark={isDark} autoCapitalize="words" />
       <Field label="Email" value={profile.email} onChangeText={(v) => set('email', v)} isDark={isDark} keyboardType="email-address" autoCapitalize="none" />
       <Field label="Phone" value={profile.phone} onChangeText={(v) => set('phone', v)} isDark={isDark} keyboardType="phone-pad" />
       <Field label="Home Address" value={profile.homeAddress} onChangeText={(v) => set('homeAddress', v)} isDark={isDark} multiline />
-      <Field
-        label="Payment Profile"
-        value={profile.paymentProfile}
-        onChangeText={(v) => set('paymentProfile', v)}
-        isDark={isDark}
-        placeholder="Visa •••• 4242 / Apple Pay"
-      />
+      <Field label="Payment Profile" value={profile.paymentProfile} onChangeText={(v) => set('paymentProfile', v)} isDark={isDark} placeholder="Visa •••• 4242 / Apple Pay" />
 
-      <TouchableOpacity style={[styles.saveBtn, (isLoading || saveMutation.isPending) && { opacity: 0.6 }]} onPress={save} disabled={isLoading || saveMutation.isPending}>
+      <TouchableOpacity style={styles.paymentBtn} onPress={() => router.push('/profile/payment' as any)}>
+        <Text style={styles.paymentBtnText}>Manage Payment Methods</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={[styles.saveBtn, (isLoading || saveMutation.isPending) && { opacity: 0.6 }]}
+        onPress={() => saveMutation.mutate()}
+        disabled={isLoading || saveMutation.isPending}
+      >
         <Text style={styles.saveText}>Save Profile</Text>
       </TouchableOpacity>
     </ScrollView>
   );
 }
 
-function Field({
-  label,
-  isDark,
-  multiline,
-  ...props
-}: {
+function Field({ label, isDark, multiline, ...props }: {
   label: string;
   value: string;
   onChangeText: (text: string) => void;
@@ -139,21 +155,15 @@ const styles = StyleSheet.create({
   content: { padding: 16, gap: 12, paddingBottom: 36 },
   title: { fontSize: 24, fontWeight: '800' },
   subtitle: { fontSize: 13, marginBottom: 10 },
+  card: { borderWidth: 1, borderRadius: 12, padding: 12 },
+  sectionTitle: { fontSize: 14, fontWeight: '700', marginBottom: 10 },
+  themeRow: { flexDirection: 'row', gap: 8 },
+  modeBtn: { flex: 1, borderRadius: 10, paddingVertical: 10, alignItems: 'center' },
   fieldWrap: { gap: 6 },
   label: { fontSize: 13, fontWeight: '600' },
-  input: {
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 15,
-  },
-  saveBtn: {
-    backgroundColor: '#10b981',
-    borderRadius: 12,
-    marginTop: 8,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
+  input: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, fontSize: 15 },
+  paymentBtn: { backgroundColor: '#111827', borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginTop: 8 },
+  paymentBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  saveBtn: { backgroundColor: '#10b981', borderRadius: 12, marginTop: 8, paddingVertical: 14, alignItems: 'center' },
   saveText: { color: '#fff', fontWeight: '700', fontSize: 16 },
 });

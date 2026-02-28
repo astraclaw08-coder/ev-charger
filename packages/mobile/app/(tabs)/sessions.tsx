@@ -10,11 +10,11 @@ import {
   TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
-  useColorScheme,
-} from 'react-native';
+  } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { api, type Session } from '@/lib/api';
+import { useAppTheme } from '@/theme';
 
 function formatDuration(startedAt: string, endedAt: string | null): string {
   const start = new Date(startedAt).getTime();
@@ -106,7 +106,7 @@ function StatItem({
 
 export default function SessionsScreen() {
   const router = useRouter();
-  const isDark = useColorScheme() === 'dark';
+  const { isDark } = useAppTheme();
 
   const { data, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['sessions'],

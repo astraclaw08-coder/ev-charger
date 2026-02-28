@@ -1,10 +1,9 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
-import { useColorScheme } from 'react-native';
+import { useAppTheme } from '@/theme';
 
 export default function TabsLayout() {
-  const scheme = useColorScheme();
-  const isDark = scheme === 'dark';
+  const { isDark } = useAppTheme();
 
   return (
     <Tabs
