@@ -11,6 +11,7 @@ import {
   FlatList,
   TouchableOpacity,
   RefreshControl,
+  Dimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
@@ -123,6 +124,50 @@ function MapboxView({ chargers }: { chargers: Charger[] }) {
   );
 }
 
+
+
+function MapPreviewFallback({ chargers }: { chargers: Charger[] }) {
+  const router = useRouter();
+  const width = Dimensions.get('window').width - 24;
+  const height = 230;
+
+  if (chargers.length === 0) {
+    return (
+      <View style={[styles.fallbackMap, { height }]}>
+        <Text style={styles.fallbackEmpty}>No charger locations to display.</Text>
+      </View>
+    );
+  }
+
+  const lats = chargers.map((c) => c.site.lat);
+  const lngs = chargers.map((c) => c.site.lng);
+  const minLat = Math.min(...lats);
+  const maxLat = Math.max(...lats);
+  const minLng = Math.min(...lngs);
+  const maxLng = Math.max(...lngs);
+
+  const latSpan = Math.max(maxLat - minLat, 0.01);
+  const lngSpan = Math.max(maxLng - minLng, 0.01);
+
+  return (
+    <View style={[styles.fallbackMap, { width, height }]}>
+      <Text style={styles.fallbackMapTitle}>Site Map (fallback)</Text>
+      {chargers.map((c) => {
+        const x = ((c.site.lng - minLng) / lngSpan) * (width - 36) + 18;
+        const y = (1 - (c.site.lat - minLat) / latSpan) * (height - 56) + 32;
+        const color = statusColor(c);
+        return (
+          <TouchableOpacity
+            key={c.id}
+            style={[styles.fallbackPin, { left: x - 8, top: y - 8, backgroundColor: color }]}
+            onPress={() => router.push(`/charger/${c.id}`)}
+          />
+        );
+      })}
+    </View>
+  );
+}
+
 // ── Fallback list view (when no Mapbox token) ─────────────────────────────────
 
 function ChargerListView({
@@ -214,6 +259,9 @@ export default function MapScreen() {
             </Text>
           </View>
         )}
+        <View style={styles.fallbackMapWrap}>
+          <MapPreviewFallback chargers={chargers} />
+        </View>
         <ChargerListView
           chargers={chargers}
           onRefresh={refetch}
@@ -271,4 +319,30 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   noBannerText: { fontSize: 12, color: '#92400e', textAlign: 'center' },
+  fallbackMapWrap: { paddingHorizontal: 12, paddingBottom: 4 },
+  fallbackMap: {
+    backgroundColor: '#e5e7eb',
+    borderRadius: 12,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    position: 'relative',
+  },
+  fallbackMapTitle: {
+    position: 'absolute',
+    top: 8,
+    left: 10,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  fallbackPin: {
+    position: 'absolute',
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
+  fallbackEmpty: { textAlign: 'center', color: '#6b7280', marginTop: 100 },
 });
