@@ -1,5 +1,6 @@
 import type { preHandlerHookHandler, FastifyRequest } from 'fastify';
 import { prisma } from '@ev-charger/shared';
+import { extractAuthProvider, normalizeRoleMetadata } from '../lib/authClaims';
 
 // Attach to request so route handlers can access the authenticated user
 declare module 'fastify' {
@@ -14,6 +15,8 @@ declare module 'fastify' {
     currentOperator?: {
       id: string;
       email?: string;
+      provider?: 'google' | 'apple' | 'unknown';
+      roles?: string[];
     };
   }
 }
@@ -90,15 +93,17 @@ export const requireOperator: preHandlerHookHandler = async (req, reply) => {
     const payload = await verifyToken(token, { secretKey: clerkSecretKey });
     const clerk = createClerkClient({ secretKey: clerkSecretKey });
     const clerkUser = await clerk.users.getUser(payload.sub);
-    const role = (clerkUser.publicMetadata as Record<string, unknown>)?.role;
+    const roles = normalizeRoleMetadata(clerkUser.publicMetadata);
 
-    if (role !== 'operator') {
+    if (!roles.includes('operator') && !roles.includes('owner')) {
       return reply.status(403).send({ error: 'Operator access required' });
     }
 
     req.currentOperator = {
       id: payload.sub,
       email: clerkUser.emailAddresses[0]?.emailAddress,
+      provider: extractAuthProvider(payload as Record<string, unknown>),
+      roles,
     };
   } catch {
     return reply.status(401).send({ error: 'Unauthorized' });
