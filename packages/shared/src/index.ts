@@ -6,3 +6,5 @@ export * from './schemas/ocpp';
 
 // Prisma client
 export { prisma } from './db';
+
+export * from './types/rbac';
