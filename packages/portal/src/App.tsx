@@ -1,11 +1,12 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { ClerkProvider, SignIn, SignedIn, SignedOut } from '@clerk/clerk-react';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { ClerkProvider, SignedIn, SignedOut } from '@clerk/clerk-react';
 import { ClerkTokenProvider, DevTokenProvider } from './auth/TokenContext';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import SiteDetail from './pages/SiteDetail';
 import Analytics from './pages/Analytics';
 import ChargerDetail from './pages/ChargerDetail';
+import Login from './pages/Login';
 
 const CLERK_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined;
 
@@ -18,8 +19,20 @@ function PortalRoutes() {
           <Route path="/sites/:id" element={<SiteDetail />} />
           <Route path="/sites/:id/analytics" element={<Analytics />} />
           <Route path="/chargers/:id" element={<ChargerDetail />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Layout>
+    </BrowserRouter>
+  );
+}
+
+function SignedOutRoutes() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="*" element={<Navigate to="/login" replace />} />
+      </Routes>
     </BrowserRouter>
   );
 }
@@ -33,15 +46,7 @@ function ClerkApp() {
         </ClerkTokenProvider>
       </SignedIn>
       <SignedOut>
-        <div className="flex min-h-screen items-center justify-center bg-gray-50">
-          <div className="w-full max-w-md">
-            <div className="mb-8 text-center">
-              <h1 className="text-2xl font-bold text-gray-900">⚡ EV Charger Portal</h1>
-              <p className="mt-1 text-sm text-gray-500">Operator management dashboard</p>
-            </div>
-            <SignIn routing="hash" />
-          </div>
-        </div>
+        <SignedOutRoutes />
       </SignedOut>
     </>
   );
