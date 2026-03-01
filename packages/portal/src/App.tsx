@@ -8,6 +8,7 @@ import SiteDetail from './pages/SiteDetail';
 import Analytics from './pages/Analytics';
 import ChargerDetail from './pages/ChargerDetail';
 import Login from './pages/Login';
+import CustomerSupport from './pages/CustomerSupport';
 
 const CLERK_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined;
 
@@ -20,6 +21,7 @@ function PortalRoutes() {
           <Route path="/sites/:id" element={<SiteDetail />} />
           <Route path="/sites/:id/analytics" element={<Analytics />} />
           <Route path="/chargers/:id" element={<ChargerDetail />} />
+          <Route path="/support" element={<CustomerSupport />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Layout>

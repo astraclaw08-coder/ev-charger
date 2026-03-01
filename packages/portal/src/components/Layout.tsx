@@ -4,6 +4,7 @@ import { cn } from '../lib/utils';
 
 const NAV = [
   { label: 'Dashboard', href: '/', icon: '🏠' },
+  { label: 'Support', href: '/support', icon: '🎧' },
 ];
 
 export default function Layout({ children }: { children: React.ReactNode }) {
@@ -25,7 +26,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               to={item.href}
               className={cn(
                 'flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors',
-                location.pathname === item.href
+                item.href === '/' ? location.pathname === '/' : location.pathname.startsWith(item.href)
                   ? 'bg-brand-50 text-brand-700'
                   : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900',
               )}
