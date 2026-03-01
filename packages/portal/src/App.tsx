@@ -1,6 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { ClerkProvider, SignedIn, SignedOut } from '@clerk/clerk-react';
 import { ClerkTokenProvider, DevTokenProvider } from './auth/TokenContext';
+import { ClerkAuthUxProvider, DevAuthUxProvider } from './auth/AuthUxContext';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import SiteDetail from './pages/SiteDetail';
@@ -31,6 +32,7 @@ function SignedOutRoutes() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/sso-callback" element={<Login error="Completing sign-in..." />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </BrowserRouter>
@@ -46,7 +48,9 @@ function ClerkApp() {
         </ClerkTokenProvider>
       </SignedIn>
       <SignedOut>
-        <SignedOutRoutes />
+        <ClerkAuthUxProvider>
+          <SignedOutRoutes />
+        </ClerkAuthUxProvider>
       </SignedOut>
     </>
   );
@@ -55,10 +59,12 @@ function ClerkApp() {
 function DevApp() {
   return (
     <DevTokenProvider>
-      <div className="sticky top-0 z-50 bg-yellow-400 px-4 py-1 text-center text-xs font-medium text-yellow-900">
-        Dev mode — no auth · operator-id: {import.meta.env.VITE_DEV_OPERATOR_ID ?? 'operator-001'}
-      </div>
-      <PortalRoutes />
+      <DevAuthUxProvider>
+        <div className="sticky top-0 z-50 bg-yellow-400 px-4 py-1 text-center text-xs font-medium text-yellow-900">
+          Dev mode — no auth · operator-id: {import.meta.env.VITE_DEV_OPERATOR_ID ?? 'operator-001'}
+        </div>
+        <PortalRoutes />
+      </DevAuthUxProvider>
     </DevTokenProvider>
   );
 }
