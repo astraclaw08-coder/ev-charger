@@ -1,13 +1,22 @@
-# UI/UX Visualization Pipeline Scaffold
+# UI/UX Visualization Pipeline
 
 Created: 2026-03-01
 
 ## Structure
-- `storybook/` — component and screen state catalog scaffold
-- `playwright/` — journey capture scaffold (screenshots/videos/traces)
-- `ci/` — CI workflow notes/templates
+- `packages/portal/.storybook/` — Storybook config for the portal UI
+- `packages/portal/src/stories/` — UI component stories
+- `packages/portal/playwright.config.ts` — Playwright smoke config
+- `packages/portal/tests/e2e/` — journey/smoke test specs
+- `.github/workflows/uiux-artifacts.yml` — CI build/test + artifact upload
 
-## Next Steps
-1. Add Storybook config and first EV portal stories.
-2. Add Playwright config + smoke journey specs.
-3. Wire GitHub Actions to publish Storybook and upload Playwright artifacts.
+## Local Commands
+```bash
+npm run storybook --workspace=packages/portal
+npm run build-storybook --workspace=packages/portal
+npm run test:playwright --workspace=packages/portal
+```
+
+## CI Artifacts
+- `storybook-static` — generated Storybook build output (`packages/portal/storybook-static`)
+- `playwright-report` — Playwright HTML report (`packages/portal/playwright-report`)
+- `playwright-test-results` — traces/screenshots/videos (`packages/portal/test-results`)
