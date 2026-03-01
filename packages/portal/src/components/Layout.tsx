@@ -5,6 +5,7 @@ import { cn } from '../lib/utils';
 const NAV = [
   { label: 'Dashboard', href: '/', icon: '🏠' },
   { label: 'Support', href: '/support', icon: '🎧' },
+  { label: 'Network Ops', href: '/network', icon: '🛠️' },
 ];
 
 export default function Layout({ children }: { children: React.ReactNode }) {
