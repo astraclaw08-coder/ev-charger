@@ -5,6 +5,7 @@ import { sessionRoutes } from './routes/sessions';
 import { siteRoutes } from './routes/sites';
 import { paymentRoutes } from './routes/payments';
 import { profileRoutes } from './routes/profile';
+import { authRoutes } from './routes/auth';
 
 export async function buildServer() {
   const app = Fastify({
@@ -37,6 +38,7 @@ export async function buildServer() {
   await app.register(siteRoutes);
   await app.register(paymentRoutes);
   await app.register(profileRoutes);
+  await app.register(authRoutes);
 
   return app;
 }
