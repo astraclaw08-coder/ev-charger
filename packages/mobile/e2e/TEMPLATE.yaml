@@ -1,0 +1,18 @@
+# TASK-XXXX: <title>
+# Verifies: <what this flow checks>
+appId: dev.evcharger.app
+---
+# 1. Launch app
+- launchApp
+- takeScreenshot: "XXXX-01-launched"
+
+# 2. Navigate to relevant screen
+- tapOn: "<tab name>"
+- takeScreenshot: "XXXX-02-screen"
+
+# 3. Assert key elements
+- assertVisible: "<expected text or element>"
+- takeScreenshot: "XXXX-03-verified"
+
+# 4. Assert regressions (old behavior gone)
+# - assertNotVisible: "<old text>"

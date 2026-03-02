@@ -1,0 +1,34 @@
+# TASK-0053: Favorites feature — heart icon, Favorites tab, map + charger detail wiring
+appId: dev.evcharger.app
+---
+- launchApp
+- assertVisible:
+    text: "Find Chargers"
+- takeScreenshot: "0053-01-map-loaded"
+
+# Favorites tab is present in the tab bar
+- assertVisible:
+    text: "Favorites, tab, 2 of 4"
+- takeScreenshot: "0053-02-favorites-tab-visible"
+
+# Navigate to Favorites tab — screen loads
+- tapOn:
+    text: "Favorites, tab, 2 of 4"
+- assertVisible:
+    text: "Favorites"
+- takeScreenshot: "0053-03-favorites-screen"
+
+# Navigate back to map
+- tapOn:
+    text: "Find Charger, tab, 1 of 4"
+- assertVisible:
+    text: "Closest chargers"
+- waitForAnimationToEnd
+- takeScreenshot: "0053-04-map-with-charger-list"
+
+# Scroll down slightly to ensure charger cards are in hierarchy
+- scroll
+- waitForAnimationToEnd
+- assertVisible:
+    text: "Closest chargers"
+- takeScreenshot: "0053-05-charger-cards-visible"
