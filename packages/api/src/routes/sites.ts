@@ -15,7 +15,10 @@ export async function siteRoutes(app: FastifyInstance) {
       orderBy: { createdAt: 'desc' },
     });
 
-    return sites.map((site) => ({
+    return sites.map((site: {
+      id: string; name: string; address: string; lat: number; lng: number; createdAt: Date;
+      chargers: Array<{ status: string }>;
+    }) => ({
       id: site.id,
       name: site.name,
       address: site.address,
@@ -54,7 +57,7 @@ export async function siteRoutes(app: FastifyInstance) {
       lat: site.lat,
       lng: site.lng,
       createdAt: site.createdAt,
-      chargers: site.chargers.map(({ password: _pw, ...c }) => c),
+      chargers: site.chargers.map(({ password: _pw, ...c }: { password: string; [k: string]: unknown }) => c),
     };
   });
 
@@ -86,7 +89,7 @@ export async function siteRoutes(app: FastifyInstance) {
     if (!site) return reply.status(404).send({ error: 'Site not found' });
 
     const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const connectorIds = site.chargers.flatMap((c) => c.connectors.map((cn) => cn.id));
+    const connectorIds = site.chargers.flatMap((c: { connectors: Array<{ id: string }> }) => c.connectors.map((cn) => cn.id));
 
     const sessions = await prisma.session.findMany({
       where: {
@@ -98,17 +101,17 @@ export async function siteRoutes(app: FastifyInstance) {
     });
 
     const sessionsCount = sessions.length;
-    const kwhDelivered = sessions.reduce((sum, s) => sum + (s.kwhDelivered ?? 0), 0);
-    const revenueCents = sessions.reduce((sum, s) => sum + (s.payment?.amountCents ?? 0), 0);
+    const kwhDelivered = sessions.reduce((sum: number, s: { kwhDelivered: number | null }) => sum + (s.kwhDelivered ?? 0), 0);
+    const revenueCents = sessions.reduce((sum: number, s: { payment: { amountCents: number | null } | null }) => sum + (s.payment?.amountCents ?? 0), 0);
 
     // Uptime approximation: % of chargers currently ONLINE
     const totalChargers = site.chargers.length;
-    const onlineChargers = site.chargers.filter((c) => c.status === 'ONLINE').length;
+    const onlineChargers = site.chargers.filter((c: { status: string }) => c.status === 'ONLINE').length;
     const uptimePct = totalChargers > 0 ? Math.round((onlineChargers / totalChargers) * 100) : 0;
 
     // Build daily breakdown: group sessions by UTC date, fill gaps with zeros
     const dailyMap: Record<string, { date: string; sessions: number; kwhDelivered: number; revenueCents: number }> = {};
-    sessions.forEach((s) => {
+    sessions.forEach((s: { startedAt: Date; kwhDelivered: number | null; payment: { amountCents: number | null } | null }) => {
       const day = s.startedAt.toISOString().slice(0, 10);
       if (!dailyMap[day]) dailyMap[day] = { date: day, sessions: 0, kwhDelivered: 0, revenueCents: 0 };
       dailyMap[day].sessions++;

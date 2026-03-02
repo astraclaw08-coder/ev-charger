@@ -216,7 +216,7 @@ export default function Analytics() {
               persistExportQueue(id, next);
               setTimeout(() => {
                 setExportQueue((current) => {
-                  const updated = current.map((j) => (j.id === job.id ? { ...j, status: 'complete' } : j));
+                  const updated = current.map((j) => (j.id === job.id ? { ...j, status: 'complete' as const } : j));
                   persistExportQueue(id, updated);
                   return updated;
                 });

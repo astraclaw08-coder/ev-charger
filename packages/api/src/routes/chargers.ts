@@ -27,7 +27,7 @@ export async function chargerRoutes(app: FastifyInstance) {
       },
     });
 
-    return chargers.map(({ password: _pw, ...c }) => c);
+    return chargers.map(({ password: _pw, ...c }: { password: string; [k: string]: unknown }) => c);
   });
 
   // GET /chargers/:id — full charger detail
@@ -76,7 +76,7 @@ export async function chargerRoutes(app: FastifyInstance) {
       ocppId: charger.ocppId,
       status: charger.status,
       lastHeartbeat: charger.lastHeartbeat,
-      connectors: charger.connectors.map((c) => ({
+      connectors: charger.connectors.map((c: { connectorId: number; status: string; sessions: Array<unknown> }) => ({
         connectorId: c.connectorId,
         status: c.status,
         activeSession: c.sessions[0] ?? null,
@@ -134,7 +134,7 @@ export async function chargerRoutes(app: FastifyInstance) {
     });
     if (!charger) return reply.status(404).send({ error: 'Charger not found' });
 
-    const connectorIds = charger.connectors.map((c) => c.id);
+    const connectorIds = charger.connectors.map((c: { id: string }) => c.id);
     const limit = Math.min(parseInt(req.query.limit ?? '20', 10), 100);
 
     const sessions = await prisma.session.findMany({

@@ -99,7 +99,7 @@ export async function sessionRoutes(app: FastifyInstance) {
       prisma.session.count({ where: { userId: user.id } }),
     ]);
 
-    const sessionsForClient = sessions.map((s) => ({
+    const sessionsForClient = sessions.map((s: { stoppedAt: Date | null; [k: string]: unknown }) => ({
       ...s,
       endedAt: s.stoppedAt,
     }));

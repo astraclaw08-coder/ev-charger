@@ -132,7 +132,7 @@ export default function NetworkOps() {
                   if(!site || !selectedChargerId) return;
                   const ev: RetryEvent = { id: crypto.randomUUID(), chargerId:selectedChargerId, command:cmd, status:'queued', createdAt:new Date().toISOString() };
                   const next=[ev,...retryEvents]; setRetryEvents(next); save(retryKey(site.id), next);
-                  setTimeout(()=>{ setRetryEvents((curr)=>{ const up=curr.map((x)=>x.id===ev.id?{...x,status:'ack'}:x); save(retryKey(site.id),up); return up; }); }, 600);
+                  setTimeout(()=>{ setRetryEvents((curr)=>{ const up=curr.map((x)=>x.id===ev.id?{...x,status:'ack' as const}:x); save(retryKey(site.id),up); return up; }); }, 600);
                 }}>{cmd}</button>
               ))}
             </div>
@@ -144,7 +144,7 @@ export default function NetworkOps() {
               if(!site || !selectedChargerId) return;
               const job: FirmwareRollout={id:crypto.randomUUID(), chargerId:selectedChargerId, version:'fw-2026.03.1', status:'rolling', createdAt:new Date().toISOString()};
               const next=[job,...firmware]; setFirmware(next); save(fwKey(site.id),next);
-              setTimeout(()=>{ setFirmware((curr)=>{ const up=curr.map((x)=>x.id===job.id?{...x,status:'done'}:x); save(fwKey(site.id),up); return up; }); }, 900);
+              setTimeout(()=>{ setFirmware((curr)=>{ const up=curr.map((x)=>x.id===job.id?{...x,status:'done' as const}:x); save(fwKey(site.id),up); return up; }); }, 900);
             }}>Start rollout</button>
           </div>
         </div>

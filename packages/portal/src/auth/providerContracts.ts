@@ -7,7 +7,7 @@ export const AUTH_PROVIDER_LABELS: Record<AuthProvider, string> = {
 
 export type AuthProviderContract = {
   provider: AuthProvider;
-  strategy: string;
+  strategy: 'oauth_google' | 'oauth_apple';
   redirectUrl: string;
 };
 

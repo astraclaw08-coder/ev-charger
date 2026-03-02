@@ -1,6 +1,5 @@
 import { prisma } from '@ev-charger/shared';
-import type { StatusNotificationRequest } from '@ev-charger/shared';
-import type { ChargerStatus, ConnectorStatus } from '@prisma/client';
+import type { StatusNotificationRequest, ChargerStatus, ConnectorStatus } from '@ev-charger/shared';
 
 // Map OCPP ChargePointStatus to Prisma ConnectorStatus
 function toConnectorStatus(ocppStatus: string): ConnectorStatus {
