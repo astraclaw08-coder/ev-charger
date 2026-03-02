@@ -18,6 +18,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, type Charger, type Connector } from '@/lib/api';
 import { ConnectorStatusBadge } from '@/components/ConnectorStatusBadge';
 import { useAppTheme } from '@/theme';
+import { useFavorites } from '@/hooks/useFavorites';
+import { HeartButton } from '@/components/HeartButton';
 
 const RATE_PER_KWH = 0.35; // $/kWh (matches hardcoded server value)
 
@@ -129,6 +131,7 @@ export default function ChargerDetailScreen() {
   const queryClient = useQueryClient();
   const [startingConnector, setStartingConnector] = useState<number | null>(null);
   const { isDark } = useAppTheme();
+  const { toggle, isFav } = useFavorites();
 
   const { data: charger, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['charger', id],
@@ -204,6 +207,9 @@ export default function ChargerDetailScreen() {
           headerStyle: { backgroundColor: isDark ? '#0b1220' : '#ffffff' },
           headerTintColor: isDark ? '#f9fafb' : '#111827',
           headerShadowVisible: false,
+          headerRight: () => (
+            <HeartButton isFavorited={isFav(charger.id)} onToggle={() => toggle(charger.id)} />
+          ),
         }}
       />
       <ScrollView

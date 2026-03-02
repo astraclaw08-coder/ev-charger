@@ -74,6 +74,15 @@ function DevApp() {
 }
 
 export default function App() {
+  if (import.meta.env.VITE_FORCE_LOGIN_SCREEN === '1') {
+    return (
+      <BrowserRouter>
+        <Routes>
+          <Route path="*" element={<Login />} />
+        </Routes>
+      </BrowserRouter>
+    );
+  }
   if (CLERK_KEY) {
     return (
       <ClerkProvider publishableKey={CLERK_KEY}>

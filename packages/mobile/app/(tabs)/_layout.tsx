@@ -30,6 +30,14 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="favorites"
+        options={{
+          title: 'Favorites',
+          tabBarLabel: 'Favorites',
+          tabBarIcon: ({ size }) => <TabIcon icon="❤️" size={size} />,
+        }}
+      />
+      <Tabs.Screen
         name="sessions"
         options={{
           title: 'Session History',

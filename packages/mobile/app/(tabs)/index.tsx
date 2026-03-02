@@ -15,6 +15,8 @@ import * as Location from 'expo-location';
 import MapView, { Marker, Region } from 'react-native-maps';
 import { api, type Charger } from '@/lib/api';
 import { useAppTheme } from '@/theme';
+import { useFavorites } from '@/hooks/useFavorites';
+import { HeartButton } from '@/components/HeartButton';
 
 type Coord = { latitude: number; longitude: number };
 
@@ -53,6 +55,7 @@ export default function MapScreen() {
   const mapRef = useRef<MapView | null>(null);
   const regionRef = useRef<Region | null>(null);
   const { isDark } = useAppTheme();
+  const { toggle, isFav } = useFavorites();
 
   const [hasLocation, setHasLocation] = useState(false);
   const [userLocation, setUserLocation] = useState<Coord | null>(null);
@@ -289,6 +292,7 @@ export default function MapScreen() {
                 </Text>
               </View>
               <Text style={{ color, fontWeight: '700', fontSize: 12 }}>{statusLabel(item)}</Text>
+              <HeartButton isFavorited={isFav(item.id)} onToggle={() => toggle(item.id)} />
             </TouchableOpacity>
           );
         })}
