@@ -127,6 +127,10 @@ model User {
   name           String?
   phone          String?
   homeAddress    String?
+  homeSiteAddress String?
+  homeCity        String?
+  homeState       String?
+  homeZipCode     String?
   paymentProfile String?
   idTag          String    @unique  // OCPP idTag for this driver (max 20 chars)
   sessions  Session[]

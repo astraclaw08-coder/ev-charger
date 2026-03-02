@@ -12,7 +12,7 @@ import {
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import * as Location from 'expo-location';
-import MapView, { Marker } from 'react-native-maps';
+import MapView, { Marker, Region } from 'react-native-maps';
 import { api, type Charger } from '@/lib/api';
 import { useAppTheme } from '@/theme';
 
@@ -51,13 +51,13 @@ function distanceKm(a: Coord, b: Coord): number {
 export default function MapScreen() {
   const router = useRouter();
   const mapRef = useRef<MapView | null>(null);
+  const regionRef = useRef<Region | null>(null);
   const { isDark } = useAppTheme();
 
   const [hasLocation, setHasLocation] = useState(false);
   const [userLocation, setUserLocation] = useState<Coord | null>(null);
   const [search, setSearch] = useState('');
   const [committedSearch, setCommittedSearch] = useState('');
-  const [mapZoom, setMapZoom] = useState(12);
 
   const { data: chargers = [], isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['chargers'],
@@ -123,14 +123,13 @@ export default function MapScreen() {
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
       const target = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
       setUserLocation(target);
-      mapRef.current?.animateToRegion(
-        {
-          ...target,
-          latitudeDelta: 0.03,
-          longitudeDelta: 0.03,
-        },
-        400,
-      );
+      const targetRegion = {
+        ...target,
+        latitudeDelta: 0.03,
+        longitudeDelta: 0.03,
+      };
+      regionRef.current = targetRegion;
+      mapRef.current?.animateToRegion(targetRegion, 400);
     } catch {
       // no-op
     }
@@ -166,11 +165,21 @@ export default function MapScreen() {
 
   function zoomBy(delta: number) {
     if (!mapRef.current) return;
-    const next = Math.max(3, Math.min(20, mapZoom + delta));
-    setMapZoom(next);
-    mapRef.current.getCamera().then((camera) => {
-      mapRef.current?.animateCamera({ ...camera, zoom: next }, { duration: 250 });
-    }).catch(() => {});
+    const base = regionRef.current ?? {
+      latitude: initialCenter.latitude,
+      longitude: initialCenter.longitude,
+      latitudeDelta: 0.06,
+      longitudeDelta: 0.06,
+    };
+    const factor = delta > 0 ? 0.5 : 2;
+    const nextRegion: Region = {
+      ...base,
+      latitudeDelta: Math.max(0.002, Math.min(60, base.latitudeDelta * factor)),
+      longitudeDelta: Math.max(0.002, Math.min(60, base.longitudeDelta * factor)),
+    };
+    regionRef.current = nextRegion;
+    mapRef.current.animateToRegion(nextRegion, 250);
+
   }
 
   function applySearch(ch: Charger) {
@@ -208,8 +217,7 @@ export default function MapScreen() {
           pitchEnabled
           userInterfaceStyle={isDark ? 'dark' : 'light'}
           onRegionChangeComplete={(r) => {
-            const approxZoom = Math.log2(360 / Math.max(r.longitudeDelta, 0.0001));
-            if (Number.isFinite(approxZoom)) setMapZoom(Math.max(3, Math.min(20, approxZoom)));
+            regionRef.current = r;
           }}
         >
           {filteredChargers.map((c) => (

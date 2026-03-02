@@ -12,12 +12,17 @@ import { useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { useAppTheme } from '@/theme';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type DriverProfile = {
   name: string;
   email: string;
   phone: string;
   homeAddress: string;
+  homeSiteAddress: string;
+  homeCity: string;
+  homeState: string;
+  homeZipCode: string;
   paymentProfile: string;
 };
 
@@ -26,12 +31,17 @@ const EMPTY: DriverProfile = {
   email: '',
   phone: '',
   homeAddress: '',
+  homeSiteAddress: '',
+  homeCity: '',
+  homeState: '',
+  homeZipCode: '',
   paymentProfile: '',
 };
 
 export default function ProfileScreen() {
   const { isDark, mode, setMode } = useAppTheme();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [profile, setProfile] = useState<DriverProfile>(EMPTY);
   const queryClient = useQueryClient();
 
@@ -47,6 +57,10 @@ export default function ProfileScreen() {
       email: data.email ?? '',
       phone: data.phone ?? '',
       homeAddress: data.homeAddress ?? '',
+      homeSiteAddress: data.homeSiteAddress ?? data.homeAddress ?? '',
+      homeCity: data.homeCity ?? '',
+      homeState: data.homeState ?? '',
+      homeZipCode: data.homeZipCode ?? '',
       paymentProfile: data.paymentProfile ?? '',
     });
   }, [data]);
@@ -57,7 +71,11 @@ export default function ProfileScreen() {
         name: profile.name,
         email: profile.email,
         phone: profile.phone,
-        homeAddress: profile.homeAddress,
+        homeAddress: profile.homeSiteAddress || profile.homeAddress,
+        homeSiteAddress: profile.homeSiteAddress,
+        homeCity: profile.homeCity,
+        homeState: profile.homeState,
+        homeZipCode: profile.homeZipCode,
         paymentProfile: profile.paymentProfile,
       }),
     onSuccess: () => {
@@ -72,9 +90,23 @@ export default function ProfileScreen() {
   }
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: isDark ? '#030712' : '#f9fafb' }]} contentContainerStyle={styles.content}>
+    <ScrollView
+      style={[styles.container, { backgroundColor: isDark ? '#030712' : '#f9fafb' }]}
+      contentContainerStyle={[styles.content, { paddingBottom: 36 + insets.bottom }]}
+      keyboardShouldPersistTaps="handled"
+    >
       <Text style={[styles.title, { color: isDark ? '#f9fafb' : '#111827' }]}>Driver Profile</Text>
       <Text style={[styles.subtitle, { color: isDark ? '#9ca3af' : '#6b7280' }]}>Set your details once and use them across devices.</Text>
+
+      <View style={[styles.card, { backgroundColor: isDark ? '#111827' : '#fff', borderColor: isDark ? '#374151' : '#e5e7eb' }]}>
+        <Text style={[styles.sectionTitle, { color: isDark ? '#f9fafb' : '#111827' }]}>Payment Methods</Text>
+        <Text style={[styles.paymentSummary, { color: isDark ? '#9ca3af' : '#4b5563' }]}>
+          {profile.paymentProfile || 'No payment method added yet'}
+        </Text>
+        <TouchableOpacity style={styles.paymentBtn} onPress={() => router.push('/profile/payment' as any)}>
+          <Text style={styles.paymentBtnText}>Manage Payment Methods</Text>
+        </TouchableOpacity>
+      </View>
 
       <View style={[styles.card, { backgroundColor: isDark ? '#111827' : '#fff', borderColor: isDark ? '#374151' : '#e5e7eb' }]}> 
         <Text style={[styles.sectionTitle, { color: isDark ? '#f9fafb' : '#111827' }]}>Appearance</Text>
@@ -101,12 +133,16 @@ export default function ProfileScreen() {
       <Field label="Name" value={profile.name} onChangeText={(v) => set('name', v)} isDark={isDark} autoCapitalize="words" />
       <Field label="Email" value={profile.email} onChangeText={(v) => set('email', v)} isDark={isDark} keyboardType="email-address" autoCapitalize="none" />
       <Field label="Phone" value={profile.phone} onChangeText={(v) => set('phone', v)} isDark={isDark} keyboardType="phone-pad" />
-      <Field label="Home Address" value={profile.homeAddress} onChangeText={(v) => set('homeAddress', v)} isDark={isDark} multiline />
-      <Field label="Payment Profile" value={profile.paymentProfile} onChangeText={(v) => set('paymentProfile', v)} isDark={isDark} placeholder="Visa •••• 4242 / Apple Pay" />
-
-      <TouchableOpacity style={styles.paymentBtn} onPress={() => router.push('/profile/payment' as any)}>
-        <Text style={styles.paymentBtnText}>Manage Payment Methods</Text>
-      </TouchableOpacity>
+      <Field label="Site Address" value={profile.homeSiteAddress} onChangeText={(v) => set('homeSiteAddress', v)} isDark={isDark} />
+      <View style={styles.row}>
+        <View style={styles.rowItem}>
+          <Field label="City" value={profile.homeCity} onChangeText={(v) => set('homeCity', v)} isDark={isDark} autoCapitalize="words" />
+        </View>
+        <View style={styles.rowItem}>
+          <Field label="State" value={profile.homeState} onChangeText={(v) => set('homeState', v.toUpperCase())} isDark={isDark} autoCapitalize="characters" maxLength={2} />
+        </View>
+      </View>
+      <Field label="Zip Code" value={profile.homeZipCode} onChangeText={(v) => set('homeZipCode', v)} isDark={isDark} keyboardType="number-pad" maxLength={10} />
 
       <TouchableOpacity
         style={[styles.saveBtn, (isLoading || saveMutation.isPending) && { opacity: 0.6 }]}
@@ -126,8 +162,9 @@ function Field({ label, isDark, multiline, ...props }: {
   isDark: boolean;
   multiline?: boolean;
   placeholder?: string;
-  keyboardType?: 'default' | 'email-address' | 'phone-pad';
+  keyboardType?: 'default' | 'email-address' | 'phone-pad' | 'number-pad';
   autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
+  maxLength?: number;
 }) {
   return (
     <View style={styles.fieldWrap}>
@@ -157,12 +194,15 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: 13, marginBottom: 10 },
   card: { borderWidth: 1, borderRadius: 12, padding: 12 },
   sectionTitle: { fontSize: 14, fontWeight: '700', marginBottom: 10 },
+  paymentSummary: { fontSize: 13, marginBottom: 12 },
   themeRow: { flexDirection: 'row', gap: 8 },
   modeBtn: { flex: 1, borderRadius: 10, paddingVertical: 10, alignItems: 'center' },
+  row: { flexDirection: 'row', gap: 10 },
+  rowItem: { flex: 1 },
   fieldWrap: { gap: 6 },
   label: { fontSize: 13, fontWeight: '600' },
   input: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, fontSize: 15 },
-  paymentBtn: { backgroundColor: '#111827', borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginTop: 8 },
+  paymentBtn: { backgroundColor: '#111827', borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
   paymentBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
   saveBtn: { backgroundColor: '#10b981', borderRadius: 12, marginTop: 8, paddingVertical: 14, alignItems: 'center' },
   saveText: { color: '#fff', fontWeight: '700', fontSize: 16 },

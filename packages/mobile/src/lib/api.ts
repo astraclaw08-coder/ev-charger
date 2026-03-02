@@ -122,6 +122,10 @@ export interface UserProfile {
   email: string;
   phone: string | null;
   homeAddress: string | null;
+  homeSiteAddress: string | null;
+  homeCity: string | null;
+  homeState: string | null;
+  homeZipCode: string | null;
   paymentProfile: string | null;
 }
 
@@ -182,7 +186,7 @@ export const api = {
     get() {
       return request<UserProfile>('/me/profile');
     },
-    update(input: Partial<Pick<UserProfile, 'name' | 'email' | 'phone' | 'homeAddress' | 'paymentProfile'>>) {
+    update(input: Partial<Pick<UserProfile, 'name' | 'email' | 'phone' | 'homeAddress' | 'homeSiteAddress' | 'homeCity' | 'homeState' | 'homeZipCode' | 'paymentProfile'>>) {
       return request<UserProfile>('/me/profile', {
         method: 'PUT',
         body: JSON.stringify(input),
