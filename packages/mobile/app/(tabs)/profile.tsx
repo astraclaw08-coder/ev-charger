@@ -104,7 +104,7 @@ export default function ProfileScreen() {
           {profile.paymentProfile || 'No payment method added yet'}
         </Text>
         <TouchableOpacity style={styles.paymentBtn} onPress={() => router.push('/profile/payment' as any)}>
-          <Text style={styles.paymentBtnText}>Manage Payment Methods</Text>
+          <Text style={styles.paymentBtnText}>Add Payment Method</Text>
         </TouchableOpacity>
       </View>
 
