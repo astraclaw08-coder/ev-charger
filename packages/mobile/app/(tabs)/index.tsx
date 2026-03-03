@@ -14,25 +14,36 @@ import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import * as Location from 'expo-location';
 import MapView, { Marker, Region } from 'react-native-maps';
-import { api, type Charger, type ChargerUptime } from '@/lib/api';
+import { api, type Charger } from '@/lib/api';
 import { useAppTheme } from '@/theme';
 import { useFavorites } from '@/hooks/useFavorites';
 import { HeartButton } from '@/components/HeartButton';
 
 type Coord = { latitude: number; longitude: number };
 
-function statusColor(charger: Charger): string {
-  const statuses = charger.connectors.map((c) => c.status);
+type SiteAggregate = {
+  siteId: string;
+  siteName: string;
+  siteAddress: string;
+  lat: number;
+  lng: number;
+  chargers: Charger[];
+  primaryChargerId: string;
+  totalPorts: number;
+  availablePorts: number;
+  distanceKm?: number;
+};
+
+function statusColorFromStatuses(statuses: string[]): string {
   if (statuses.some((s) => s === 'AVAILABLE')) return '#10b981';
   if (statuses.some((s) => s === 'CHARGING' || s === 'PREPARING' || s === 'FINISHING')) return '#f59e0b';
   if (statuses.some((s) => s === 'FAULTED')) return '#ef4444';
   return '#9ca3af';
 }
 
-function statusLabel(charger: Charger): string {
-  const statuses = charger.connectors.map((c) => c.status);
+function statusLabelFromStatuses(statuses: string[]): string {
   if (statuses.some((s) => s === 'AVAILABLE')) return 'Available';
-  if (statuses.some((s) => s === 'CHARGING')) return 'In Use';
+  if (statuses.some((s) => s === 'CHARGING' || s === 'PREPARING' || s === 'FINISHING')) return 'In Use';
   if (statuses.some((s) => s === 'FAULTED')) return 'Faulted';
   return 'Offline';
 }
@@ -83,58 +94,71 @@ export default function MapScreen() {
   }, []);
 
 
-  const filteredChargers = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return chargers;
-    return chargers.filter((c) =>
-      c.site.name.toLowerCase().includes(q) || c.site.address.toLowerCase().includes(q),
-    );
-  }, [chargers, search]);
+  const sites = useMemo(() => {
+    const bySite = new Map<string, SiteAggregate>();
 
+    for (const charger of chargers) {
+      const key = charger.site.id;
+      const existing = bySite.get(key);
+      if (!existing) {
+        bySite.set(key, {
+          siteId: charger.site.id,
+          siteName: charger.site.name,
+          siteAddress: charger.site.address,
+          lat: charger.site.lat,
+          lng: charger.site.lng,
+          chargers: [charger],
+          primaryChargerId: charger.id,
+          totalPorts: charger.connectors.length,
+          availablePorts: charger.connectors.filter((c) => c.status === 'AVAILABLE').length,
+        });
+      } else {
+        existing.chargers.push(charger);
+        existing.totalPorts += charger.connectors.length;
+        existing.availablePorts += charger.connectors.filter((c) => c.status === 'AVAILABLE').length;
+      }
+    }
+
+    return Array.from(bySite.values());
+  }, [chargers]);
+
+  const filteredSites = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return sites;
+    return sites.filter((s) =>
+      s.siteName.toLowerCase().includes(q) || s.siteAddress.toLowerCase().includes(q),
+    );
+  }, [sites, search]);
 
   const suggestions = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return [] as Charger[];
-    return chargers
-      .filter((c) => c.site.name.toLowerCase().includes(q) || c.site.address.toLowerCase().includes(q))
-      .slice(0, 5);
-  }, [chargers, search]);
+    if (!q) return [] as SiteAggregate[];
+    return filteredSites.slice(0, 5);
+  }, [filteredSites, search]);
 
   const initialCenter = useMemo(() => {
     if (userLocation) return userLocation;
-    if (filteredChargers.length > 0) {
-      return { latitude: filteredChargers[0].site.lat, longitude: filteredChargers[0].site.lng };
+    if (filteredSites.length > 0) {
+      return { latitude: filteredSites[0].lat, longitude: filteredSites[0].lng };
     }
     return { latitude: 33.9164, longitude: -118.3526 };
-  }, [filteredChargers, userLocation]);
+  }, [filteredSites, userLocation]);
 
-
-
-  const { data: uptimeList = {} } = useQuery<Record<string, ChargerUptime | null>>({
-    queryKey: ['charger-uptime-list', chargers.map(c => c.id).join(',')],
-    queryFn: async () => {
-      const rows = await Promise.all(chargers.slice(0, 20).map(async (c) => [c.id, await api.chargers.uptime(c.id).catch(() => null)] as const));
-      return Object.fromEntries(rows);
-    },
-    enabled: chargers.length > 0,
-    staleTime: 60_000,
-    refetchInterval: 120_000,
-  });
 
   const nearest = useMemo(() => {
-    if (filteredChargers.length === 0) return [] as Array<Charger & { distanceKm?: number }>;
+    if (filteredSites.length === 0) return [] as SiteAggregate[];
 
-    const withDistance = filteredChargers.map((c) => {
+    const withDistance = filteredSites.map((s) => {
       const d = userLocation
-        ? distanceKm(userLocation, { latitude: c.site.lat, longitude: c.site.lng })
+        ? distanceKm(userLocation, { latitude: s.lat, longitude: s.lng })
         : undefined;
-      return { ...c, distanceKm: d };
+      return { ...s, distanceKm: d };
     });
 
     return withDistance
       .sort((a, b) => (a.distanceKm ?? 9999) - (b.distanceKm ?? 9999))
       .slice(0, 3);
-  }, [filteredChargers, userLocation]);
+  }, [filteredSites, userLocation]);
 
   async function recenterToUser() {
     try {
@@ -156,9 +180,9 @@ export default function MapScreen() {
 
   useEffect(() => {
     const q = committedSearch.trim();
-    if (!q || filteredChargers.length === 0 || !mapRef.current) return;
+    if (!q || filteredSites.length === 0 || !mapRef.current) return;
 
-    const coords = filteredChargers.map((c) => ({ latitude: c.site.lat, longitude: c.site.lng }));
+    const coords = filteredSites.map((s) => ({ latitude: s.lat, longitude: s.lng }));
     const unique = Array.from(new Map(coords.map((c) => [`${c.latitude.toFixed(6)},${c.longitude.toFixed(6)}`, c])).values());
 
     if (unique.length === 1) {
@@ -178,7 +202,7 @@ export default function MapScreen() {
       edgePadding: { top: 70, right: 70, bottom: 120, left: 70 },
       animated: true,
     });
-  }, [committedSearch, filteredChargers]);
+  }, [committedSearch, filteredSites]);
 
 
   function zoomBy(delta: number) {
@@ -200,10 +224,10 @@ export default function MapScreen() {
 
   }
 
-  function applySearch(ch: Charger) {
-    setSearch(ch.site.name);
-    setCommittedSearch(ch.site.name);
-    router.push(`/charger/${ch.id}`);
+  function applySearch(site: SiteAggregate) {
+    setSearch(site.siteName);
+    setCommittedSearch(site.siteName);
+    router.push(`/charger/${site.primaryChargerId}`);
   }
 
   if (isLoading) {
@@ -238,16 +262,21 @@ export default function MapScreen() {
             regionRef.current = r;
           }}
         >
-          {filteredChargers.map((c) => (
-            <Marker
-              key={c.id}
-              coordinate={{ latitude: c.site.lat, longitude: c.site.lng }}
-              title={c.site.name}
-              description={`${c.vendor} ${c.model} · ${statusLabel(c)}${uptimeList[c.id] ? ` · Uptime 7d ${uptimeList[c.id]!.uptimePercent7d.toFixed(1)}%` : ''}`}
-              pinColor={statusColor(c)}
-              onCalloutPress={() => router.push(`/charger/${c.id}`)}
-            />
-          ))}
+          {filteredSites.map((site) => {
+            const allStatuses = site.chargers.flatMap((c) => c.connectors.map((x) => x.status));
+            const pinColor = statusColorFromStatuses(allStatuses);
+            const label = statusLabelFromStatuses(allStatuses);
+            return (
+              <Marker
+                key={site.siteId}
+                coordinate={{ latitude: site.lat, longitude: site.lng }}
+                title={site.siteName}
+                description={`${label} · ${site.availablePorts}/${site.totalPorts} ports available`}
+                pinColor={pinColor}
+                onCalloutPress={() => router.push(`/charger/${site.primaryChargerId}`)}
+              />
+            );
+          })}
         </MapView>
 
         <View pointerEvents="box-none" style={styles.mapControls}>
@@ -295,9 +324,9 @@ export default function MapScreen() {
         {suggestions.length > 0 && (
           <View style={[styles.suggestWrap, { backgroundColor: isDark ? '#111827ee' : '#fffffff0' }]}>
             {suggestions.map((sug) => (
-              <TouchableOpacity key={sug.id} style={styles.suggestRow} onPress={() => applySearch(sug)}>
-                <Text style={[styles.suggestName, { color: isDark ? '#f9fafb' : '#111827' }]} numberOfLines={1}>{sug.site.name}</Text>
-                <Text style={[styles.suggestAddr, { color: isDark ? '#9ca3af' : '#6b7280' }]} numberOfLines={1}>{sug.site.address}</Text>
+              <TouchableOpacity key={sug.siteId} style={styles.suggestRow} onPress={() => applySearch(sug)}>
+                <Text style={[styles.suggestName, { color: isDark ? '#f9fafb' : '#111827' }]} numberOfLines={1}>{sug.siteName}</Text>
+                <Text style={[styles.suggestAddr, { color: isDark ? '#9ca3af' : '#6b7280' }]} numberOfLines={1}>{sug.siteAddress}</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -310,32 +339,28 @@ export default function MapScreen() {
         refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}
       >
         <Text style={[styles.sectionTitle, { color: isDark ? '#f9fafb' : '#111827' }]}>Closest chargers</Text>
-        <Text style={[styles.sectionSubtitle, { color: isDark ? '#9ca3af' : '#6b7280' }]}>Top 2–3 stations nearest your current location</Text>
+        <Text style={[styles.sectionSubtitle, { color: isDark ? '#9ca3af' : '#6b7280' }]}>Top 2-3 stations nearest your current location</Text>
 
         {nearest.map((item) => {
-          const color = statusColor(item);
-          const available = item.connectors.filter((c) => c.status === 'AVAILABLE').length;
+          const statuses = item.chargers.flatMap((c) => c.connectors.map((x) => x.status));
+          const color = statusColorFromStatuses(statuses);
+          const label = statusLabelFromStatuses(statuses);
           return (
             <TouchableOpacity
-              key={item.id}
+              key={item.siteId}
               style={[styles.card, { backgroundColor: isDark ? '#111827' : '#f9fafb' }]}
-              onPress={() => router.push(`/charger/${item.id}`)}
+              onPress={() => router.push(`/charger/${item.primaryChargerId}`)}
             >
               <View style={[styles.dot, { backgroundColor: color }]} />
               <View style={{ flex: 1 }}>
-                <Text style={[styles.name, { color: isDark ? '#f9fafb' : '#111827' }]}>{item.site.name}</Text>
-                <Text style={[styles.meta, { color: isDark ? '#9ca3af' : '#6b7280' }]}>
+                <Text style={[styles.name, { color: isDark ? '#f9fafb' : '#111827' }]}>{item.siteName}</Text>
+                <Text style={[styles.meta, { color: isDark ? '#9ca3af' : '#6b7280' }]}> 
                   {item.distanceKm != null ? `${item.distanceKm.toFixed(2)} km • ` : ''}
-                  {available}/{item.connectors.length} available
+                  {item.availablePorts}/{item.totalPorts} ports available
                 </Text>
-                {uptimeList[item.id] && (
-                  <Text style={{ marginTop: 2, fontSize: 11, color: uptimeList[item.id]!.uptimePercent7d < 95 ? '#dc2626' : '#6b7280' }}>
-                    Uptime 7d: {uptimeList[item.id]!.uptimePercent7d.toFixed(2)}%{uptimeList[item.id]!.uptimePercent7d < 95 ? ' · Degraded' : ''}
-                  </Text>
-                )}
               </View>
-              <Text style={{ color, fontWeight: '700', fontSize: 12 }}>{statusLabel(item)}</Text>
-              <HeartButton isFavorited={isFav(item.id)} onToggle={() => toggle(item.id)} />
+              <Text style={{ color, fontWeight: '700', fontSize: 12 }}>{label}</Text>
+              <HeartButton isFavorited={isFav(item.primaryChargerId)} onToggle={() => toggle(item.primaryChargerId)} />
             </TouchableOpacity>
           );
         })}
