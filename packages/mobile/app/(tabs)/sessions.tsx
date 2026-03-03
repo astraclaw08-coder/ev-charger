@@ -128,8 +128,9 @@ export default function SessionsScreen() {
   const { isDark } = useAppTheme();
   const { isGuest } = useAppAuth();
   const [summaryRange, setSummaryRange] = useState<SummaryRange>('month');
+  const [manualRefreshing, setManualRefreshing] = useState(false);
 
-  const { data, isLoading, refetch, isRefetching } = useQuery({
+  const { data, isLoading, refetch } = useQuery({
     queryKey: ['sessions'],
     queryFn: () => api.sessions.list(20, 0),
     staleTime: 60_000,
@@ -142,6 +143,15 @@ export default function SessionsScreen() {
       return undefined;
     }, [refetch]),
   );
+
+  async function onPullRefresh() {
+    setManualRefreshing(true);
+    try {
+      await refetch();
+    } finally {
+      setManualRefreshing(false);
+    }
+  }
 
   if (isGuest) {
     return (
@@ -189,7 +199,7 @@ export default function SessionsScreen() {
         data={sessions}
         keyExtractor={(s) => s.id}
         contentContainerStyle={styles.listContent}
-        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}
+        refreshControl={<RefreshControl refreshing={manualRefreshing} onRefresh={onPullRefresh} />}
         ListHeaderComponent={
           <View style={styles.headerWrap}>
             <View style={[styles.segmentedControl, { backgroundColor: isDark ? '#111827' : '#e5e7eb' }]}> 
