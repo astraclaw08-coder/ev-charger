@@ -6,6 +6,7 @@ import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import SiteDetail from './pages/SiteDetail';
 import Analytics from './pages/Analytics';
+import AnalyticsPicker from './pages/AnalyticsPicker';
 import ChargerDetail from './pages/ChargerDetail';
 import Login from './pages/Login';
 import CustomerSupport from './pages/CustomerSupport';
@@ -20,6 +21,7 @@ function PortalRoutes() {
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/sites/:id" element={<SiteDetail />} />
+          <Route path="/analytics" element={<AnalyticsPicker />} />
           <Route path="/sites/:id/analytics" element={<Analytics />} />
           <Route path="/chargers/:id" element={<ChargerDetail />} />
           <Route path="/support" element={<CustomerSupport />} />
