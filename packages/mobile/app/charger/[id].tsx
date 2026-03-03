@@ -1,5 +1,5 @@
 /**
- * Charger detail screen — connector list, status, price per kWh, Start button.
+ * Charger detail screen - connector list, status, price per kWh, Start button.
  * Also handles Stripe payment setup (save card) before first session.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -61,7 +61,7 @@ function PaymentSetupBanner({ onSetupComplete, isDark }: { onSetupComplete: () =
   }
 
   return (
-    <View style={[styles.paymentBanner, { backgroundColor: isDark ? '#1f2937' : '#fffbeb', borderColor: isDark ? '#374151' : '#fde68a' }]}> 
+    <View style={[styles.paymentBanner, { backgroundColor: isDark ? '#1f2937' : '#fffbeb', borderColor: isDark ? '#374151' : '#fde68a' }]}>
       <Text style={[styles.paymentBannerTitle, { color: isDark ? '#f9fafb' : '#92400e' }]}>Save a payment method</Text>
       <Text style={[styles.paymentBannerSubtitle, { color: isDark ? '#d1d5db' : '#78350f' }]}>
         Add a card to start charging. You'll only be charged for energy used.
@@ -98,7 +98,7 @@ function ConnectorRow({
   const isCharging = connector.status === 'CHARGING' || connector.status === 'FINISHING';
 
   return (
-    <View style={[styles.connectorRow, { borderTopColor: isDark ? '#1f2937' : '#f3f4f6' }]}> 
+    <View style={[styles.connectorRow, { borderTopColor: isDark ? '#1f2937' : '#f3f4f6' }]}>
       <View style={styles.connectorLeft}>
         <Text style={[styles.connectorLabel, { color: isDark ? '#e5e7eb' : '#374151' }]}>Connector {connector.connectorId}</Text>
         <ConnectorStatusBadge status={connector.status} />
@@ -130,6 +130,8 @@ export default function ChargerDetailScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [startingConnector, setStartingConnector] = useState<number | null>(null);
+  const [activationMessage, setActivationMessage] = useState<string | null>(null);
+  const activationPollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { isDark } = useAppTheme();
   const { toggle, isFav } = useFavorites();
 
@@ -150,41 +152,89 @@ export default function ChargerDetailScreen() {
   const startMutation = useMutation({
     mutationFn: ({ chargerId, connectorId }: { chargerId: string; connectorId: number }) =>
       api.sessions.start(chargerId, connectorId),
-    onMutate: ({ connectorId }) => setStartingConnector(connectorId),
+    onMutate: ({ connectorId }) => {
+      setStartingConnector(connectorId);
+      setActivationMessage(null);
+    },
     onSettled: () => setStartingConnector(null),
-    onSuccess: (data) => {
+    onSuccess: async (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['charger', id] });
       queryClient.invalidateQueries({ queryKey: ['sessions'] });
 
-      // Poll for session creation (OCPP server creates it async after StartTransaction)
-      Alert.alert(
-        'Session starting…',
-        'Your session is being started. Check the History tab in a moment.',
-        [
-          {
-            text: 'View Sessions',
-            onPress: () => {
-              // Wait a moment for the session to be created, then navigate
-              setTimeout(() => {
-                router.push('/(tabs)/sessions');
-                // Then try to find the active session
-                api.sessions.list(5, 0).then((res) => {
-                  const active = res.sessions.find((s) => s.status === 'ACTIVE');
-                  if (active) router.replace(`/session/${active.id}`);
-                });
-              }, 3000);
-            },
-          },
-          { text: 'Stay Here' },
-        ],
-      );
+      setActivationMessage('Start accepted. Connecting to your live session…');
+
+      const startedAt = Date.now();
+      const timeoutMs = 20000;
+
+      const pollForSession = async () => {
+        try {
+          const res = await api.sessions.list(20, 0);
+          const active = res.sessions.find(
+            (s) =>
+              s.status === 'ACTIVE' &&
+              s.connector.charger.id === variables.chargerId &&
+              s.connector.connectorId === variables.connectorId,
+          );
+
+          if (active) {
+            setActivationMessage('Charging started. Opening live session…');
+            router.replace(`/session/${active.id}`);
+            return;
+          }
+
+          if (Date.now() - startedAt >= timeoutMs) {
+            setActivationMessage(null);
+            Alert.alert(
+              'Activation is taking longer than expected',
+              'The charger accepted the request, but session creation is delayed. Please check History in a few seconds.',
+              [{ text: 'Go to History', onPress: () => router.push('/(tabs)/sessions') }, { text: 'OK' }],
+            );
+            return;
+          }
+
+          activationPollRef.current = setTimeout(pollForSession, 1500);
+        } catch {
+          if (Date.now() - startedAt >= timeoutMs) {
+            setActivationMessage(null);
+            Alert.alert(
+              'Could not confirm activation yet',
+              'Network check failed while waiting for session creation. Please check History.',
+              [{ text: 'Go to History', onPress: () => router.push('/(tabs)/sessions') }, { text: 'OK' }],
+            );
+            return;
+          }
+          activationPollRef.current = setTimeout(pollForSession, 1500);
+        }
+      };
+
+      activationPollRef.current = setTimeout(pollForSession, 900);
     },
     onError: (err: Error) => {
+      setActivationMessage(null);
+      const lower = err.message.toLowerCase();
+      if (lower.includes('occupied') || lower.includes('in use')) {
+        Alert.alert('Connector unavailable', 'This connector is currently occupied. Please choose another connector.');
+        return;
+      }
+      if (lower.includes('timeout')) {
+        Alert.alert('Activation timeout', 'The charger did not confirm start in time. Please try again.');
+        return;
+      }
       Alert.alert('Failed to Start', err.message);
     },
   });
 
+  useEffect(() => {
+    return () => {
+      if (activationPollRef.current) clearTimeout(activationPollRef.current);
+    };
+  }, []);
+
   function handleStartSession(chargerId: string, connectorId: number) {
+    if (activationPollRef.current) {
+      clearTimeout(activationPollRef.current);
+      activationPollRef.current = null;
+    }
     startMutation.mutate({ chargerId, connectorId });
   }
 
@@ -226,7 +276,7 @@ export default function ChargerDetailScreen() {
         refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}
       >
         {/* Site info */}
-        <View style={[styles.siteCard, { backgroundColor: isDark ? '#111827' : '#fff' }]}> 
+        <View style={[styles.siteCard, { backgroundColor: isDark ? '#111827' : '#fff' }]}>
           <Text style={[styles.siteAddress, { color: isDark ? '#9ca3af' : '#6b7280' }]}>{charger.site.address}</Text>
           <View style={styles.siteMetaRow}>
             <Text style={[styles.chargerModel, { color: isDark ? '#d1d5db' : '#374151' }]}>
@@ -254,7 +304,7 @@ export default function ChargerDetailScreen() {
         <PaymentSetupBanner onSetupComplete={() => {}} isDark={isDark} />
 
         {/* Connectors */}
-        <View style={[styles.section, { backgroundColor: isDark ? '#111827' : '#fff' }]}> 
+        <View style={[styles.section, { backgroundColor: isDark ? '#111827' : '#fff' }]}>
           <Text style={[styles.sectionTitle, { color: isDark ? '#f9fafb' : '#111827' }]}>Connectors</Text>
           {charger.connectors.map((connector) => (
             <ConnectorRow
@@ -273,14 +323,23 @@ export default function ChargerDetailScreen() {
         {startMutation.isPending && (
           <View style={[styles.startingOverlay, { backgroundColor: isDark ? '#052e2b' : '#ecfdf5' }]}> 
             <ActivityIndicator color="#10b981" />
-            <Text style={[styles.startingText, { color: isDark ? '#a7f3d0' : '#065f46' }]}>
+            <Text style={[styles.startingText, { color: isDark ? '#a7f3d0' : '#065f46' }]}> 
               Sending start command to connector {startingConnector}…
             </Text>
           </View>
         )}
 
+        {activationMessage && (
+          <View style={[styles.startingOverlay, { backgroundColor: isDark ? '#1e293b' : '#eff6ff' }]}> 
+            <ActivityIndicator color={isDark ? '#93c5fd' : '#2563eb'} />
+            <Text style={[styles.startingText, { color: isDark ? '#bfdbfe' : '#1d4ed8' }]}>
+              {activationMessage}
+            </Text>
+          </View>
+        )}
+
         {/* Price info */}
-        <View style={[styles.priceNote, { backgroundColor: isDark ? '#1f2937' : '#f3f4f6' }]}> 
+        <View style={[styles.priceNote, { backgroundColor: isDark ? '#1f2937' : '#f3f4f6' }]}>
           <Text style={[styles.priceNoteText, { color: isDark ? '#d1d5db' : '#6b7280' }]}>
             ⚡ Rate: ${RATE_PER_KWH.toFixed(2)}/kWh · Billed based on energy delivered
           </Text>
