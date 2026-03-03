@@ -14,6 +14,7 @@ import { api } from '@/lib/api';
 import { useAppTheme } from '@/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { useAppAuth } from '@/providers/AuthProvider';
 
 type DriverProfile = {
   name: string;
@@ -46,10 +47,12 @@ export default function ProfileScreen() {
   const tabBarHeight = useBottomTabBarHeight();
   const [profile, setProfile] = useState<DriverProfile>(EMPTY);
   const queryClient = useQueryClient();
+  const { isGuest, signOut } = useAppAuth();
 
   const { data, isLoading } = useQuery({
     queryKey: ['me-profile'],
     queryFn: () => api.profile.get(),
+    enabled: !isGuest,
   });
 
   React.useEffect(() => {
@@ -89,6 +92,18 @@ export default function ProfileScreen() {
 
   function set<K extends keyof DriverProfile>(k: K, v: DriverProfile[K]) {
     setProfile((prev) => ({ ...prev, [k]: v }));
+  }
+
+  if (isGuest) {
+    return (
+      <View style={[styles.guestWrap, { backgroundColor: isDark ? '#030712' : '#f9fafb' }]}>
+        <Text style={[styles.title, { color: isDark ? '#f9fafb' : '#111827' }]}>Guest Mode</Text>
+        <Text style={[styles.subtitle, { color: isDark ? '#9ca3af' : '#6b7280' }]}>Sign in to access profile, history, and charging actions.</Text>
+        <TouchableOpacity style={styles.saveBtn} onPress={() => router.replace('/(auth)/sign-in' as any)}>
+          <Text style={styles.saveText}>Sign In</Text>
+        </TouchableOpacity>
+      </View>
+    );
   }
 
   return (
@@ -153,6 +168,18 @@ export default function ProfileScreen() {
       >
         <Text style={styles.saveText}>Save Profile</Text>
       </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.logoutBtn}
+        onPress={() =>
+          Alert.alert('Log Out?', 'You can still browse chargers in guest mode.', [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Log Out', style: 'destructive', onPress: () => signOut() },
+          ])
+        }
+      >
+        <Text style={styles.logoutText}>Log Out</Text>
+      </TouchableOpacity>
     </ScrollView>
   );
 }
@@ -192,6 +219,7 @@ function Field({ label, isDark, multiline, ...props }: {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { padding: 16, paddingBottom: 36 },
+  guestWrap: { flex: 1, padding: 16, justifyContent: 'center' },
   title: { fontSize: 24, fontWeight: '800' },
   subtitle: { fontSize: 13, marginBottom: 10 },
   card: { borderWidth: 1, borderRadius: 12, padding: 12, marginBottom: 12 },
@@ -208,4 +236,6 @@ const styles = StyleSheet.create({
   paymentBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
   saveBtn: { backgroundColor: '#10b981', borderRadius: 12, marginTop: 8, paddingVertical: 14, alignItems: 'center' },
   saveText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+  logoutBtn: { backgroundColor: '#991b1b', borderRadius: 12, marginTop: 12, paddingVertical: 14, alignItems: 'center' },
+  logoutText: { color: '#fff', fontWeight: '700', fontSize: 16 },
 });

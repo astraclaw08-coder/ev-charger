@@ -12,9 +12,11 @@ import {
 } from 'react-native';
 import { Link, useRouter } from 'expo-router';
 import { isDevMode } from '@/lib/api';
+import { useAppAuth } from '@/providers/AuthProvider';
 
 export default function SignInScreen() {
   const router = useRouter();
+  const { signIn } = useAppAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -31,7 +33,10 @@ export default function SignInScreen() {
           </Text>
           <TouchableOpacity
             style={styles.button}
-            onPress={() => router.replace('/(tabs)/index' as any)}
+            onPress={() => {
+              signIn?.();
+              router.replace('/(tabs)/index' as any);
+            }}
           >
             <Text style={styles.buttonText}>Continue to App</Text>
           </TouchableOpacity>

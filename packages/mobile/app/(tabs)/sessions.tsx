@@ -15,6 +15,7 @@ import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { api, type Session } from '@/lib/api';
 import { useAppTheme } from '@/theme';
+import { useAppAuth } from '@/providers/AuthProvider';
 
 type SummaryRange = 'week' | 'month' | 'year';
 
@@ -124,6 +125,7 @@ function SummaryCard({ label, value, isDark }: { label: string; value: string; i
 export default function SessionsScreen() {
   const router = useRouter();
   const { isDark } = useAppTheme();
+  const { isGuest } = useAppAuth();
   const [summaryRange, setSummaryRange] = useState<SummaryRange>('month');
 
   const { data, isLoading, refetch, isRefetching } = useQuery({
@@ -131,6 +133,18 @@ export default function SessionsScreen() {
     queryFn: () => api.sessions.list(20, 0),
     refetchInterval: 15_000,
   });
+
+  if (isGuest) {
+    return (
+      <View style={[styles.centered, { backgroundColor: isDark ? '#030712' : '#f9fafb', paddingHorizontal: 20 }]}> 
+        <Text style={[styles.emptyTitle, { marginBottom: 8 }]}>Guest mode</Text>
+        <Text style={[styles.emptySubtitle, { marginBottom: 16 }]}>Sign in to view charging history.</Text>
+        <TouchableOpacity style={{ backgroundColor: '#10b981', borderRadius: 10, paddingHorizontal: 18, paddingVertical: 12 }} onPress={() => router.replace('/(auth)/sign-in' as any)}>
+          <Text style={{ color: '#fff', fontWeight: '700' }}>Sign In</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   if (isLoading) {
     return (

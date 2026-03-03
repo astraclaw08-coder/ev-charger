@@ -21,6 +21,7 @@ import { ConnectorStatusBadge } from '@/components/ConnectorStatusBadge';
 import { useAppTheme } from '@/theme';
 import { useFavorites } from '@/hooks/useFavorites';
 import { HeartButton } from '@/components/HeartButton';
+import { useAppAuth } from '@/providers/AuthProvider';
 
 const RATE_PER_KWH = 0.35; // $/kWh (matches hardcoded server value)
 
@@ -136,6 +137,7 @@ export default function ChargerDetailScreen() {
   const activationPollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { isDark } = useAppTheme();
   const { toggle, isFav } = useFavorites();
+  const { isGuest } = useAppAuth();
 
   const { data: charger, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['charger', id],
@@ -218,11 +220,7 @@ export default function ChargerDetailScreen() {
           if (Date.now() - startedAt >= timeoutMs) {
             setActivationMessage(null);
             setShowActivationModal(false);
-            Alert.alert(
-              'Activation is taking longer than expected',
-              'The charger accepted the request, but session creation is delayed. Please check History in a few seconds.',
-              [{ text: 'Go to History', onPress: () => router.push('/(tabs)/sessions') }, { text: 'OK' }],
-            );
+            router.push('/(tabs)/sessions');
             return;
           }
 
@@ -267,6 +265,13 @@ export default function ChargerDetailScreen() {
   }, []);
 
   function handleStartSession(chargerId: string, connectorId: number) {
+    if (isGuest) {
+      Alert.alert('Sign in required', 'Please sign in to start a charging session.', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Sign In', onPress: () => router.replace('/(auth)/sign-in' as any) },
+      ]);
+      return;
+    }
     if (activationPollRef.current) {
       clearTimeout(activationPollRef.current);
       activationPollRef.current = null;

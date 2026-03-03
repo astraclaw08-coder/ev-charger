@@ -4,6 +4,7 @@ import { TouchableOpacity, Text, View } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { useAppTheme } from '@/theme';
+import { useAppAuth } from '@/providers/AuthProvider';
 
 function formatElapsed(startedAt: string): string {
   const start = new Date(startedAt).getTime();
@@ -80,6 +81,7 @@ function ActiveSessionBanner() {
 
 export default function TabsLayout() {
   const { isDark } = useAppTheme();
+  const { isGuest } = useAppAuth();
 
   return (
     <>
@@ -128,6 +130,7 @@ export default function TabsLayout() {
             title: 'Profile',
             tabBarLabel: 'Profile',
             tabBarIcon: ({ size }) => <TabIcon icon="👤" size={size} />,
+            tabBarBadge: isGuest ? 'Guest' : undefined,
           }}
         />
       </Tabs>
