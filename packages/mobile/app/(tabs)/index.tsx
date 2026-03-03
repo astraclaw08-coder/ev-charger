@@ -8,6 +8,7 @@ import {
   RefreshControl,
   ScrollView,
   TextInput,
+  Keyboard,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
@@ -53,6 +54,7 @@ function distanceKm(a: Coord, b: Coord): number {
 export default function MapScreen() {
   const router = useRouter();
   const mapRef = useRef<MapView | null>(null);
+  const searchInputRef = useRef<TextInput | null>(null);
   const regionRef = useRef<Region | null>(null);
   const { isDark } = useAppTheme();
   const { toggle, isFav } = useFavorites();
@@ -256,15 +258,38 @@ export default function MapScreen() {
           <TouchableOpacity style={styles.zoomBtn} onPress={() => zoomBy(-1)}><Text style={styles.zoomText}>－</Text></TouchableOpacity>
         </View>
 
-        <View style={[styles.searchWrap, { backgroundColor: isDark ? '#111827cc' : '#ffffffe6' }]} pointerEvents="box-none">
+        <View style={[styles.searchWrap, { backgroundColor: isDark ? '#111827cc' : '#ffffffe6' }]}>
           <TextInput
+            ref={searchInputRef}
+            testID="map-search-input"
             value={search}
             onChangeText={setSearch}
             onSubmitEditing={() => setCommittedSearch(search.trim())}
+            autoCorrect={false}
+            autoCapitalize="none"
+            clearButtonMode="never"
             placeholder="Search site or address"
             placeholderTextColor={isDark ? '#9ca3af' : '#6b7280'}
             style={[styles.searchInput, { color: isDark ? '#f9fafb' : '#111827' }]}
           />
+          {search.trim().length > 0 && (
+            <TouchableOpacity
+              testID="map-search-clear"
+              accessibilityRole="button"
+              accessibilityLabel="Clear search"
+              style={styles.clearBtn}
+              onPressIn={() => {
+                setSearch('');
+                setCommittedSearch('');
+                searchInputRef.current?.setNativeProps({ text: '' });
+                searchInputRef.current?.clear();
+                searchInputRef.current?.blur();
+                Keyboard.dismiss();
+              }}
+            >
+              <Text style={styles.clearBtnText}>✕</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {suggestions.length > 0 && (
@@ -340,7 +365,20 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#ffffff33',
   },
-  searchInput: { fontSize: 14, fontWeight: '600' },
+  searchInput: { fontSize: 14, fontWeight: '600', flex: 1, paddingRight: 40 },
+  clearBtn: {
+    position: 'absolute',
+    right: 10,
+    top: 7,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#374151',
+    zIndex: 10,
+  },
+  clearBtnText: { color: '#fff', fontSize: 12, fontWeight: '800' },
   suggestWrap: { position: 'absolute', left: 12, right: 12, bottom: 64, borderRadius: 12, borderWidth: 1, borderColor: '#ffffff22', overflow: 'hidden' },
   suggestRow: { paddingHorizontal: 10, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#ffffff1f' },
   suggestName: { fontSize: 13, fontWeight: '700' },
