@@ -2,7 +2,7 @@
  * Charger detail screen - connector list, status, price per kWh, Start button.
  * Also handles Stripe payment setup (save card) before first session.
  */
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -141,12 +141,40 @@ export default function ChargerDetailScreen() {
     refetchInterval: 10_000,
   });
 
+  const { data: allChargers = [] } = useQuery({
+    queryKey: ['chargers'],
+    queryFn: () => api.chargers.list(),
+    refetchInterval: 30_000,
+  });
 
+  const siteChargers = useMemo(() => {
+    if (!charger) return [] as Charger[];
+    return allChargers.filter((c) => c.site.id === charger.site.id);
+  }, [allChargers, charger]);
+
+  const [selectedChargerId, setSelectedChargerId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!charger) return;
+    if (!selectedChargerId) {
+      setSelectedChargerId(charger.id);
+      return;
+    }
+    if (!siteChargers.some((c) => c.id === selectedChargerId)) {
+      setSelectedChargerId(charger.id);
+    }
+  }, [charger, selectedChargerId, siteChargers]);
+
+  const selectedCharger = useMemo(() => {
+    if (!charger) return null;
+    return siteChargers.find((c) => c.id === selectedChargerId) ?? charger;
+  }, [charger, selectedChargerId, siteChargers]);
 
   const { data: uptime } = useQuery<ChargerUptime | null>({
-    queryKey: ['charger-uptime', id],
-    queryFn: () => api.chargers.uptime(id).catch(() => null),
+    queryKey: ['charger-uptime', selectedCharger?.id ?? id],
+    queryFn: () => api.chargers.uptime(selectedCharger?.id ?? id).catch(() => null),
     refetchInterval: 60_000,
+    enabled: Boolean(selectedCharger?.id ?? id),
   });
 
   const startMutation = useMutation({
@@ -254,7 +282,7 @@ export default function ChargerDetailScreen() {
     );
   }
 
-  const availableCount = charger.connectors.filter((c) => c.status === 'AVAILABLE').length;
+  const availableCount = selectedCharger?.connectors.filter((c) => c.status === 'AVAILABLE').length ?? 0;
 
   return (
     <>
@@ -266,7 +294,10 @@ export default function ChargerDetailScreen() {
           headerTintColor: isDark ? '#f9fafb' : '#111827',
           headerShadowVisible: false,
           headerRight: () => (
-            <HeartButton isFavorited={isFav(charger.id)} onToggle={() => toggle(charger.id)} />
+            <HeartButton
+              isFavorited={isFav(selectedCharger?.id ?? charger.id)}
+              onToggle={() => toggle(selectedCharger?.id ?? charger.id)}
+            />
           ),
         }}
       />
@@ -280,10 +311,10 @@ export default function ChargerDetailScreen() {
           <Text style={[styles.siteAddress, { color: isDark ? '#9ca3af' : '#6b7280' }]}>{charger.site.address}</Text>
           <View style={styles.siteMetaRow}>
             <Text style={[styles.chargerModel, { color: isDark ? '#d1d5db' : '#374151' }]}>
-              {charger.vendor} {charger.model}
+              {selectedCharger ? `${selectedCharger.vendor} ${selectedCharger.model}` : 'Select a charger'}
             </Text>
-            <Text style={[styles.availCount, { color: '#10b981' }]}>
-              {availableCount}/{charger.connectors.length} available
+            <Text style={[styles.availCount, { color: '#10b981' }]}> 
+              {availableCount}/{selectedCharger?.connectors.length ?? 0} available
             </Text>
           </View>
           {uptime && (
@@ -303,14 +334,43 @@ export default function ChargerDetailScreen() {
         {/* Payment setup (dev mode: skipped silently) */}
         <PaymentSetupBanner onSetupComplete={() => {}} isDark={isDark} />
 
-        {/* Connectors */}
+        {/* Chargers at this site */}
+        <View style={[styles.section, { backgroundColor: isDark ? '#111827' : '#fff' }]}>
+          <Text style={[styles.sectionTitle, { color: isDark ? '#f9fafb' : '#111827' }]}>Chargers at this site</Text>
+          {siteChargers.map((siteCharger) => {
+            const selected = siteCharger.id === selectedCharger?.id;
+            const available = siteCharger.connectors.filter((c) => c.status === 'AVAILABLE').length;
+            return (
+              <TouchableOpacity
+                key={siteCharger.id}
+                style={[
+                  styles.chargerSelectRow,
+                  { backgroundColor: selected ? (isDark ? '#1f2937' : '#ecfdf5') : 'transparent' },
+                ]}
+                onPress={() => setSelectedChargerId(siteCharger.id)}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.chargerSelectTitle, { color: isDark ? '#f9fafb' : '#111827' }]}>
+                    {siteCharger.ocppId}
+                  </Text>
+                  <Text style={[styles.chargerSelectMeta, { color: isDark ? '#9ca3af' : '#6b7280' }]}>
+                    {siteCharger.vendor} {siteCharger.model} · {available}/{siteCharger.connectors.length} available
+                  </Text>
+                </View>
+                {selected && <Text style={styles.selectedTag}>Selected</Text>}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        {/* Connectors for selected charger */}
         <View style={[styles.section, { backgroundColor: isDark ? '#111827' : '#fff' }]}>
           <Text style={[styles.sectionTitle, { color: isDark ? '#f9fafb' : '#111827' }]}>Connectors</Text>
-          {charger.connectors.map((connector) => (
+          {selectedCharger?.connectors.map((connector) => (
             <ConnectorRow
               key={connector.id}
               connector={connector}
-              chargerId={charger.id}
+              chargerId={selectedCharger.id}
               isDark={isDark}
               onSessionStarted={(cid, connId) => {
                 if (startMutation.isPending) return;
@@ -321,16 +381,16 @@ export default function ChargerDetailScreen() {
         </View>
 
         {startMutation.isPending && (
-          <View style={[styles.startingOverlay, { backgroundColor: isDark ? '#052e2b' : '#ecfdf5' }]}> 
+          <View style={[styles.startingOverlay, { backgroundColor: isDark ? '#052e2b' : '#ecfdf5' }]}>
             <ActivityIndicator color="#10b981" />
-            <Text style={[styles.startingText, { color: isDark ? '#a7f3d0' : '#065f46' }]}> 
+            <Text style={[styles.startingText, { color: isDark ? '#a7f3d0' : '#065f46' }]}>
               Sending start command to connector {startingConnector}…
             </Text>
           </View>
         )}
 
         {activationMessage && (
-          <View style={[styles.startingOverlay, { backgroundColor: isDark ? '#1e293b' : '#eff6ff' }]}> 
+          <View style={[styles.startingOverlay, { backgroundColor: isDark ? '#1e293b' : '#eff6ff' }]}>
             <ActivityIndicator color={isDark ? '#93c5fd' : '#2563eb'} />
             <Text style={[styles.startingText, { color: isDark ? '#bfdbfe' : '#1d4ed8' }]}>
               {activationMessage}
@@ -399,6 +459,18 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   sectionTitle: { fontSize: 16, fontWeight: '700', color: '#111827', marginBottom: 4 },
+  chargerSelectRow: {
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#37415133',
+  },
+  chargerSelectTitle: { fontSize: 14, fontWeight: '700' },
+  chargerSelectMeta: { fontSize: 12, marginTop: 2 },
+  selectedTag: { color: '#10b981', fontWeight: '700', fontSize: 12 },
 
   connectorRow: {
     flexDirection: 'row',
