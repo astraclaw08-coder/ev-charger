@@ -413,7 +413,7 @@ export default function ChargerDetailScreen() {
           <View style={styles.modalBackdrop}>
             <View style={[styles.modalCard, { backgroundColor: isDark ? '#0f172a' : '#ffffff' }]}>
               <Image
-                source={{ uri: 'https://media.giphy.com/media/3o7TKtnuHOHHUjR38Y/giphy.gif' }}
+                source={require('../../assets/plug-in.gif')}
                 style={styles.modalGif}
                 resizeMode="cover"
               />
