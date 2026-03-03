@@ -9,8 +9,10 @@ import {
   ScrollView,
   TextInput,
   Keyboard,
+  AppState,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { useQuery } from '@tanstack/react-query';
 import * as Location from 'expo-location';
 import MapView, { Marker, Region } from 'react-native-maps';
@@ -78,7 +80,8 @@ export default function MapScreen() {
   const { data: chargers = [], isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['chargers'],
     queryFn: () => api.chargers.list(),
-    refetchInterval: 30_000,
+    staleTime: 60_000,
+    placeholderData: (prev) => prev,
   });
 
   useEffect(() => {
@@ -92,6 +95,20 @@ export default function MapScreen() {
       setUserLocation({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
     })().catch(() => setHasLocation(false));
   }, []);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      refetch();
+      return undefined;
+    }, [refetch]),
+  );
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') refetch();
+    });
+    return () => sub.remove();
+  }, [refetch]);
 
 
   const sites = useMemo(() => {
@@ -235,14 +252,6 @@ export default function MapScreen() {
     router.push(`/charger/${site.primaryChargerId}`);
   }
 
-  if (isLoading) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#10b981" />
-      </View>
-    );
-  }
-
   return (
     <View style={[styles.container, { backgroundColor: isDark ? '#030712' : '#f9fafb' }]}>
       {/* 3/4 screen map */}
@@ -346,29 +355,38 @@ export default function MapScreen() {
         <Text style={[styles.sectionTitle, { color: isDark ? '#f9fafb' : '#111827' }]}>Closest chargers</Text>
         <Text style={[styles.sectionSubtitle, { color: isDark ? '#9ca3af' : '#6b7280' }]}>Top 2-3 stations nearest your current location</Text>
 
-        {nearest.map((item) => {
-          const statuses = item.chargers.flatMap((c) => c.connectors.map((x) => x.status));
-          const color = statusColorFromStatuses(statuses);
-          const label = statusLabelFromStatuses(statuses);
-          return (
-            <TouchableOpacity
-              key={item.siteId}
-              style={[styles.card, { backgroundColor: isDark ? '#111827' : '#f9fafb' }]}
-              onPress={() => router.push(`/charger/${item.primaryChargerId}`)}
-            >
-              <View style={[styles.dot, { backgroundColor: color }]} />
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.name, { color: isDark ? '#f9fafb' : '#111827' }]}>{item.siteName}</Text>
-                <Text style={[styles.meta, { color: isDark ? '#9ca3af' : '#6b7280' }]}> 
-                  {item.distanceKm != null ? `${item.distanceKm.toFixed(2)} km • ` : ''}
-                  {item.availablePorts}/{item.totalPorts} ports available
-                </Text>
-              </View>
-              <Text style={{ color, fontWeight: '700', fontSize: 12 }}>{label}</Text>
-              <HeartButton isFavorited={isFav(item.primaryChargerId)} onToggle={() => toggle(item.primaryChargerId)} />
-            </TouchableOpacity>
-          );
-        })}
+        <View style={styles.nearestListWrap}>
+          {isLoading && nearest.length === 0 && (
+            <View style={[styles.card, { backgroundColor: isDark ? '#111827' : '#f3f4f6', justifyContent: 'center' }]}>
+              <ActivityIndicator color="#10b981" />
+              <Text style={[styles.meta, { color: isDark ? '#9ca3af' : '#6b7280', marginLeft: 8 }]}>Loading nearby sites…</Text>
+            </View>
+          )}
+
+          {nearest.map((item) => {
+            const statuses = item.chargers.flatMap((c) => c.connectors.map((x) => x.status));
+            const color = statusColorFromStatuses(statuses);
+            const label = statusLabelFromStatuses(statuses);
+            return (
+              <TouchableOpacity
+                key={item.siteId}
+                style={[styles.card, { backgroundColor: isDark ? '#111827' : '#f9fafb' }]}
+                onPress={() => router.push(`/charger/${item.primaryChargerId}`)}
+              >
+                <View style={[styles.dot, { backgroundColor: color }]} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.name, { color: isDark ? '#f9fafb' : '#111827' }]}>{item.siteName}</Text>
+                  <Text style={[styles.meta, { color: isDark ? '#9ca3af' : '#6b7280' }]}> 
+                    {item.distanceKm != null ? `${item.distanceKm.toFixed(2)} km • ` : ''}
+                    {item.availablePorts}/{item.totalPorts} ports available
+                  </Text>
+                </View>
+                <Text style={{ color, fontWeight: '700', fontSize: 12 }}>{label}</Text>
+                <HeartButton isFavorited={isFav(item.primaryChargerId)} onToggle={() => toggle(item.primaryChargerId)} />
+              </TouchableOpacity>
+            );
+          })}
+        </View>
       </ScrollView>
     </View>
   );
@@ -416,6 +434,7 @@ const styles = StyleSheet.create({
   bottomSheet: { flex: 1, paddingHorizontal: 12, paddingTop: 10 },
   sectionTitle: { fontSize: 17, fontWeight: '800' },
   sectionSubtitle: { fontSize: 12, marginTop: 2, marginBottom: 8 },
+  nearestListWrap: { minHeight: 120 },
   card: {
     borderRadius: 12,
     padding: 12,

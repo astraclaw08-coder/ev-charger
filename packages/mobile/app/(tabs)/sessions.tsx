@@ -132,6 +132,8 @@ export default function SessionsScreen() {
   const { data, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['sessions'],
     queryFn: () => api.sessions.list(20, 0),
+    staleTime: 60_000,
+    placeholderData: (prev) => prev,
   });
 
   useFocusEffect(
@@ -190,8 +192,6 @@ export default function SessionsScreen() {
         refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}
         ListHeaderComponent={
           <View style={styles.headerWrap}>
-            <Text style={[styles.heading, { color: isDark ? '#f9fafb' : '#111827' }]}>Session history</Text>
-
             <View style={[styles.segmentedControl, { backgroundColor: isDark ? '#111827' : '#e5e7eb' }]}> 
               {(['week', 'month', 'year'] as SummaryRange[]).map((range) => {
                 const selected = summaryRange === range;
@@ -249,8 +249,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f9fafb' },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   listContent: { padding: 16, gap: 12, paddingBottom: 32 },
-  headerWrap: { marginBottom: 8, gap: 10 },
-  heading: { fontSize: 22, fontWeight: '800', color: '#111827' },
+  headerWrap: { marginBottom: 6, gap: 8 },
   segmentedControl: {
     flexDirection: 'row',
     borderRadius: 10,
