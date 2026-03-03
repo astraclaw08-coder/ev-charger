@@ -13,7 +13,6 @@ import {
   Alert,
   RefreshControl,
   Modal,
-  Image,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -412,11 +411,10 @@ export default function ChargerDetailScreen() {
         <Modal visible={showActivationModal} transparent animationType="fade" onRequestClose={() => setShowActivationModal(false)}>
           <View style={styles.modalBackdrop}>
             <View style={[styles.modalCard, { backgroundColor: isDark ? '#0f172a' : '#ffffff' }]}>
-              <Image
-                source={require('../../assets/plug-in.gif')}
-                style={styles.modalGif}
-                resizeMode="cover"
-              />
+              <View style={styles.modalGifFallback}>
+                <Text style={styles.modalGifFallbackIcon}>🔌 → 🚗</Text>
+                <Text style={styles.modalGifFallbackText}>Connect charger to vehicle</Text>
+              </View>
               <Text style={[styles.modalTitle, { color: isDark ? '#f8fafc' : '#0f172a' }]}>Charger activated</Text>
               <Text style={[styles.modalText, { color: isDark ? '#cbd5e1' : '#334155' }]}>
                 Your charger has been successfully activated. Please plug in the connector to your vehicle to start charging.
@@ -559,6 +557,22 @@ const styles = StyleSheet.create({
   modalGif: {
     width: '100%',
     height: 180,
+  },
+  modalGifFallback: {
+    width: '100%',
+    height: 180,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#0b1220',
+  },
+  modalGifFallbackIcon: {
+    fontSize: 40,
+    marginBottom: 8,
+  },
+  modalGifFallbackText: {
+    color: '#cbd5e1',
+    fontSize: 13,
+    fontWeight: '700',
   },
   modalTitle: {
     fontSize: 18,
