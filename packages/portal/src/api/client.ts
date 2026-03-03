@@ -206,5 +206,11 @@ export function createApiClient(token: string | null | undefined) {
         method: 'POST',
         body: JSON.stringify({ type }),
       }),
+
+    remoteStartCharger: (id: string, body: { connectorId: number; idTag: string }) =>
+      request<{ status: string }>(`/chargers/${id}/remote-start`, token, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
   };
 }
