@@ -1,7 +1,7 @@
 /**
  * Session History screen — driver's past and active sessions.
  */
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -10,11 +10,13 @@ import {
   TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
-  } from 'react-native';
+} from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { api, type Session } from '@/lib/api';
 import { useAppTheme } from '@/theme';
+
+type SummaryRange = 'week' | 'month' | 'year';
 
 function formatDuration(startedAt: string, endedAt: string | null): string {
   const start = new Date(startedAt).getTime();
@@ -34,9 +36,19 @@ function formatDate(iso: string): string {
   });
 }
 
-
 function formatKwh(value: number): string {
   return value.toFixed(4).replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1');
+}
+
+function getRangeStart(range: SummaryRange): Date {
+  const now = new Date();
+  if (range === 'week') {
+    return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  }
+  if (range === 'month') {
+    return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  }
+  return new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
 }
 
 function SessionCard({ session, onPress, isDark }: { session: Session; onPress: () => void; isDark: boolean }) {
@@ -52,7 +64,6 @@ function SessionCard({ session, onPress, isDark }: { session: Session; onPress: 
 
   return (
     <TouchableOpacity style={[styles.card, { backgroundColor: isDark ? '#111827' : '#fff' }]} onPress={onPress} activeOpacity={0.7}>
-      {/* Header row */}
       <View style={styles.cardHeader}>
         <Text style={[styles.siteName, { color: isDark ? '#f9fafb' : '#111827' }]}>{charger.site.name}</Text>
         {isActive && (
@@ -62,10 +73,8 @@ function SessionCard({ session, onPress, isDark }: { session: Session; onPress: 
         )}
       </View>
 
-      {/* Address */}
       <Text style={[styles.address, { color: isDark ? '#9ca3af' : '#6b7280' }]}>{charger.site.address}</Text>
 
-      {/* Stats row */}
       <View style={styles.statsRow}>
         <StatItem label="Date" value={formatDate(session.startedAt)} />
         <StatItem label="Duration" value={formatDuration(session.startedAt, session.endedAt)} />
@@ -73,7 +82,6 @@ function SessionCard({ session, onPress, isDark }: { session: Session; onPress: 
         {cost && <StatItem label="Cost" value={cost} highlight />}
       </View>
 
-      {/* Status */}
       <Text
         style={[
           styles.statusText,
@@ -104,9 +112,19 @@ function StatItem({
   );
 }
 
+function SummaryCard({ label, value, isDark }: { label: string; value: string; isDark: boolean }) {
+  return (
+    <View style={[styles.summaryCard, { backgroundColor: isDark ? '#111827' : '#ffffff' }]}> 
+      <Text style={[styles.summaryLabel, { color: isDark ? '#9ca3af' : '#6b7280' }]}>{label}</Text>
+      <Text style={[styles.summaryValue, { color: isDark ? '#f9fafb' : '#111827' }]}>{value}</Text>
+    </View>
+  );
+}
+
 export default function SessionsScreen() {
   const router = useRouter();
   const { isDark } = useAppTheme();
+  const [summaryRange, setSummaryRange] = useState<SummaryRange>('month');
 
   const { data, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['sessions'],
@@ -124,17 +142,66 @@ export default function SessionsScreen() {
 
   const sessions = data?.sessions ?? [];
 
+  const summary = useMemo(() => {
+    const rangeStart = getRangeStart(summaryRange).getTime();
+    const inRange = sessions.filter((s) => new Date(s.startedAt).getTime() >= rangeStart);
+
+    const totalKwh = inRange.reduce((sum, s) => sum + (s.kwhDelivered ?? 0), 0);
+    const totalSpend = inRange.reduce((sum, s) => {
+      if (s.payment?.amountCents != null) return sum + s.payment.amountCents / 100;
+      if (s.costEstimateCents != null) return sum + s.costEstimateCents / 100;
+      return sum;
+    }, 0);
+
+    return {
+      transactions: inRange.length,
+      totalKwh,
+      totalSpend,
+    };
+  }, [sessions, summaryRange]);
+
   return (
-    <View style={[styles.container, { backgroundColor: isDark ? '#030712' : '#f9fafb' }]}>
+    <View style={[styles.container, { backgroundColor: isDark ? '#030712' : '#f9fafb' }]}> 
       <FlatList
         data={sessions}
         keyExtractor={(s) => s.id}
         contentContainerStyle={styles.listContent}
         refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}
         ListHeaderComponent={
-          <Text style={[styles.heading, { color: isDark ? '#f9fafb' : '#111827' }]}>
-            {sessions.length} session{sessions.length !== 1 ? 's' : ''}
-          </Text>
+          <View style={styles.headerWrap}>
+            <Text style={[styles.heading, { color: isDark ? '#f9fafb' : '#111827' }]}>Session history</Text>
+
+            <View style={[styles.segmentedControl, { backgroundColor: isDark ? '#111827' : '#e5e7eb' }]}> 
+              {(['week', 'month', 'year'] as SummaryRange[]).map((range) => {
+                const selected = summaryRange === range;
+                return (
+                  <TouchableOpacity
+                    key={range}
+                    style={[
+                      styles.segmentBtn,
+                      selected && { backgroundColor: isDark ? '#1f2937' : '#ffffff' },
+                    ]}
+                    onPress={() => setSummaryRange(range)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.segmentText, { color: selected ? '#10b981' : isDark ? '#9ca3af' : '#6b7280' }]}>
+                      {range === 'week' ? 'Week' : range === 'month' ? 'Month' : 'Year'}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <View style={styles.summaryRow}>
+              <SummaryCard label="Transactions" value={`${summary.transactions}`} isDark={isDark} />
+              <SummaryCard label="Total kWh" value={formatKwh(summary.totalKwh)} isDark={isDark} />
+              <SummaryCard label="Total Spent" value={`$${summary.totalSpend.toFixed(2)}`} isDark={isDark} />
+            </View>
+
+            <Text style={[styles.countText, { color: isDark ? '#9ca3af' : '#6b7280' }]}>
+              {sessions.length} total session{sessions.length !== 1 ? 's' : ''}
+            </Text>
+          </View>
         }
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
@@ -149,11 +216,7 @@ export default function SessionsScreen() {
           <SessionCard
             session={item}
             isDark={isDark}
-            onPress={() =>
-              item.status === 'ACTIVE'
-                ? router.push(`/session/${item.id}`)
-                : router.push(`/session/${item.id}`)
-            }
+            onPress={() => router.push(`/session/${item.id}`)}
           />
         )}
       />
@@ -165,7 +228,49 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f9fafb' },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   listContent: { padding: 16, gap: 12, paddingBottom: 32 },
-  heading: { fontSize: 18, fontWeight: '700', color: '#111827', marginBottom: 4 },
+  headerWrap: { marginBottom: 8, gap: 10 },
+  heading: { fontSize: 22, fontWeight: '800', color: '#111827' },
+  segmentedControl: {
+    flexDirection: 'row',
+    borderRadius: 10,
+    padding: 4,
+    gap: 6,
+    alignSelf: 'flex-start',
+  },
+  segmentBtn: {
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  segmentText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  summaryCard: {
+    flex: 1,
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+  },
+  summaryLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+    marginBottom: 4,
+  },
+  summaryValue: {
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  countText: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
   card: {
     backgroundColor: '#fff',
     borderRadius: 14,
