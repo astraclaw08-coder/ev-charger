@@ -98,24 +98,29 @@ export default function MapScreen() {
     const bySite = new Map<string, SiteAggregate>();
 
     for (const charger of chargers) {
-      const key = charger.site.id;
+      const site = charger?.site;
+      const connectors = Array.isArray(charger?.connectors) ? charger.connectors : [];
+      const hasCoords = Number.isFinite(site?.lat) && Number.isFinite(site?.lng);
+      if (!charger?.id || !site || !hasCoords) continue;
+
+      const key = site.id || `${site.name}|${site.address}`;
       const existing = bySite.get(key);
       if (!existing) {
         bySite.set(key, {
-          siteId: charger.site.id,
-          siteName: charger.site.name,
-          siteAddress: charger.site.address,
-          lat: charger.site.lat,
-          lng: charger.site.lng,
+          siteId: key,
+          siteName: site.name,
+          siteAddress: site.address,
+          lat: site.lat,
+          lng: site.lng,
           chargers: [charger],
           primaryChargerId: charger.id,
-          totalPorts: charger.connectors.length,
-          availablePorts: charger.connectors.filter((c) => c.status === 'AVAILABLE').length,
+          totalPorts: connectors.length,
+          availablePorts: connectors.filter((c) => c.status === 'AVAILABLE').length,
         });
       } else {
         existing.chargers.push(charger);
-        existing.totalPorts += charger.connectors.length;
-        existing.availablePorts += charger.connectors.filter((c) => c.status === 'AVAILABLE').length;
+        existing.totalPorts += connectors.length;
+        existing.availablePorts += connectors.filter((c) => c.status === 'AVAILABLE').length;
       }
     }
 
