@@ -94,7 +94,7 @@ export default function ProfileScreen() {
   return (
     <ScrollView
       style={[styles.container, { backgroundColor: isDark ? '#030712' : '#f9fafb' }]}
-      contentContainerStyle={[styles.content, { paddingBottom: Math.max(36 + insets.bottom, tabBarHeight + 24) }]}
+      contentContainerStyle={[styles.content, { paddingBottom: Math.max(36 + insets.bottom, tabBarHeight + 24), flexGrow: 1 }]}
       keyboardShouldPersistTaps="handled"
     >
       <Text style={[styles.title, { color: isDark ? '#f9fafb' : '#111827' }]}>Driver Profile</Text>
@@ -137,7 +137,7 @@ export default function ProfileScreen() {
       <Field label="Phone" value={profile.phone} onChangeText={(v) => set('phone', v)} isDark={isDark} keyboardType="phone-pad" />
       <Field label="Site Address" value={profile.homeSiteAddress} onChangeText={(v) => set('homeSiteAddress', v)} isDark={isDark} />
       <View style={styles.row}>
-        <View style={styles.rowItem}>
+        <View style={[styles.rowItem, { marginRight: 0 }]}>
           <Field label="City" value={profile.homeCity} onChangeText={(v) => set('homeCity', v)} isDark={isDark} autoCapitalize="words" />
         </View>
         <View style={styles.rowItem}>
@@ -191,17 +191,17 @@ function Field({ label, isDark, multiline, ...props }: {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  content: { padding: 16, gap: 12, paddingBottom: 36 },
+  content: { padding: 16, paddingBottom: 36 },
   title: { fontSize: 24, fontWeight: '800' },
   subtitle: { fontSize: 13, marginBottom: 10 },
-  card: { borderWidth: 1, borderRadius: 12, padding: 12 },
+  card: { borderWidth: 1, borderRadius: 12, padding: 12, marginBottom: 12 },
   sectionTitle: { fontSize: 14, fontWeight: '700', marginBottom: 10 },
   paymentSummary: { fontSize: 13, marginBottom: 12 },
   themeRow: { flexDirection: 'row', gap: 8 },
   modeBtn: { flex: 1, borderRadius: 10, paddingVertical: 10, alignItems: 'center' },
-  row: { flexDirection: 'row', gap: 10 },
-  rowItem: { flex: 1 },
-  fieldWrap: { gap: 6 },
+  row: { flexDirection: 'row', marginBottom: 12 },
+  rowItem: { flex: 1, marginRight: 10 },
+  fieldWrap: { marginBottom: 12 },
   label: { fontSize: 13, fontWeight: '600' },
   input: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, fontSize: 15 },
   paymentBtn: { backgroundColor: '#111827', borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
