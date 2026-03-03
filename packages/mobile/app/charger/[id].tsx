@@ -13,6 +13,7 @@ import {
   Alert,
   RefreshControl,
   Modal,
+  Image,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -423,10 +424,11 @@ export default function ChargerDetailScreen() {
         <Modal visible={showActivationModal} transparent animationType="fade" onRequestClose={() => setShowActivationModal(false)}>
           <View style={styles.modalBackdrop}>
             <View style={[styles.modalCard, { backgroundColor: isDark ? '#0f172a' : '#ffffff' }]}>
-              <View style={styles.modalGifFallback}>
-                <Text style={styles.modalGifFallbackIcon}>🔌 → 🚗</Text>
-                <Text style={styles.modalGifFallbackText}>Connect charger to vehicle</Text>
-              </View>
+              <Image
+                source={require('../../assets/activation-visual.jpg')}
+                style={styles.modalGifFallback}
+                resizeMode="cover"
+              />
               <Text style={[styles.modalTitle, { color: isDark ? '#f8fafc' : '#0f172a' }]}>Charger activated</Text>
               <Text style={[styles.modalText, { color: isDark ? '#cbd5e1' : '#334155' }]}>
                 Your charger has been successfully activated. Please plug in the connector to your vehicle to start charging.
