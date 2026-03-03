@@ -130,6 +130,12 @@ export default function NetworkOps() {
               {(['RemoteStartTransaction','Reset','ChangeAvailability'] as const).map((cmd)=>(
                 <button key={cmd} className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-xs text-gray-700 hover:bg-gray-50" onClick={()=>{
                   if(!site || !selectedChargerId) return;
+
+                  if (cmd === 'Reset') {
+                    const ok = window.confirm('Confirm charger reset? This may interrupt active charging sessions.');
+                    if (!ok) return;
+                  }
+
                   const ev: RetryEvent = { id: crypto.randomUUID(), chargerId:selectedChargerId, command:cmd, status:'queued', createdAt:new Date().toISOString() };
                   const next=[ev,...retryEvents]; setRetryEvents(next); save(retryKey(site.id), next);
                   setTimeout(()=>{ setRetryEvents((curr)=>{ const up=curr.map((x)=>x.id===ev.id?{...x,status:'ack' as const}:x); save(retryKey(site.id),up); return up; }); }, 600);
