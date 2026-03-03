@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { AppState } from 'react-native';
 import { Tabs, useRouter, useSegments } from 'expo-router';
 import { TouchableOpacity, Text, View } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { useAppTheme } from '@/theme';
@@ -21,16 +23,29 @@ function ActiveSessionBanner() {
   const { isDark } = useAppTheme();
   const [, setTick] = useState(0);
 
-  const { data } = useQuery({
+  const { data, refetch } = useQuery({
     queryKey: ['sessions'],
     queryFn: () => api.sessions.list(20, 0),
-    refetchInterval: 10_000,
   });
 
   useEffect(() => {
     const timer = setInterval(() => setTick((t) => t + 1), 30_000);
     return () => clearInterval(timer);
   }, []);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      refetch();
+      return undefined;
+    }, [refetch]),
+  );
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') refetch();
+    });
+    return () => sub.remove();
+  }, [refetch]);
 
   const active = useMemo(() => data?.sessions.find((s) => s.status === 'ACTIVE') ?? null, [data]);
   const currentTab = segments[segments.length - 1];

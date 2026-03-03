@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { useQuery } from '@tanstack/react-query';
 import { api, type Session } from '@/lib/api';
 import { useAppTheme } from '@/theme';
@@ -131,8 +132,14 @@ export default function SessionsScreen() {
   const { data, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['sessions'],
     queryFn: () => api.sessions.list(20, 0),
-    refetchInterval: 15_000,
   });
+
+  useFocusEffect(
+    React.useCallback(() => {
+      refetch();
+      return undefined;
+    }, [refetch]),
+  );
 
   if (isGuest) {
     return (

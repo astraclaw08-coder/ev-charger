@@ -15,6 +15,7 @@ import {
   Modal,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, type Charger, type Connector, type ChargerUptime } from '@/lib/api';
 import { ConnectorStatusBadge } from '@/components/ConnectorStatusBadge';
@@ -142,13 +143,11 @@ export default function ChargerDetailScreen() {
   const { data: charger, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['charger', id],
     queryFn: () => api.chargers.get(id),
-    refetchInterval: 10_000,
   });
 
-  const { data: allChargers = [] } = useQuery({
+  const { data: allChargers = [], refetch: refetchAllChargers } = useQuery({
     queryKey: ['chargers'],
     queryFn: () => api.chargers.list(),
-    refetchInterval: 30_000,
   });
 
   const siteChargers = useMemo(() => {
@@ -174,12 +173,20 @@ export default function ChargerDetailScreen() {
     return siteChargers.find((c) => c.id === selectedChargerId) ?? charger;
   }, [charger, selectedChargerId, siteChargers]);
 
-  const { data: uptime } = useQuery<ChargerUptime | null>({
+  const { data: uptime, refetch: refetchUptime } = useQuery<ChargerUptime | null>({
     queryKey: ['charger-uptime', selectedCharger?.id ?? id],
     queryFn: () => api.chargers.uptime(selectedCharger?.id ?? id).catch(() => null),
-    refetchInterval: 60_000,
     enabled: Boolean(selectedCharger?.id ?? id),
   });
+
+  useFocusEffect(
+    React.useCallback(() => {
+      refetch();
+      refetchAllChargers();
+      refetchUptime();
+      return undefined;
+    }, [refetch, refetchAllChargers, refetchUptime]),
+  );
 
   const startMutation = useMutation({
     mutationFn: ({ chargerId, connectorId }: { chargerId: string; connectorId: number }) =>
