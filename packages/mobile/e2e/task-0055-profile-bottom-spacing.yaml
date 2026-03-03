@@ -1,11 +1,20 @@
 appId: dev.evcharger.app
 ---
-- launchApp
-- openLink: "dev.evcharger.app://--/(tabs)/profile"
+- launchApp:
+    clearState: true
+- tapOn:
+    text: "Profile, tab, 4 of 4"
+- assertVisible:
+    text: "Driver Profile"
+- scrollUntilVisible:
+    element:
+      text: "Save Profile"
+    direction: DOWN
+    timeout: 15000
 - assertVisible:
     text: "Save Profile"
-- takeScreenshot: "0055-01-save-visible"
+- takeScreenshot: "0055-01-save-visible-at-bottom"
 - scroll
 - assertVisible:
     text: "Save Profile"
-- takeScreenshot: "0055-02-save-still-visible"
+- takeScreenshot: "0055-02-save-not-obscured-after-scroll"
