@@ -207,6 +207,7 @@ export default function CustomerSupport() {
                 <p className="mt-1 text-xs text-gray-600">
                   Energy: {s.kwhDelivered ?? 0} kWh · Payment: {s.payment?.status ?? 'N/A'}
                   {s.payment?.amountCents != null ? ` · $${(s.payment.amountCents / 100).toFixed(2)}` : ''}
+                  {s.payment && ['CAPTURED', 'AUTHORIZED'].includes(String(s.payment.status)) ? ' · Refund eligible' : ''}
                 </p>
                 <p className="mt-1 text-xs text-brand-700">Case notes: {noteCountBySession.get(s.id) ?? 0}</p>
 
@@ -216,10 +217,18 @@ export default function CustomerSupport() {
                     className="rounded-md border border-green-300 bg-green-50 px-2 py-1 text-xs text-green-700 hover:bg-green-100"
                     onClick={() => {
                       if (!selectedChargerId) return;
+                      const canRefund = !!s.payment && ['CAPTURED', 'AUTHORIZED'].includes(String(s.payment.status));
+                      if (!canRefund) {
+                        window.alert('Refund unavailable: payment must be CAPTURED or AUTHORIZED.');
+                        return;
+                      }
+                      const ok = window.confirm(`Issue refund for session ${s.id}?`);
+                      if (!ok) return;
+
                       const record: SupportAudit = {
                         id: crypto.randomUUID(),
                         sessionId: s.id,
-                        action: 'refund-approved',
+                        action: 'refund-issued',
                         reason: triageReason,
                         createdAt: new Date().toISOString(),
                       };
@@ -227,7 +236,7 @@ export default function CustomerSupport() {
                       setAudit(next);
                       saveAudit(selectedChargerId, next);
                     }}
-                  >Approve refund</button>
+                  >Issue refund</button>
                   <button
                     type="button"
                     className="rounded-md border border-red-300 bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100"
