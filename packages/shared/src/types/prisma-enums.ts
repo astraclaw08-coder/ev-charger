@@ -9,7 +9,7 @@
  * the generated types because Prisma 5 uses string literal unions internally.
  */
 
-export type ChargerStatus = 'OFFLINE' | 'ONLINE' | 'FAULTED';
+export type ChargerStatus = 'OFFLINE' | 'ONLINE' | 'FAULTED' | 'DEGRADED';
 
 export type ConnectorStatus =
   | 'AVAILABLE'
@@ -27,3 +27,5 @@ export type SessionStatus = 'ACTIVE' | 'COMPLETED' | 'FAILED';
 export type PaymentStatus = 'PENDING' | 'AUTHORIZED' | 'CAPTURED' | 'FAILED' | 'REFUNDED';
 
 export type OcppDirection = 'INBOUND' | 'OUTBOUND';
+
+export type UptimeEventType = 'ONLINE' | 'OFFLINE' | 'FAULTED' | 'DEGRADED' | 'RECOVERED';

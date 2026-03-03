@@ -13,7 +13,7 @@ import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import * as Location from 'expo-location';
 import MapView, { Marker, Region } from 'react-native-maps';
-import { api, type Charger } from '@/lib/api';
+import { api, type Charger, type ChargerUptime } from '@/lib/api';
 import { useAppTheme } from '@/theme';
 import { useFavorites } from '@/hooks/useFavorites';
 import { HeartButton } from '@/components/HeartButton';
@@ -105,6 +105,19 @@ export default function MapScreen() {
     }
     return { latitude: 33.9164, longitude: -118.3526 };
   }, [filteredChargers, userLocation]);
+
+
+
+  const { data: uptimeList = {} } = useQuery<Record<string, ChargerUptime | null>>({
+    queryKey: ['charger-uptime-list', chargers.map(c => c.id).join(',')],
+    queryFn: async () => {
+      const rows = await Promise.all(chargers.slice(0, 20).map(async (c) => [c.id, await api.chargers.uptime(c.id).catch(() => null)] as const));
+      return Object.fromEntries(rows);
+    },
+    enabled: chargers.length > 0,
+    staleTime: 60_000,
+    refetchInterval: 120_000,
+  });
 
   const nearest = useMemo(() => {
     if (filteredChargers.length === 0) return [] as Array<Charger & { distanceKm?: number }>;
@@ -228,7 +241,7 @@ export default function MapScreen() {
               key={c.id}
               coordinate={{ latitude: c.site.lat, longitude: c.site.lng }}
               title={c.site.name}
-              description={`${c.vendor} ${c.model} · ${statusLabel(c)}`}
+              description={`${c.vendor} ${c.model} · ${statusLabel(c)}${uptimeList[c.id] ? ` · Uptime 7d ${uptimeList[c.id]!.uptimePercent7d.toFixed(1)}%` : ''}`}
               pinColor={statusColor(c)}
               onCalloutPress={() => router.push(`/charger/${c.id}`)}
             />
@@ -290,6 +303,11 @@ export default function MapScreen() {
                   {item.distanceKm != null ? `${item.distanceKm.toFixed(2)} km • ` : ''}
                   {available}/{item.connectors.length} available
                 </Text>
+                {uptimeList[item.id] && (
+                  <Text style={{ marginTop: 2, fontSize: 11, color: uptimeList[item.id]!.uptimePercent7d < 95 ? '#dc2626' : '#6b7280' }}>
+                    Uptime 7d: {uptimeList[item.id]!.uptimePercent7d.toFixed(2)}%{uptimeList[item.id]!.uptimePercent7d < 95 ? ' · Degraded' : ''}
+                  </Text>
+                )}
               </View>
               <Text style={{ color, fontWeight: '700', fontSize: 12 }}>{statusLabel(item)}</Text>
               <HeartButton isFavorited={isFav(item.id)} onToggle={() => toggle(item.id)} />

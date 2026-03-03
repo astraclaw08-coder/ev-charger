@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { prisma } from '@ev-charger/shared';
 import { requireOperator } from '../plugins/auth';
+import { getChargerUptime } from '../lib/uptime';
 
 export async function siteRoutes(app: FastifyInstance) {
   // GET /sites — list operator's sites with charger counts
@@ -75,6 +76,36 @@ export async function siteRoutes(app: FastifyInstance) {
     });
 
     return reply.status(201).send(site);
+  });
+
+
+
+  // GET /sites/:id/uptime — aggregate uptime across site chargers
+  app.get<{ Params: { id: string } }>('/sites/:id/uptime', {
+    preHandler: requireOperator,
+  }, async (req, reply) => {
+    const site = await prisma.site.findUnique({
+      where: { id: req.params.id },
+      include: { chargers: { select: { id: true, ocppId: true, status: true } } },
+    });
+
+    if (!site) return reply.status(404).send({ error: 'Site not found' });
+
+    const perCharger = await Promise.all(site.chargers.map((c) => getChargerUptime(c.id)));
+    const rows = perCharger.filter(Boolean) as NonNullable<Awaited<ReturnType<typeof getChargerUptime>>>[];
+
+    const avg = (arr: number[]) => arr.length ? Math.round((arr.reduce((a,b)=>a+b,0)/arr.length) * 100) / 100 : 0;
+
+    return {
+      siteId: site.id,
+      siteName: site.name,
+      chargerCount: rows.length,
+      uptimePercent24h: avg(rows.map(r => r.uptimePercent24h)),
+      uptimePercent7d: avg(rows.map(r => r.uptimePercent7d)),
+      uptimePercent30d: avg(rows.map(r => r.uptimePercent30d)),
+      degradedChargers: rows.filter(r => r.currentStatus === 'DEGRADED').length,
+      incidents: rows.flatMap(r => r.incidents.map(i => ({ ...i, chargerId: r.chargerId }))).slice(-50),
+    };
   });
 
   // GET /sites/:id/analytics — last 30 days: sessions, kWh, revenue, uptime

@@ -1,4 +1,5 @@
 import { prisma } from '@ev-charger/shared';
+import { recordUptimeEvent, toUptimeEvent } from '../uptimeEvents';
 import type { StatusNotificationRequest, ChargerStatus, ConnectorStatus } from '@ev-charger/shared';
 
 // Map OCPP ChargePointStatus to Prisma ConnectorStatus
@@ -34,10 +35,12 @@ export async function handleStatusNotification(
 
   if (connectorId === 0) {
     // ConnectorId 0 = the charger itself
+    const mapped = toChargerStatus(status);
     await prisma.charger.update({
       where: { id: chargerId },
-      data: { status: toChargerStatus(status) },
+      data: { status: mapped },
     });
+    await recordUptimeEvent(chargerId, toUptimeEvent(status), { reason: `StatusNotification connector=0 status=${status}`, errorCode });
   } else {
     // Upsert connector status (create if missing, update if exists)
     await prisma.connector.upsert({
@@ -51,6 +54,15 @@ export async function handleStatusNotification(
         status: toConnectorStatus(status),
       },
     });
+
+    // connector-level fault/offline visibility for incidents
+    if (status === 'Faulted' || status === 'Unavailable') {
+      await recordUptimeEvent(chargerId, status === 'Faulted' ? 'FAULTED' : 'OFFLINE', {
+        connectorId,
+        reason: `StatusNotification connector=${connectorId} status=${status}`,
+        errorCode,
+      });
+    }
   }
 
   return {};

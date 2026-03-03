@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { createApiClient, type SiteDetail as SiteDetailType } from '../api/client';
+import { createApiClient, type SiteDetail as SiteDetailType, type ChargerUptime, type SiteUptime } from '../api/client';
 import { useToken } from '../auth/TokenContext';
 import ChargerMap from '../components/ChargerMap';
 import StatusBadge from '../components/StatusBadge';
@@ -34,6 +34,8 @@ export default function SiteDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showAddCharger, setShowAddCharger] = useState(false);
+  const [chargerUptime, setChargerUptime] = useState<Record<string, ChargerUptime>>({});
+  const [siteUptime, setSiteUptime] = useState<SiteUptime | null>(null);
 
   const [tariff, setTariff] = useState<TariffConfig>({ pricePerKwhUsd: 0.35, idleFeePerMinUsd: 0.08, gracePeriodMin: 10 });
   const [assignments, setAssignments] = useState<RoleAssignment[]>([]);
@@ -44,11 +46,21 @@ export default function SiteDetail() {
   const load = useCallback(async () => {
     try {
       const token = await getToken();
-      const data = await createApiClient(token).getSite(id!);
+      const client = createApiClient(token);
+      const data = await client.getSite(id!);
       setSite(data);
       setTariff(loadTariff(data.id));
       setAssignments(loadRoles(data.id));
       setAuditEvents(loadAudit(data.id));
+
+      const [siteUp, perCharger] = await Promise.all([
+        client.getSiteUptime(data.id).catch(() => null),
+        Promise.all(data.chargers.map((c) => client.getChargerUptime(c.id).catch(() => null))),
+      ]);
+      if (siteUp) setSiteUptime(siteUp);
+      const map: Record<string, ChargerUptime> = {};
+      perCharger.forEach((u) => { if (u) map[u.chargerId] = u; });
+      setChargerUptime(map);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to load site');
     } finally {
@@ -161,6 +173,19 @@ export default function SiteDetail() {
         </div>
       </div>
 
+
+      {siteUptime && (
+        <div className="rounded-xl border border-gray-200 bg-white p-4">
+          <h2 className="mb-2 text-sm font-semibold text-gray-700">Site uptime summary (OCA v1.1)</h2>
+          <div className="grid gap-3 sm:grid-cols-4 text-sm">
+            <div><p className="text-gray-500">24h</p><p className="font-semibold text-gray-900">{siteUptime.uptimePercent24h.toFixed(2)}%</p></div>
+            <div><p className="text-gray-500">7d</p><p className="font-semibold text-gray-900">{siteUptime.uptimePercent7d.toFixed(2)}%</p></div>
+            <div><p className="text-gray-500">30d</p><p className="font-semibold text-gray-900">{siteUptime.uptimePercent30d.toFixed(2)}%</p></div>
+            <div><p className="text-gray-500">Degraded</p><p className="font-semibold text-amber-700">{siteUptime.degradedChargers}</p></div>
+          </div>
+        </div>
+      )}
+
       <ChargerMap lat={site.lat} lng={site.lng} siteName={site.name} chargers={site.chargers} />
 
       <div>
@@ -172,7 +197,7 @@ export default function SiteDetail() {
             <button onClick={() => setShowAddCharger(true)} className="mt-3 text-sm text-brand-600 hover:underline">Register your first charger →</button>
           </div>
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{site.chargers.map((charger) => (<ChargerCard key={charger.id} charger={charger} />))}</div>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{site.chargers.map((charger) => (<ChargerCard key={charger.id} charger={charger} uptime={chargerUptime[charger.id]} />))}</div>
         )}
       </div>
 
@@ -206,7 +231,7 @@ export default function SiteDetail() {
   );
 }
 
-function ChargerCard({ charger }: { charger: SiteDetailType['chargers'][number] }) {
+function ChargerCard({ charger, uptime }: { charger: SiteDetailType['chargers'][number]; uptime?: ChargerUptime }) {
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
       <div className="flex items-start justify-between">
@@ -231,6 +256,15 @@ function ChargerCard({ charger }: { charger: SiteDetailType['chargers'][number] 
           </div>
         ))}
       </div>
+
+      {uptime && (
+        <div className="mt-3 rounded-md border border-gray-100 bg-gray-50 px-2 py-1.5 text-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-gray-500">Uptime 7d</span>
+            <span className={uptime.uptimePercent7d >= 99 ? 'text-green-700 font-semibold' : uptime.uptimePercent7d >= 95 ? 'text-amber-700 font-semibold' : 'text-red-700 font-semibold'}>{uptime.uptimePercent7d.toFixed(2)}%</span>
+          </div>
+        </div>
+      )}
 
       <Link to={`/chargers/${charger.id}`} className="mt-3 block rounded-md border border-gray-200 px-3 py-1.5 text-center text-xs font-medium text-gray-600 hover:bg-gray-50">View Detail →</Link>
     </div>

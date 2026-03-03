@@ -1,4 +1,5 @@
 import { prisma } from '@ev-charger/shared';
+import { recordUptimeEvent } from '../uptimeEvents';
 import type { HeartbeatResponse } from '@ev-charger/shared';
 
 export async function handleHeartbeat(
@@ -9,10 +10,15 @@ export async function handleHeartbeat(
   const now = new Date();
   console.log(`[Heartbeat] chargerId=${chargerId}`);
 
+  const current = await prisma.charger.findUnique({ where: { id: chargerId }, select: { status: true } });
   await prisma.charger.update({
     where: { id: chargerId },
-    data: { lastHeartbeat: now },
+    data: { lastHeartbeat: now, status: current?.status === 'DEGRADED' ? 'ONLINE' : undefined },
   });
+
+  if (current?.status === 'DEGRADED') {
+    await recordUptimeEvent(chargerId, 'RECOVERED', { reason: 'Heartbeat restored' });
+  }
 
   return { currentTime: now.toISOString() };
 }

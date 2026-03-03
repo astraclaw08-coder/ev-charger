@@ -8,13 +8,27 @@ export default function Dashboard() {
   const [sites, setSites] = useState<SiteListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [fleetUptime, setFleetUptime] = useState<{ uptime24h: number; uptime7d: number; uptime30d: number; degraded: number } | null>(null);
 
   useEffect(() => {
     async function load() {
       try {
         const token = await getToken();
-        const data = await createApiClient(token).getSites();
+        const client = createApiClient(token);
+        const data = await client.getSites();
         setSites(data);
+
+        const siteUp = await Promise.all(data.map((site) => client.getSiteUptime(site.id).catch(() => null)));
+        const rows = siteUp.filter(Boolean);
+        if (rows.length) {
+          const avg = (arr: number[]) => Math.round((arr.reduce((a, b) => a + b, 0) / arr.length) * 100) / 100;
+          setFleetUptime({
+            uptime24h: avg(rows.map((r) => r!.uptimePercent24h)),
+            uptime7d: avg(rows.map((r) => r!.uptimePercent7d)),
+            uptime30d: avg(rows.map((r) => r!.uptimePercent30d)),
+            degraded: rows.reduce((sum, r) => sum + (r?.degradedChargers ?? 0), 0),
+          });
+        }
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : 'Failed to load sites');
       } finally {
@@ -44,6 +58,19 @@ export default function Dashboard() {
           <p className="mt-1 text-sm text-gray-500">All your charging sites</p>
         </div>
       </div>
+
+
+      {fleetUptime && (
+        <div className="mt-4 rounded-xl border border-gray-200 bg-white p-4">
+          <p className="text-sm font-semibold text-gray-700">Fleet uptime summary (OCA v1.1)</p>
+          <div className="mt-2 grid gap-3 sm:grid-cols-4">
+            <div><p className="text-xs text-gray-500">24h</p><p className="text-lg font-semibold text-gray-900">{fleetUptime.uptime24h.toFixed(2)}%</p></div>
+            <div><p className="text-xs text-gray-500">7d</p><p className="text-lg font-semibold text-gray-900">{fleetUptime.uptime7d.toFixed(2)}%</p></div>
+            <div><p className="text-xs text-gray-500">30d</p><p className="text-lg font-semibold text-gray-900">{fleetUptime.uptime30d.toFixed(2)}%</p></div>
+            <div><p className="text-xs text-gray-500">Degraded chargers</p><p className="text-lg font-semibold text-amber-700">{fleetUptime.degraded}</p></div>
+          </div>
+        </div>
+      )}
 
       {sites.length === 0 ? (
         <div className="mt-12 text-center text-gray-400">

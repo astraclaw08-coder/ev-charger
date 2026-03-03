@@ -137,6 +137,16 @@ export interface Payment {
   stripeIntentId: string | null;
 }
 
+
+export interface ChargerUptime {
+  chargerId: string;
+  currentStatus: 'ONLINE' | 'OFFLINE' | 'FAULTED' | 'DEGRADED';
+  lastOnlineAt: string | null;
+  uptimePercent24h: number;
+  uptimePercent7d: number;
+  uptimePercent30d: number;
+}
+
 // ── API calls ────────────────────────────────────────────────────────────────
 
 export const api = {
@@ -149,6 +159,9 @@ export const api = {
     },
     get(id: string) {
       return request<Charger>(`/chargers/${id}`);
+    },
+    uptime(id: string) {
+      return request<ChargerUptime>(`/chargers/${id}/uptime`);
     },
   },
 

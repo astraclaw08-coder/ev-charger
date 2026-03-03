@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { prisma } from '@ev-charger/shared';
 import { requireOperator } from '../plugins/auth';
 import { remoteReset } from '../lib/ocppClient';
+import { getChargerUptime } from '../lib/uptime';
 
 export async function chargerRoutes(app: FastifyInstance) {
   // GET /chargers — list chargers with optional bbox filter
@@ -149,6 +150,17 @@ export async function chargerRoutes(app: FastifyInstance) {
     });
 
     return sessions;
+  });
+
+
+
+  // GET /chargers/:id/uptime — rolling uptime windows + incidents
+  app.get<{ Params: { id: string } }>('/chargers/:id/uptime', {
+    preHandler: requireOperator,
+  }, async (req, reply) => {
+    const uptime = await getChargerUptime(req.params.id);
+    if (!uptime) return reply.status(404).send({ error: 'Charger not found' });
+    return uptime;
   });
 
   // POST /chargers/:id/reset — operator reboots a charger

@@ -13,6 +13,7 @@ enum ChargerStatus {
   OFFLINE
   ONLINE
   FAULTED
+  DEGRADED
 }
 
 enum ConnectorStatus {
@@ -46,6 +47,14 @@ enum OcppDirection {
   OUTBOUND
 }
 
+enum UptimeEventType {
+  ONLINE
+  OFFLINE
+  FAULTED
+  DEGRADED
+  RECOVERED
+}
+
 // ─── Models ───────────────────────────────────────────────────────────────────
 
 model Site {
@@ -75,6 +84,7 @@ model Charger {
   lastHeartbeat DateTime?
   connectors    Connector[]
   ocppLogs      OcppLog[]
+  uptimeEvents  UptimeEvent[]
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
@@ -169,4 +179,20 @@ model OcppLog {
 
   @@index([chargerId])
   @@index([createdAt])
+}
+
+
+model UptimeEvent {
+  id          String          @id @default(uuid())
+  chargerId   String
+  charger     Charger         @relation(fields: [chargerId], references: [id], onDelete: Cascade)
+  connectorId Int?
+  event       UptimeEventType
+  reason      String?
+  errorCode   String?
+  createdAt   DateTime        @default(now())
+
+  @@index([chargerId, createdAt])
+  @@index([createdAt])
+  @@index([event])
 }

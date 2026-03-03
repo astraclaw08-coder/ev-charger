@@ -1,4 +1,5 @@
 import { prisma } from '@ev-charger/shared';
+import { recordUptimeEvent } from '../uptimeEvents';
 import type { BootNotificationRequest, BootNotificationResponse } from '@ev-charger/shared';
 
 export async function handleBootNotification(
@@ -16,6 +17,8 @@ export async function handleBootNotification(
       model: params.chargePointModel,
     },
   });
+
+  await recordUptimeEvent(chargerId, 'ONLINE', { reason: 'BootNotification accepted' });
 
   return {
     currentTime: new Date().toISOString(),
