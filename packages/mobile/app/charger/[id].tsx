@@ -12,6 +12,8 @@ import {
   ScrollView,
   Alert,
   RefreshControl,
+  Modal,
+  Image,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -131,6 +133,7 @@ export default function ChargerDetailScreen() {
   const queryClient = useQueryClient();
   const [startingConnector, setStartingConnector] = useState<number | null>(null);
   const [activationMessage, setActivationMessage] = useState<string | null>(null);
+  const [showActivationModal, setShowActivationModal] = useState(false);
   const activationPollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { isDark } = useAppTheme();
   const { toggle, isFav } = useFavorites();
@@ -183,13 +186,15 @@ export default function ChargerDetailScreen() {
     onMutate: ({ connectorId }) => {
       setStartingConnector(connectorId);
       setActivationMessage(null);
+      setShowActivationModal(false);
     },
     onSettled: () => setStartingConnector(null),
     onSuccess: async (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['charger', id] });
       queryClient.invalidateQueries({ queryKey: ['sessions'] });
 
-      setActivationMessage('Start accepted. Connecting to your live session…');
+      setActivationMessage('Your charger has been successfully activated. Please plug in the connector to your vehicle to start charging.');
+      setShowActivationModal(true);
 
       const startedAt = Date.now();
       const timeoutMs = 20000;
@@ -206,12 +211,14 @@ export default function ChargerDetailScreen() {
 
           if (active) {
             setActivationMessage('Charging started. Opening live session…');
+            setShowActivationModal(false);
             router.replace(`/session/${active.id}`);
             return;
           }
 
           if (Date.now() - startedAt >= timeoutMs) {
             setActivationMessage(null);
+            setShowActivationModal(false);
             Alert.alert(
               'Activation is taking longer than expected',
               'The charger accepted the request, but session creation is delayed. Please check History in a few seconds.',
@@ -224,6 +231,7 @@ export default function ChargerDetailScreen() {
         } catch {
           if (Date.now() - startedAt >= timeoutMs) {
             setActivationMessage(null);
+            setShowActivationModal(false);
             Alert.alert(
               'Could not confirm activation yet',
               'Network check failed while waiting for session creation. Please check History.',
@@ -239,6 +247,7 @@ export default function ChargerDetailScreen() {
     },
     onError: (err: Error) => {
       setActivationMessage(null);
+      setShowActivationModal(false);
       const lower = err.message.toLowerCase();
       if (lower.includes('occupied') || lower.includes('in use')) {
         Alert.alert('Connector unavailable', 'This connector is currently occupied. Please choose another connector.');
@@ -282,7 +291,9 @@ export default function ChargerDetailScreen() {
     );
   }
 
-  const availableCount = selectedCharger?.connectors.filter((c) => c.status === 'AVAILABLE').length ?? 0;
+  const siteAvailableChargers = siteChargers.filter((c) =>
+    c.connectors.some((connector) => connector.status === 'AVAILABLE'),
+  ).length;
 
   return (
     <>
@@ -311,10 +322,10 @@ export default function ChargerDetailScreen() {
           <Text style={[styles.siteAddress, { color: isDark ? '#9ca3af' : '#6b7280' }]}>{charger.site.address}</Text>
           <View style={styles.siteMetaRow}>
             <Text style={[styles.chargerModel, { color: isDark ? '#d1d5db' : '#374151' }]}>
-              {selectedCharger ? `${selectedCharger.vendor} ${selectedCharger.model}` : 'Select a charger'}
+              {siteChargers.length} charger{siteChargers.length !== 1 ? 's' : ''} at this site
             </Text>
-            <Text style={[styles.availCount, { color: '#10b981' }]}> 
-              {availableCount}/{selectedCharger?.connectors.length ?? 0} available
+            <Text style={[styles.availCount, { color: '#10b981' }]}>
+              {siteAvailableChargers} charger{siteAvailableChargers !== 1 ? 's' : ''} available
             </Text>
           </View>
           {uptime && (
@@ -389,14 +400,30 @@ export default function ChargerDetailScreen() {
           </View>
         )}
 
-        {activationMessage && (
-          <View style={[styles.startingOverlay, { backgroundColor: isDark ? '#1e293b' : '#eff6ff' }]}>
+        {activationMessage && !showActivationModal && (
+          <View style={[styles.startingOverlay, { backgroundColor: isDark ? '#1e293b' : '#eff6ff' }]}> 
             <ActivityIndicator color={isDark ? '#93c5fd' : '#2563eb'} />
-            <Text style={[styles.startingText, { color: isDark ? '#bfdbfe' : '#1d4ed8' }]}>
+            <Text style={[styles.startingText, { color: isDark ? '#bfdbfe' : '#1d4ed8' }]}> 
               {activationMessage}
             </Text>
           </View>
         )}
+
+        <Modal visible={showActivationModal} transparent animationType="fade" onRequestClose={() => setShowActivationModal(false)}>
+          <View style={styles.modalBackdrop}>
+            <View style={[styles.modalCard, { backgroundColor: isDark ? '#0f172a' : '#ffffff' }]}>
+              <Image
+                source={{ uri: 'https://media.giphy.com/media/3o7TKtnuHOHHUjR38Y/giphy.gif' }}
+                style={styles.modalGif}
+                resizeMode="cover"
+              />
+              <Text style={[styles.modalTitle, { color: isDark ? '#f8fafc' : '#0f172a' }]}>Charger activated</Text>
+              <Text style={[styles.modalText, { color: isDark ? '#cbd5e1' : '#334155' }]}>
+                Your charger has been successfully activated. Please plug in the connector to your vehicle to start charging.
+              </Text>
+            </View>
+          </View>
+        </Modal>
 
         {/* Price info */}
         <View style={[styles.priceNote, { backgroundColor: isDark ? '#1f2937' : '#f3f4f6' }]}>
@@ -516,4 +543,34 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   priceNoteText: { fontSize: 12, color: '#6b7280', textAlign: 'center' },
+
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: '#00000088',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  modalCard: {
+    width: '100%',
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  modalGif: {
+    width: '100%',
+    height: 180,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    paddingHorizontal: 16,
+    paddingTop: 14,
+  },
+  modalText: {
+    fontSize: 14,
+    lineHeight: 20,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 16,
+  },
 });
