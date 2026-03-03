@@ -136,6 +136,8 @@ export default function ChargerDetailScreen() {
   const [startingConnector, setStartingConnector] = useState<number | null>(null);
   const [activationMessage, setActivationMessage] = useState<string | null>(null);
   const [showActivationModal, setShowActivationModal] = useState(false);
+  const [activationDeadlineMs, setActivationDeadlineMs] = useState<number | null>(null);
+  const [countdownText, setCountdownText] = useState('02:00');
   const activationPollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { isDark } = useAppTheme();
   const { toggle, isFav } = useFavorites();
@@ -189,6 +191,20 @@ export default function ChargerDetailScreen() {
     }, [refetch, refetchAllChargers, refetchUptime]),
   );
 
+  useEffect(() => {
+    if (!showActivationModal || !activationDeadlineMs) return;
+    const tick = () => {
+      const remain = Math.max(0, activationDeadlineMs - Date.now());
+      const totalSec = Math.ceil(remain / 1000);
+      const mm = String(Math.floor(totalSec / 60)).padStart(2, '0');
+      const ss = String(totalSec % 60).padStart(2, '0');
+      setCountdownText(`${mm}:${ss}`);
+    };
+    tick();
+    const timer = setInterval(tick, 1000);
+    return () => clearInterval(timer);
+  }, [showActivationModal, activationDeadlineMs]);
+
   const startMutation = useMutation({
     mutationFn: ({ chargerId, connectorId }: { chargerId: string; connectorId: number }) =>
       api.sessions.start(chargerId, connectorId),
@@ -196,6 +212,8 @@ export default function ChargerDetailScreen() {
       setStartingConnector(connectorId);
       setActivationMessage(null);
       setShowActivationModal(false);
+      setActivationDeadlineMs(null);
+      setCountdownText('02:00');
     },
     onSettled: () => setStartingConnector(null),
     onSuccess: async (_, variables) => {
@@ -204,9 +222,10 @@ export default function ChargerDetailScreen() {
 
       setActivationMessage('Your charger has been successfully activated. Please plug in the connector to your vehicle to start charging.');
       setShowActivationModal(true);
+      setActivationDeadlineMs(Date.now() + 120000);
 
       const startedAt = Date.now();
-      const timeoutMs = 20000;
+      const timeoutMs = 120000;
 
       const pollForSession = async () => {
         try {
@@ -221,6 +240,7 @@ export default function ChargerDetailScreen() {
           if (active) {
             setActivationMessage('Charging started. Opening live session…');
             setShowActivationModal(false);
+            setActivationDeadlineMs(null);
             router.replace(`/session/${active.id}`);
             return;
           }
@@ -228,6 +248,7 @@ export default function ChargerDetailScreen() {
           if (Date.now() - startedAt >= timeoutMs) {
             setActivationMessage(null);
             setShowActivationModal(false);
+            setActivationDeadlineMs(null);
             router.push('/(tabs)/sessions');
             return;
           }
@@ -237,6 +258,7 @@ export default function ChargerDetailScreen() {
           if (Date.now() - startedAt >= timeoutMs) {
             setActivationMessage(null);
             setShowActivationModal(false);
+            setActivationDeadlineMs(null);
             Alert.alert(
               'Could not confirm activation yet',
               'Network check failed while waiting for session creation. Please check History.',
@@ -253,6 +275,7 @@ export default function ChargerDetailScreen() {
     onError: (err: Error) => {
       setActivationMessage(null);
       setShowActivationModal(false);
+      setActivationDeadlineMs(null);
       const lower = err.message.toLowerCase();
       if (lower.includes('occupied') || lower.includes('in use')) {
         Alert.alert('Connector unavailable', 'This connector is currently occupied. Please choose another connector.');
@@ -424,12 +447,15 @@ export default function ChargerDetailScreen() {
         <Modal visible={showActivationModal} transparent animationType="fade" onRequestClose={() => setShowActivationModal(false)}>
           <View style={styles.modalBackdrop}>
             <View style={[styles.modalCard, { backgroundColor: isDark ? '#0f172a' : '#ffffff' }]}>
-              <Image
-                source={require('../../assets/activation-visual.jpg')}
-                style={styles.modalGifFallback}
-                resizeMode="cover"
-              />
+              <View style={styles.modalImageViewport}>
+                <Image
+                  source={require('../../assets/activation-visual.jpg')}
+                  style={styles.modalGifFallback}
+                  resizeMode="cover"
+                />
+              </View>
               <Text style={[styles.modalTitle, { color: isDark ? '#f8fafc' : '#0f172a' }]}>Charger activated</Text>
+              <Text style={[styles.modalTimer, { color: isDark ? '#86efac' : '#047857' }]}>Activation window: {countdownText}</Text>
               <Text style={[styles.modalText, { color: isDark ? '#cbd5e1' : '#334155' }]}>
                 Your charger has been successfully activated. Please plug in the connector to your vehicle to start charging.
               </Text>
@@ -568,31 +594,28 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     overflow: 'hidden',
   },
-  modalGif: {
+  modalImageViewport: {
     width: '100%',
-    height: 180,
+    height: 190,
+    overflow: 'hidden',
+    backgroundColor: '#0b1220',
   },
   modalGifFallback: {
     width: '100%',
-    height: 180,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#0b1220',
-  },
-  modalGifFallbackIcon: {
-    fontSize: 40,
-    marginBottom: 8,
-  },
-  modalGifFallbackText: {
-    color: '#cbd5e1',
-    fontSize: 13,
-    fontWeight: '700',
+    height: 230,
+    marginTop: -20,
   },
   modalTitle: {
     fontSize: 18,
     fontWeight: '800',
     paddingHorizontal: 16,
     paddingTop: 14,
+  },
+  modalTimer: {
+    fontSize: 13,
+    fontWeight: '800',
+    paddingHorizontal: 16,
+    paddingTop: 6,
   },
   modalText: {
     fontSize: 14,
