@@ -6,7 +6,7 @@ import { useToken } from '../auth/TokenContext';
 type Incident = { id: string; chargerId: string; title: string; createdAt: string; severity: 'low'|'medium'|'high' };
 type FirmwareRollout = { id: string; chargerId: string; version: string; status: 'queued'|'rolling'|'done'; createdAt: string };
 
-type RetryEvent = { id: string; chargerId: string; command: 'RemoteStartTransaction'|'Reset'|'ChangeAvailability'; status: 'queued'|'sent'|'ack'; createdAt: string };
+type RetryEvent = { id: string; chargerId: string; connectorId?: number; command: 'RemoteStartTransaction'|'Reset'|'ChangeAvailability'; status: 'queued'|'sent'|'ack'; createdAt: string };
 
 function incidentsKey(siteId: string){ return `ev-portal:network:incidents:${siteId}`; }
 function fwKey(siteId: string){ return `ev-portal:network:fw:${siteId}`; }
@@ -20,6 +20,7 @@ export default function NetworkOps() {
   const [sites, setSites] = useState<SiteListItem[]>([]);
   const [site, setSite] = useState<SiteDetail | null>(null);
   const [selectedChargerId, setSelectedChargerId] = useState('');
+  const [selectedConnectorId, setSelectedConnectorId] = useState<number>(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [incidents, setIncidents] = useState<Incident[]>([]);
@@ -38,6 +39,7 @@ export default function NetworkOps() {
         setSite(detail);
         const chargerId = detail.chargers[0]?.id ?? '';
         setSelectedChargerId(chargerId);
+        setSelectedConnectorId(detail.chargers[0]?.connectors?.[0]?.connectorId ?? 1);
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : 'Failed to load network ops workspace');
       } finally {
@@ -82,14 +84,14 @@ export default function NetworkOps() {
         <div>
           <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">Site</label>
           <select className="w-full rounded-md border border-gray-300 px-2 py-2 text-sm" value={site?.id ?? ''} onChange={async (e)=>{
-            const token=await getToken(); const detail=await createApiClient(token).getSite(e.target.value); setSite(detail); setSelectedChargerId(detail.chargers[0]?.id ?? '');
+            const token=await getToken(); const detail=await createApiClient(token).getSite(e.target.value); setSite(detail); setSelectedChargerId(detail.chargers[0]?.id ?? ''); setSelectedConnectorId(detail.chargers[0]?.connectors?.[0]?.connectorId ?? 1);
           }}>
             {sites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
         </div>
         <div>
           <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">Charger</label>
-          <select className="w-full rounded-md border border-gray-300 px-2 py-2 text-sm" value={selectedChargerId} onChange={(e)=>setSelectedChargerId(e.target.value)}>
+          <select className="w-full rounded-md border border-gray-300 px-2 py-2 text-sm" value={selectedChargerId} onChange={(e)=>{ const cid=e.target.value; setSelectedChargerId(cid); const ch=site?.chargers.find(c=>c.id===cid); setSelectedConnectorId(ch?.connectors?.[0]?.connectorId ?? 1); }}>
             {site?.chargers.map((c)=><option key={c.id} value={c.id}>{c.ocppId} · {c.status}</option>)}
           </select>
         </div>
@@ -127,6 +129,19 @@ export default function NetworkOps() {
           <div className="rounded-xl border border-gray-200 bg-white p-4">
             <h2 className="mb-2 text-sm font-semibold text-gray-700">Remote retry panel</h2>
             <div className="space-y-2">
+              <div>
+                <label className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-gray-500">Target connector (for ChangeAvailability)</label>
+                <select
+                  className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-xs"
+                  value={selectedConnectorId}
+                  onChange={(e)=>setSelectedConnectorId(Number(e.target.value))}
+                  disabled={!site?.chargers.find(c=>c.id===selectedChargerId)}
+                >
+                  {(site?.chargers.find(c=>c.id===selectedChargerId)?.connectors ?? []).map((cn)=>(
+                    <option key={cn.id} value={cn.connectorId}>Connector #{cn.connectorId} · {cn.status}</option>
+                  ))}
+                </select>
+              </div>
               {(['RemoteStartTransaction','Reset','ChangeAvailability'] as const).map((cmd)=>(
                 <button key={cmd} className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-xs text-gray-700 hover:bg-gray-50" onClick={()=>{
                   if(!site || !selectedChargerId) return;
@@ -136,7 +151,7 @@ export default function NetworkOps() {
                     if (!ok) return;
                   }
 
-                  const ev: RetryEvent = { id: crypto.randomUUID(), chargerId:selectedChargerId, command:cmd, status:'queued', createdAt:new Date().toISOString() };
+                  const ev: RetryEvent = { id: crypto.randomUUID(), chargerId:selectedChargerId, connectorId: cmd==='ChangeAvailability' ? selectedConnectorId : undefined, command:cmd, status:'queued', createdAt:new Date().toISOString() };
                   const next=[ev,...retryEvents]; setRetryEvents(next); save(retryKey(site.id), next);
                   setTimeout(()=>{ setRetryEvents((curr)=>{ const up=curr.map((x)=>x.id===ev.id?{...x,status:'ack' as const}:x); save(retryKey(site.id),up); return up; }); }, 600);
                 }}>{cmd}</button>
@@ -162,7 +177,7 @@ export default function NetworkOps() {
           <div className="space-y-2">
             {retryEvents.length===0 && <p className="text-xs text-gray-500">No retry commands sent.</p>}
             {retryEvents.slice(0,10).map((r)=><div key={r.id} className="rounded-md border border-gray-200 p-2 text-xs">
-              <p className="text-gray-800">{r.command}</p><p className="text-gray-500">{new Date(r.createdAt).toLocaleString()} · {r.status}</p>
+              <p className="text-gray-800">{r.command}{r.command==='ChangeAvailability' && r.connectorId ? ` · connector #${r.connectorId}` : ''}</p><p className="text-gray-500">{new Date(r.createdAt).toLocaleString()} · {r.status}</p>
             </div>)}
           </div>
         </div>
