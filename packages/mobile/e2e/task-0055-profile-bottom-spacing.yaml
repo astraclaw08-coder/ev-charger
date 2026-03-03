@@ -1,0 +1,11 @@
+appId: dev.evcharger.app
+---
+- launchApp
+- openLink: "dev.evcharger.app://--/(tabs)/profile"
+- assertVisible:
+    text: "Save Profile"
+- takeScreenshot: "0055-01-save-visible"
+- scroll
+- assertVisible:
+    text: "Save Profile"
+- takeScreenshot: "0055-02-save-still-visible"

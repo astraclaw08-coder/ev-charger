@@ -13,6 +13,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { useAppTheme } from '@/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 
 type DriverProfile = {
   name: string;
@@ -42,6 +43,7 @@ export default function ProfileScreen() {
   const { isDark, mode, setMode } = useAppTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const tabBarHeight = useBottomTabBarHeight();
   const [profile, setProfile] = useState<DriverProfile>(EMPTY);
   const queryClient = useQueryClient();
 
@@ -92,7 +94,7 @@ export default function ProfileScreen() {
   return (
     <ScrollView
       style={[styles.container, { backgroundColor: isDark ? '#030712' : '#f9fafb' }]}
-      contentContainerStyle={[styles.content, { paddingBottom: 36 + insets.bottom }]}
+      contentContainerStyle={[styles.content, { paddingBottom: Math.max(36 + insets.bottom, tabBarHeight + 24) }]}
       keyboardShouldPersistTaps="handled"
     >
       <Text style={[styles.title, { color: isDark ? '#f9fafb' : '#111827' }]}>Driver Profile</Text>
