@@ -196,6 +196,20 @@ export default function SiteDetail() {
             <p className="mt-2 font-medium">No chargers registered</p>
             <button onClick={() => setShowAddCharger(true)} className="mt-3 text-sm text-brand-600 hover:underline">Register your first charger →</button>
           </div>
+        ) : site.chargers.length > 4 ? (
+          <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+            <div className="hidden grid-cols-[1.6fr_1fr_1.8fr_0.8fr] gap-3 border-b border-gray-200 bg-gray-50 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500 md:grid">
+              <span>Charger</span>
+              <span>Status</span>
+              <span>Connectors</span>
+              <span className="text-right">Action</span>
+            </div>
+            <div className="divide-y divide-gray-100">
+              {site.chargers.map((charger) => (
+                <ChargerListRow key={charger.id} charger={charger} uptime={chargerUptime[charger.id]} />
+              ))}
+            </div>
+          </div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{site.chargers.map((charger) => (<ChargerCard key={charger.id} charger={charger} uptime={chargerUptime[charger.id]} />))}</div>
         )}
@@ -227,6 +241,42 @@ export default function SiteDetail() {
           onClose={() => setShowAddCharger(false)}
         />
       )}
+    </div>
+  );
+}
+
+function ChargerListRow({ charger, uptime }: { charger: SiteDetailType['chargers'][number]; uptime?: ChargerUptime }) {
+  return (
+    <div className="grid gap-3 px-4 py-3 md:grid-cols-[1.6fr_1fr_1.8fr_0.8fr] md:items-center">
+      <div>
+        <p className="font-mono text-sm font-semibold text-gray-900">{charger.ocppId}</p>
+        <p className="text-xs text-gray-500">{charger.vendor} {charger.model} · S/N {charger.serialNumber}</p>
+        {charger.lastHeartbeat && (
+          <p className="text-xs text-gray-400">Heartbeat: {formatDate(charger.lastHeartbeat)}</p>
+        )}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-1.5">
+        <StatusBadge status={charger.status} type="charger" />
+        {uptime && (
+          <span className={uptime.uptimePercent7d >= 99 ? 'text-xs font-semibold text-green-700' : uptime.uptimePercent7d >= 95 ? 'text-xs font-semibold text-amber-700' : 'text-xs font-semibold text-red-700'}>
+            {uptime.uptimePercent7d.toFixed(2)}% 7d
+          </span>
+        )}
+      </div>
+
+      <div className="flex flex-wrap gap-1.5">
+        {charger.connectors.map((c) => (
+          <div key={c.id} className="flex items-center gap-1 rounded-md border border-gray-100 bg-gray-50 px-2 py-0.5">
+            <span className="text-xs text-gray-500">#{c.connectorId}</span>
+            <StatusBadge status={c.status} type="connector" />
+          </div>
+        ))}
+      </div>
+
+      <div className="md:text-right">
+        <Link to={`/chargers/${charger.id}`} className="inline-block rounded-md border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50">View Detail →</Link>
+      </div>
     </div>
   );
 }
