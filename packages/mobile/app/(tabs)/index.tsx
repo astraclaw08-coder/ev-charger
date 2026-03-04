@@ -36,18 +36,31 @@ type SiteAggregate = {
   distanceKm?: number;
 };
 
-function statusColorFromStatuses(statuses: string[]): string {
-  if (statuses.some((s) => s === 'AVAILABLE')) return '#10b981';
-  if (statuses.some((s) => s === 'CHARGING' || s === 'PREPARING' || s === 'FINISHING')) return '#f59e0b';
-  if (statuses.some((s) => s === 'FAULTED')) return '#ef4444';
-  return '#9ca3af';
+function statusColorFromStatuses(statuses: string[], chargerStatuses: string[]): string {
+  const hasAvailable = statuses.some((s) => s === 'AVAILABLE');
+  const hasInUse = statuses.some((s) => s === 'CHARGING' || s === 'PREPARING' || s === 'FINISHING' || s === 'SUSPENDED_EV' || s === 'SUSPENDED_EVSE');
+  const hasFaulted = statuses.some((s) => s === 'FAULTED');
+  const isOffline = chargerStatuses.some((s) => s === 'OFFLINE') && !hasAvailable && !hasInUse;
+
+  if (hasAvailable) return '#10b981';
+  if (hasInUse) return '#f59e0b';
+  if (hasFaulted) return '#ef4444';
+  if (isOffline) return '#9ca3af';
+  return '#6b7280';
 }
 
-function statusLabelFromStatuses(statuses: string[]): string {
-  if (statuses.some((s) => s === 'AVAILABLE')) return 'Available';
-  if (statuses.some((s) => s === 'CHARGING' || s === 'PREPARING' || s === 'FINISHING')) return 'In Use';
-  if (statuses.some((s) => s === 'FAULTED')) return 'Faulted';
-  return 'Offline';
+function statusLabelFromStatuses(statuses: string[], chargerStatuses: string[]): string {
+  const hasAvailable = statuses.some((s) => s === 'AVAILABLE');
+  const hasInUse = statuses.some((s) => s === 'CHARGING' || s === 'PREPARING' || s === 'FINISHING' || s === 'SUSPENDED_EV' || s === 'SUSPENDED_EVSE');
+  const hasFaulted = statuses.some((s) => s === 'FAULTED');
+  const hasUnavailable = statuses.some((s) => s === 'UNAVAILABLE' || s === 'OFFLINE');
+  const isOffline = chargerStatuses.some((s) => s === 'OFFLINE') && !hasAvailable && !hasInUse;
+
+  if (hasAvailable) return 'Available';
+  if (hasInUse) return 'In Use';
+  if (hasFaulted) return 'Faulted';
+  if (isOffline || hasUnavailable) return 'Offline';
+  return 'Unknown';
 }
 
 function distanceKm(a: Coord, b: Coord): number {
@@ -278,8 +291,9 @@ export default function MapScreen() {
         >
           {filteredSites.map((site) => {
             const allStatuses = site.chargers.flatMap((c) => c.connectors.map((x) => x.status));
-            const pinColor = statusColorFromStatuses(allStatuses);
-            const label = statusLabelFromStatuses(allStatuses);
+            const chargerStatuses = site.chargers.map((c) => String(c.status || '').toUpperCase());
+            const pinColor = statusColorFromStatuses(allStatuses, chargerStatuses);
+            const label = statusLabelFromStatuses(allStatuses, chargerStatuses);
             return (
               <Marker
                 key={site.siteId}
@@ -365,8 +379,9 @@ export default function MapScreen() {
 
           {nearest.map((item) => {
             const statuses = item.chargers.flatMap((c) => c.connectors.map((x) => x.status));
-            const color = statusColorFromStatuses(statuses);
-            const label = statusLabelFromStatuses(statuses);
+            const chargerStatuses = item.chargers.map((c) => String(c.status || '').toUpperCase());
+            const color = statusColorFromStatuses(statuses, chargerStatuses);
+            const label = statusLabelFromStatuses(statuses, chargerStatuses);
             return (
               <TouchableOpacity
                 key={item.siteId}

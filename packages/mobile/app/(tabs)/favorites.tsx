@@ -15,18 +15,30 @@ import { useAppTheme } from '@/theme';
 
 function statusColor(c: Charger) {
   const s = c.connectors.map((x) => x.status);
-  if (s.some((x) => x === 'AVAILABLE')) return '#10b981';
-  if (s.some((x) => x === 'CHARGING' || x === 'PREPARING')) return '#f59e0b';
-  if (s.some((x) => x === 'FAULTED')) return '#ef4444';
-  return '#9ca3af';
+  const hasAvailable = s.some((x) => x === 'AVAILABLE');
+  const hasInUse = s.some((x) => x === 'CHARGING' || x === 'PREPARING' || x === 'FINISHING' || x === 'SUSPENDED_EV' || x === 'SUSPENDED_EVSE');
+  const hasFaulted = s.some((x) => x === 'FAULTED');
+  const isOffline = String(c.status || '').toUpperCase() === 'OFFLINE' && !hasAvailable && !hasInUse;
+
+  if (hasAvailable) return '#10b981';
+  if (hasInUse) return '#f59e0b';
+  if (hasFaulted) return '#ef4444';
+  if (isOffline || s.some((x) => x === 'UNAVAILABLE')) return '#9ca3af';
+  return '#6b7280';
 }
 
 function statusLabel(c: Charger) {
   const s = c.connectors.map((x) => x.status);
-  if (s.some((x) => x === 'AVAILABLE')) return 'Available';
-  if (s.some((x) => x === 'CHARGING')) return 'In Use';
-  if (s.some((x) => x === 'FAULTED')) return 'Faulted';
-  return 'Offline';
+  const hasAvailable = s.some((x) => x === 'AVAILABLE');
+  const hasInUse = s.some((x) => x === 'CHARGING' || x === 'PREPARING' || x === 'FINISHING' || x === 'SUSPENDED_EV' || x === 'SUSPENDED_EVSE');
+  const hasFaulted = s.some((x) => x === 'FAULTED');
+  const isOffline = String(c.status || '').toUpperCase() === 'OFFLINE' && !hasAvailable && !hasInUse;
+
+  if (hasAvailable) return 'Available';
+  if (hasInUse) return 'In Use';
+  if (hasFaulted) return 'Faulted';
+  if (isOffline || s.some((x) => x === 'UNAVAILABLE')) return 'Offline';
+  return 'Unknown';
 }
 
 export default function FavoritesScreen() {

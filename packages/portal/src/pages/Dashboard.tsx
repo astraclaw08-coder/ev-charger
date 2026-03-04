@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
 import { Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { createApiClient, type DailyEntry, type SiteListItem } from '../api/client';
 import { useToken } from '../auth/TokenContext';
@@ -92,8 +91,12 @@ export default function Dashboard() {
       let faulted = 0;
       let offline = 0;
 
+      const OFFLINE_TIMEOUT_MS = 5 * 60 * 1000;
+
       chargerStatuses.filter(Boolean).forEach((ch) => {
-        const chargerOffline = ch?.status?.toUpperCase() === 'OFFLINE';
+        const hbMs = ch?.lastHeartbeat ? new Date(ch.lastHeartbeat).getTime() : 0;
+        const staleHeartbeat = !hbMs || (Date.now() - hbMs) > OFFLINE_TIMEOUT_MS;
+        const chargerOffline = ch?.status?.toUpperCase() === 'OFFLINE' && staleHeartbeat;
         ch?.connectors.forEach((connector) => {
           totalConnectors += 1;
           const status = chargerOffline ? 'OFFLINE' : connector.status.toUpperCase();
@@ -101,7 +104,7 @@ export default function Dashboard() {
 
           if (status === 'AVAILABLE') available += 1;
           if (status === 'FAULTED') faulted += 1;
-          if (status === 'PREPARING' || status === 'CHARGING' || status === 'FINISHING') charging += 1;
+          if (status === 'PREPARING' || status === 'CHARGING' || status === 'FINISHING' || status === 'SUSPENDED_EV' || status === 'SUSPENDED_EVSE') charging += 1;
           if (status === 'UNAVAILABLE' || status === 'OFFLINE') offline += 1;
         });
       });
@@ -267,7 +270,7 @@ export default function Dashboard() {
 
           <div className="mt-3 flex flex-wrap gap-2">
             {fleetStatus.byStatus
-              .filter((entry) => !['AVAILABLE', 'PREPARING', 'CHARGING', 'FINISHING', 'FAULTED', 'UNAVAILABLE', 'OFFLINE'].includes(entry.status))
+              .filter((entry) => !['AVAILABLE', 'PREPARING', 'CHARGING', 'FINISHING', 'SUSPENDED_EV', 'SUSPENDED_EVSE', 'FAULTED', 'UNAVAILABLE', 'OFFLINE'].includes(entry.status))
               .map((entry) => (
                 <span key={entry.status} className="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs text-gray-700">
                   {entry.status}: {entry.count}
