@@ -34,6 +34,8 @@ export default function SiteDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showAddCharger, setShowAddCharger] = useState(false);
+  const [showEditSite, setShowEditSite] = useState(false);
+  const [editSiteForm, setEditSiteForm] = useState({ name: '', address: '', lat: '', lng: '' });
   const [chargerUptime, setChargerUptime] = useState<Record<string, ChargerUptime>>({});
   const [siteUptime, setSiteUptime] = useState<SiteUptime | null>(null);
 
@@ -49,6 +51,7 @@ export default function SiteDetail() {
       const client = createApiClient(token);
       const data = await client.getSite(id!);
       setSite(data);
+      setEditSiteForm({ name: data.name, address: data.address, lat: String(data.lat), lng: String(data.lng) });
       setTariff(loadTariff(data.id));
       setAssignments(loadRoles(data.id));
       setAuditEvents(loadAudit(data.id));
@@ -98,10 +101,50 @@ export default function SiteDetail() {
           <p className="text-sm text-gray-500">{site.address}</p>
         </div>
         <div className="flex gap-2">
+          <button onClick={() => setShowEditSite((v) => !v)} className="rounded-md border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">Edit Site</button>
           <Link to={`/sites/${site.id}/analytics`} className="rounded-md border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50">Analytics</Link>
           <button onClick={() => setShowAddCharger(true)} className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">+ Add Charger</button>
         </div>
       </div>
+
+      {showEditSite && (
+        <div className="rounded-xl border border-gray-200 bg-white p-4">
+          <h2 className="mb-3 text-sm font-semibold text-gray-700">Edit site details</h2>
+          <div className="grid gap-3 md:grid-cols-2">
+            <label className="text-sm text-gray-700">Site name
+              <input className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5" value={editSiteForm.name} onChange={(e) => setEditSiteForm((f) => ({ ...f, name: e.target.value }))} />
+            </label>
+            <label className="text-sm text-gray-700">Address
+              <input className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5" value={editSiteForm.address} onChange={(e) => setEditSiteForm((f) => ({ ...f, address: e.target.value }))} />
+            </label>
+            <label className="text-sm text-gray-700">Latitude
+              <input type="number" step="0.000001" className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5" value={editSiteForm.lat} onChange={(e) => setEditSiteForm((f) => ({ ...f, lat: e.target.value }))} />
+            </label>
+            <label className="text-sm text-gray-700">Longitude
+              <input type="number" step="0.000001" className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5" value={editSiteForm.lng} onChange={(e) => setEditSiteForm((f) => ({ ...f, lng: e.target.value }))} />
+            </label>
+          </div>
+          <div className="mt-3 flex gap-2">
+            <button
+              className="rounded-md bg-brand-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-700"
+              onClick={async () => {
+                const token = await getToken();
+                const payload = {
+                  name: editSiteForm.name.trim(),
+                  address: editSiteForm.address.trim(),
+                  lat: Number(editSiteForm.lat),
+                  lng: Number(editSiteForm.lng),
+                };
+                await createApiClient(token).updateSite(site.id, payload);
+                pushAudit('site.updated', `${payload.name} @ ${payload.address} (${payload.lat}, ${payload.lng})`);
+                setShowEditSite(false);
+                await load();
+              }}
+            >Save site</button>
+            <button className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50" onClick={() => setShowEditSite(false)}>Cancel</button>
+          </div>
+        </div>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="rounded-xl border border-gray-200 bg-white p-4">

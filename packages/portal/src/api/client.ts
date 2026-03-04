@@ -201,6 +201,12 @@ export function createApiClient(token: string | null | undefined) {
         body: JSON.stringify(body),
       }),
 
+    updateSite: (id: string, body: { name: string; address: string; lat: number; lng: number }) =>
+      request<SiteDetail>(`/sites/${id}`, token, {
+        method: 'PUT',
+        body: JSON.stringify(body),
+      }),
+
     createCharger: (body: {
       siteId: string;
       ocppId: string;

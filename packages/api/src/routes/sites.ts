@@ -78,6 +78,28 @@ export async function siteRoutes(app: FastifyInstance) {
     return reply.status(201).send(site);
   });
 
+  // PUT /sites/:id — operator updates site details
+  app.put<{
+    Params: { id: string };
+    Body: { name: string; address: string; lat: number; lng: number };
+  }>('/sites/:id', {
+    preHandler: requireOperator,
+  }, async (req, reply) => {
+    const operator = req.currentOperator!;
+    const existing = await prisma.site.findUnique({ where: { id: req.params.id } });
+    if (!existing || existing.operatorId !== operator.id) {
+      return reply.status(404).send({ error: 'Site not found' });
+    }
+
+    const { name, address, lat, lng } = req.body;
+    const site = await prisma.site.update({
+      where: { id: req.params.id },
+      data: { name, address, lat, lng },
+    });
+
+    return site;
+  });
+
 
 
   // GET /sites/:id/uptime — aggregate uptime across site chargers
