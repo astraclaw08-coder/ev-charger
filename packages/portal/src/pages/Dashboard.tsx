@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { createApiClient, type SiteListItem } from '../api/client';
+import { Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { createApiClient, type DailyEntry, type SiteListItem } from '../api/client';
 import { useToken } from '../auth/TokenContext';
 
 type CreateSiteForm = {
@@ -9,6 +10,8 @@ type CreateSiteForm = {
   lat: string;
   lng: string;
 };
+
+type RangePreset = '7d' | '30d' | '60d' | 'custom';
 
 const EMPTY_FORM: CreateSiteForm = {
   name: '',
@@ -33,6 +36,11 @@ export default function Dashboard() {
     offline: number;
     byStatus: Array<{ status: string; count: number }>;
   } | null>(null);
+  const [rangePreset, setRangePreset] = useState<RangePreset>('7d');
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
+  const [rangeError, setRangeError] = useState('');
+  const [fleetTrend, setFleetTrend] = useState<Array<{ date: string; label: string; sessions: number; kwhDelivered: number; revenueUsd: number }>>([]);
   const [showAddSiteModal, setShowAddSiteModal] = useState(false);
   const [createLoading, setCreateLoading] = useState(false);
   const [createMsg, setCreateMsg] = useState('');
@@ -40,16 +48,31 @@ export default function Dashboard() {
 
   async function load() {
     try {
+      setRangeError('');
       const token = await getToken();
       const client = createApiClient(token);
       const data = await client.getSites();
       setSites(data);
 
-      const siteUp = await Promise.all(data.map((site) => client.getSiteUptime(site.id).catch(() => null)));
-      const siteAnalytics = await Promise.all(data.map((site) => client.getAnalytics(site.id).catch(() => null)));
-      const siteDetails = await Promise.all(data.map((site) => client.getSite(site.id).catch(() => null)));
+      const analyticsRange = (() => {
+        if (rangePreset === '7d') return { periodDays: 7 };
+        if (rangePreset === '30d') return { periodDays: 30 };
+        if (rangePreset === '60d') return { periodDays: 60 };
+        if (!customStartDate || !customEndDate) {
+          setRangeError('Custom range requires both start and end date.');
+          return null;
+        }
+        return { startDate: customStartDate, endDate: customEndDate };
+      })();
 
-      const totalKwh30d = siteAnalytics.filter(Boolean).reduce((sum, a) => sum + (a?.kwhDelivered ?? 0), 0);
+      const siteUp = await Promise.all(data.map((site) => client.getSiteUptime(site.id).catch(() => null)));
+      const [siteAnalytics30d, siteAnalyticsRange, siteDetails] = await Promise.all([
+        Promise.all(data.map((site) => client.getAnalytics(site.id, { periodDays: 30 }).catch(() => null))),
+        Promise.all(data.map((site) => client.getAnalytics(site.id, analyticsRange ?? { periodDays: 7 }).catch(() => null))),
+        Promise.all(data.map((site) => client.getSite(site.id).catch(() => null))),
+      ]);
+
+      const totalKwh30d = siteAnalytics30d.filter(Boolean).reduce((sum, a) => sum + (a?.kwhDelivered ?? 0), 0);
 
       const chargerIds = siteDetails
         .filter(Boolean)
@@ -99,6 +122,28 @@ export default function Dashboard() {
           .map(([status, count]) => ({ status, count }))
           .sort((a, b) => b.count - a.count),
       });
+
+      const mergedDaily = new Map<string, { sessions: number; kwhDelivered: number; revenueCents: number }>();
+      siteAnalyticsRange.filter(Boolean).forEach((analytics) => {
+        analytics?.daily.forEach((d: DailyEntry) => {
+          const row = mergedDaily.get(d.date) ?? { sessions: 0, kwhDelivered: 0, revenueCents: 0 };
+          row.sessions += d.sessions;
+          row.kwhDelivered += d.kwhDelivered;
+          row.revenueCents += d.revenueCents;
+          mergedDaily.set(d.date, row);
+        });
+      });
+      const trendRows = Array.from(mergedDaily.entries())
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([date, row]) => ({
+          date,
+          label: date.slice(5),
+          sessions: row.sessions,
+          kwhDelivered: Math.round(row.kwhDelivered * 1000) / 1000,
+          revenueUsd: Math.round(row.revenueCents) / 100,
+        }));
+      setFleetTrend(trendRows);
+
       const rows = siteUp.filter(Boolean);
       if (rows.length) {
         const avg = (arr: number[]) => Math.round((arr.reduce((a, b) => a + b, 0) / arr.length) * 100) / 100;
@@ -119,9 +164,10 @@ export default function Dashboard() {
   }
 
   useEffect(() => {
+    setLoading(true);
     load();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [getToken]);
+  }, [getToken, rangePreset, customStartDate, customEndDate]);
 
   async function handleCreateSite(e: React.FormEvent) {
     e.preventDefault();
@@ -226,6 +272,69 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      <div className="mt-4 rounded-xl border border-gray-200 bg-white p-4">
+        <div className="flex flex-wrap items-end gap-3">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Rolling range</p>
+            <select
+              value={rangePreset}
+              onChange={(e) => setRangePreset(e.target.value as RangePreset)}
+              className="mt-1 rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+            >
+              <option value="7d">Last 7 days</option>
+              <option value="30d">Last 30 days</option>
+              <option value="60d">Last 60 days</option>
+              <option value="custom">Custom</option>
+            </select>
+          </div>
+          {rangePreset === 'custom' && (
+            <>
+              <label className="text-xs text-gray-600">
+                Start date
+                <input
+                  type="date"
+                  value={customStartDate}
+                  onChange={(e) => setCustomStartDate(e.target.value)}
+                  className="mt-1 block rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+                />
+              </label>
+              <label className="text-xs text-gray-600">
+                End date
+                <input
+                  type="date"
+                  value={customEndDate}
+                  onChange={(e) => setCustomEndDate(e.target.value)}
+                  className="mt-1 block rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+                />
+              </label>
+            </>
+          )}
+        </div>
+
+        {rangeError && <p className="mt-2 text-xs text-red-600">{rangeError}</p>}
+
+        <div className="mt-3 h-64">
+          {loading ? (
+            <div className="h-full animate-pulse rounded-lg bg-gray-100" />
+          ) : fleetTrend.length === 0 ? (
+            <div className="flex h-full items-center justify-center text-sm text-gray-400">No trend data for selected range.</div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={fleetTrend} margin={{ top: 8, right: 16, left: 4, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                <YAxis yAxisId="left" tick={{ fontSize: 11 }} />
+                <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11 }} />
+                <Tooltip />
+                <Bar yAxisId="left" dataKey="kwhDelivered" name="kWh" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                <Line yAxisId="right" type="monotone" dataKey="revenueUsd" name="Revenue (USD)" stroke="#10b981" strokeWidth={2} dot={false} />
+                <Line yAxisId="left" type="monotone" dataKey="sessions" name="Transactions" stroke="#f59e0b" strokeWidth={2} dot={false} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      </div>
 
       {fleetUptime && (
         <div className="mt-4 rounded-xl border border-gray-200 bg-white p-4">

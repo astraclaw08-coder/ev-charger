@@ -108,8 +108,8 @@ export async function siteRoutes(app: FastifyInstance) {
     };
   });
 
-  // GET /sites/:id/analytics — last 30 days: sessions, kWh, revenue, uptime
-  app.get<{ Params: { id: string } }>('/sites/:id/analytics', {
+  // GET /sites/:id/analytics — variable range: sessions, kWh, revenue, uptime
+  app.get<{ Params: { id: string }; Querystring: { periodDays?: string; startDate?: string; endDate?: string } }>('/sites/:id/analytics', {
     preHandler: requireOperator,
   }, async (req, reply) => {
     const site = await prisma.site.findUnique({
@@ -119,13 +119,30 @@ export async function siteRoutes(app: FastifyInstance) {
 
     if (!site) return reply.status(404).send({ error: 'Site not found' });
 
-    const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const periodDaysRaw = Number.parseInt(req.query.periodDays ?? '30', 10);
+    const periodDays = Number.isFinite(periodDaysRaw) && periodDaysRaw > 0 ? Math.min(periodDaysRaw, 120) : 30;
+
+    const hasCustomRange = Boolean(req.query.startDate || req.query.endDate);
+    if (hasCustomRange && (!req.query.startDate || !req.query.endDate)) {
+      return reply.status(400).send({ error: 'startDate and endDate are required together for custom range' });
+    }
+
+    const endDate = req.query.endDate ? new Date(`${req.query.endDate}T23:59:59.999Z`) : new Date();
+    const startDate = req.query.startDate
+      ? new Date(`${req.query.startDate}T00:00:00.000Z`)
+      : new Date(endDate.getTime() - (periodDays - 1) * 24 * 60 * 60 * 1000);
+
+    if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime()) || startDate > endDate) {
+      return reply.status(400).send({ error: 'Invalid analytics date range' });
+    }
+
+    const dayCount = Math.max(1, Math.floor((endDate.getTime() - startDate.getTime()) / (24 * 60 * 60 * 1000)) + 1);
     const connectorIds = site.chargers.flatMap((c: { connectors: Array<{ id: string }> }) => c.connectors.map((cn) => cn.id));
 
     const sessions = await prisma.session.findMany({
       where: {
         connectorId: { in: connectorIds },
-        startedAt: { gte: since },
+        startedAt: { gte: startDate, lte: endDate },
         status: 'COMPLETED',
       },
       include: { payment: true },
@@ -150,17 +167,17 @@ export async function siteRoutes(app: FastifyInstance) {
       dailyMap[day].revenueCents += s.payment?.amountCents ?? 0;
     });
 
-    // Fill missing days with zeros so charts have a continuous 30-day range
+    // Fill missing days with zeros so charts have a continuous selected range
     const daily: typeof dailyMap[string][] = [];
-    for (let i = 29; i >= 0; i--) {
-      const d = new Date(Date.now() - i * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    for (let i = 0; i < dayCount; i++) {
+      const d = new Date(startDate.getTime() + i * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
       daily.push(dailyMap[d] ?? { date: d, sessions: 0, kwhDelivered: 0, revenueCents: 0 });
     }
 
     return {
       siteId: site.id,
       siteName: site.name,
-      periodDays: 30,
+      periodDays: dayCount,
       sessionsCount,
       kwhDelivered: Math.round(kwhDelivered * 1000) / 1000,
       revenueCents,

@@ -173,7 +173,14 @@ export function createApiClient(token: string | null | undefined) {
   return {
     getSites: () => request<SiteListItem[]>('/sites', token),
     getSite: (id: string) => request<SiteDetail>(`/sites/${id}`, token),
-    getAnalytics: (siteId: string) => request<Analytics>(`/sites/${siteId}/analytics`, token),
+    getAnalytics: (siteId: string, params?: { periodDays?: number; startDate?: string; endDate?: string }) => {
+      const query = new URLSearchParams();
+      if (params?.periodDays) query.set('periodDays', String(params.periodDays));
+      if (params?.startDate) query.set('startDate', params.startDate);
+      if (params?.endDate) query.set('endDate', params.endDate);
+      const qs = query.toString();
+      return request<Analytics>(`/sites/${siteId}/analytics${qs ? `?${qs}` : ''}`, token);
+    },
 
     getChargerStatus: (id: string) => request<ChargerStatus>(`/chargers/${id}/status`, token),
     getChargerSessions: (id: string) =>
