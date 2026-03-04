@@ -118,7 +118,15 @@ export async function startServer(port: number): Promise<OcppServerHandle> {
 
       prisma.charger.update({
         where: { id: chargerId },
-        data: { status: 'OFFLINE' },
+        data: { status: 'DEGRADED' },
+      }).catch(console.error);
+
+      prisma.uptimeEvent.create({
+        data: {
+          chargerId,
+          event: 'DEGRADED',
+          reason: 'WebSocket disconnected; pending offline confirmation window',
+        },
       }).catch(console.error);
     });
   });

@@ -1,7 +1,8 @@
 import { prisma, type ChargerStatus, type UptimeEventType } from '@ev-charger/shared';
 
-const HEARTBEAT_THRESHOLD_SECONDS = Number(process.env.OCPP_HEARTBEAT_THRESHOLD_SECONDS ?? 90);
-const OFFLINE_GRACE_SECONDS = Number(process.env.OCPP_OFFLINE_GRACE_SECONDS ?? 300);
+const HEARTBEAT_THRESHOLD_SECONDS = Number(process.env.OCPP_HEARTBEAT_THRESHOLD_SECONDS ?? 900);
+const OFFLINE_GRACE_SECONDS = Number(process.env.OCPP_OFFLINE_GRACE_SECONDS ?? 120);
+const OFFLINE_CONFIRM_SECONDS = Number(process.env.OCPP_OFFLINE_CONFIRM_SECONDS ?? 120);
 const UPTIME_ALERT_THRESHOLD_PERCENT = Number(process.env.OCPP_UPTIME_ALERT_THRESHOLD_PERCENT ?? 95);
 
 export type UptimeIncident = {
@@ -25,7 +26,11 @@ export async function ensureChargerLiveness(chargerId: string) {
 
   const now = Date.now();
   const lastHbMs = charger.lastHeartbeat?.getTime() ?? 0;
-  const stale = !lastHbMs || now - lastHbMs > (HEARTBEAT_THRESHOLD_SECONDS + OFFLINE_GRACE_SECONDS) * 1000;
+  const staleAfterMs = (HEARTBEAT_THRESHOLD_SECONDS + OFFLINE_GRACE_SECONDS) * 1000;
+  const offlineAfterMs = (HEARTBEAT_THRESHOLD_SECONDS + OFFLINE_GRACE_SECONDS + OFFLINE_CONFIRM_SECONDS) * 1000;
+  const ageMs = !lastHbMs ? Number.POSITIVE_INFINITY : now - lastHbMs;
+  const stale = ageMs > staleAfterMs;
+  const offlineEligible = ageMs > offlineAfterMs;
 
   if (stale && charger.status === 'ONLINE') {
     await prisma.charger.update({ where: { id: charger.id }, data: { status: 'DEGRADED' } });
@@ -33,10 +38,34 @@ export async function ensureChargerLiveness(chargerId: string) {
       data: {
         chargerId: charger.id,
         event: 'DEGRADED',
-        reason: `No heartbeat for > ${HEARTBEAT_THRESHOLD_SECONDS + OFFLINE_GRACE_SECONDS}s`,
+        reason: `Heartbeat stale (> ${HEARTBEAT_THRESHOLD_SECONDS + OFFLINE_GRACE_SECONDS}s); awaiting offline confirmation`,
       },
     });
     return { ...charger, status: 'DEGRADED' as const };
+  }
+
+  if (offlineEligible && charger.status === 'DEGRADED') {
+    const recentDisconnectSignal = await prisma.uptimeEvent.findFirst({
+      where: {
+        chargerId: charger.id,
+        event: 'DEGRADED',
+        reason: { contains: 'disconnected' },
+        createdAt: { gte: new Date(now - offlineAfterMs - 5 * 60 * 1000) },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (recentDisconnectSignal) {
+      await prisma.charger.update({ where: { id: charger.id }, data: { status: 'OFFLINE' } });
+      await prisma.uptimeEvent.create({
+        data: {
+          chargerId: charger.id,
+          event: 'OFFLINE',
+          reason: `Confirmed unreachable after disconnect + stale heartbeat (> ${HEARTBEAT_THRESHOLD_SECONDS + OFFLINE_GRACE_SECONDS + OFFLINE_CONFIRM_SECONDS}s)`,
+        },
+      });
+      return { ...charger, status: 'OFFLINE' as const };
+    }
   }
 
   return charger;
