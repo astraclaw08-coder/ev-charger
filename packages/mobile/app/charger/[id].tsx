@@ -339,6 +339,8 @@ export default function ChargerDetailScreen() {
           headerStyle: { backgroundColor: isDark ? '#0b1220' : '#ffffff' },
           headerTintColor: isDark ? '#f9fafb' : '#111827',
           headerShadowVisible: false,
+          headerBackTitleVisible: false,
+          headerBackButtonDisplayMode: 'minimal',
           headerRight: () => (
             <HeartButton
               isFavorited={isFav(selectedCharger?.id ?? charger.id)}
