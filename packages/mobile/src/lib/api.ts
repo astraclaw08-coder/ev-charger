@@ -115,12 +115,36 @@ export interface ActiveSession {
   status: string;
 }
 
+
+export interface UserProfile {
+  id: string;
+  name: string | null;
+  email: string;
+  phone: string | null;
+  homeAddress: string | null;
+  homeSiteAddress: string | null;
+  homeCity: string | null;
+  homeState: string | null;
+  homeZipCode: string | null;
+  paymentProfile: string | null;
+}
+
 export interface Payment {
   id: string;
   status: string;
   amountCents: number | null;
   stripeCustomerId: string | null;
   stripeIntentId: string | null;
+}
+
+
+export interface ChargerUptime {
+  chargerId: string;
+  currentStatus: 'ONLINE' | 'OFFLINE' | 'FAULTED' | 'DEGRADED';
+  lastOnlineAt: string | null;
+  uptimePercent24h: number;
+  uptimePercent7d: number;
+  uptimePercent30d: number;
 }
 
 // ── API calls ────────────────────────────────────────────────────────────────
@@ -135,6 +159,9 @@ export const api = {
     },
     get(id: string) {
       return request<Charger>(`/chargers/${id}`);
+    },
+    uptime(id: string) {
+      return request<ChargerUptime>(`/chargers/${id}/uptime`);
     },
   },
 
@@ -164,6 +191,18 @@ export const api = {
     setupIntent() {
       return request<{ clientSecret: string; stripeCustomerId: string }>('/payments/setup-intent', {
         method: 'POST',
+      });
+    },
+  },
+
+  profile: {
+    get() {
+      return request<UserProfile>('/me/profile');
+    },
+    update(input: Partial<Pick<UserProfile, 'name' | 'email' | 'phone' | 'homeAddress' | 'homeSiteAddress' | 'homeCity' | 'homeState' | 'homeZipCode' | 'paymentProfile'>>) {
+      return request<UserProfile>('/me/profile', {
+        method: 'PUT',
+        body: JSON.stringify(input),
       });
     },
   },

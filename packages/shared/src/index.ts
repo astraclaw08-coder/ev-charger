@@ -6,3 +6,8 @@ export * from './schemas/ocpp';
 
 // Prisma client
 export { prisma } from './db';
+
+// Prisma enum type aliases (available without requiring prisma generate)
+export * from './types/prisma-enums';
+
+export * from './types/rbac';

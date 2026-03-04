@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { createApiClient, type ChargerStatus, type SessionRecord } from '../api/client';
+import { createApiClient, type ChargerStatus, type SessionRecord, type ChargerUptime } from '../api/client';
 import { useToken } from '../auth/TokenContext';
 import StatusBadge from '../components/StatusBadge';
 import { formatDate, formatDuration } from '../lib/utils';
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
 export default function ChargerDetail() {
   const { id } = useParams<{ id: string }>();
@@ -11,21 +12,28 @@ export default function ChargerDetail() {
 
   const [status, setStatus] = useState<ChargerStatus | null>(null);
   const [sessions, setSessions] = useState<SessionRecord[]>([]);
+  const [uptime, setUptime] = useState<ChargerUptime | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [resetLoading, setResetLoading] = useState(false);
   const [resetMsg, setResetMsg] = useState('');
+  const [remoteStartLoading, setRemoteStartLoading] = useState(false);
+  const [remoteStartMsg, setRemoteStartMsg] = useState('');
+  const [idTag, setIdTag] = useState('TESTDRIVER0001');
+  const [connectorId, setConnectorId] = useState<number>(1);
 
   const load = useCallback(async () => {
     try {
       const token = await getToken();
       const client = createApiClient(token);
-      const [chargerStatus, recentSessions] = await Promise.all([
+      const [chargerStatus, recentSessions, uptimeData] = await Promise.all([
         client.getChargerStatus(id!),
         client.getChargerSessions(id!),
+        client.getChargerUptime(id!).catch(() => null),
       ]);
       setStatus(chargerStatus);
       setSessions(recentSessions);
+      setUptime(uptimeData);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to load charger');
     } finally {
@@ -34,6 +42,27 @@ export default function ChargerDetail() {
   }, [id, getToken]);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    if (status?.connectors?.length) {
+      setConnectorId(status.connectors[0].connectorId);
+    }
+  }, [status]);
+
+  async function handleRemoteStart() {
+    setRemoteStartMsg('');
+    setRemoteStartLoading(true);
+    try {
+      const token = await getToken();
+      const result = await createApiClient(token).remoteStartCharger(id!, { connectorId, idTag });
+      setRemoteStartMsg(`Remote start command sent — charger responded: ${result.status}`);
+      setTimeout(load, 1500);
+    } catch (err: unknown) {
+      setRemoteStartMsg(err instanceof Error ? err.message : 'Remote start failed');
+    } finally {
+      setRemoteStartLoading(false);
+    }
+  }
 
   async function handleReset(type: 'Soft' | 'Hard') {
     setResetMsg('');
@@ -79,8 +108,37 @@ export default function ChargerDetail() {
           )}
         </div>
 
-        {/* Reset controls */}
-        <div className="flex flex-col items-end gap-2">
+        {/* Remote start + reset controls */}
+        <div className="flex min-w-[360px] flex-col items-end gap-2">
+          <div className="w-full rounded-lg border border-gray-200 bg-white p-3">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Remote Start</p>
+            <div className="grid grid-cols-3 gap-2">
+              <select
+                value={connectorId}
+                onChange={(e) => setConnectorId(Number(e.target.value))}
+                className="rounded-md border border-gray-300 px-2 py-2 text-sm"
+              >
+                {status.connectors.map((c) => (
+                  <option key={c.connectorId} value={c.connectorId}>Connector #{c.connectorId}</option>
+                ))}
+              </select>
+              <input
+                value={idTag}
+                onChange={(e) => setIdTag(e.target.value)}
+                placeholder="idTag"
+                className="rounded-md border border-gray-300 px-2 py-2 text-sm"
+              />
+              <button
+                onClick={handleRemoteStart}
+                disabled={remoteStartLoading || !idTag.trim()}
+                className="rounded-md bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
+              >
+                {remoteStartLoading ? 'Starting…' : 'Remote Start'}
+              </button>
+            </div>
+            {remoteStartMsg && <p className="mt-2 text-xs text-gray-500">{remoteStartMsg}</p>}
+          </div>
+
           <div className="flex gap-2">
             <button
               onClick={() => handleReset('Soft')}
@@ -102,6 +160,34 @@ export default function ChargerDetail() {
           )}
         </div>
       </div>
+
+
+
+      {uptime && (
+        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+          <h2 className="mb-4 text-sm font-semibold text-gray-700">Uptime Monitoring (OCA v1.1)</h2>
+          <div className="grid gap-3 sm:grid-cols-3 mb-4">
+            <div><p className="text-xs text-gray-500">24h</p><p className={`text-lg font-semibold ${uptime.uptimePercent24h >= 99 ? 'text-green-700' : uptime.uptimePercent24h >= 95 ? 'text-amber-700' : 'text-red-700'}`}>{uptime.uptimePercent24h.toFixed(2)}%</p></div>
+            <div><p className="text-xs text-gray-500">7d</p><p className={`text-lg font-semibold ${uptime.uptimePercent7d >= 99 ? 'text-green-700' : uptime.uptimePercent7d >= 95 ? 'text-amber-700' : 'text-red-700'}`}>{uptime.uptimePercent7d.toFixed(2)}%</p></div>
+            <div><p className="text-xs text-gray-500">30d</p><p className={`text-lg font-semibold ${uptime.uptimePercent30d >= 99 ? 'text-green-700' : uptime.uptimePercent30d >= 95 ? 'text-amber-700' : 'text-red-700'}`}>{uptime.uptimePercent30d.toFixed(2)}%</p></div>
+          </div>
+
+          <div className="h-36">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={[
+                { window: '24h', value: uptime.uptimePercent24h },
+                { window: '7d', value: uptime.uptimePercent7d },
+                { window: '30d', value: uptime.uptimePercent30d },
+              ]}>
+                <XAxis dataKey="window" />
+                <YAxis domain={[0, 100]} />
+                <Tooltip formatter={(v: number) => `${v.toFixed(2)}%`} />
+                <Line type="monotone" dataKey="value" stroke="#10b981" strokeWidth={2} dot />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
 
       {/* Connector status grid */}
       <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">

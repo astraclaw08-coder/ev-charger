@@ -15,6 +15,7 @@ import {
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, type Session } from '@/lib/api';
+import { useAppTheme } from '@/theme';
 
 const RATE_PER_KWH = 0.35;
 
@@ -36,6 +37,12 @@ function formatDate(iso: string): string {
     hour: 'numeric',
     minute: '2-digit',
   });
+}
+
+
+function formatKwh(value: number): string {
+  // up to 4 decimal places, trimming trailing zeros
+  return value.toFixed(4).replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1');
 }
 
 // ── Live ticker (updates every second for duration display) ───────────────────
@@ -67,7 +74,7 @@ function SessionSummary({ session }: { session: Session }) {
       <Text style={styles.summarySubtitle}>{session.connector.charger.site.name}</Text>
 
       <View style={styles.summaryStats}>
-        <SummaryStatCard label="Energy" value={`${kwh.toFixed(2)} kWh`} icon="⚡" />
+        <SummaryStatCard label="Energy" value={`${formatKwh(kwh)} kWh`} icon="⚡" />
         <SummaryStatCard
           label="Duration"
           value={formatDuration(session.startedAt, session.endedAt)}
@@ -151,7 +158,7 @@ function LiveSessionView({
   function confirmStop() {
     Alert.alert(
       'Stop Charging?',
-      `You've used ${kwh.toFixed(2)} kWh (~$${estimatedCost.toFixed(2)}) so far.`,
+      `You've used ${formatKwh(kwh)} kWh (~$${estimatedCost.toFixed(2)}) so far.`,
       [
         { text: 'Keep Charging', style: 'cancel' },
         { text: 'Stop Session', style: 'destructive', onPress: onStop },
@@ -176,7 +183,7 @@ function LiveSessionView({
 
       {/* Big kWh counter */}
       <View style={styles.kwhContainer}>
-        <Text style={styles.kwhValue}>{kwh.toFixed(2)}</Text>
+        <Text style={styles.kwhValue}>{formatKwh(kwh)}</Text>
         <Text style={styles.kwhUnit}>kWh delivered</Text>
       </View>
 
@@ -222,6 +229,7 @@ function LiveSessionView({
 
 export default function SessionScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { isDark } = useAppTheme();
   const router = useRouter();
   const queryClient = useQueryClient();
 
@@ -252,7 +260,7 @@ export default function SessionScreen() {
 
   if (isLoading) {
     return (
-      <View style={styles.centered}>
+      <View style={[styles.centered, { backgroundColor: isDark ? '#030712' : '#f9fafb' }]}> 
         <ActivityIndicator size="large" color="#10b981" />
       </View>
     );
@@ -260,7 +268,7 @@ export default function SessionScreen() {
 
   if (!session) {
     return (
-      <View style={styles.centered}>
+      <View style={[styles.centered, { backgroundColor: isDark ? '#030712' : '#f9fafb' }]}> 
         <Text style={styles.errorText}>Session not found.</Text>
       </View>
     );
@@ -274,7 +282,7 @@ export default function SessionScreen() {
           headerShown: true,
         }}
       />
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView contentContainerStyle={[styles.scrollContent, { backgroundColor: isDark ? '#030712' : '#f9fafb' }]}> 
         {session.status === 'ACTIVE' ? (
           <LiveSessionView
             session={session}

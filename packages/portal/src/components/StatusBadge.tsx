@@ -1,6 +1,6 @@
 import { cn } from '../lib/utils';
 
-type ChargerStatus = 'ONLINE' | 'OFFLINE' | 'FAULTED';
+type ChargerStatus = 'ONLINE' | 'OFFLINE' | 'FAULTED' | 'DEGRADED';
 type ConnectorStatus =
   | 'AVAILABLE'
   | 'PREPARING'

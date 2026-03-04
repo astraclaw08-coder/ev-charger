@@ -105,6 +105,36 @@ export interface CreatedCharger {
   password: string;
 }
 
+
+export interface UptimeIncident {
+  event: 'ONLINE' | 'OFFLINE' | 'FAULTED' | 'DEGRADED' | 'RECOVERED';
+  reason: string | null;
+  errorCode: string | null;
+  connectorId: number | null;
+  timestamp: string;
+}
+
+export interface ChargerUptime {
+  chargerId: string;
+  currentStatus: 'ONLINE' | 'OFFLINE' | 'FAULTED' | 'DEGRADED';
+  lastOnlineAt: string | null;
+  uptimePercent24h: number;
+  uptimePercent7d: number;
+  uptimePercent30d: number;
+  incidents: UptimeIncident[];
+}
+
+export interface SiteUptime {
+  siteId: string;
+  siteName: string;
+  chargerCount: number;
+  uptimePercent24h: number;
+  uptimePercent7d: number;
+  uptimePercent30d: number;
+  degradedChargers: number;
+  incidents: Array<UptimeIncident & { chargerId: string }>;
+}
+
 // ─── Client ──────────────────────────────────────────────────────────────────
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
@@ -143,11 +173,22 @@ export function createApiClient(token: string | null | undefined) {
   return {
     getSites: () => request<SiteListItem[]>('/sites', token),
     getSite: (id: string) => request<SiteDetail>(`/sites/${id}`, token),
-    getAnalytics: (siteId: string) => request<Analytics>(`/sites/${siteId}/analytics`, token),
+    getAnalytics: (siteId: string, params?: { periodDays?: number; startDate?: string; endDate?: string }) => {
+      const query = new URLSearchParams();
+      if (params?.periodDays) query.set('periodDays', String(params.periodDays));
+      if (params?.startDate) query.set('startDate', params.startDate);
+      if (params?.endDate) query.set('endDate', params.endDate);
+      const qs = query.toString();
+      return request<Analytics>(`/sites/${siteId}/analytics${qs ? `?${qs}` : ''}`, token);
+    },
 
     getChargerStatus: (id: string) => request<ChargerStatus>(`/chargers/${id}/status`, token),
     getChargerSessions: (id: string) =>
       request<SessionRecord[]>(`/chargers/${id}/sessions`, token),
+    getChargerUptime: (id: string) =>
+      request<ChargerUptime>(`/chargers/${id}/uptime`, token),
+    getSiteUptime: (id: string) =>
+      request<SiteUptime>(`/sites/${id}/uptime`, token),
 
     createSite: (body: { name: string; address: string; lat: number; lng: number }) =>
       request<{ id: string; name: string }>('/sites', token, {
@@ -171,6 +212,12 @@ export function createApiClient(token: string | null | undefined) {
       request<{ status: string }>(`/chargers/${id}/reset`, token, {
         method: 'POST',
         body: JSON.stringify({ type }),
+      }),
+
+    remoteStartCharger: (id: string, body: { connectorId: number; idTag: string }) =>
+      request<{ status: string }>(`/chargers/${id}/remote-start`, token, {
+        method: 'POST',
+        body: JSON.stringify(body),
       }),
   };
 }

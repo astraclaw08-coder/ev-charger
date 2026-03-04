@@ -1,11 +1,12 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StripeProvider } from '@stripe/stripe-react-native';
-import Mapbox from '@rnmapbox/maps';
-import { AuthProvider } from './AuthProvider';
+
+import { AuthProvider } from '@/providers/AuthProvider';
+import { ThemeProvider, useAppTheme } from '@/theme';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -14,25 +15,27 @@ const queryClient = new QueryClient({
 });
 
 const STRIPE_KEY = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? '';
-const MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '';
 
-export default function RootLayout() {
-  useEffect(() => {
-    if (MAPBOX_TOKEN) {
-      Mapbox.setAccessToken(MAPBOX_TOKEN);
-    }
-  }, []);
-
+function AppShell() {
+  const { isDark } = useAppTheme();
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <QueryClientProvider client={queryClient}>
         <StripeProvider publishableKey={STRIPE_KEY}>
           <AuthProvider>
             <Stack screenOptions={{ headerShown: false }} />
-            <StatusBar style="auto" />
+            <StatusBar style={isDark ? 'light' : 'dark'} />
           </AuthProvider>
         </StripeProvider>
       </QueryClientProvider>
     </GestureHandlerRootView>
+  );
+}
+
+export default function RootLayout() {
+  return (
+    <ThemeProvider>
+      <AppShell />
+    </ThemeProvider>
   );
 }

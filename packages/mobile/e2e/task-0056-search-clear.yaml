@@ -1,0 +1,18 @@
+appId: dev.evcharger.app
+---
+- launchApp:
+    clearState: true
+- assertVisible:
+    text: "Find Chargers"
+- tapOn:
+    id: "map-search-input"
+- inputText: "haw"
+- pressKey: Enter
+- assertVisible:
+    id: "map-search-clear"
+- tapOn:
+    id: "map-search-clear"
+- waitForAnimationToEnd
+- assertNotVisible:
+    id: "map-search-clear"
+- takeScreenshot: "0056-01-clear-button-works"

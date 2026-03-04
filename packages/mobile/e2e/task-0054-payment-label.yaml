@@ -1,0 +1,18 @@
+# TASK-0054: Rename "Manage Payment Methods" -> "Add Payment Method" in Profile tab
+appId: dev.evcharger.app
+---
+# 1. Launch and navigate to Profile tab
+- launchApp
+- tapOn:
+    text: "Profile, tab, 4 of 4"
+- takeScreenshot: "0054-01-profile-tab"
+
+# 2. Assert new label present
+- assertVisible:
+    text: "Add Payment Method"
+- takeScreenshot: "0054-02-button-verified"
+
+# 3. Assert old label gone
+- assertNotVisible:
+    text: "Manage Payment Methods"
+- takeScreenshot: "0054-03-old-label-gone"

@@ -23,9 +23,10 @@ export async function sessionRoutes(app: FastifyInstance) {
     const connector = charger.connectors[0];
     if (!connector) return reply.status(404).send({ error: 'Connector not found' });
 
-    if (connector.status !== 'AVAILABLE') {
+    const startableStates = new Set(['AVAILABLE', 'PREPARING', 'SUSPENDED_EV']);
+    if (!startableStates.has(connector.status)) {
       return reply.status(409).send({
-        error: `Connector is ${connector.status}, not AVAILABLE`,
+        error: `Connector is ${connector.status}, not startable (requires AVAILABLE, PREPARING, or SUSPENDED_EV)`,
       });
     }
 
@@ -98,7 +99,12 @@ export async function sessionRoutes(app: FastifyInstance) {
       prisma.session.count({ where: { userId: user.id } }),
     ]);
 
-    return { sessions, total, limit, offset };
+    const sessionsForClient = sessions.map((s: { stoppedAt: Date | null; [k: string]: unknown }) => ({
+      ...s,
+      endedAt: s.stoppedAt,
+    }));
+
+    return { sessions: sessionsForClient, total, limit, offset };
   });
 
   // GET /sessions/:id — live session detail with cost estimate
@@ -132,6 +138,10 @@ export async function sessionRoutes(app: FastifyInstance) {
         ? Math.round(session.kwhDelivered * session.ratePerKwh * 100)
         : null;
 
-    return { ...session, costEstimateCents };
+    return {
+      ...session,
+      endedAt: session.stoppedAt,
+      costEstimateCents,
+    };
   });
 }

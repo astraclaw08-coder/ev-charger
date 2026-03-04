@@ -1,0 +1,21 @@
+appId: dev.evcharger.app
+---
+- launchApp:
+    clearState: true
+- tapOn:
+    text: "Profile, tab, 4 of 4"
+- scrollUntilVisible:
+    element:
+      text: "Save Profile"
+    direction: DOWN
+    timeout: 15000
+- assertVisible:
+    text: "Save Profile"
+- scrollUntilVisible:
+    element:
+      text: "Driver Profile"
+    direction: UP
+    timeout: 15000
+- assertVisible:
+    text: "Driver Profile"
+- takeScreenshot: "0055-03-top-visible-after-scroll-up"
