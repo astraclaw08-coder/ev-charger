@@ -93,9 +93,10 @@ export default function Dashboard() {
       let offline = 0;
 
       chargerStatuses.filter(Boolean).forEach((ch) => {
+        const chargerOffline = ch?.status?.toUpperCase() === 'OFFLINE';
         ch?.connectors.forEach((connector) => {
           totalConnectors += 1;
-          const status = connector.status.toUpperCase();
+          const status = chargerOffline ? 'OFFLINE' : connector.status.toUpperCase();
           statusCountMap.set(status, (statusCountMap.get(status) ?? 0) + 1);
 
           if (status === 'AVAILABLE') available += 1;
@@ -246,7 +247,7 @@ export default function Dashboard() {
       {fleetStatus && (
         <div className="mt-3 rounded-xl border border-gray-200 bg-white p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm font-semibold text-gray-700">Fleet charger/connectors status breakdown</p>
+            <p className="text-sm font-semibold text-gray-700">Connector Statuses</p>
             <p className="text-xs text-gray-500">
               Chargers: <span className="font-semibold text-gray-900">{fleetStatus.totalChargers}</span>
               {' · '}
