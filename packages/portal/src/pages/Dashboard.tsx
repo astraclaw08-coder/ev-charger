@@ -23,6 +23,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [fleetUptime, setFleetUptime] = useState<{ uptime24h: number; uptime7d: number; uptime30d: number; degraded: number } | null>(null);
+  const [fleetKpis, setFleetKpis] = useState<{ totalSites: number; totalKwh30d: number; activeSessions: number } | null>(null);
   const [showAddSiteModal, setShowAddSiteModal] = useState(false);
   const [createLoading, setCreateLoading] = useState(false);
   const [createMsg, setCreateMsg] = useState('');
@@ -36,6 +37,27 @@ export default function Dashboard() {
       setSites(data);
 
       const siteUp = await Promise.all(data.map((site) => client.getSiteUptime(site.id).catch(() => null)));
+      const siteAnalytics = await Promise.all(data.map((site) => client.getAnalytics(site.id).catch(() => null)));
+      const siteDetails = await Promise.all(data.map((site) => client.getSite(site.id).catch(() => null)));
+
+      const totalKwh30d = siteAnalytics.filter(Boolean).reduce((sum, a) => sum + (a?.kwhDelivered ?? 0), 0);
+
+      const chargerIds = siteDetails
+        .filter(Boolean)
+        .flatMap((s) => s?.chargers.map((c) => c.id) ?? []);
+
+      const chargerStatuses = await Promise.all(
+        chargerIds.map((chargerId) => client.getChargerStatus(chargerId).catch(() => null)),
+      );
+      const activeSessions = chargerStatuses
+        .filter(Boolean)
+        .reduce((sum, ch) => sum + (ch?.connectors.filter((c) => c.activeSession).length ?? 0), 0);
+
+      setFleetKpis({
+        totalSites: data.length,
+        totalKwh30d: Math.round(totalKwh30d * 1000) / 1000,
+        activeSessions,
+      });
       const rows = siteUp.filter(Boolean);
       if (rows.length) {
         const avg = (arr: number[]) => Math.round((arr.reduce((a, b) => a + b, 0) / arr.length) * 100) / 100;
@@ -125,6 +147,14 @@ export default function Dashboard() {
         <p className="mt-2 text-xs text-gray-500">{createMsg}</p>
       )}
 
+      {fleetKpis && (
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <KpiTile label="Total kWh (30d)" value={`${fleetKpis.totalKwh30d.toFixed(3)} kWh`} />
+          <KpiTile label="Total Sites" value={`${fleetKpis.totalSites}`} />
+          <KpiTile label="Active Sessions" value={`${fleetKpis.activeSessions}`} />
+        </div>
+      )}
+
       {fleetUptime && (
         <div className="mt-4 rounded-xl border border-gray-200 bg-white p-4">
           <p className="text-sm font-semibold text-gray-700">Fleet uptime summary (OCA v1.1)</p>
@@ -207,6 +237,15 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function KpiTile({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-4">
+      <p className="text-xs text-gray-500">{label}</p>
+      <p className="mt-1 text-xl font-semibold text-gray-900">{value}</p>
     </div>
   );
 }
