@@ -26,12 +26,16 @@ export interface ChargerInfo {
   serialNumber: string;
   model: string;
   vendor: string;
-  status: 'ONLINE' | 'OFFLINE' | 'FAULTED';
+  status: 'ONLINE' | 'OFFLINE' | 'FAULTED' | 'DEGRADED';
   lastHeartbeat: string | null;
   siteId: string;
   connectors: ConnectorInfo[];
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ChargerListItem extends ChargerInfo {
+  site: { id: string; name: string; address: string; lat: number; lng: number };
 }
 
 export interface SiteDetail {
@@ -173,6 +177,7 @@ export function createApiClient(token: string | null | undefined) {
   return {
     getSites: () => request<SiteListItem[]>('/sites', token),
     getSite: (id: string) => request<SiteDetail>(`/sites/${id}`, token),
+    getChargers: () => request<ChargerListItem[]>('/chargers', token),
     getAnalytics: (siteId: string, params?: { periodDays?: number; startDate?: string; endDate?: string }) => {
       const query = new URLSearchParams();
       if (params?.periodDays) query.set('periodDays', String(params.periodDays));
