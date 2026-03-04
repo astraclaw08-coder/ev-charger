@@ -2,22 +2,10 @@ name: UIUX Artifacts
 
 on:
   pull_request:
-    paths:
-      - '.github/workflows/uiux-artifacts.yml'
-      - 'packages/portal/**'
-      - 'docs/uiux/**'
-      - 'package.json'
-      - 'package-lock.json'
   push:
     branches:
       - main
       - task-0028-claude
-    paths:
-      - '.github/workflows/uiux-artifacts.yml'
-      - 'packages/portal/**'
-      - 'docs/uiux/**'
-      - 'package.json'
-      - 'package-lock.json'
   workflow_dispatch:
 
 jobs:
