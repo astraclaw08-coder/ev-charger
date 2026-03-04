@@ -348,20 +348,6 @@ export default function Dashboard() {
         </div>
       )}
 
-      <div className="mt-6 rounded-xl border border-gray-200 bg-white p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-sm font-semibold text-gray-700">Sites have moved</p>
-            <p className="text-xs text-gray-500">Manage and review all {sites.length} sites in the dedicated Sites tab.</p>
-          </div>
-          <Link
-            to="/sites"
-            className="rounded-md border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
-          >
-            Open Sites →
-          </Link>
-        </div>
-      </div>
 
       {showAddSiteModal && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 p-4" onClick={() => setShowAddSiteModal(false)}>
