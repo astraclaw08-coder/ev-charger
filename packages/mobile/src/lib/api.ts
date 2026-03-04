@@ -149,16 +149,29 @@ export interface ChargerUptime {
 
 // ── API calls ────────────────────────────────────────────────────────────────
 
+function normalizeCharger(charger: Charger): Charger {
+  const chargerStatus = String(charger.status || '').toUpperCase();
+  if (chargerStatus === 'OFFLINE') {
+    return {
+      ...charger,
+      connectors: charger.connectors.map((c) => ({ ...c, status: 'UNAVAILABLE' })),
+    };
+  }
+  return charger;
+}
+
 export const api = {
   chargers: {
-    list(bbox?: { minLat: number; maxLat: number; minLng: number; maxLng: number }) {
+    async list(bbox?: { minLat: number; maxLat: number; minLng: number; maxLng: number }) {
       const params = bbox
         ? `?minLat=${bbox.minLat}&maxLat=${bbox.maxLat}&minLng=${bbox.minLng}&maxLng=${bbox.maxLng}`
         : '';
-      return request<Charger[]>(`/chargers${params}`);
+      const rows = await request<Charger[]>(`/chargers${params}`);
+      return rows.map(normalizeCharger);
     },
-    get(id: string) {
-      return request<Charger>(`/chargers/${id}`);
+    async get(id: string) {
+      const row = await request<Charger>(`/chargers/${id}`);
+      return normalizeCharger(row);
     },
     uptime(id: string) {
       return request<ChargerUptime>(`/chargers/${id}/uptime`);
