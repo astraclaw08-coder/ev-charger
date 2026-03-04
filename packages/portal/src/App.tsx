@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { ClerkProvider, SignedIn, SignedOut } from '@clerk/clerk-react';
 import { ClerkTokenProvider, DevTokenProvider } from './auth/TokenContext';
@@ -13,6 +14,7 @@ import CustomerSupport from './pages/CustomerSupport';
 import NetworkOps from './pages/NetworkOps';
 
 const CLERK_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined;
+const DEV_LOGIN_FLAG_KEY = 'portal.dev.signedIn';
 
 function PortalRoutes() {
   return (
@@ -62,14 +64,40 @@ function ClerkApp() {
   );
 }
 
+function DevSignedOutRoutes({ onSignIn }: { onSignIn: () => void }) {
+  const devOperatorId = import.meta.env.VITE_DEV_OPERATOR_ID ?? 'operator-001';
+
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/login" element={<Login devMode devOperatorId={devOperatorId} onDevSignIn={onSignIn} />} />
+        <Route path="/sso-callback" element={<Navigate to="/login" replace />} />
+        <Route path="*" element={<Navigate to="/login" replace />} />
+      </Routes>
+    </BrowserRouter>
+  );
+}
+
 function DevApp() {
+  const [devSignedIn, setDevSignedIn] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.sessionStorage.getItem(DEV_LOGIN_FLAG_KEY) === '1';
+  });
+
+  function handleDevSignIn() {
+    if (typeof window !== 'undefined') {
+      window.sessionStorage.setItem(DEV_LOGIN_FLAG_KEY, '1');
+    }
+    setDevSignedIn(true);
+  }
+
   return (
     <DevTokenProvider>
       <DevAuthUxProvider>
         <div className="sticky top-0 z-50 bg-yellow-400 px-4 py-1 text-center text-xs font-medium text-yellow-900">
-          Dev mode — no auth · operator-id: {import.meta.env.VITE_DEV_OPERATOR_ID ?? 'operator-001'}
+          Dev mode — auth shell enabled · operator-id: {import.meta.env.VITE_DEV_OPERATOR_ID ?? 'operator-001'}
         </div>
-        <PortalRoutes />
+        {devSignedIn ? <PortalRoutes /> : <DevSignedOutRoutes onSignIn={handleDevSignIn} />}
       </DevAuthUxProvider>
     </DevTokenProvider>
   );

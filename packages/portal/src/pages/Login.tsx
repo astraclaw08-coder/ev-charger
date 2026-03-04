@@ -4,9 +4,12 @@ import { useAuthUx } from '../auth/AuthUxContext';
 
 type LoginProps = {
   error?: string;
+  devMode?: boolean;
+  devOperatorId?: string;
+  onDevSignIn?: () => void;
 };
 
-export default function Login({ error }: LoginProps) {
+export default function Login({ error, devMode = false, devOperatorId = 'operator-001', onDevSignIn }: LoginProps) {
   const { sessionStatus, providerLoading, providerEnabled, signInWithProvider, lastError } = useAuthUx();
 
   const resolvedError = error ?? lastError;
@@ -36,7 +39,18 @@ export default function Login({ error }: LoginProps) {
           <p className="mt-1 text-sm text-gray-500">Enterprise login</p>
         </div>
 
-        <div className="space-y-3">{(['google', 'apple'] as const).map(providerButton)}</div>
+        <div className="space-y-3">
+          {(['google', 'apple'] as const).map(providerButton)}
+          {devMode && (
+            <button
+              type="button"
+              onClick={onDevSignIn}
+              className="w-full rounded-md bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-500"
+            >
+              Dev Mode — sign in as {devOperatorId}
+            </button>
+          )}
+        </div>
 
         <div
           role="alert"
@@ -45,7 +59,9 @@ export default function Login({ error }: LoginProps) {
         >
           {resolvedError ?? (providerEnabled
             ? 'Choose a provider to continue.'
-            : 'Authentication providers are not wired yet. This is a frontend contract/hook phase.')}
+            : devMode
+              ? 'Development mode: use the dev sign-in button to preview the full login shell and then enter the app.'
+              : 'Authentication providers are not wired yet. This is a frontend contract/hook phase.')}
         </div>
 
         <p className="mt-4 text-center text-xs text-gray-500">
