@@ -78,19 +78,27 @@ function DevApp() {
 export default function App() {
   if (import.meta.env.VITE_FORCE_LOGIN_SCREEN === '1') {
     return (
-      <BrowserRouter>
-        <Routes>
-          <Route path="*" element={<Login />} />
-        </Routes>
-      </BrowserRouter>
+      <div className="portal-dark">
+        <BrowserRouter>
+          <Routes>
+            <Route path="*" element={<Login />} />
+          </Routes>
+        </BrowserRouter>
+      </div>
     );
   }
   if (CLERK_KEY) {
     return (
-      <ClerkProvider publishableKey={CLERK_KEY}>
-        <ClerkApp />
-      </ClerkProvider>
+      <div className="portal-dark">
+        <ClerkProvider publishableKey={CLERK_KEY}>
+          <ClerkApp />
+        </ClerkProvider>
+      </div>
     );
   }
-  return <DevApp />;
+  return (
+    <div className="portal-dark">
+      <DevApp />
+    </div>
+  );
 }
