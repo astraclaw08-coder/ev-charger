@@ -57,9 +57,10 @@ export default function NetworkOps() {
   }, [site]);
 
   const chargerStatusSummary = useMemo(() => {
-    if (!site) return { online: 0, offline: 0, faulted: 0 };
+    if (!site) return { online: 0, degraded: 0, offline: 0, faulted: 0 };
     return {
       online: site.chargers.filter((c) => c.status === 'ONLINE').length,
+      degraded: site.chargers.filter((c) => c.status === 'DEGRADED').length,
       offline: site.chargers.filter((c) => c.status === 'OFFLINE').length,
       faulted: site.chargers.filter((c) => c.status === 'FAULTED').length,
     };
@@ -95,8 +96,9 @@ export default function NetworkOps() {
             {site?.chargers.map((c)=><option key={c.id} value={c.id}>{c.ocppId} · {c.status}</option>)}
           </select>
         </div>
-        <div className="grid grid-cols-3 gap-2 text-center">
+        <div className="grid grid-cols-4 gap-2 text-center">
           <MiniCard label="Online" value={chargerStatusSummary.online} tone="green" />
+          <MiniCard label="Degraded" value={chargerStatusSummary.degraded} tone="amber" />
           <MiniCard label="Offline" value={chargerStatusSummary.offline} tone="yellow" />
           <MiniCard label="Faulted" value={chargerStatusSummary.faulted} tone="red" />
         </div>
@@ -110,9 +112,15 @@ export default function NetworkOps() {
               <div key={c.id} className="rounded-md border border-gray-200 p-3">
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-medium text-gray-900">{c.ocppId}</p>
-                  <span className={`rounded-full px-2 py-0.5 text-xs ${c.status==='ONLINE'?'bg-green-100 text-green-700':c.status==='OFFLINE'?'bg-yellow-100 text-yellow-700':'bg-red-100 text-red-700'}`}>{c.status}</span>
+                  <span className={`rounded-full px-2 py-0.5 text-xs ${c.status==='ONLINE'?'bg-green-100 text-green-700':c.status==='DEGRADED'?'bg-amber-100 text-amber-700':c.status==='OFFLINE'?'bg-yellow-100 text-yellow-700':'bg-red-100 text-red-700'}`}>{c.status}</span>
                 </div>
                 <p className="mt-1 text-xs text-gray-500">Last heartbeat: {c.lastHeartbeat ? new Date(c.lastHeartbeat).toLocaleString() : 'never'}</p>
+                {c.status === 'DEGRADED' && (
+                  <p className="mt-1 text-xs text-amber-700">Pending offline confirmation (heartbeat stale/disconnect window).</p>
+                )}
+                {c.status === 'OFFLINE' && (
+                  <p className="mt-1 text-xs text-yellow-700">Confirmed unreachable after heartbeat timeout window.</p>
+                )}
                 <div className="mt-2 flex flex-wrap gap-2">
                   <button className="rounded-md border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 hover:bg-gray-50" onClick={()=>{
                     if(!site) return;
@@ -197,7 +205,13 @@ export default function NetworkOps() {
   );
 }
 
-function MiniCard({label, value, tone}:{label:string; value:number; tone:'green'|'yellow'|'red'}) {
-  const cls = tone==='green' ? 'bg-green-50 text-green-700 border-green-200' : tone==='yellow' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' : 'bg-red-50 text-red-700 border-red-200';
+function MiniCard({label, value, tone}:{label:string; value:number; tone:'green'|'amber'|'yellow'|'red'}) {
+  const cls = tone==='green'
+    ? 'bg-green-50 text-green-700 border-green-200'
+    : tone==='amber'
+      ? 'bg-amber-50 text-amber-700 border-amber-200'
+      : tone==='yellow'
+        ? 'bg-yellow-50 text-yellow-700 border-yellow-200'
+        : 'bg-red-50 text-red-700 border-red-200';
   return <div className={`rounded-md border p-2 ${cls}`}><p className="text-xs">{label}</p><p className="text-lg font-semibold">{value}</p></div>;
 }
