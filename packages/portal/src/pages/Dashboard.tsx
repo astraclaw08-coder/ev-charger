@@ -24,6 +24,15 @@ export default function Dashboard() {
   const [error, setError] = useState('');
   const [fleetUptime, setFleetUptime] = useState<{ uptime24h: number; uptime7d: number; uptime30d: number; degraded: number } | null>(null);
   const [fleetKpis, setFleetKpis] = useState<{ totalSites: number; totalKwh30d: number; activeSessions: number } | null>(null);
+  const [fleetStatus, setFleetStatus] = useState<{
+    totalChargers: number;
+    totalConnectors: number;
+    available: number;
+    charging: number;
+    faulted: number;
+    offline: number;
+    byStatus: Array<{ status: string; count: number }>;
+  } | null>(null);
   const [showAddSiteModal, setShowAddSiteModal] = useState(false);
   const [createLoading, setCreateLoading] = useState(false);
   const [createMsg, setCreateMsg] = useState('');
@@ -53,10 +62,42 @@ export default function Dashboard() {
         .filter(Boolean)
         .reduce((sum, ch) => sum + (ch?.connectors.filter((c) => c.activeSession).length ?? 0), 0);
 
+      const statusCountMap = new Map<string, number>();
+      let totalConnectors = 0;
+      let available = 0;
+      let charging = 0;
+      let faulted = 0;
+
+      chargerStatuses.filter(Boolean).forEach((ch) => {
+        ch?.connectors.forEach((connector) => {
+          totalConnectors += 1;
+          const status = connector.status.toUpperCase();
+          statusCountMap.set(status, (statusCountMap.get(status) ?? 0) + 1);
+
+          if (status === 'AVAILABLE') available += 1;
+          if (status === 'FAULTED') faulted += 1;
+          if (status === 'PREPARING' || status === 'CHARGING' || status === 'FINISHING') charging += 1;
+        });
+      });
+
+      const totalChargers = chargerStatuses.filter(Boolean).length;
+      const offline = chargerStatuses.filter((ch) => ch?.status?.toUpperCase() === 'OFFLINE').length;
+
       setFleetKpis({
         totalSites: data.length,
         totalKwh30d: Math.round(totalKwh30d * 1000) / 1000,
         activeSessions,
+      });
+      setFleetStatus({
+        totalChargers,
+        totalConnectors,
+        available,
+        charging,
+        faulted,
+        offline,
+        byStatus: Array.from(statusCountMap.entries())
+          .map(([status, count]) => ({ status, count }))
+          .sort((a, b) => b.count - a.count),
       });
       const rows = siteUp.filter(Boolean);
       if (rows.length) {
@@ -152,6 +193,37 @@ export default function Dashboard() {
           <KpiTile label="Total kWh (30d)" value={`${fleetKpis.totalKwh30d.toFixed(3)} kWh`} />
           <KpiTile label="Total Sites" value={`${fleetKpis.totalSites}`} />
           <KpiTile label="Active Sessions" value={`${fleetKpis.activeSessions}`} />
+        </div>
+      )}
+
+      {fleetStatus && (
+        <div className="mt-3 rounded-xl border border-gray-200 bg-white p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm font-semibold text-gray-700">Fleet charger/connectors status breakdown</p>
+            <p className="text-xs text-gray-500">
+              Chargers: <span className="font-semibold text-gray-900">{fleetStatus.totalChargers}</span>
+              {' · '}
+              Connectors: <span className="font-semibold text-gray-900">{fleetStatus.totalConnectors}</span>
+            </p>
+          </div>
+
+          <div className="mt-2 text-sm text-gray-700">
+            <span className="font-medium text-green-700">🟢 Available {fleetStatus.available}</span>
+            <span className="mx-2 text-gray-300">·</span>
+            <span className="font-medium text-amber-700">🟡 Charging {fleetStatus.charging}</span>
+            <span className="mx-2 text-gray-300">·</span>
+            <span className="font-medium text-red-700">🔴 Faulted {fleetStatus.faulted}</span>
+            <span className="mx-2 text-gray-300">·</span>
+            <span className="font-medium text-gray-600">⚫ Offline {fleetStatus.offline}</span>
+          </div>
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            {fleetStatus.byStatus.map((entry) => (
+              <span key={entry.status} className="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs text-gray-700">
+                {entry.status}: {entry.count}
+              </span>
+            ))}
+          </div>
         </div>
       )}
 
