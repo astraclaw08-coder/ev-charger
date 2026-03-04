@@ -228,7 +228,7 @@ export default function CustomerSupport() {
                       const record: SupportAudit = {
                         id: crypto.randomUUID(),
                         sessionId: s.id,
-                        action: 'refund-issued',
+                        action: 'refund-approved',
                         reason: triageReason,
                         createdAt: new Date().toISOString(),
                       };
