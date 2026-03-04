@@ -90,6 +90,7 @@ export default function Dashboard() {
       let available = 0;
       let charging = 0;
       let faulted = 0;
+      let offline = 0;
 
       chargerStatuses.filter(Boolean).forEach((ch) => {
         ch?.connectors.forEach((connector) => {
@@ -100,11 +101,11 @@ export default function Dashboard() {
           if (status === 'AVAILABLE') available += 1;
           if (status === 'FAULTED') faulted += 1;
           if (status === 'PREPARING' || status === 'CHARGING' || status === 'FINISHING') charging += 1;
+          if (status === 'UNAVAILABLE' || status === 'OFFLINE') offline += 1;
         });
       });
 
       const totalChargers = chargerStatuses.filter(Boolean).length;
-      const offline = chargerStatuses.filter((ch) => ch?.status?.toUpperCase() === 'OFFLINE').length;
 
       setFleetKpis({
         totalSites: data.length,
