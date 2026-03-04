@@ -217,7 +217,7 @@ export default function Dashboard() {
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-          <p className="mt-1 text-sm text-gray-500">All your charging sites</p>
+          <p className="mt-1 text-sm text-gray-500">Fleet overview and operations snapshot</p>
         </div>
         <button
           onClick={() => {
@@ -348,19 +348,20 @@ export default function Dashboard() {
         </div>
       )}
 
-      {sites.length === 0 ? (
-        <div className="mt-12 text-center text-gray-400">
-          <p className="text-4xl">📍</p>
-          <p className="mt-2 font-medium">No sites yet</p>
-          <p className="text-sm">Click + Add Site to create your first site.</p>
+      <div className="mt-6 rounded-xl border border-gray-200 bg-white p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-gray-700">Sites have moved</p>
+            <p className="text-xs text-gray-500">Manage and review all {sites.length} sites in the dedicated Sites tab.</p>
+          </div>
+          <Link
+            to="/sites"
+            className="rounded-md border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+          >
+            Open Sites →
+          </Link>
         </div>
-      ) : (
-        <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {sites.map((site) => (
-            <SiteCard key={site.id} site={site} />
-          ))}
-        </div>
-      )}
+      </div>
 
       {showAddSiteModal && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 p-4" onClick={() => setShowAddSiteModal(false)}>
@@ -431,63 +432,3 @@ function KpiTile({ label, value }: { label: string; value: string }) {
   );
 }
 
-function SiteCard({ site }: { site: SiteListItem }) {
-  const total = site.chargerCount;
-  const { online, offline, faulted } = site.statusSummary;
-
-  return (
-    <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm transition hover:shadow-md">
-      <div className="flex items-start justify-between">
-        <div className="min-w-0">
-          <h3 className="truncate font-semibold text-gray-900">{site.name}</h3>
-          <p className="mt-0.5 truncate text-xs text-gray-500">{site.address}</p>
-        </div>
-        <span className="ml-2 shrink-0 text-2xl">🔌</span>
-      </div>
-
-      <div className="mt-4 flex gap-3">
-        <Stat label="Total" value={total} color="text-gray-700" />
-        <Stat label="Online" value={online} color="text-green-700" />
-        {faulted > 0 && <Stat label="Faulted" value={faulted} color="text-red-700" />}
-        {offline > 0 && <Stat label="Offline" value={offline} color="text-gray-500" />}
-      </div>
-
-      {total > 0 && (
-        <div className="mt-3 flex h-1.5 overflow-hidden rounded-full bg-gray-100">
-          <div
-            className="bg-green-500 transition-all"
-            style={{ width: `${(online / total) * 100}%` }}
-          />
-          <div
-            className="bg-red-400 transition-all"
-            style={{ width: `${(faulted / total) * 100}%` }}
-          />
-        </div>
-      )}
-
-      <div className="mt-4 flex gap-2">
-        <Link
-          to={`/sites/${site.id}`}
-          className="flex-1 rounded-md bg-brand-600 px-3 py-1.5 text-center text-xs font-medium text-white hover:bg-brand-700"
-        >
-          View Site
-        </Link>
-        <Link
-          to={`/sites/${site.id}/analytics`}
-          className="flex-1 rounded-md border border-gray-200 px-3 py-1.5 text-center text-xs font-medium text-gray-600 hover:bg-gray-50"
-        >
-          Analytics
-        </Link>
-      </div>
-    </div>
-  );
-}
-
-function Stat({ label, value, color }: { label: string; value: number; color: string }) {
-  return (
-    <div className="text-center">
-      <p className={`text-xl font-bold leading-none ${color}`}>{value}</p>
-      <p className="mt-0.5 text-xs text-gray-400">{label}</p>
-    </div>
-  );
-}

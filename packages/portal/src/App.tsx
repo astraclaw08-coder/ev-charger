@@ -5,6 +5,7 @@ import { ClerkTokenProvider, DevTokenProvider } from './auth/TokenContext';
 import { ClerkAuthUxProvider, DevAuthUxProvider } from './auth/AuthUxContext';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
+import Sites from './pages/Sites';
 import SiteDetail from './pages/SiteDetail';
 import Analytics from './pages/Analytics';
 import FleetAnalytics from './pages/FleetAnalytics';
@@ -22,6 +23,7 @@ function PortalRoutes() {
       <Layout>
         <Routes>
           <Route path="/" element={<Dashboard />} />
+          <Route path="/sites" element={<Sites />} />
           <Route path="/sites/:id" element={<SiteDetail />} />
           <Route path="/analytics" element={<FleetAnalytics />} />
           <Route path="/sites/:id/analytics" element={<Analytics />} />

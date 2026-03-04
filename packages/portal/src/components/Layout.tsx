@@ -4,6 +4,7 @@ import { cn } from '../lib/utils';
 
 const NAV = [
   { label: 'Dashboard', href: '/', icon: '🏠' },
+  { label: 'Sites', href: '/sites', icon: '📍' },
   { label: 'Analytics', href: '/analytics', icon: '📊' },
   { label: 'Support', href: '/support', icon: '🎧' },
   { label: 'Network Ops', href: '/network', icon: '🛠️' },
