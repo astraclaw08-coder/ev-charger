@@ -20,6 +20,7 @@ export default function NetworkOps() {
   const [sites, setSites] = useState<SiteListItem[]>([]);
   const [allChargers, setAllChargers] = useState<ChargerListItem[]>([]);
   const [site, setSite] = useState<SiteDetail | null>(null);
+  const [selectedSiteId, setSelectedSiteId] = useState('');
   const [selectedChargerId, setSelectedChargerId] = useState('');
   const [selectedConnectorId, setSelectedConnectorId] = useState<number>(1);
   const [loading, setLoading] = useState(true);
@@ -39,6 +40,7 @@ export default function NetworkOps() {
         if (!siteList.length) return;
 
         const firstWithChargers = siteList.find((s) => s.chargerCount > 0) ?? siteList[0];
+        setSelectedSiteId(firstWithChargers.id);
         const detail = await api.getSite(firstWithChargers.id);
         setSite(detail);
 
@@ -65,10 +67,12 @@ export default function NetworkOps() {
   }, [site]);
 
   const effectiveSiteChargers = useMemo(() => {
-    if (!site) return [] as SiteDetail['chargers'];
-    if (site.chargers.length) return site.chargers;
+    const activeSiteId = selectedSiteId || site?.id;
+    if (!activeSiteId) return [] as SiteDetail['chargers'];
+
+    if (site && site.id === activeSiteId && site.chargers.length) return site.chargers;
     return allChargers
-      .filter((c) => c.site.id === site.id)
+      .filter((c) => c.site.id === activeSiteId)
       .map((c) => ({
         id: c.id,
         ocppId: c.ocppId,
@@ -82,7 +86,7 @@ export default function NetworkOps() {
         createdAt: c.createdAt,
         updatedAt: c.updatedAt,
       }));
-  }, [site, allChargers]);
+  }, [site, allChargers, selectedSiteId]);
 
   const chargerStatusSummary = useMemo(() => {
     if (!effectiveSiteChargers.length) return { online: 0, degraded: 0, offline: 0, faulted: 0 };
@@ -112,14 +116,23 @@ export default function NetworkOps() {
       <div className="grid gap-4 rounded-xl border border-gray-200 bg-white p-4 md:grid-cols-3">
         <div>
           <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">Site</label>
-          <select className="w-full rounded-md border border-gray-300 px-2 py-2 text-sm" value={site?.id ?? ''} onChange={async (e)=>{
-            const token=await getToken();
-            const api= createApiClient(token);
-            const detail=await api.getSite(e.target.value);
-            setSite(detail);
-            const fallback = detail.chargers.length ? detail.chargers : allChargers.filter((c)=>c.site.id===detail.id);
-            setSelectedChargerId(fallback[0]?.id ?? '');
-            setSelectedConnectorId(fallback[0]?.connectors?.[0]?.connectorId ?? 1);
+          <select className="w-full rounded-md border border-gray-300 px-2 py-2 text-sm" value={selectedSiteId || site?.id || ''} onChange={async (e)=>{
+            const nextSiteId = e.target.value;
+            setSelectedSiteId(nextSiteId);
+
+            try {
+              const token=await getToken();
+              const api= createApiClient(token);
+              const detail=await api.getSite(nextSiteId);
+              setSite(detail);
+              const fallback = detail.chargers.length ? detail.chargers : allChargers.filter((c)=>c.site.id===detail.id);
+              setSelectedChargerId(fallback[0]?.id ?? '');
+              setSelectedConnectorId(fallback[0]?.connectors?.[0]?.connectorId ?? 1);
+            } catch (err) {
+              const fallback = allChargers.filter((c)=>c.site.id===nextSiteId);
+              setSelectedChargerId(fallback[0]?.id ?? '');
+              setSelectedConnectorId(fallback[0]?.connectors?.[0]?.connectorId ?? 1);
+            }
           }}>
             {sites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
