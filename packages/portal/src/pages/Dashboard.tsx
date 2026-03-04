@@ -265,11 +265,13 @@ export default function Dashboard() {
           </div>
 
           <div className="mt-3 flex flex-wrap gap-2">
-            {fleetStatus.byStatus.map((entry) => (
-              <span key={entry.status} className="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs text-gray-700">
-                {entry.status}: {entry.count}
-              </span>
-            ))}
+            {fleetStatus.byStatus
+              .filter((entry) => !['AVAILABLE', 'PREPARING', 'CHARGING', 'FINISHING', 'FAULTED', 'UNAVAILABLE', 'OFFLINE'].includes(entry.status))
+              .map((entry) => (
+                <span key={entry.status} className="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs text-gray-700">
+                  {entry.status}: {entry.count}
+                </span>
+              ))}
           </div>
         </div>
       )}
