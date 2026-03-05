@@ -159,6 +159,7 @@ function LiveSessionView({
   onStop: () => void;
   stopping: boolean;
 }) {
+  const { isDark } = useAppTheme();
   const kwh = getLiveKwh(session);
   const estimatedCost = kwh * RATE_PER_KWH;
   const duration = useLiveDuration(session.startedAt, true);
@@ -175,7 +176,7 @@ function LiveSessionView({
   }
 
   return (
-    <View style={styles.liveContainer}>
+    <View style={[styles.liveContainer, { backgroundColor: isDark ? '#030712' : '#f9fafb' }]}>
       {/* Pulsing status indicator */}
       <View style={styles.liveHeader}>
         <View style={styles.liveDot} />
@@ -183,8 +184,8 @@ function LiveSessionView({
       </View>
 
       {/* Site name */}
-      <Text style={styles.liveSiteName}>{session.connector.charger.site.name}</Text>
-      <Text style={styles.liveConnector}>
+      <Text style={[styles.liveSiteName, { color: isDark ? '#f9fafb' : '#111827' }]}>{session.connector.charger.site.name}</Text>
+      <Text style={[styles.liveConnector, { color: isDark ? '#9ca3af' : '#6b7280' }]}>
         {session.connector.charger.vendor} {session.connector.charger.model} ·
         Connector {session.connector.connectorId}
       </Text>
@@ -192,26 +193,26 @@ function LiveSessionView({
       {/* Big kWh counter */}
       <View style={styles.kwhContainer}>
         <Text style={styles.kwhValue}>{formatKwh(kwh)}</Text>
-        <Text style={styles.kwhUnit}>kWh delivered</Text>
+        <Text style={[styles.kwhUnit, { color: isDark ? '#94a3b8' : '#6b7280' }]}>kWh delivered</Text>
       </View>
 
       {/* Stats row */}
-      <View style={styles.liveStats}>
+      <View style={[styles.liveStats, { backgroundColor: isDark ? '#0f172a' : '#fff', borderColor: isDark ? '#1f2937' : '#e5e7eb', borderWidth: 1 }]}> 
         <View style={styles.liveStat}>
-          <Text style={styles.liveStatValue}>{duration}</Text>
-          <Text style={styles.liveStatLabel}>Duration</Text>
+          <Text style={[styles.liveStatValue, { color: isDark ? '#f8fafc' : '#111827' }]}>{duration}</Text>
+          <Text style={[styles.liveStatLabel, { color: isDark ? '#94a3b8' : '#9ca3af' }]}>Duration</Text>
         </View>
-        <View style={styles.liveStatDivider} />
+        <View style={[styles.liveStatDivider, { backgroundColor: isDark ? '#334155' : '#e5e7eb' }]} />
         <View style={styles.liveStat}>
           <Text style={[styles.liveStatValue, styles.costValue]}>
             ${estimatedCost.toFixed(2)}
           </Text>
-          <Text style={styles.liveStatLabel}>Est. Cost</Text>
+          <Text style={[styles.liveStatLabel, { color: isDark ? '#94a3b8' : '#9ca3af' }]}>Est. Cost</Text>
         </View>
-        <View style={styles.liveStatDivider} />
+        <View style={[styles.liveStatDivider, { backgroundColor: isDark ? '#334155' : '#e5e7eb' }]} />
         <View style={styles.liveStat}>
-          <Text style={styles.liveStatValue}>${RATE_PER_KWH.toFixed(2)}</Text>
-          <Text style={styles.liveStatLabel}>Per kWh</Text>
+          <Text style={[styles.liveStatValue, { color: isDark ? '#f8fafc' : '#111827' }]}>${RATE_PER_KWH.toFixed(2)}</Text>
+          <Text style={[styles.liveStatLabel, { color: isDark ? '#94a3b8' : '#9ca3af' }]}>Per kWh</Text>
         </View>
       </View>
 
