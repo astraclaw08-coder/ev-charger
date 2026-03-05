@@ -26,10 +26,14 @@ function ActiveSessionBanner({ active }: { active: Session }) {
   return (
     <View style={{
       position: 'absolute',
-      left: 12,
-      right: 12,
-      bottom: 8,
+      left: 0,
+      right: 0,
+      bottom: 0,
       zIndex: 20,
+      backgroundColor: isDark ? '#030712' : '#f9fafb',
+      paddingHorizontal: 12,
+      paddingBottom: 8,
+      paddingTop: 4,
     }}>
       <TouchableOpacity
         style={{
@@ -90,7 +94,7 @@ export default function TabsLayout() {
 
   const active = useMemo(() => data?.sessions.find((s) => s.status === 'ACTIVE') ?? null, [data]);
   const currentTab = segments[segments.length - 1];
-  const bannerVisible = Boolean(active) && currentTab !== 'sessions';
+  const bannerVisible = Boolean(active);
 
   return (
     <>
