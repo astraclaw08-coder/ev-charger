@@ -177,7 +177,7 @@ function SummaryStatCard({
     ]}>
       <Text style={styles.statIcon}>{icon}</Text>
       <Text style={[styles.statValue, { color: isDark ? '#f8fafc' : '#111827' }, highlight && styles.statValueHighlight]}>{value}</Text>
-      <Text style={[styles.statLabel, { color: isDark ? '#94a3b8' : '#9ca3af' }]}>{label}</Text>
+      <Text numberOfLines={1} style={[styles.statLabel, { color: isDark ? '#94a3b8' : '#9ca3af' }]}>{label}</Text>
     </View>
   );
 }
@@ -490,7 +490,7 @@ const styles = StyleSheet.create({
   statIcon: { fontSize: 24, marginBottom: 6 },
   statValue: { fontSize: 18, fontWeight: '700', color: '#111827' },
   statValueHighlight: { color: '#10b981' },
-  statLabel: { fontSize: 11, color: '#9ca3af', marginTop: 2, textTransform: 'uppercase' },
+  statLabel: { fontSize: 10, color: '#9ca3af', marginTop: 2, textTransform: 'none' },
   paymentSuccess: {
     backgroundColor: '#d1fae5',
     borderRadius: 10,
