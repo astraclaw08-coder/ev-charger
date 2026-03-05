@@ -109,18 +109,18 @@ export default function TabsLayout() {
           tabBarStyle: {
             borderTopColor: isDark ? '#1f2937' : '#e5e7eb',
             backgroundColor: isDark ? '#0b1220' : '#ffffff',
-            paddingBottom: 0,
-            paddingTop: 0,
-            height: 58,
+            paddingBottom: Math.max(insets.bottom, 8),
+            paddingTop: 6,
+            height: 62 + Math.max(insets.bottom, 8),
             marginBottom: bannerVisible ? 72 + Math.max(insets.bottom, 8) : 0,
           },
           tabBarItemStyle: {
             justifyContent: 'center',
             alignItems: 'center',
-            paddingVertical: 0,
+            paddingVertical: 2,
           },
           tabBarLabelStyle: {
-            marginTop: 0,
+            marginTop: 2,
             paddingTop: 0,
             lineHeight: 14,
           },
