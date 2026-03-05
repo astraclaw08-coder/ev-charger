@@ -95,7 +95,11 @@ function ConnectorRow({
 }: {
   connector: Connector;
   chargerId: string;
-  onSessionStarted: (chargerId: string, connectorId: number) => void;
+  onSessionStarted: (
+    chargerId: string,
+    connectorId: number,
+    connectorStatus: Connector['status'],
+  ) => void;
   isDark: boolean;
 }) {
   const isStartable = connector.status === 'AVAILABLE' || connector.status === 'PREPARING' || connector.status === 'SUSPENDED_EV';
@@ -112,7 +116,7 @@ function ConnectorRow({
       {isStartable && (
         <TouchableOpacity
           style={styles.startButton}
-          onPress={() => onSessionStarted(chargerId, connector.connectorId)}
+          onPress={() => onSessionStarted(chargerId, connector.connectorId, connector.status)}
         >
           <Text style={styles.startButtonText}>Start</Text>
         </TouchableOpacity>
@@ -139,6 +143,7 @@ export default function ChargerDetailScreen() {
   const [activationDeadlineMs, setActivationDeadlineMs] = useState<number | null>(null);
   const [countdownText, setCountdownText] = useState('02:00');
   const activationPollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const startContextRef = useRef<{ alreadyPlugged: boolean } | null>(null);
   const { isDark } = useAppTheme();
   const { toggle, isFav } = useFavorites();
   const { isGuest } = useAppAuth();
@@ -220,9 +225,16 @@ export default function ChargerDetailScreen() {
       queryClient.invalidateQueries({ queryKey: ['charger', id] });
       queryClient.invalidateQueries({ queryKey: ['sessions'] });
 
-      setActivationMessage('Your charger has been successfully activated. Please plug in the connector to your vehicle to start charging.');
-      setShowActivationModal(true);
-      setActivationDeadlineMs(Date.now() + 120000);
+      const alreadyPlugged = startContextRef.current?.alreadyPlugged ?? false;
+      if (alreadyPlugged) {
+        setActivationMessage('Charger activated. Starting your session…');
+        setShowActivationModal(false);
+        setActivationDeadlineMs(null);
+      } else {
+        setActivationMessage('Your charger has been successfully activated. Please plug in the connector to your vehicle to start charging.');
+        setShowActivationModal(true);
+        setActivationDeadlineMs(Date.now() + 120000);
+      }
 
       const startedAt = Date.now();
       const timeoutMs = 120000;
@@ -295,7 +307,11 @@ export default function ChargerDetailScreen() {
     };
   }, []);
 
-  function handleStartSession(chargerId: string, connectorId: number) {
+  function handleStartSession(
+    chargerId: string,
+    connectorId: number,
+    connectorStatus: Connector['status'],
+  ) {
     if (isGuest) {
       Alert.alert('Sign in required', 'Please sign in to start a charging session.', [
         { text: 'Cancel', style: 'cancel' },
@@ -307,6 +323,9 @@ export default function ChargerDetailScreen() {
       clearTimeout(activationPollRef.current);
       activationPollRef.current = null;
     }
+    startContextRef.current = {
+      alreadyPlugged: connectorStatus === 'PREPARING' || connectorStatus === 'SUSPENDED_EV',
+    };
     startMutation.mutate({ chargerId, connectorId });
   }
 
@@ -339,7 +358,6 @@ export default function ChargerDetailScreen() {
           headerStyle: { backgroundColor: isDark ? '#0b1220' : '#ffffff' },
           headerTintColor: isDark ? '#f9fafb' : '#111827',
           headerShadowVisible: false,
-          headerBackTitleVisible: false,
           headerBackButtonDisplayMode: 'minimal',
           headerRight: () => (
             <HeartButton
@@ -420,9 +438,9 @@ export default function ChargerDetailScreen() {
               connector={connector}
               chargerId={selectedCharger.id}
               isDark={isDark}
-              onSessionStarted={(cid, connId) => {
+              onSessionStarted={(cid, connId, connectorStatus) => {
                 if (startMutation.isPending) return;
-                handleStartSession(cid, connId);
+                handleStartSession(cid, connId, connectorStatus);
               }}
             />
           ))}
