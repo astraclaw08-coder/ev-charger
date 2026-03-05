@@ -100,12 +100,13 @@ export async function sessionRoutes(app: FastifyInstance) {
     ]);
 
     const sessionsForClient = sessions.map((s: any) => {
-      const computedKwh =
-        s.kwhDelivered != null
-          ? s.kwhDelivered
-          : s.meterStop != null && s.meterStart != null
-            ? Math.max(0, (s.meterStop - s.meterStart) / 1000)
-            : null;
+      const meterDerivedKwh =
+        s.meterStop != null && s.meterStart != null
+          ? Math.max(0, (s.meterStop - s.meterStart) / 1000)
+          : null;
+      const computedKwh = meterDerivedKwh != null
+        ? Math.max(s.kwhDelivered ?? 0, meterDerivedKwh)
+        : s.kwhDelivered;
       return {
         ...s,
         kwhDelivered: computedKwh,
@@ -142,12 +143,14 @@ export async function sessionRoutes(app: FastifyInstance) {
     if (!session) return reply.status(404).send({ error: 'Session not found' });
     if (session.userId !== user.id) return reply.status(403).send({ error: 'Not your session' });
 
-    const computedKwh =
-      session.kwhDelivered != null
-        ? session.kwhDelivered
-        : session.meterStop != null && session.meterStart != null
-          ? Math.max(0, (session.meterStop - session.meterStart) / 1000)
-          : null;
+    const meterDerivedKwh =
+      session.meterStop != null && session.meterStart != null
+        ? Math.max(0, (session.meterStop - session.meterStart) / 1000)
+        : null;
+
+    const computedKwh = meterDerivedKwh != null
+      ? Math.max(session.kwhDelivered ?? 0, meterDerivedKwh)
+      : session.kwhDelivered;
 
     const costEstimateCents =
       computedKwh != null && session.ratePerKwh != null
