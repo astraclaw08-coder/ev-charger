@@ -108,13 +108,13 @@ function SessionSummary({ session, fallbackKwh }: { session: Session; fallbackKw
       <View style={styles.summaryStats}>
         <SummaryStatCard label="ENERGY (kWh)" value={formatKwh(finalKwh)} icon="⚡" isDark={isDark} />
         <SummaryStatCard
-          label="Duration"
+          label="DURATION"
           value={formatDuration(session.startedAt, session.endedAt)}
           icon="⏱"
           isDark={isDark}
         />
         <SummaryStatCard
-          label="Total Cost"
+          label="TOTAL COST"
           value={`$${cost.toFixed(2)}`}
           icon="💳"
           isDark={isDark}
