@@ -7,9 +7,9 @@ import {
   ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, type Charger } from '@/lib/api';
-import { useFavorites } from '@/hooks/useFavorites';
+import { getFavorites, toggleFavorite } from '@/lib/favorites';
 import { HeartButton } from '@/components/HeartButton';
 import { useAppTheme } from '@/theme';
 
@@ -44,14 +44,24 @@ function statusLabel(c: Charger) {
 export default function FavoritesScreen() {
   const router = useRouter();
   const { isDark } = useAppTheme();
-  const { favorites, toggle, isFav } = useFavorites();
-  const { data: chargers = [], isLoading, refetch, isRefetching } = useQuery({
-    queryKey: ['chargers'],
-    queryFn: () => api.chargers.list(),
-    refetchInterval: 30_000,
+  const queryClient = useQueryClient();
+
+  const { data: favoriteIds = [], isLoading: favoritesLoading, refetch: refetchFavorites, isRefetching: isRefetchingFavorites } = useQuery({
+    queryKey: ['favorites'],
+    queryFn: () => getFavorites(),
+    refetchInterval: 15_000,
   });
 
-  const favChargers = chargers.filter((c) => isFav(c.id));
+  const { data: chargers = [], isLoading: chargersLoading, refetch: refetchChargers, isRefetching: isRefetchingChargers } = useQuery({
+    queryKey: ['chargers'],
+    queryFn: () => api.chargers.list(),
+    refetchInterval: 15_000,
+  });
+
+  const isLoading = favoritesLoading || chargersLoading;
+  const isRefetching = isRefetchingFavorites || isRefetchingChargers;
+
+  const favChargers = chargers.filter((c) => favoriteIds.includes(c.id));
 
   if (isLoading) {
     return <View style={styles.centered}><ActivityIndicator size="large" color="#10b981" /></View>;
@@ -62,7 +72,7 @@ export default function FavoritesScreen() {
       <FlatList
         data={favChargers}
         keyExtractor={(c) => c.id}
-        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}
+        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => { refetchFavorites(); refetchChargers(); }} />}
         contentContainerStyle={favChargers.length === 0 ? styles.emptyContainer : { padding: 12 }}
         ListEmptyComponent={
           <View style={styles.emptyInner}>
@@ -89,7 +99,14 @@ export default function FavoritesScreen() {
                 </Text>
               </View>
               <Text style={{ color, fontWeight: '700', fontSize: 12, marginRight: 8 }}>{statusLabel(item)}</Text>
-              <HeartButton isFavorited={isFav(item.id)} onToggle={() => toggle(item.id)} />
+              <HeartButton
+                isFavorited={favoriteIds.includes(item.id)}
+                onToggle={async () => {
+                  await toggleFavorite(item.id);
+                  queryClient.invalidateQueries({ queryKey: ['favorites'] });
+                  queryClient.invalidateQueries({ queryKey: ['chargers'] });
+                }}
+              />
             </TouchableOpacity>
           );
         }}
