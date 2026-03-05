@@ -60,7 +60,7 @@ function ActiveSessionBanner() {
       position: 'absolute',
       left: 12,
       right: 12,
-      top: 8,
+      bottom: 86,
       zIndex: 20,
     }}>
       <TouchableOpacity
@@ -110,7 +110,7 @@ export default function TabsLayout() {
             backgroundColor: isDark ? '#0b1220' : '#ffffff',
             paddingBottom: 4,
           },
-          sceneStyle: { backgroundColor: isDark ? '#030712' : '#f9fafb' },
+          sceneStyle: { backgroundColor: isDark ? '#030712' : '#f9fafb', paddingBottom: 72 },
           headerStyle: { backgroundColor: isDark ? '#0b1220' : '#fff' },
           headerTintColor: isDark ? '#f9fafb' : '#111827',
           headerShadowVisible: false,
