@@ -7,6 +7,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api, type Session } from '@/lib/api';
 import { useAppTheme } from '@/theme';
 import { useAppAuth } from '@/providers/AuthProvider';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 function formatElapsed(startedAt: string): string {
   const start = new Date(startedAt).getTime();
@@ -20,6 +21,7 @@ function formatElapsed(startedAt: string): string {
 function ActiveSessionBanner({ active }: { active: Session }) {
   const router = useRouter();
   const { isDark } = useAppTheme();
+  const insets = useSafeAreaInsets();
   const kwh = active.kwhDelivered ?? 0;
   const siteName = active.connector.charger.site.name;
 
@@ -28,11 +30,11 @@ function ActiveSessionBanner({ active }: { active: Session }) {
       position: 'absolute',
       left: 0,
       right: 0,
-      bottom: 0,
+      bottom: Math.max(insets.bottom - 4, 0),
       zIndex: 20,
       backgroundColor: isDark ? '#030712' : '#f9fafb',
       paddingHorizontal: 12,
-      paddingBottom: 8,
+      paddingBottom: Math.max(insets.bottom, 8),
       paddingTop: 4,
     }}>
       <TouchableOpacity
@@ -71,6 +73,7 @@ export default function TabsLayout() {
   const { isDark } = useAppTheme();
   const { isGuest } = useAppAuth();
   const segments = useSegments();
+  const insets = useSafeAreaInsets();
 
   const { data, refetch } = useQuery({
     queryKey: ['sessions'],
@@ -106,7 +109,7 @@ export default function TabsLayout() {
             borderTopColor: isDark ? '#1f2937' : '#e5e7eb',
             backgroundColor: isDark ? '#0b1220' : '#ffffff',
             paddingBottom: 4,
-            marginBottom: bannerVisible ? 60 : 0,
+            marginBottom: bannerVisible ? 60 + Math.max(insets.bottom, 8) : 0,
           },
           sceneStyle: { backgroundColor: isDark ? '#030712' : '#f9fafb' },
           headerStyle: { backgroundColor: isDark ? '#0b1220' : '#fff' },
