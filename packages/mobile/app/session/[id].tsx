@@ -71,16 +71,25 @@ function SessionSummary({ session }: { session: Session }) {
   const router = useRouter();
   const { isDark } = useAppTheme();
   const ratePerKwh = session.ratePerKwh ?? RATE_PER_KWH;
-  const finalKwh =
-    session.meterStop != null
-      ? Math.max(0, (session.meterStop - session.meterStart) / 1000)
-      : getLiveKwh(session);
+  const meterDerivedKwh =
+    session.meterStop != null ? Math.max(0, (session.meterStop - session.meterStart) / 1000) : 0;
+  const sessionDerivedKwh = getLiveKwh(session);
+  const paymentDerivedCost = session.payment?.amountCents != null ? session.payment.amountCents / 100 : null;
+  const estimateDerivedCost = session.costEstimateCents != null ? session.costEstimateCents / 100 : null;
+
   const cost =
-    session.payment?.amountCents != null
-      ? session.payment.amountCents / 100
-      : session.costEstimateCents != null
-        ? session.costEstimateCents / 100
-        : finalKwh * ratePerKwh;
+    paymentDerivedCost ??
+    estimateDerivedCost ??
+    (sessionDerivedKwh > 0 ? sessionDerivedKwh * ratePerKwh : meterDerivedKwh * ratePerKwh);
+
+  const finalKwh =
+    meterDerivedKwh > 0
+      ? meterDerivedKwh
+      : sessionDerivedKwh > 0
+        ? sessionDerivedKwh
+        : cost > 0 && ratePerKwh > 0
+          ? cost / ratePerKwh
+          : 0;
   const paymentMethod = isDevMode
     ? ''
     : session.payment?.stripeCustomerId
@@ -161,7 +170,7 @@ function SummaryStatCard({
     <View style={[
       styles.statCard,
       { backgroundColor: isDark ? '#111827' : '#fff' },
-      highlight && styles.statCardHighlight,
+      highlight && (isDark ? styles.statCardHighlightDark : styles.statCardHighlight),
     ]}>
       <Text style={styles.statIcon}>{icon}</Text>
       <Text style={[styles.statValue, { color: isDark ? '#f8fafc' : '#111827' }, highlight && styles.statValueHighlight]}>{value}</Text>
@@ -444,6 +453,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   statCardHighlight: { backgroundColor: '#ecfdf5' },
+  statCardHighlightDark: { backgroundColor: '#052e2b', borderWidth: 1, borderColor: '#065f46' },
   statIcon: { fontSize: 24, marginBottom: 6 },
   statValue: { fontSize: 18, fontWeight: '700', color: '#111827' },
   statValueHighlight: { color: '#10b981' },
