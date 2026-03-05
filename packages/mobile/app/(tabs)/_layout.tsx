@@ -98,6 +98,8 @@ export default function TabsLayout() {
   const active = useMemo(() => data?.sessions.find((s) => s.status === 'ACTIVE') ?? null, [data]);
   const currentTab = segments[segments.length - 1];
   const bannerVisible = Boolean(active);
+  const tabIconGap = 6;
+  const tabBottomGap = bannerVisible ? tabIconGap : Math.max(insets.bottom, 8);
 
   return (
     <>
@@ -109,9 +111,9 @@ export default function TabsLayout() {
           tabBarStyle: {
             borderTopColor: isDark ? '#1f2937' : '#e5e7eb',
             backgroundColor: isDark ? '#0b1220' : '#ffffff',
-            paddingBottom: Math.max(insets.bottom, 8),
-            paddingTop: 6,
-            height: 62 + Math.max(insets.bottom, 8),
+            paddingBottom: tabBottomGap,
+            paddingTop: tabIconGap,
+            height: 62 + tabBottomGap,
             marginBottom: bannerVisible ? 72 + Math.max(insets.bottom, 8) : 0,
           },
           tabBarItemStyle: {
