@@ -26,9 +26,7 @@ function FitToSites({ sites }: { sites: DashboardSiteMapItem[] }) {
   const map = useMap();
   useEffect(() => {
     if (!sites.length) return;
-    const active = sites.filter((s) => s.totalChargers > 0);
-    const rows = active.length ? active : sites;
-    const bounds = L.latLngBounds(rows.map((s) => [s.lat, s.lng] as [number, number]));
+    const bounds = L.latLngBounds(sites.map((s) => [s.lat, s.lng] as [number, number]));
     map.fitBounds(bounds, { padding: [28, 28], maxZoom: 13 });
   }, [map, sites]);
   return null;
@@ -52,8 +50,8 @@ export default function DashboardSitesMap({ sites }: { sites: DashboardSiteMapIt
       <div className="h-72 overflow-hidden rounded-lg border border-gray-200">
         <MapContainer center={center} zoom={11} scrollWheelZoom={false} style={{ height: '100%', width: '100%' }}>
           <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>'
-            url="https://{s}.basemaps.cartocdn.com/dark_matter/{z}/{x}/{y}{r}.png"
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://stadiamaps.com/">Stadia Maps</a>'
+            url="https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png"
           />
           <FitToSites sites={sites} />
           {sites.map((site) => (
