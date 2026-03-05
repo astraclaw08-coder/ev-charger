@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, type Session } from '@/lib/api';
+import { api, isDevMode, type Session } from '@/lib/api';
 import { useAppTheme } from '@/theme';
 
 const RATE_PER_KWH = 0.35;
@@ -69,30 +69,45 @@ function useLiveDuration(startedAt: string, active: boolean): string {
 
 function SessionSummary({ session }: { session: Session }) {
   const router = useRouter();
-  const kwh = getLiveKwh(session);
+  const { isDark } = useAppTheme();
+  const ratePerKwh = session.ratePerKwh ?? RATE_PER_KWH;
+  const finalKwh =
+    session.meterStop != null
+      ? Math.max(0, (session.meterStop - session.meterStart) / 1000)
+      : getLiveKwh(session);
   const cost =
     session.payment?.amountCents != null
       ? session.payment.amountCents / 100
-      : kwh * RATE_PER_KWH;
+      : session.costEstimateCents != null
+        ? session.costEstimateCents / 100
+        : finalKwh * ratePerKwh;
+  const paymentMethod = isDevMode
+    ? ''
+    : session.payment?.stripeCustomerId
+      ? 'Card on file'
+      : '—';
 
   return (
     <View style={styles.summaryContainer}>
       <Text style={styles.summaryCheckmark}>✓</Text>
-      <Text style={styles.summaryTitle}>Session Complete</Text>
-      <Text style={styles.summarySubtitle}>{session.connector.charger.site.name}</Text>
+      <Text style={[styles.summaryTitle, { color: isDark ? '#e2e8f0' : '#111827' }]}>Session Complete</Text>
+      <Text style={[styles.summarySubtitle, { color: isDark ? '#cbd5e1' : '#6b7280' }]}>{session.connector.charger.site.name}</Text>
+      <Text style={[styles.summaryAddress, { color: isDark ? '#94a3b8' : '#6b7280' }]}>{session.connector.charger.site.address}</Text>
 
       <View style={styles.summaryStats}>
-        <SummaryStatCard label="Energy" value={`${formatKwh(kwh)} kWh`} icon="⚡" />
+        <SummaryStatCard label="Energy" value={`${formatKwh(finalKwh)} kWh`} icon="⚡" isDark={isDark} />
         <SummaryStatCard
           label="Duration"
           value={formatDuration(session.startedAt, session.endedAt)}
           icon="⏱"
+          isDark={isDark}
         />
         <SummaryStatCard
           label="Total Cost"
           value={`$${cost.toFixed(2)}`}
           icon="💳"
           highlight
+          isDark={isDark}
         />
       </View>
 
@@ -110,12 +125,13 @@ function SessionSummary({ session }: { session: Session }) {
         </View>
       )}
 
-      <View style={styles.summaryMeta}>
-        <Text style={styles.metaText}>Started: {formatDate(session.startedAt)}</Text>
+      <View style={[styles.summaryMeta, { backgroundColor: isDark ? '#111827' : '#f3f4f6' }]}>
+        <Text style={[styles.metaText, { color: isDark ? '#cbd5e1' : '#6b7280' }]}>Started: {formatDate(session.startedAt)}</Text>
         {session.endedAt && (
-          <Text style={styles.metaText}>Ended: {formatDate(session.endedAt)}</Text>
+          <Text style={[styles.metaText, { color: isDark ? '#cbd5e1' : '#6b7280' }]}>Ended: {formatDate(session.endedAt)}</Text>
         )}
-        <Text style={styles.metaText}>Rate: ${RATE_PER_KWH.toFixed(2)}/kWh</Text>
+        <Text style={[styles.metaText, { color: isDark ? '#cbd5e1' : '#6b7280' }]}>Rate: ${ratePerKwh.toFixed(2)}/kWh</Text>
+        <Text style={[styles.metaText, { color: isDark ? '#cbd5e1' : '#6b7280' }]}>Payment Method: {paymentMethod}</Text>
       </View>
 
       <TouchableOpacity
@@ -133,17 +149,23 @@ function SummaryStatCard({
   value,
   icon,
   highlight,
+  isDark,
 }: {
   label: string;
   value: string;
   icon: string;
   highlight?: boolean;
+  isDark: boolean;
 }) {
   return (
-    <View style={[styles.statCard, highlight && styles.statCardHighlight]}>
+    <View style={[
+      styles.statCard,
+      { backgroundColor: isDark ? '#111827' : '#fff' },
+      highlight && styles.statCardHighlight,
+    ]}>
       <Text style={styles.statIcon}>{icon}</Text>
-      <Text style={[styles.statValue, highlight && styles.statValueHighlight]}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
+      <Text style={[styles.statValue, { color: isDark ? '#f8fafc' : '#111827' }, highlight && styles.statValueHighlight]}>{value}</Text>
+      <Text style={[styles.statLabel, { color: isDark ? '#94a3b8' : '#9ca3af' }]}>{label}</Text>
     </View>
   );
 }
@@ -402,7 +424,8 @@ const styles = StyleSheet.create({
   },
   summaryCheckmark: { fontSize: 56, marginBottom: 12 },
   summaryTitle: { fontSize: 24, fontWeight: '800', color: '#111827', marginBottom: 4 },
-  summarySubtitle: { fontSize: 14, color: '#6b7280', marginBottom: 28 },
+  summarySubtitle: { fontSize: 14, color: '#6b7280', marginBottom: 4 },
+  summaryAddress: { fontSize: 13, marginBottom: 24, textAlign: 'center' },
   summaryStats: {
     flexDirection: 'row',
     gap: 12,
