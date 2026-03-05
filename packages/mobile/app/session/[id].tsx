@@ -116,7 +116,7 @@ function SessionSummary({ session, fallbackKwh }: { session: Session; fallbackKw
         <SummaryStatCard
           label="TOTAL COST"
           value={`$${cost.toFixed(2)}`}
-          icon="💳"
+          icon="money-outline"
           isDark={isDark}
         />
       </View>
@@ -175,7 +175,13 @@ function SummaryStatCard({
       { backgroundColor: isDark ? '#111827' : '#fff' },
       highlight && (isDark ? styles.statCardHighlightDark : styles.statCardHighlight),
     ]}>
-      <Text style={styles.statIcon}>{icon}</Text>
+      {icon === 'money-outline' ? (
+        <View style={[styles.moneyIconCircle, { borderColor: isDark ? '#94a3b8' : '#6b7280' }]}>
+          <Text style={[styles.moneyIconText, { color: isDark ? '#e2e8f0' : '#374151' }]}>$</Text>
+        </View>
+      ) : (
+        <Text style={styles.statIcon}>{icon}</Text>
+      )}
       <Text style={[styles.statValue, { color: isDark ? '#f8fafc' : '#111827' }, highlight && styles.statValueHighlight]}>{value}</Text>
       <Text numberOfLines={1} style={[styles.statLabel, { color: isDark ? '#94a3b8' : '#9ca3af' }]}>{label}</Text>
     </View>
@@ -488,6 +494,21 @@ const styles = StyleSheet.create({
   statCardHighlight: { backgroundColor: '#ecfdf5' },
   statCardHighlightDark: { backgroundColor: '#052e2b', borderWidth: 1, borderColor: '#065f46' },
   statIcon: { fontSize: 24, marginBottom: 6 },
+  moneyIconCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
+    backgroundColor: 'transparent',
+  },
+  moneyIconText: {
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 14,
+  },
   statValue: { fontSize: 18, fontWeight: '700', color: '#111827' },
   statValueHighlight: { color: '#10b981' },
   statLabel: { fontSize: 10, color: '#9ca3af', marginTop: 2, textTransform: 'none' },
