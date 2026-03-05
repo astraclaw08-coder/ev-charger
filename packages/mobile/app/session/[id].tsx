@@ -1,5 +1,5 @@
 /**
- * Live session screen — polls for kWh + cost, shows Stop button.
+ * Live session screen - polls for kWh + cost, shows Stop button.
  * After stop: shows session summary (kWh, duration, cost).
  */
 import React, { useEffect, useState } from 'react';
@@ -96,7 +96,7 @@ function SessionSummary({ session, fallbackKwh }: { session: Session; fallbackKw
     ? ''
     : session.payment?.stripeCustomerId
       ? 'Card on file'
-      : '—';
+      : '-';
 
   return (
     <View style={styles.summaryContainer}>
@@ -141,6 +141,7 @@ function SessionSummary({ session, fallbackKwh }: { session: Session; fallbackKw
           <Text style={[styles.metaText, { color: isDark ? '#cbd5e1' : '#6b7280' }]}>Ended: {formatDate(session.endedAt)}</Text>
         )}
         <Text style={[styles.metaText, { color: isDark ? '#cbd5e1' : '#6b7280' }]}>Transaction #: {session.transactionId ?? '—'}</Text>
+        <Text style={[styles.metaText, { color: isDark ? '#cbd5e1' : '#6b7280' }]}>Charger Serial/Name: {session.connector.charger.ocppId}</Text>
         <Text style={[styles.metaText, { color: isDark ? '#cbd5e1' : '#6b7280' }]}>Rate: ${ratePerKwh.toFixed(2)}/kWh</Text>
         <Text style={[styles.metaText, { color: isDark ? '#cbd5e1' : '#6b7280' }]}>Payment Method: {paymentMethod}</Text>
       </View>
@@ -222,6 +223,9 @@ function LiveSessionView({
         {session.connector.charger.vendor} {session.connector.charger.model} ·
         Connector {session.connector.connectorId}
       </Text>
+      <Text style={[styles.liveChargerSerial, { color: isDark ? '#94a3b8' : '#6b7280' }]}>
+        Charger Serial/Name: {session.connector.charger.ocppId}
+      </Text>
 
       {/* Big kWh counter */}
       <View style={styles.kwhContainer}>
@@ -230,7 +234,7 @@ function LiveSessionView({
       </View>
 
       {/* Stats row */}
-      <View style={[styles.liveStats, { backgroundColor: isDark ? '#0f172a' : '#fff', borderColor: isDark ? '#1f2937' : '#e5e7eb', borderWidth: 1 }]}> 
+      <View style={[styles.liveStats, { backgroundColor: isDark ? '#0f172a' : '#fff', borderColor: isDark ? '#1f2937' : '#e5e7eb', borderWidth: 1 }]}>
         <View style={styles.liveStat}>
           <Text style={[styles.liveStatValue, { color: isDark ? '#f8fafc' : '#111827' }]}>{duration}</Text>
           <Text style={[styles.liveStatLabel, { color: isDark ? '#94a3b8' : '#9ca3af' }]}>Duration</Text>
@@ -311,7 +315,7 @@ export default function SessionScreen() {
 
   if (isLoading) {
     return (
-      <View style={[styles.centered, { backgroundColor: isDark ? '#030712' : '#f9fafb' }]}> 
+      <View style={[styles.centered, { backgroundColor: isDark ? '#030712' : '#f9fafb' }]}>
         <ActivityIndicator size="large" color="#10b981" />
       </View>
     );
@@ -319,7 +323,7 @@ export default function SessionScreen() {
 
   if (!session) {
     return (
-      <View style={[styles.centered, { backgroundColor: isDark ? '#030712' : '#f9fafb' }]}> 
+      <View style={[styles.centered, { backgroundColor: isDark ? '#030712' : '#f9fafb' }]}>
         <Text style={styles.errorText}>Session not found.</Text>
       </View>
     );
@@ -343,7 +347,7 @@ export default function SessionScreen() {
           headerShadowVisible: false,
         }}
       />
-      <ScrollView contentContainerStyle={[styles.scrollContent, { backgroundColor: isDark ? '#030712' : '#f9fafb' }]}> 
+      <ScrollView contentContainerStyle={[styles.scrollContent, { backgroundColor: isDark ? '#030712' : '#f9fafb' }]}>
         {session.status === 'ACTIVE' ? (
           <LiveSessionView
             session={session}
@@ -400,7 +404,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#6b7280',
     textAlign: 'center',
-    marginBottom: 32,
+    marginBottom: 4,
+  },
+  liveChargerSerial: {
+    fontSize: 12,
+    textAlign: 'center',
+    marginBottom: 28,
   },
   kwhContainer: { alignItems: 'center', marginBottom: 32 },
   kwhValue: { fontSize: 72, fontWeight: '800', color: '#10b981', lineHeight: 80 },
