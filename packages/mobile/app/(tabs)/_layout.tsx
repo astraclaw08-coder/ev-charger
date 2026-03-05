@@ -30,8 +30,8 @@ function ActiveSessionBanner({ active }: { active: Session }) {
       position: 'absolute',
       left: 0,
       right: 0,
-      bottom: Math.max(insets.bottom - 4, 0),
-      zIndex: 20,
+      bottom: 0,
+      zIndex: 1,
       backgroundColor: isDark ? '#030712' : '#f9fafb',
       paddingHorizontal: 12,
       paddingBottom: Math.max(insets.bottom, 8),
@@ -101,6 +101,7 @@ export default function TabsLayout() {
 
   return (
     <>
+      {active && bannerVisible ? <ActiveSessionBanner active={active} /> : null}
       <Tabs
         screenOptions={{
           tabBarActiveTintColor: '#10b981',
@@ -109,7 +110,7 @@ export default function TabsLayout() {
             borderTopColor: isDark ? '#1f2937' : '#e5e7eb',
             backgroundColor: isDark ? '#0b1220' : '#ffffff',
             paddingBottom: 4,
-            marginBottom: bannerVisible ? 60 + Math.max(insets.bottom, 8) : 0,
+            marginBottom: bannerVisible ? 72 + Math.max(insets.bottom, 8) : 0,
           },
           sceneStyle: { backgroundColor: isDark ? '#030712' : '#f9fafb' },
           headerStyle: { backgroundColor: isDark ? '#0b1220' : '#fff' },
@@ -151,7 +152,6 @@ export default function TabsLayout() {
           }}
         />
       </Tabs>
-      {active && bannerVisible ? <ActiveSessionBanner active={active} /> : null}
     </>
   );
 }
