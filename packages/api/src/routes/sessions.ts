@@ -109,6 +109,7 @@ export async function sessionRoutes(app: FastifyInstance) {
         : s.kwhDelivered;
       return {
         ...s,
+        ocppTransactionId: s.transactionId,
         kwhDelivered: computedKwh,
         endedAt: s.stoppedAt,
       };
@@ -159,6 +160,7 @@ export async function sessionRoutes(app: FastifyInstance) {
 
     return {
       ...session,
+      ocppTransactionId: session.transactionId,
       kwhDelivered: computedKwh,
       endedAt: session.stoppedAt,
       costEstimateCents,
