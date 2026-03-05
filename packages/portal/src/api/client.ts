@@ -90,6 +90,7 @@ export interface ChargerStatus {
 
 export interface SessionRecord {
   id: string;
+  transactionId: number | null;
   startedAt: string;
   stoppedAt: string | null;
   status: string;
@@ -137,6 +138,27 @@ export interface SiteUptime {
   uptimePercent30d: number;
   degradedChargers: number;
   incidents: Array<UptimeIncident & { chargerId: string }>;
+}
+
+export interface AdminUser {
+  id: string;
+  username?: string;
+  email?: string;
+  firstName?: string;
+  lastName?: string;
+  enabled?: boolean;
+  emailVerified?: boolean;
+  createdTimestamp?: number;
+}
+
+export interface AdminAuditEvent {
+  id: string;
+  operatorId: string;
+  action: string;
+  targetUserId?: string;
+  targetEmail?: string;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
 }
 
 // ─── Client ──────────────────────────────────────────────────────────────────
@@ -230,5 +252,45 @@ export function createApiClient(token: string | null | undefined) {
         method: 'POST',
         body: JSON.stringify(body),
       }),
+
+    listAdminUsers: (params?: { search?: string; max?: number }) => {
+      const qs = new URLSearchParams();
+      if (params?.search) qs.set('search', params.search);
+      if (params?.max != null) qs.set('max', String(params.max));
+      return request<AdminUser[]>(`/admin/users${qs.toString() ? `?${qs}` : ''}`, token);
+    },
+
+    createAdminUser: (body: { email: string; firstName?: string; lastName?: string; sendInvite?: boolean; temporaryPassword?: string }) =>
+      request<AdminUser>('/admin/users', token, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+
+    addAdminUserRole: (userId: string, role: string) =>
+      request<{ ok: boolean }>(`/admin/users/${userId}/roles/add`, token, {
+        method: 'POST',
+        body: JSON.stringify({ role }),
+      }),
+
+    removeAdminUserRole: (userId: string, role: string) =>
+      request<{ ok: boolean }>(`/admin/users/${userId}/roles/remove`, token, {
+        method: 'POST',
+        body: JSON.stringify({ role }),
+      }),
+
+    deactivateAdminUser: (userId: string) =>
+      request<{ ok: boolean }>(`/admin/users/${userId}/deactivate`, token, { method: 'POST' }),
+
+    reactivateAdminUser: (userId: string) =>
+      request<{ ok: boolean }>(`/admin/users/${userId}/reactivate`, token, { method: 'POST' }),
+
+    triggerPasswordReset: (userId: string) =>
+      request<{ ok: boolean }>(`/admin/users/${userId}/reset-credentials`, token, { method: 'POST' }),
+
+    revokeAdminUserSessions: (userId: string) =>
+      request<{ ok: boolean }>(`/admin/users/${userId}/revoke-sessions`, token, { method: 'POST' }),
+
+    listAdminAudit: (limit = 50) =>
+      request<AdminAuditEvent[]>(`/admin/users/audit?limit=${limit}`, token),
   };
 }

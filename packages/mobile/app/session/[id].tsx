@@ -67,7 +67,7 @@ function useLiveDuration(startedAt: string, active: boolean): string {
 
 // ── Session Summary (completed) ───────────────────────────────────────────────
 
-function SessionSummary({ session }: { session: Session }) {
+function SessionSummary({ session, fallbackKwh }: { session: Session; fallbackKwh?: number }) {
   const router = useRouter();
   const { isDark } = useAppTheme();
   const ratePerKwh = session.ratePerKwh ?? RATE_PER_KWH;
@@ -87,9 +87,11 @@ function SessionSummary({ session }: { session: Session }) {
       ? meterDerivedKwh
       : sessionDerivedKwh > 0
         ? sessionDerivedKwh
-        : cost > 0 && ratePerKwh > 0
-          ? cost / ratePerKwh
-          : 0;
+        : (fallbackKwh ?? 0) > 0
+          ? (fallbackKwh ?? 0)
+          : cost > 0 && ratePerKwh > 0
+            ? cost / ratePerKwh
+            : 0;
   const paymentMethod = isDevMode
     ? ''
     : session.payment?.stripeCustomerId
@@ -115,7 +117,6 @@ function SessionSummary({ session }: { session: Session }) {
           label="Total Cost"
           value={`$${cost.toFixed(2)}`}
           icon="💳"
-          highlight
           isDark={isDark}
         />
       </View>
@@ -139,6 +140,7 @@ function SessionSummary({ session }: { session: Session }) {
         {session.endedAt && (
           <Text style={[styles.metaText, { color: isDark ? '#cbd5e1' : '#6b7280' }]}>Ended: {formatDate(session.endedAt)}</Text>
         )}
+        <Text style={[styles.metaText, { color: isDark ? '#cbd5e1' : '#6b7280' }]}>Transaction #: {session.transactionId ?? '—'}</Text>
         <Text style={[styles.metaText, { color: isDark ? '#cbd5e1' : '#6b7280' }]}>Rate: ${ratePerKwh.toFixed(2)}/kWh</Text>
         <Text style={[styles.metaText, { color: isDark ? '#cbd5e1' : '#6b7280' }]}>Payment Method: {paymentMethod}</Text>
       </View>
@@ -272,6 +274,7 @@ export default function SessionScreen() {
   const { isDark } = useAppTheme();
   const router = useRouter();
   const queryClient = useQueryClient();
+  const [lastObservedKwh, setLastObservedKwh] = useState(0);
 
   const { data: session, isLoading } = useQuery({
     queryKey: ['session', id],
@@ -281,6 +284,14 @@ export default function SessionScreen() {
       return query.state.data?.status === 'ACTIVE' ? 3_000 : false;
     },
   });
+
+  useEffect(() => {
+    if (!session) return;
+    const observed = getLiveKwh(session);
+    if (observed > lastObservedKwh) {
+      setLastObservedKwh(observed);
+    }
+  }, [session, lastObservedKwh]);
 
   const stopMutation = useMutation({
     mutationFn: () => api.sessions.stop(id),
@@ -340,7 +351,7 @@ export default function SessionScreen() {
             stopping={stopMutation.isPending}
           />
         ) : (
-          <SessionSummary session={session} />
+          <SessionSummary session={session} fallbackKwh={lastObservedKwh} />
         )}
       </ScrollView>
     </>
