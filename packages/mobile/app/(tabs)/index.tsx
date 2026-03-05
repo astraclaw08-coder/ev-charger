@@ -89,8 +89,9 @@ export default function MapScreen() {
   const [userLocation, setUserLocation] = useState<Coord | null>(null);
   const [search, setSearch] = useState('');
   const [committedSearch, setCommittedSearch] = useState('');
+  const [manualRefreshing, setManualRefreshing] = useState(false);
 
-  const { data: chargers = [], isLoading, refetch, isRefetching } = useQuery({
+  const { data: chargers = [], isLoading, refetch } = useQuery({
     queryKey: ['chargers'],
     queryFn: () => api.chargers.list(),
     staleTime: 60_000,
@@ -209,6 +210,15 @@ export default function MapScreen() {
       mapRef.current?.animateToRegion(targetRegion, 400);
     } catch {
       // no-op
+    }
+  }
+
+  async function onManualRefresh() {
+    setManualRefreshing(true);
+    try {
+      await refetch();
+    } finally {
+      setManualRefreshing(false);
     }
   }
 
@@ -364,7 +374,7 @@ export default function MapScreen() {
       {/* 1/4 screen nearest list */}
       <ScrollView
         style={[styles.bottomSheet, { backgroundColor: isDark ? '#0b1220' : '#ffffff' }]}
-        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}
+        refreshControl={<RefreshControl refreshing={manualRefreshing} onRefresh={onManualRefresh} />}
       >
         <Text style={[styles.sectionTitle, { color: isDark ? '#f9fafb' : '#111827' }]}>Closest chargers</Text>
         <Text style={[styles.sectionSubtitle, { color: isDark ? '#9ca3af' : '#6b7280' }]}>Top 2-3 stations nearest your current location</Text>
