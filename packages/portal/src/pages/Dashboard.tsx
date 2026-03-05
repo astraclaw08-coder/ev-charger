@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { createApiClient, type DailyEntry, type SiteListItem } from '../api/client';
+import DashboardSitesMap, { type DashboardSiteMapItem } from '../components/DashboardSitesMap';
 import { useToken } from '../auth/TokenContext';
 
 type CreateSiteForm = {
@@ -40,6 +41,7 @@ export default function Dashboard() {
   const [customEndDate, setCustomEndDate] = useState('');
   const [rangeError, setRangeError] = useState('');
   const [fleetTrend, setFleetTrend] = useState<Array<{ date: string; label: string; sessions: number; kwhDelivered: number; revenueUsd: number }>>([]);
+  const [siteMapItems, setSiteMapItems] = useState<DashboardSiteMapItem[]>([]);
   const [showAddSiteModal, setShowAddSiteModal] = useState(false);
   const [createLoading, setCreateLoading] = useState(false);
   const [createMsg, setCreateMsg] = useState('');
@@ -83,6 +85,36 @@ export default function Dashboard() {
       const activeSessions = chargerStatuses
         .filter(Boolean)
         .reduce((sum, ch) => sum + (ch?.connectors.filter((c) => c.activeSession).length ?? 0), 0);
+
+      const statusByChargerId = new Map(
+        chargerStatuses
+          .filter(Boolean)
+          .map((ch) => [ch!.id, ch!] as const),
+      );
+
+      const mapRows: DashboardSiteMapItem[] = siteDetails
+        .filter(Boolean)
+        .map((site) => {
+          const totalChargers = site!.chargers.length;
+          const availableChargers = site!.chargers.reduce((count, charger) => {
+            const live = statusByChargerId.get(charger.id);
+            const chargerStatus = String((live?.status ?? charger.status) || '').toUpperCase();
+            const connectors = (live?.connectors ?? charger.connectors) || [];
+            const hasAvailableConnector = connectors.some((cn) => String(cn.status || '').toUpperCase() === 'AVAILABLE');
+            return count + (chargerStatus !== 'OFFLINE' && hasAvailableConnector ? 1 : 0);
+          }, 0);
+
+          return {
+            id: site!.id,
+            name: site!.name,
+            address: site!.address,
+            lat: site!.lat,
+            lng: site!.lng,
+            availableChargers,
+            totalChargers,
+          };
+        });
+      setSiteMapItems(mapRows);
 
       const statusCountMap = new Map<string, number>();
       let totalConnectors = 0;
@@ -279,6 +311,8 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      <DashboardSitesMap sites={siteMapItems} />
 
       <div className="mt-4 rounded-xl border border-gray-200 bg-white p-4">
         <div className="flex flex-wrap items-end gap-3">
