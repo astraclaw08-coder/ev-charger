@@ -57,12 +57,8 @@ function SessionCard({ session, onPress, isDark }: { session: Session; onPress: 
   const isActive = session.status === 'ACTIVE';
   const charger = session.connector.charger;
   const kwh = session.kwhDelivered ?? 0;
-  const cost =
-    session.payment?.amountCents != null
-      ? `$${(session.payment.amountCents / 100).toFixed(2)}`
-      : session.costEstimateCents != null
-        ? `~$${(session.costEstimateCents / 100).toFixed(2)}`
-        : null;
+  const costCents = session.effectiveAmountCents ?? session.payment?.amountCents ?? session.costEstimateCents ?? null;
+  const cost = costCents != null ? `$${(costCents / 100).toFixed(2)}` : null;
 
   return (
     <TouchableOpacity style={[styles.card, { backgroundColor: isDark ? '#111827' : '#fff' }]} onPress={onPress} activeOpacity={0.7}>

@@ -96,6 +96,7 @@ export interface Session {
   startedAt: string;
   endedAt: string | null;
   costEstimateCents?: number | null;
+  effectiveAmountCents?: number | null;
   connector: {
     connectorId: number;
     charger: {

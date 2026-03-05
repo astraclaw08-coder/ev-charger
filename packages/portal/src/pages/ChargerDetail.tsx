@@ -269,8 +269,8 @@ export default function ChargerDetail() {
                     </td>
                     <td className="px-5 py-3 text-gray-500 text-xs">
                       {s.payment
-                        ? `${s.payment.status}${s.payment.amountCents != null ? ` · $${(s.payment.amountCents / 100).toFixed(2)}` : ''}`
-                        : '—'}
+                        ? `${s.payment.status}${(s.effectiveAmountCents ?? s.payment.amountCents) != null ? ` · $${(((s.effectiveAmountCents ?? s.payment.amountCents) as number) / 100).toFixed(2)}` : ''}`
+                        : (s.effectiveAmountCents != null ? `$${(s.effectiveAmountCents / 100).toFixed(2)}` : '—')}
                     </td>
                   </tr>
                 ))}

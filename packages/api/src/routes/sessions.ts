@@ -107,11 +107,19 @@ export async function sessionRoutes(app: FastifyInstance) {
       const computedKwh = meterDerivedKwh != null
         ? Math.max(s.kwhDelivered ?? 0, meterDerivedKwh)
         : s.kwhDelivered;
+      const effectiveAmountCents =
+        s.payment?.amountCents != null
+          ? s.payment.amountCents
+          : computedKwh != null && s.ratePerKwh != null
+            ? Math.round(computedKwh * s.ratePerKwh * 100)
+            : null;
       return {
         ...s,
         ocppTransactionId: s.transactionId,
         kwhDelivered: computedKwh,
         endedAt: s.stoppedAt,
+        effectiveAmountCents,
+        costEstimateCents: effectiveAmountCents,
       };
     });
 

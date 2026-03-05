@@ -149,7 +149,22 @@ export async function chargerRoutes(app: FastifyInstance) {
       },
     });
 
-    return sessions;
+    return sessions.map((s: any) => {
+      const meterDerivedKwh =
+        s.meterStop != null && s.meterStart != null
+          ? Math.max(0, (s.meterStop - s.meterStart) / 1000)
+          : null;
+      const computedKwh = meterDerivedKwh != null
+        ? Math.max(s.kwhDelivered ?? 0, meterDerivedKwh)
+        : s.kwhDelivered;
+      const effectiveAmountCents =
+        s.payment?.amountCents != null
+          ? s.payment.amountCents
+          : computedKwh != null && s.ratePerKwh != null
+            ? Math.round(computedKwh * s.ratePerKwh * 100)
+            : null;
+      return { ...s, kwhDelivered: computedKwh, effectiveAmountCents };
+    });
   });
 
 

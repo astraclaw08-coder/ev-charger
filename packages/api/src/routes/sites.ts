@@ -170,9 +170,15 @@ export async function siteRoutes(app: FastifyInstance) {
       include: { payment: true },
     });
 
+    const getEffectiveAmountCents = (s: { kwhDelivered: number | null; ratePerKwh: number | null; payment: { amountCents: number | null } | null }) => {
+      if (s.payment?.amountCents != null) return s.payment.amountCents;
+      if (s.kwhDelivered != null && s.ratePerKwh != null) return Math.round(s.kwhDelivered * s.ratePerKwh * 100);
+      return 0;
+    };
+
     const sessionsCount = sessions.length;
     const kwhDelivered = sessions.reduce((sum: number, s: { kwhDelivered: number | null }) => sum + (s.kwhDelivered ?? 0), 0);
-    const revenueCents = sessions.reduce((sum: number, s: { payment: { amountCents: number | null } | null }) => sum + (s.payment?.amountCents ?? 0), 0);
+    const revenueCents = sessions.reduce((sum: number, s: { kwhDelivered: number | null; ratePerKwh: number | null; payment: { amountCents: number | null } | null }) => sum + getEffectiveAmountCents(s), 0);
 
     // Uptime approximation: % of chargers currently ONLINE
     const totalChargers = site.chargers.length;
@@ -181,12 +187,12 @@ export async function siteRoutes(app: FastifyInstance) {
 
     // Build daily breakdown: group sessions by UTC date, fill gaps with zeros
     const dailyMap: Record<string, { date: string; sessions: number; kwhDelivered: number; revenueCents: number }> = {};
-    sessions.forEach((s: { startedAt: Date; kwhDelivered: number | null; payment: { amountCents: number | null } | null }) => {
+    sessions.forEach((s: { startedAt: Date; kwhDelivered: number | null; ratePerKwh: number | null; payment: { amountCents: number | null } | null }) => {
       const day = s.startedAt.toISOString().slice(0, 10);
       if (!dailyMap[day]) dailyMap[day] = { date: day, sessions: 0, kwhDelivered: 0, revenueCents: 0 };
       dailyMap[day].sessions++;
       dailyMap[day].kwhDelivered = Math.round((dailyMap[day].kwhDelivered + (s.kwhDelivered ?? 0)) * 1000) / 1000;
-      dailyMap[day].revenueCents += s.payment?.amountCents ?? 0;
+      dailyMap[day].revenueCents += getEffectiveAmountCents(s);
     });
 
     // Fill missing days with zeros so charts have a continuous selected range

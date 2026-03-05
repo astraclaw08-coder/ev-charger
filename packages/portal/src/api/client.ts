@@ -100,6 +100,7 @@ export interface SessionRecord {
   connector: { connectorId: number };
   user: { name: string | null; email: string } | null;
   payment: { status: string; amountCents: number | null } | null;
+  effectiveAmountCents?: number | null;
 }
 
 export interface CreatedCharger {
