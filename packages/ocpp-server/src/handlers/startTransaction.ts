@@ -2,14 +2,12 @@ import { prisma } from '@ev-charger/shared';
 import type { StartTransactionRequest, StartTransactionResponse } from '@ev-charger/shared';
 
 const DEFAULT_RATE_PER_KWH = 0.35; // USD — set per charger/site in Phase 3
+const TX_ID_MIN = 10000;
+const TX_ID_MAX = 99999;
+const TX_ID_MAX_ATTEMPTS = 30;
 
-async function nextTransactionId(): Promise<number> {
-  const last = await prisma.session.findFirst({
-    where: { transactionId: { not: null } },
-    orderBy: { transactionId: 'desc' },
-    select: { transactionId: true },
-  });
-  return (last?.transactionId ?? 0) + 1;
+function randomFiveDigitTransactionId(): number {
+  return Math.floor(Math.random() * (TX_ID_MAX - TX_ID_MIN + 1)) + TX_ID_MIN;
 }
 
 export async function handleStartTransaction(
@@ -44,20 +42,35 @@ export async function handleStartTransaction(
     };
   }
 
-  const transactionId = await nextTransactionId();
+  let session = null as Awaited<ReturnType<typeof prisma.session.create>> | null;
+  let transactionId = 0;
 
-  const session = await prisma.session.create({
-    data: {
-      connectorId: connector.id,
-      userId: user.id,
-      transactionId,
-      idTag,
-      startedAt: new Date(timestamp),
-      meterStart,
-      ratePerKwh: DEFAULT_RATE_PER_KWH,
-      status: 'ACTIVE',
-    },
-  });
+  for (let attempt = 1; attempt <= TX_ID_MAX_ATTEMPTS; attempt++) {
+    transactionId = randomFiveDigitTransactionId();
+    try {
+      session = await prisma.session.create({
+        data: {
+          connectorId: connector.id,
+          userId: user.id,
+          transactionId,
+          idTag,
+          startedAt: new Date(timestamp),
+          meterStart,
+          ratePerKwh: DEFAULT_RATE_PER_KWH,
+          status: 'ACTIVE',
+        },
+      });
+      break;
+    } catch (err: any) {
+      // Prisma unique constraint violation => collision, retry with new random id
+      if (err?.code === 'P2002') continue;
+      throw err;
+    }
+  }
+
+  if (!session) {
+    throw new Error('Failed to allocate unique 5-digit transactionId after retries');
+  }
 
   // Mark connector as Charging
   await prisma.connector.update({
