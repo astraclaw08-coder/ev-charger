@@ -30,7 +30,7 @@ export default function FleetAnalytics() {
   const [chargersBySite, setChargersBySite] = useState<Record<string, ChargerInfo[]>>({});
 
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('30d');
-  const [roleScope, setRoleScope] = useState<AnalystRole>('analyst');
+  const [roleScope, setRoleScope] = useState<AnalystRole>('owner');
   const [siteFilter, setSiteFilter] = useState<'all' | string>('all');
   const [chargerFilter, setChargerFilter] = useState<'all' | string>('all');
   const [startDate, setStartDate] = useState('');

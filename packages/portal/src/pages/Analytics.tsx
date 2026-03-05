@@ -80,7 +80,7 @@ export default function Analytics() {
   const [savedViews, setSavedViews] = useState<SavedView[]>([]);
   const [viewName, setViewName] = useState('');
 
-  const [roleScope, setRoleScope] = useState<AnalystRole>('analyst');
+  const [roleScope, setRoleScope] = useState<AnalystRole>('owner');
   const [exportQueue, setExportQueue] = useState<ExportJob[]>([]);
 
   useEffect(() => {
