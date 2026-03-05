@@ -26,7 +26,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [fleetUptime, setFleetUptime] = useState<{ uptime24h: number; uptime7d: number; uptime30d: number; degraded: number } | null>(null);
-  const [fleetKpis, setFleetKpis] = useState<{ totalSites: number; totalKwh30d: number; activeSessions: number } | null>(null);
+  const [fleetKpis, setFleetKpis] = useState<{ totalSites: number; totalKwh30d: number; totalRevenue30d: number; activeSessions: number } | null>(null);
   const [fleetStatus, setFleetStatus] = useState<{
     totalChargers: number;
     totalConnectors: number;
@@ -74,6 +74,7 @@ export default function Dashboard() {
       ]);
 
       const totalKwh30d = siteAnalytics30d.filter(Boolean).reduce((sum, a) => sum + (a?.kwhDelivered ?? 0), 0);
+      const totalRevenue30d = siteAnalytics30d.filter(Boolean).reduce((sum, a) => sum + ((a?.revenueCents ?? 0) / 100), 0);
 
       const chargerIds = siteDetails
         .filter(Boolean)
@@ -146,6 +147,7 @@ export default function Dashboard() {
       setFleetKpis({
         totalSites: data.length,
         totalKwh30d: Math.round(totalKwh30d * 1000) / 1000,
+        totalRevenue30d: Math.round(totalRevenue30d * 100) / 100,
         activeSessions,
       });
       setFleetStatus({
@@ -272,8 +274,9 @@ export default function Dashboard() {
       )}
 
       {fleetKpis && (
-        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <KpiTile label="Total kWh (30d)" value={`${fleetKpis.totalKwh30d.toFixed(3)} kWh`} />
+          <KpiTile label="Total Revenue (30d)" value={`$${fleetKpis.totalRevenue30d.toFixed(2)}`} />
           <KpiTile label="Total Sites" value={`${fleetKpis.totalSites}`} />
           <KpiTile label="Active Sessions" value={`${fleetKpis.activeSessions}`} />
         </div>
