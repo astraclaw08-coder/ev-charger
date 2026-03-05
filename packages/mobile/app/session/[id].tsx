@@ -140,7 +140,7 @@ function SessionSummary({ session, fallbackKwh }: { session: Session; fallbackKw
         {session.endedAt && (
           <Text style={[styles.metaText, { color: isDark ? '#cbd5e1' : '#6b7280' }]}>Ended: {formatDate(session.endedAt)}</Text>
         )}
-        <Text style={[styles.metaText, { color: isDark ? '#cbd5e1' : '#6b7280' }]}>Transaction #: {session.transactionId ?? '—'}</Text>
+        <Text style={[styles.metaText, { color: isDark ? '#cbd5e1' : '#6b7280' }]}>Transaction #: {session.transactionId ?? '-'}</Text>
         <Text style={[styles.metaText, { color: isDark ? '#cbd5e1' : '#6b7280' }]}>Charger Serial/Name: {session.connector.charger.ocppId}</Text>
         <Text style={[styles.metaText, { color: isDark ? '#cbd5e1' : '#6b7280' }]}>Rate: ${ratePerKwh.toFixed(2)}/kWh</Text>
         <Text style={[styles.metaText, { color: isDark ? '#cbd5e1' : '#6b7280' }]}>Payment Method: {paymentMethod}</Text>
@@ -188,10 +188,12 @@ function LiveSessionView({
   session,
   onStop,
   stopping,
+  showConnectorLabel,
 }: {
   session: Session;
   onStop: () => void;
   stopping: boolean;
+  showConnectorLabel: boolean;
 }) {
   const { isDark } = useAppTheme();
   const kwh = getLiveKwh(session);
@@ -219,13 +221,14 @@ function LiveSessionView({
 
       {/* Site name */}
       <Text style={[styles.liveSiteName, { color: isDark ? '#f9fafb' : '#111827' }]}>{session.connector.charger.site.name}</Text>
-      <Text style={[styles.liveConnector, { color: isDark ? '#9ca3af' : '#6b7280' }]}>
-        {session.connector.charger.vendor} {session.connector.charger.model} ·
-        Connector {session.connector.connectorId}
-      </Text>
-      <Text style={[styles.liveChargerSerial, { color: isDark ? '#94a3b8' : '#6b7280' }]}>
+      <Text style={[styles.liveChargerSerial, { color: isDark ? '#94a3b8' : '#6b7280' }]}> 
         Charger Serial/Name: {session.connector.charger.ocppId}
       </Text>
+      {showConnectorLabel ? (
+        <Text style={[styles.liveConnector, { color: isDark ? '#9ca3af' : '#6b7280' }]}> 
+          Connector {session.connector.connectorId}
+        </Text>
+      ) : null}
 
       {/* Big kWh counter */}
       <View style={styles.kwhContainer}>
@@ -288,6 +291,15 @@ export default function SessionScreen() {
       return query.state.data?.status === 'ACTIVE' ? 3_000 : false;
     },
   });
+
+  const { data: chargerDetails } = useQuery({
+    queryKey: ['charger', session?.connector.charger.id],
+    queryFn: () => api.chargers.get(session!.connector.charger.id),
+    enabled: Boolean(session?.connector.charger.id),
+    staleTime: 30_000,
+  });
+
+  const showConnectorLabel = (chargerDetails?.connectors?.length ?? 1) > 1;
 
   useEffect(() => {
     if (!session) return;
@@ -353,6 +365,7 @@ export default function SessionScreen() {
             session={session}
             onStop={() => stopMutation.mutate()}
             stopping={stopMutation.isPending}
+            showConnectorLabel={showConnectorLabel}
           />
         ) : (
           <SessionSummary session={session} fallbackKwh={lastObservedKwh} />
