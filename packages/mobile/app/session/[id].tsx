@@ -45,6 +45,14 @@ function formatKwh(value: number): string {
   return value.toFixed(4).replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1');
 }
 
+function getLiveKwh(session: Session): number {
+  if (session.kwhDelivered != null) return session.kwhDelivered;
+  if (session.meterStop != null && session.meterStart != null) {
+    return Math.max(0, (session.meterStop - session.meterStart) / 1000);
+  }
+  return 0;
+}
+
 // ── Live ticker (updates every second for duration display) ───────────────────
 
 function useLiveDuration(startedAt: string, active: boolean): string {
@@ -61,7 +69,7 @@ function useLiveDuration(startedAt: string, active: boolean): string {
 
 function SessionSummary({ session }: { session: Session }) {
   const router = useRouter();
-  const kwh = session.kwhDelivered ?? 0;
+  const kwh = getLiveKwh(session);
   const cost =
     session.payment?.amountCents != null
       ? session.payment.amountCents / 100
@@ -151,7 +159,7 @@ function LiveSessionView({
   onStop: () => void;
   stopping: boolean;
 }) {
-  const kwh = session.kwhDelivered ?? 0;
+  const kwh = getLiveKwh(session);
   const estimatedCost = kwh * RATE_PER_KWH;
   const duration = useLiveDuration(session.startedAt, true);
 
@@ -220,7 +228,7 @@ function LiveSessionView({
         )}
       </TouchableOpacity>
 
-      <Text style={styles.pollingNote}>Updating every 10 seconds</Text>
+      <Text style={styles.pollingNote}>Updating every 3 seconds</Text>
     </View>
   );
 }
@@ -238,7 +246,7 @@ export default function SessionScreen() {
     queryFn: () => api.sessions.get(id),
     refetchInterval: (query) => {
       // Poll aggressively while active
-      return query.state.data?.status === 'ACTIVE' ? 10_000 : false;
+      return query.state.data?.status === 'ACTIVE' ? 3_000 : false;
     },
   });
 

@@ -26,6 +26,7 @@ function ActiveSessionBanner() {
   const { data, refetch } = useQuery({
     queryKey: ['sessions'],
     queryFn: () => api.sessions.list(20, 0),
+    refetchInterval: 5_000,
   });
 
   useEffect(() => {

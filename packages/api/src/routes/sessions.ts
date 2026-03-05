@@ -99,10 +99,19 @@ export async function sessionRoutes(app: FastifyInstance) {
       prisma.session.count({ where: { userId: user.id } }),
     ]);
 
-    const sessionsForClient = sessions.map((s: { stoppedAt: Date | null; [k: string]: unknown }) => ({
-      ...s,
-      endedAt: s.stoppedAt,
-    }));
+    const sessionsForClient = sessions.map((s: any) => {
+      const computedKwh =
+        s.kwhDelivered != null
+          ? s.kwhDelivered
+          : s.meterStop != null && s.meterStart != null
+            ? Math.max(0, (s.meterStop - s.meterStart) / 1000)
+            : null;
+      return {
+        ...s,
+        kwhDelivered: computedKwh,
+        endedAt: s.stoppedAt,
+      };
+    });
 
     return { sessions: sessionsForClient, total, limit, offset };
   });
@@ -133,13 +142,21 @@ export async function sessionRoutes(app: FastifyInstance) {
     if (!session) return reply.status(404).send({ error: 'Session not found' });
     if (session.userId !== user.id) return reply.status(403).send({ error: 'Not your session' });
 
+    const computedKwh =
+      session.kwhDelivered != null
+        ? session.kwhDelivered
+        : session.meterStop != null && session.meterStart != null
+          ? Math.max(0, (session.meterStop - session.meterStart) / 1000)
+          : null;
+
     const costEstimateCents =
-      session.kwhDelivered != null && session.ratePerKwh != null
-        ? Math.round(session.kwhDelivered * session.ratePerKwh * 100)
+      computedKwh != null && session.ratePerKwh != null
+        ? Math.round(computedKwh * session.ratePerKwh * 100)
         : null;
 
     return {
       ...session,
+      kwhDelivered: computedKwh,
       endedAt: session.stoppedAt,
       costEstimateCents,
     };
