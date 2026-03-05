@@ -1,7 +1,7 @@
 /**
  * Favorites tab — list of favorited chargers with live status.
  */
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   ActivityIndicator, RefreshControl,
@@ -46,22 +46,31 @@ export default function FavoritesScreen() {
   const { isDark } = useAppTheme();
   const queryClient = useQueryClient();
 
-  const { data: favoriteIds = [], isLoading: favoritesLoading, refetch: refetchFavorites, isRefetching: isRefetchingFavorites } = useQuery({
+  const { data: favoriteIds = [], isLoading: favoritesLoading, refetch: refetchFavorites } = useQuery({
     queryKey: ['favorites'],
     queryFn: () => getFavorites(),
     refetchInterval: 15_000,
   });
 
-  const { data: chargers = [], isLoading: chargersLoading, refetch: refetchChargers, isRefetching: isRefetchingChargers } = useQuery({
+  const { data: chargers = [], isLoading: chargersLoading, refetch: refetchChargers } = useQuery({
     queryKey: ['chargers'],
     queryFn: () => api.chargers.list(),
     refetchInterval: 15_000,
   });
 
+  const [manualRefreshing, setManualRefreshing] = useState(false);
   const isLoading = favoritesLoading || chargersLoading;
-  const isRefetching = isRefetchingFavorites || isRefetchingChargers;
 
   const favChargers = chargers.filter((c) => favoriteIds.includes(c.id));
+
+  async function onManualRefresh() {
+    setManualRefreshing(true);
+    try {
+      await Promise.all([refetchFavorites(), refetchChargers()]);
+    } finally {
+      setManualRefreshing(false);
+    }
+  }
 
   if (isLoading) {
     return <View style={styles.centered}><ActivityIndicator size="large" color="#10b981" /></View>;
@@ -72,7 +81,7 @@ export default function FavoritesScreen() {
       <FlatList
         data={favChargers}
         keyExtractor={(c) => c.id}
-        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => { refetchFavorites(); refetchChargers(); }} />}
+        refreshControl={<RefreshControl refreshing={manualRefreshing} onRefresh={onManualRefresh} />}
         contentContainerStyle={favChargers.length === 0 ? styles.emptyContainer : { padding: 12 }}
         ListEmptyComponent={
           <View style={styles.emptyInner}>
