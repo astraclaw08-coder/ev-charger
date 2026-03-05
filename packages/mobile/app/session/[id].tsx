@@ -289,6 +289,16 @@ export default function SessionScreen() {
         options={{
           title: session.status === 'ACTIVE' ? 'Charging' : 'Session Details',
           headerShown: true,
+          headerStyle: {
+            backgroundColor:
+              session.status === 'ACTIVE' ? '#030712' : isDark ? '#030712' : '#f9fafb',
+          },
+          headerTintColor: session.status === 'ACTIVE' ? '#f8fafc' : isDark ? '#f8fafc' : '#111827',
+          headerBackButtonDisplayMode: 'minimal',
+          headerTitleStyle: {
+            color: session.status === 'ACTIVE' ? '#f8fafc' : isDark ? '#f8fafc' : '#111827',
+          },
+          headerShadowVisible: false,
         }}
       />
       <ScrollView contentContainerStyle={[styles.scrollContent, { backgroundColor: isDark ? '#030712' : '#f9fafb' }]}> 
