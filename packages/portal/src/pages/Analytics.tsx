@@ -7,6 +7,8 @@ import {
   Bar,
   LineChart,
   Line,
+  XAxis,
+  YAxis,
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
@@ -276,6 +278,8 @@ export default function Analytics() {
       <ChartCard title="Sessions per Day">
         <ResponsiveContainer width="100%" height={200}>
           <LineChart data={chartData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+            <XAxis dataKey="label" tick={{ fontSize: 11 }} tickLine={false} />
+            <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
             <Tooltip formatter={(v: number) => [v, 'Sessions']} labelFormatter={(l) => `Date: ${l}`} />
             <Line type="monotone" dataKey="sessions" stroke="#16a34a" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
           </LineChart>
@@ -285,6 +289,8 @@ export default function Analytics() {
       <ChartCard title="kWh Delivered per Day">
         <ResponsiveContainer width="100%" height={200}>
           <AreaChart data={chartData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+            <XAxis dataKey="label" tick={{ fontSize: 11 }} tickLine={false} />
+            <YAxis tick={{ fontSize: 11 }} />
             <Tooltip formatter={(v: number) => [`${v} kWh`, 'Energy']} labelFormatter={(l) => `Date: ${l}`} />
             <Area type="monotone" dataKey="kwhDelivered" stroke="#2563eb" fill="#dbeafe" strokeWidth={2} />
           </AreaChart>
@@ -295,6 +301,8 @@ export default function Analytics() {
         <ChartCard title="Revenue per Day (USD)">
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={chartData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+              <XAxis dataKey="label" tick={{ fontSize: 11 }} tickLine={false} />
+              <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `$${v}`} />
               <Tooltip formatter={(v: number) => [`$${v.toFixed(2)}`, 'Revenue']} labelFormatter={(l) => `Date: ${l}`} />
               <Bar dataKey="revenueUsd" fill="#16a34a" radius={[3, 3, 0, 0]} />
             </BarChart>
