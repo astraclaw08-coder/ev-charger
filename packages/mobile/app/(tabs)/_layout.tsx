@@ -1,10 +1,10 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { AppState } from 'react-native';
 import { Tabs, useRouter, useSegments } from 'expo-router';
 import { TouchableOpacity, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useQuery } from '@tanstack/react-query';
-import { api } from '@/lib/api';
+import { api, type Session } from '@/lib/api';
 import { useAppTheme } from '@/theme';
 import { useAppAuth } from '@/providers/AuthProvider';
 
@@ -17,41 +17,9 @@ function formatElapsed(startedAt: string): string {
   return `${h}h ${m}m`;
 }
 
-function ActiveSessionBanner() {
+function ActiveSessionBanner({ active }: { active: Session }) {
   const router = useRouter();
-  const segments = useSegments();
   const { isDark } = useAppTheme();
-  const [, setTick] = useState(0);
-
-  const { data, refetch } = useQuery({
-    queryKey: ['sessions'],
-    queryFn: () => api.sessions.list(20, 0),
-    refetchInterval: 5_000,
-  });
-
-  useEffect(() => {
-    const timer = setInterval(() => setTick((t) => t + 1), 30_000);
-    return () => clearInterval(timer);
-  }, []);
-
-  useFocusEffect(
-    React.useCallback(() => {
-      refetch();
-      return undefined;
-    }, [refetch]),
-  );
-
-  useEffect(() => {
-    const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') refetch();
-    });
-    return () => sub.remove();
-  }, [refetch]);
-
-  const active = useMemo(() => data?.sessions.find((s) => s.status === 'ACTIVE') ?? null, [data]);
-  const currentTab = segments[segments.length - 1];
-  if (!active || currentTab === 'sessions') return null;
-
   const kwh = active.kwhDelivered ?? 0;
   const siteName = active.connector.charger.site.name;
 
@@ -60,7 +28,7 @@ function ActiveSessionBanner() {
       position: 'absolute',
       left: 12,
       right: 12,
-      bottom: 86,
+      bottom: 8,
       zIndex: 20,
     }}>
       <TouchableOpacity
@@ -98,6 +66,31 @@ function ActiveSessionBanner() {
 export default function TabsLayout() {
   const { isDark } = useAppTheme();
   const { isGuest } = useAppAuth();
+  const segments = useSegments();
+
+  const { data, refetch } = useQuery({
+    queryKey: ['sessions'],
+    queryFn: () => api.sessions.list(20, 0),
+    refetchInterval: 5_000,
+  });
+
+  useFocusEffect(
+    React.useCallback(() => {
+      refetch();
+      return undefined;
+    }, [refetch]),
+  );
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') refetch();
+    });
+    return () => sub.remove();
+  }, [refetch]);
+
+  const active = useMemo(() => data?.sessions.find((s) => s.status === 'ACTIVE') ?? null, [data]);
+  const currentTab = segments[segments.length - 1];
+  const bannerVisible = Boolean(active) && currentTab !== 'sessions';
 
   return (
     <>
@@ -109,8 +102,9 @@ export default function TabsLayout() {
             borderTopColor: isDark ? '#1f2937' : '#e5e7eb',
             backgroundColor: isDark ? '#0b1220' : '#ffffff',
             paddingBottom: 4,
+            marginBottom: bannerVisible ? 60 : 0,
           },
-          sceneStyle: { backgroundColor: isDark ? '#030712' : '#f9fafb', paddingBottom: 72 },
+          sceneStyle: { backgroundColor: isDark ? '#030712' : '#f9fafb' },
           headerStyle: { backgroundColor: isDark ? '#0b1220' : '#fff' },
           headerTintColor: isDark ? '#f9fafb' : '#111827',
           headerShadowVisible: false,
@@ -150,7 +144,7 @@ export default function TabsLayout() {
           }}
         />
       </Tabs>
-      <ActiveSessionBanner />
+      {active && bannerVisible ? <ActiveSessionBanner active={active} /> : null}
     </>
   );
 }
