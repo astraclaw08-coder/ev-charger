@@ -106,7 +106,7 @@ function SessionSummary({ session, fallbackKwh }: { session: Session; fallbackKw
       <Text style={[styles.summaryAddress, { color: isDark ? '#94a3b8' : '#6b7280' }]}>{session.connector.charger.site.address}</Text>
 
       <View style={styles.summaryStats}>
-        <SummaryStatCard label="Energy" value={`${formatKwh(finalKwh)} kWh`} icon="⚡" isDark={isDark} />
+        <SummaryStatCard label="ENERGY (kWh)" value={formatKwh(finalKwh)} icon="⚡" isDark={isDark} />
         <SummaryStatCard
           label="Duration"
           value={formatDuration(session.startedAt, session.endedAt)}
@@ -233,7 +233,7 @@ function LiveSessionView({
       {/* Big kWh counter */}
       <View style={styles.kwhContainer}>
         <Text style={styles.kwhValue}>{formatKwh(kwh)}</Text>
-        <Text style={[styles.kwhUnit, { color: isDark ? '#94a3b8' : '#6b7280' }]}>kWh delivered</Text>
+        <Text style={[styles.kwhUnit, { color: isDark ? '#94a3b8' : '#6b7280' }]}>ENERGY (kWh)</Text>
       </View>
 
       {/* Stats row */}
