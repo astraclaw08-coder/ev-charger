@@ -1,6 +1,6 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import L from 'leaflet';
-import { MapContainer, Marker, Popup, TileLayer } from 'react-leaflet';
+import { MapContainer, Marker, Popup, TileLayer, useMap } from 'react-leaflet';
 
 export type DashboardSiteMapItem = {
   id: string;
@@ -22,6 +22,18 @@ function iconFor(availableChargers: number) {
   });
 }
 
+function FitToSites({ sites }: { sites: DashboardSiteMapItem[] }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!sites.length) return;
+    const active = sites.filter((s) => s.totalChargers > 0);
+    const rows = active.length ? active : sites;
+    const bounds = L.latLngBounds(rows.map((s) => [s.lat, s.lng] as [number, number]));
+    map.fitBounds(bounds, { padding: [28, 28], maxZoom: 13 });
+  }, [map, sites]);
+  return null;
+}
+
 export default function DashboardSitesMap({ sites }: { sites: DashboardSiteMapItem[] }) {
   const center = useMemo<[number, number]>(() => {
     if (!sites.length) return [34.0522, -118.2437];
@@ -41,8 +53,9 @@ export default function DashboardSitesMap({ sites }: { sites: DashboardSiteMapIt
         <MapContainer center={center} zoom={11} scrollWheelZoom={false} style={{ height: '100%', width: '100%' }}>
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>'
-            url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+            url="https://{s}.basemaps.cartocdn.com/dark_matter/{z}/{x}/{y}{r}.png"
           />
+          <FitToSites sites={sites} />
           {sites.map((site) => (
             <Marker
               key={site.id}
