@@ -67,8 +67,5 @@ export async function handleStartTransaction(
 
   console.log(`[StartTransaction] Session ${session.id} started, transactionId=${transactionId}`);
 
-  return {
-    idTagInfo: { status: 'Accepted' },
-    transactionId,
-  };
+  return { idTagInfo: { status: 'Accepted' }, transactionId };
 }

@@ -9,6 +9,7 @@ import { handleAuthorize } from './handlers/authorize';
 import { handleStartTransaction } from './handlers/startTransaction';
 import { handleStopTransaction } from './handlers/stopTransaction';
 import { handleMeterValues } from './handlers/meterValues';
+import { logOcppMessage } from './ocppLogger';
 
 // ocpp-rpc ships as CommonJS without bundled TS types
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -58,57 +59,72 @@ export async function startServer(port: number): Promise<OcppServerHandle> {
     console.log(`[Server] Connected: ${ocppId} (db=${chargerId})`);
     clientRegistry.register(ocppId, client);
 
+    const registerInboundHandler = (
+      action: string,
+      fn: (params: any) => Promise<any> | any,
+    ) => {
+      client.handle(action, async ({ params, messageId }: any) => {
+        await logOcppMessage(chargerId, 'INBOUND', action, params, messageId);
+        const response = await fn(params);
+        await logOcppMessage(chargerId, 'OUTBOUND', action, response ?? {}, messageId ? `${messageId}:response` : undefined);
+        return response;
+      });
+    };
+
     // ── Inbound handlers ──────────────────────────────────────────────────────
-    client.handle('BootNotification', async ({ params }: any) =>
+    registerInboundHandler('BootNotification', (params) =>
       handleBootNotification(client, chargerId, params));
 
-    client.handle('Heartbeat', async ({ params }: any) =>
+    registerInboundHandler('Heartbeat', (params) =>
       handleHeartbeat(client, chargerId, params));
 
-    client.handle('StatusNotification', async ({ params }: any) =>
+    registerInboundHandler('StatusNotification', (params) =>
       handleStatusNotification(client, chargerId, params));
 
-    client.handle('Authorize', async ({ params }: any) =>
+    registerInboundHandler('Authorize', (params) =>
       handleAuthorize(client, chargerId, params));
 
-    client.handle('StartTransaction', async ({ params }: any) =>
+    registerInboundHandler('StartTransaction', (params) =>
       handleStartTransaction(client, chargerId, params));
 
-    client.handle('StopTransaction', async ({ params }: any) =>
+    registerInboundHandler('StopTransaction', (params) =>
       handleStopTransaction(client, chargerId, params));
 
-    client.handle('MeterValues', async ({ params }: any) =>
+    registerInboundHandler('MeterValues', (params) =>
       handleMeterValues(client, chargerId, params));
 
     // ── Stub handlers for common vendor messages ──────────────────────────────
     // Real chargers often send these; return sensible defaults to avoid CALLERROR.
 
-    client.handle('GetConfiguration', async ({ params }: any) => {
+    registerInboundHandler('GetConfiguration', (params) => {
       const keys: string[] = params?.key ?? [];
       console.log(`[GetConfiguration] chargerId=${chargerId} keys=${keys.join(',') || '*'}`);
       return { configurationKey: [], unknownKey: keys };
     });
 
-    client.handle('DataTransfer', async ({ params }: any) => {
+    registerInboundHandler('DataTransfer', (params) => {
       console.log(`[DataTransfer] chargerId=${chargerId} vendorId=${params?.vendorId} messageId=${params?.messageId}`);
       return { status: 'Accepted' };
     });
 
-    client.handle('FirmwareStatusNotification', async ({ params }: any) => {
+    registerInboundHandler('FirmwareStatusNotification', (params) => {
       console.log(`[FirmwareStatusNotification] chargerId=${chargerId} status=${params?.status}`);
       return {};
     });
 
-    client.handle('DiagnosticsStatusNotification', async ({ params }: any) => {
+    registerInboundHandler('DiagnosticsStatusNotification', (params) => {
       console.log(`[DiagnosticsStatusNotification] chargerId=${chargerId} status=${params?.status}`);
       return {};
     });
 
     // Catch-all: log and return empty object — never throw (would send CALLERROR
     // which can cause real chargers to disconnect or log faults).
-    client.handle(({ method, params }: any) => {
+    client.handle(async ({ method, params, messageId }: any) => {
       console.warn(`[Server] Unhandled action: ${method}`, JSON.stringify(params));
-      return {};
+      await logOcppMessage(chargerId, 'INBOUND', method, params, messageId);
+      const response = {};
+      await logOcppMessage(chargerId, 'OUTBOUND', method, response, messageId ? `${messageId}:response` : undefined);
+      return response;
     });
 
     // ── Disconnect ────────────────────────────────────────────────────────────
