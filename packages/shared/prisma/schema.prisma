@@ -210,3 +210,53 @@ model AdminAuditEvent {
   @@index([action, createdAt])
   @@index([targetUserId])
 }
+
+model PortalSettings {
+  id                       String   @id @default(uuid())
+  scopeKey                 String   @unique
+  organizationName         String?
+  organizationBillingAddress String?
+  supportContactEmail      String?
+  supportContactPhone      String?
+  profileDisplayName       String?
+  profileTimezone          String?
+  remittanceBankName       String?
+  remittanceAccountType    String?
+  remittanceEmail          String?
+  routingNumber            String?
+  accountNumber            String?
+  updatedByOperatorId      String
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  @@index([scopeKey])
+}
+
+model OperatorNotificationPreference {
+  id            String   @id @default(uuid())
+  operatorId    String   @unique
+  emailEnabled  Boolean  @default(true)
+  smsEnabled    Boolean  @default(false)
+  outageAlerts  Boolean  @default(true)
+  billingAlerts Boolean  @default(true)
+  weeklyDigest  Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model ChargerModelCatalog {
+  id                  String   @id @default(uuid())
+  scopeKey            String
+  modelCode           String
+  vendor              String
+  displayName         String
+  maxKw               Float
+  connectorType       String
+  isActive            Boolean  @default(true)
+  updatedByOperatorId String
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@unique([scopeKey, modelCode])
+  @@index([scopeKey, isActive])
+}

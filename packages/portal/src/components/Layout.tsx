@@ -9,6 +9,7 @@ const NAV = [
   { label: 'Support', href: '/support', icon: '🎧' },
   { label: 'Network Ops', href: '/network', icon: '🛠️' },
   { label: 'Users', href: '/users', icon: '👥' },
+  { label: 'Settings', href: '/settings', icon: '⚙️' },
 ];
 
 export default function Layout({ children }: { children: React.ReactNode }) {

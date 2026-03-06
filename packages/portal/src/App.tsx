@@ -15,6 +15,7 @@ import Login from './pages/Login';
 import CustomerSupport from './pages/CustomerSupport';
 import NetworkOps from './pages/NetworkOps';
 import UserManagement from './pages/UserManagement';
+import Settings from './pages/Settings';
 
 const CLERK_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined;
 const DEV_LOGIN_FLAG_KEY = 'portal.dev.signedIn';
@@ -33,6 +34,7 @@ function PortalRoutes() {
           <Route path="/support" element={<CustomerSupport />} />
           <Route path="/network" element={<NetworkOps />} />
           <Route path="/users" element={<UserManagement />} />
+          <Route path="/settings" element={<Settings />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Layout>

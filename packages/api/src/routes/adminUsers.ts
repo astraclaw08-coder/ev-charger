@@ -4,6 +4,7 @@ import { requireOperator } from '../plugins/auth';
 import { requirePolicy } from '../plugins/authorization';
 import { getKeycloakAdminClient } from '../lib/keycloakAdmin';
 import { recordSensitiveAction } from '../lib/sensitiveActionLimiter';
+import { writeAdminAudit } from '../lib/adminAudit';
 
 const DEFAULT_ASSIGNABLE_ROLES = ['owner', 'operator', 'customer_support', 'network_reliability', 'analyst'];
 
@@ -33,23 +34,6 @@ function parseOptionalReason(reason: unknown) {
   return trimmed.length ? trimmed.slice(0, 500) : undefined;
 }
 
-async function writeAudit(args: {
-  operatorId: string;
-  action: string;
-  targetUserId?: string;
-  targetEmail?: string;
-  metadata?: Record<string, unknown>;
-}) {
-  await prisma.adminAuditEvent.create({
-    data: {
-      operatorId: args.operatorId,
-      action: args.action,
-      targetUserId: args.targetUserId,
-      targetEmail: args.targetEmail,
-      metadata: (args.metadata ?? {}) as any,
-    },
-  });
-}
 
 async function guardSensitiveAction(req: { currentOperator?: { id: string }; ip: string }, reply: { header: (n: string, v: string) => void; status: (code: number) => { send: (payload: unknown) => unknown } }) {
   const operatorId = req.currentOperator?.id;
@@ -109,7 +93,7 @@ export async function adminUserRoutes(app: FastifyInstance) {
         temporaryPassword,
       });
 
-      await writeAudit({
+      await writeAdminAudit({
         operatorId: req.currentOperator!.id,
         action: 'keycloak.user.create',
         targetUserId: user.id,
@@ -138,7 +122,7 @@ export async function adminUserRoutes(app: FastifyInstance) {
     await kc.addRealmRole(req.params.userId, role);
     await kc.logoutUser(req.params.userId);
 
-    await writeAudit({
+    await writeAdminAudit({
       operatorId: req.currentOperator!.id,
       action: 'keycloak.user.role.add',
       targetUserId: req.params.userId,
@@ -171,7 +155,7 @@ export async function adminUserRoutes(app: FastifyInstance) {
     await kc.removeRealmRole(req.params.userId, role);
     await kc.logoutUser(req.params.userId);
 
-    await writeAudit({
+    await writeAdminAudit({
       operatorId: req.currentOperator!.id,
       action: 'keycloak.user.role.remove',
       targetUserId: req.params.userId,
@@ -196,7 +180,7 @@ export async function adminUserRoutes(app: FastifyInstance) {
       await kc.logoutUser(req.params.userId);
     }
 
-    await writeAudit({
+    await writeAdminAudit({
       operatorId: req.currentOperator!.id,
       action: 'keycloak.user.deactivate',
       targetUserId: req.params.userId,
@@ -213,7 +197,7 @@ export async function adminUserRoutes(app: FastifyInstance) {
   }, async (req) => {
     const kc = getKeycloakAdminClient();
     await kc.setEnabled(req.params.userId, true);
-    await writeAudit({
+    await writeAdminAudit({
       operatorId: req.currentOperator!.id,
       action: 'keycloak.user.reactivate',
       targetUserId: req.params.userId,
@@ -235,7 +219,7 @@ export async function adminUserRoutes(app: FastifyInstance) {
       await kc.logoutUser(req.params.userId);
     }
 
-    await writeAudit({
+    await writeAdminAudit({
       operatorId: req.currentOperator!.id,
       action: 'keycloak.user.reset-credentials',
       targetUserId: req.params.userId,
@@ -253,7 +237,7 @@ export async function adminUserRoutes(app: FastifyInstance) {
   }, async (req) => {
     const kc = getKeycloakAdminClient();
     await kc.logoutUser(req.params.userId);
-    await writeAudit({
+    await writeAdminAudit({
       operatorId: req.currentOperator!.id,
       action: 'keycloak.user.revoke-sessions',
       targetUserId: req.params.userId,

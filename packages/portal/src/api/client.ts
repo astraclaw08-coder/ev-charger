@@ -166,6 +166,51 @@ export interface AdminAuditEvent {
   createdAt: string;
 }
 
+export interface PortalSettings {
+  id: string;
+  scopeKey: string;
+  organizationName?: string | null;
+  organizationBillingAddress?: string | null;
+  supportContactEmail?: string | null;
+  supportContactPhone?: string | null;
+  profileDisplayName?: string | null;
+  profileTimezone?: string | null;
+  remittanceBankName?: string | null;
+  remittanceAccountType?: string | null;
+  remittanceEmail?: string | null;
+  routingNumber?: string | null;
+  accountNumber?: string | null;
+  updatedByOperatorId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface OperatorNotificationPreference {
+  id: string;
+  operatorId: string;
+  emailEnabled: boolean;
+  smsEnabled: boolean;
+  outageAlerts: boolean;
+  billingAlerts: boolean;
+  weeklyDigest: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ChargerModelCatalogItem {
+  id: string;
+  scopeKey: string;
+  modelCode: string;
+  vendor: string;
+  displayName: string;
+  maxKw: number;
+  connectorType: string;
+  isActive: boolean;
+  updatedByOperatorId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // ─── Client ──────────────────────────────────────────────────────────────────
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
@@ -309,5 +354,32 @@ export function createApiClient(token: string | null | undefined) {
 
     listAdminAudit: (limit = 50) =>
       request<AdminAuditEvent[]>(`/admin/users/audit?limit=${limit}`, token),
+
+    getAdminSettings: () =>
+      request<{ settings: PortalSettings | null; notificationPreferences: OperatorNotificationPreference | null; chargerModels: ChargerModelCatalogItem[] }>('/admin/settings', token),
+
+    updateOrgProfileSettings: (body: Record<string, unknown>) =>
+      request<PortalSettings>('/admin/settings/org-profile', token, {
+        method: 'PUT',
+        body: JSON.stringify(body),
+      }),
+
+    updateNotificationSettings: (body: { emailEnabled?: boolean; smsEnabled?: boolean; outageAlerts?: boolean; billingAlerts?: boolean; weeklyDigest?: boolean; reason: string }) =>
+      request<OperatorNotificationPreference>('/admin/settings/notifications', token, {
+        method: 'PUT',
+        body: JSON.stringify(body),
+      }),
+
+    createChargerModelCatalogItem: (body: { modelCode: string; vendor: string; displayName: string; maxKw: number; connectorType: string; reason: string }) =>
+      request<ChargerModelCatalogItem>('/admin/settings/charger-models', token, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+
+    toggleChargerModelCatalogItem: (id: string, body: { isActive: boolean; reason: string }) =>
+      request<ChargerModelCatalogItem>(`/admin/settings/charger-models/${id}/toggle`, token, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
   };
 }

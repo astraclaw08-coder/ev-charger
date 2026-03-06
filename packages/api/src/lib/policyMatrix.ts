@@ -16,6 +16,8 @@ export type PolicyKey =
   | 'admin.users.read'
   | 'admin.users.write'
   | 'admin.audit.read'
+  | 'admin.settings.read'
+  | 'admin.settings.write'
   | 'admin.security.posture.read'
   | 'admin.security.breakglass'
   | 'admin.security.scim';
@@ -44,6 +46,8 @@ export const POLICY_MATRIX: Record<PolicyKey, PolicyContract> = {
   'admin.users.read': { description: 'Read admin users', anyOf: ['rbac:manage'], minScope: 'limited', sensitive: true },
   'admin.users.write': { description: 'Mutate admin users/roles', anyOf: ['rbac:manage'], minScope: 'full', sensitive: true },
   'admin.audit.read': { description: 'Read admin audit log', anyOf: ['rbac:manage'], minScope: 'limited', sensitive: true },
+  'admin.settings.read': { description: 'Read organization/admin settings', anyOf: ['rbac:manage'], minScope: 'limited', sensitive: true },
+  'admin.settings.write': { description: 'Mutate organization/admin settings', anyOf: ['rbac:manage'], minScope: 'full', sensitive: true },
   'admin.security.posture.read': { description: 'Read security posture', anyOf: ['rbac:manage'], minScope: 'limited', sensitive: true },
   'admin.security.breakglass': { description: 'Break-glass owner elevation', allOf: ['rbac:manage'], minScope: 'full', sensitive: true },
   'admin.security.scim': { description: 'SCIM provisioning hooks', anyOf: ['rbac:manage'], minScope: 'full', sensitive: true },
