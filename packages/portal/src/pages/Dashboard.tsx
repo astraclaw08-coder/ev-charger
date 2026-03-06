@@ -52,6 +52,9 @@ export default function Dashboard() {
       const chargerStatuses = await Promise.all(
         chargerIds.map((chargerId) => client.getChargerStatus(chargerId).catch(() => null)),
       );
+      const chargerSessions = await Promise.all(
+        chargerIds.map((chargerId) => client.getChargerSessions(chargerId).catch(() => [])),
+      );
       const activeSessions = chargerStatuses
         .filter(Boolean)
         .reduce((sum, ch) => sum + (ch?.connectors.filter((c) => c.activeSession).length ?? 0), 0);
@@ -114,36 +117,36 @@ export default function Dashboard() {
       const totalChargers = chargerStatuses.filter(Boolean).length;
 
       const analyticsRows = siteAnalyticsRange.filter(Boolean);
-      const totalActiveChargingSeconds = analyticsRows
-        .reduce((sum, analytics) => sum + (analytics?.activeChargingSeconds ?? 0), 0);
-      const totalAvailableConnectorSeconds = analyticsRows
-        .reduce((sum, analytics) => sum + (analytics?.availableConnectorSeconds ?? 0), 0);
+      const periodEndMs = Date.now();
+      const periodStartMs = periodEndMs - (periodDays * 24 * 60 * 60 * 1000);
 
-      const weightedUtilizationFromSeconds = totalAvailableConnectorSeconds > 0
-        ? (totalActiveChargingSeconds / totalAvailableConnectorSeconds) * 100
-        : null;
+      const actualChargingSeconds = chargerSessions
+        .flat()
+        .reduce((sum, session) => {
+          const startMs = new Date(session.startedAt).getTime();
+          const stopMs = session.stoppedAt ? new Date(session.stoppedAt).getTime() : periodEndMs;
+          const overlapStart = Math.max(startMs, periodStartMs);
+          const overlapEnd = Math.min(stopMs, periodEndMs);
+          if (!Number.isFinite(overlapStart) || !Number.isFinite(overlapEnd) || overlapEnd <= overlapStart) {
+            return sum;
+          }
+          return sum + Math.floor((overlapEnd - overlapStart) / 1000);
+        }, 0);
 
-      const weightedUtilizationFromReportedPct = (() => {
-        const withCapacity = analyticsRows.filter((a) => (a?.availableConnectorSeconds ?? 0) > 0);
-        if (withCapacity.length > 0) {
-          const weighted = withCapacity.reduce((sum, a) => sum + ((a?.utilizationRatePct ?? 0) * (a?.availableConnectorSeconds ?? 0)), 0);
-          const denom = withCapacity.reduce((sum, a) => sum + (a?.availableConnectorSeconds ?? 0), 0);
-          return denom > 0 ? weighted / denom : null;
-        }
+      const totalConnectorsForUtil = siteDetails
+        .filter(Boolean)
+        .reduce((sum, site) => sum + (site?.chargers.reduce((inner, ch) => inner + ch.connectors.length, 0) ?? 0), 0);
 
-        const withPct = analyticsRows.filter((a) => (a?.utilizationRatePct ?? 0) > 0);
-        if (!withPct.length) return null;
-        return withPct.reduce((sum, a) => sum + (a?.utilizationRatePct ?? 0), 0) / withPct.length;
-      })();
+      const totalPossibleChargingSeconds = totalConnectorsForUtil > 0
+        ? totalConnectorsForUtil * periodDays * 24 * 60 * 60
+        : 0;
 
-      const totalSessionsInRange = analyticsRows.reduce((sum, a) => sum + (a?.sessionsCount ?? 0), 0);
-      const utilizationCandidate = (weightedUtilizationFromSeconds && weightedUtilizationFromSeconds > 0)
-        ? weightedUtilizationFromSeconds
-        : weightedUtilizationFromReportedPct;
-
-      const utilizationRatePct = utilizationCandidate != null
-        ? Math.round(utilizationCandidate * 100) / 100
-        : (totalSessionsInRange > 0 ? 0.01 : 0);
+      const utilizationRatePct = totalPossibleChargingSeconds > 0
+        ? Math.round((actualChargingSeconds / totalPossibleChargingSeconds) * 10000) / 100
+        : (() => {
+            const totalSessionsInRange = analyticsRows.reduce((sum, a) => sum + (a?.sessionsCount ?? 0), 0);
+            return totalSessionsInRange > 0 ? 0.01 : 0;
+          })();
 
       setFleetKpis({
         totalSites: data.length,
