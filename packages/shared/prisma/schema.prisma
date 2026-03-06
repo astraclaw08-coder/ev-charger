@@ -196,3 +196,17 @@ model UptimeEvent {
   @@index([createdAt])
   @@index([event])
 }
+
+model AdminAuditEvent {
+  id           String   @id @default(uuid())
+  operatorId   String
+  action       String
+  targetUserId String?
+  targetEmail  String?
+  metadata     Json?
+  createdAt    DateTime @default(now())
+
+  @@index([operatorId, createdAt])
+  @@index([action, createdAt])
+  @@index([targetUserId])
+}

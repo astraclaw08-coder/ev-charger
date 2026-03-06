@@ -150,6 +150,7 @@ export interface AdminUser {
   enabled?: boolean;
   emailVerified?: boolean;
   createdTimestamp?: number;
+  realmRoles?: string[];
 }
 
 export interface AdminAuditEvent {
@@ -267,29 +268,41 @@ export function createApiClient(token: string | null | undefined) {
         body: JSON.stringify(body),
       }),
 
-    addAdminUserRole: (userId: string, role: string) =>
+    addAdminUserRole: (userId: string, role: string, reason?: string) =>
       request<{ ok: boolean }>(`/admin/users/${userId}/roles/add`, token, {
         method: 'POST',
-        body: JSON.stringify({ role }),
+        body: JSON.stringify({ role, reason }),
       }),
 
-    removeAdminUserRole: (userId: string, role: string) =>
+    removeAdminUserRole: (userId: string, role: string, options?: { reason?: string; confirmPrivilegedRoleRemoval?: boolean }) =>
       request<{ ok: boolean }>(`/admin/users/${userId}/roles/remove`, token, {
         method: 'POST',
-        body: JSON.stringify({ role }),
+        body: JSON.stringify({ role, reason: options?.reason, confirmPrivilegedRoleRemoval: options?.confirmPrivilegedRoleRemoval }),
       }),
 
-    deactivateAdminUser: (userId: string) =>
-      request<{ ok: boolean }>(`/admin/users/${userId}/deactivate`, token, { method: 'POST' }),
+    deactivateAdminUser: (userId: string, options?: { reason?: string; revokeSessions?: boolean }) =>
+      request<{ ok: boolean }>(`/admin/users/${userId}/deactivate`, token, {
+        method: 'POST',
+        body: JSON.stringify(options ?? {}),
+      }),
 
-    reactivateAdminUser: (userId: string) =>
-      request<{ ok: boolean }>(`/admin/users/${userId}/reactivate`, token, { method: 'POST' }),
+    reactivateAdminUser: (userId: string, reason?: string) =>
+      request<{ ok: boolean }>(`/admin/users/${userId}/reactivate`, token, {
+        method: 'POST',
+        body: JSON.stringify({ reason }),
+      }),
 
-    triggerPasswordReset: (userId: string) =>
-      request<{ ok: boolean }>(`/admin/users/${userId}/reset-credentials`, token, { method: 'POST' }),
+    triggerPasswordReset: (userId: string, options?: { reason?: string; revokeSessions?: boolean }) =>
+      request<{ ok: boolean }>(`/admin/users/${userId}/reset-credentials`, token, {
+        method: 'POST',
+        body: JSON.stringify(options ?? {}),
+      }),
 
-    revokeAdminUserSessions: (userId: string) =>
-      request<{ ok: boolean }>(`/admin/users/${userId}/revoke-sessions`, token, { method: 'POST' }),
+    revokeAdminUserSessions: (userId: string, reason?: string) =>
+      request<{ ok: boolean }>(`/admin/users/${userId}/revoke-sessions`, token, {
+        method: 'POST',
+        body: JSON.stringify({ reason }),
+      }),
 
     listAdminAudit: (limit = 50) =>
       request<AdminAuditEvent[]>(`/admin/users/audit?limit=${limit}`, token),
