@@ -2,8 +2,15 @@ import type { FastifyInstance } from 'fastify';
 import crypto from 'crypto';
 import { prisma } from '@ev-charger/shared';
 import { requireOperator } from '../plugins/auth';
+import { requirePolicy } from '../plugins/authorization';
 import { remoteReset } from '../lib/ocppClient';
 import { getChargerUptime } from '../lib/uptime';
+
+function hasSiteAccess(siteId: string, siteIds: string[] | undefined) {
+  if (!siteIds || siteIds.length === 0) return true;
+  if (siteIds.includes('*')) return true;
+  return siteIds.includes(siteId);
+}
 
 export async function chargerRoutes(app: FastifyInstance) {
   // GET /chargers — list chargers with optional bbox filter
@@ -53,7 +60,7 @@ export async function chargerRoutes(app: FastifyInstance) {
 
   // GET /chargers/:id/status — real-time state (operator only)
   app.get<{ Params: { id: string } }>('/chargers/:id/status', {
-    preHandler: requireOperator,
+    preHandler: [requireOperator, requirePolicy('charger.status.read')],
   }, async (req, reply) => {
     const charger = await prisma.charger.findUnique({
       where: { id: req.params.id },
@@ -71,6 +78,12 @@ export async function chargerRoutes(app: FastifyInstance) {
     });
 
     if (!charger) return reply.status(404).send({ error: 'Charger not found' });
+    if (!hasSiteAccess(charger.siteId, req.currentOperator?.claims?.siteIds)) {
+      return reply.status(403).send({
+        error: 'Forbidden',
+        denyReason: { code: 'SITE_OUT_OF_SCOPE', reason: `Site ${charger.siteId} is not in granted siteIds`, policy: 'charger.status.read' },
+      });
+    }
 
     return {
       id: charger.id,
@@ -89,12 +102,18 @@ export async function chargerRoutes(app: FastifyInstance) {
   app.post<{
     Body: { siteId: string; ocppId: string; serialNumber: string; model: string; vendor: string };
   }>('/chargers', {
-    preHandler: requireOperator,
+    preHandler: [requireOperator, requirePolicy('charger.register')],
   }, async (req, reply) => {
     const { siteId, ocppId, serialNumber, model, vendor } = req.body;
 
     const site = await prisma.site.findUnique({ where: { id: siteId } });
     if (!site) return reply.status(404).send({ error: 'Site not found' });
+    if (!hasSiteAccess(site.id, req.currentOperator?.claims?.siteIds)) {
+      return reply.status(403).send({
+        error: 'Forbidden',
+        denyReason: { code: 'SITE_OUT_OF_SCOPE', reason: `Site ${site.id} is not in granted siteIds`, policy: 'charger.register' },
+      });
+    }
 
     const existing = await prisma.charger.findFirst({ where: { ocppId } });
     if (existing) return reply.status(409).send({ error: `ocppId "${ocppId}" is already registered` });
@@ -127,13 +146,19 @@ export async function chargerRoutes(app: FastifyInstance) {
 
   // GET /chargers/:id/sessions — recent sessions on this charger (operator only)
   app.get<{ Params: { id: string }; Querystring: { limit?: string } }>('/chargers/:id/sessions', {
-    preHandler: requireOperator,
+    preHandler: [requireOperator, requirePolicy('charger.sessions.read')],
   }, async (req, reply) => {
     const charger = await prisma.charger.findUnique({
       where: { id: req.params.id },
       include: { connectors: { select: { id: true } } },
     });
     if (!charger) return reply.status(404).send({ error: 'Charger not found' });
+    if (!hasSiteAccess(charger.siteId, req.currentOperator?.claims?.siteIds)) {
+      return reply.status(403).send({
+        error: 'Forbidden',
+        denyReason: { code: 'SITE_OUT_OF_SCOPE', reason: `Site ${charger.siteId} is not in granted siteIds`, policy: 'charger.sessions.read' },
+      });
+    }
 
     const connectorIds = charger.connectors.map((c: { id: string }) => c.id);
     const limit = Math.min(parseInt(req.query.limit ?? '20', 10), 100);
@@ -171,8 +196,17 @@ export async function chargerRoutes(app: FastifyInstance) {
 
   // GET /chargers/:id/uptime — rolling uptime windows + incidents
   app.get<{ Params: { id: string } }>('/chargers/:id/uptime', {
-    preHandler: requireOperator,
+    preHandler: [requireOperator, requirePolicy('charger.uptime.read')],
   }, async (req, reply) => {
+    const charger = await prisma.charger.findUnique({ where: { id: req.params.id }, select: { siteId: true } });
+    if (!charger) return reply.status(404).send({ error: 'Charger not found' });
+    if (!hasSiteAccess(charger.siteId, req.currentOperator?.claims?.siteIds)) {
+      return reply.status(403).send({
+        error: 'Forbidden',
+        denyReason: { code: 'SITE_OUT_OF_SCOPE', reason: `Site ${charger.siteId} is not in granted siteIds`, policy: 'charger.uptime.read' },
+      });
+    }
+
     const uptime = await getChargerUptime(req.params.id);
     if (!uptime) return reply.status(404).send({ error: 'Charger not found' });
     return uptime;
@@ -183,10 +217,16 @@ export async function chargerRoutes(app: FastifyInstance) {
     Params: { id: string };
     Body: { type?: 'Soft' | 'Hard' };
   }>('/chargers/:id/reset', {
-    preHandler: requireOperator,
+    preHandler: [requireOperator, requirePolicy('charger.reset')],
   }, async (req, reply) => {
     const charger = await prisma.charger.findUnique({ where: { id: req.params.id } });
     if (!charger) return reply.status(404).send({ error: 'Charger not found' });
+    if (!hasSiteAccess(charger.siteId, req.currentOperator?.claims?.siteIds)) {
+      return reply.status(403).send({
+        error: 'Forbidden',
+        denyReason: { code: 'SITE_OUT_OF_SCOPE', reason: `Site ${charger.siteId} is not in granted siteIds`, policy: 'charger.reset' },
+      });
+    }
 
     const type = req.body?.type ?? 'Soft';
     const status = await remoteReset(charger.ocppId, type);

@@ -1,17 +1,21 @@
 import type { FastifyInstance } from 'fastify';
 import { prisma } from '@ev-charger/shared';
 import { requireOperator } from '../plugins/auth';
+import { requirePolicy } from '../plugins/authorization';
 import { getChargerUptime } from '../lib/uptime';
 
 export async function siteRoutes(app: FastifyInstance) {
   // GET /sites — list operator's sites with charger counts
   app.get('/sites', {
-    preHandler: requireOperator,
+    preHandler: [requireOperator, requirePolicy('site.list')],
   }, async (req) => {
     const operator = req.currentOperator!;
+    const scopedSiteIds = operator.claims?.siteIds ?? [];
 
     const sites = await prisma.site.findMany({
-      where: { operatorId: operator.id },
+      where: scopedSiteIds.length > 0 && !scopedSiteIds.includes('*')
+        ? { id: { in: scopedSiteIds } }
+        : { operatorId: operator.id },
       include: { chargers: { include: { connectors: true } } },
       orderBy: { createdAt: 'desc' },
     });
@@ -37,7 +41,7 @@ export async function siteRoutes(app: FastifyInstance) {
 
   // GET /sites/:id — site detail with chargers (no passwords)
   app.get<{ Params: { id: string } }>('/sites/:id', {
-    preHandler: requireOperator,
+    preHandler: [requireOperator, requirePolicy('site.read', { getResourceSiteId: (req) => req.params.id })],
   }, async (req, reply) => {
     const site = await prisma.site.findUnique({
       where: { id: req.params.id },
@@ -66,7 +70,7 @@ export async function siteRoutes(app: FastifyInstance) {
   app.post<{
     Body: { name: string; address: string; lat: number; lng: number };
   }>('/sites', {
-    preHandler: requireOperator,
+    preHandler: [requireOperator, requirePolicy('site.create')],
   }, async (req, reply) => {
     const operator = req.currentOperator!;
     const { name, address, lat, lng } = req.body;
@@ -83,7 +87,7 @@ export async function siteRoutes(app: FastifyInstance) {
     Params: { id: string };
     Body: { name: string; address: string; lat: number; lng: number };
   }>('/sites/:id', {
-    preHandler: requireOperator,
+    preHandler: [requireOperator, requirePolicy('site.update', { getResourceSiteId: (req) => req.params.id })],
   }, async (req, reply) => {
     const operator = req.currentOperator!;
     const existing = await prisma.site.findUnique({ where: { id: req.params.id } });
@@ -104,7 +108,7 @@ export async function siteRoutes(app: FastifyInstance) {
 
   // GET /sites/:id/uptime — aggregate uptime across site chargers
   app.get<{ Params: { id: string } }>('/sites/:id/uptime', {
-    preHandler: requireOperator,
+    preHandler: [requireOperator, requirePolicy('site.uptime.read', { getResourceSiteId: (req) => req.params.id })],
   }, async (req, reply) => {
     const site = await prisma.site.findUnique({
       where: { id: req.params.id },
@@ -132,7 +136,7 @@ export async function siteRoutes(app: FastifyInstance) {
 
   // GET /sites/:id/analytics — variable range: sessions, kWh, revenue, uptime
   app.get<{ Params: { id: string }; Querystring: { periodDays?: string; startDate?: string; endDate?: string } }>('/sites/:id/analytics', {
-    preHandler: requireOperator,
+    preHandler: [requireOperator, requirePolicy('site.analytics.read', { getResourceSiteId: (req) => req.params.id })],
   }, async (req, reply) => {
     const site = await prisma.site.findUnique({
       where: { id: req.params.id },

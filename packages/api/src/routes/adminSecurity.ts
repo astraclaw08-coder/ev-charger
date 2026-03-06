@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { prisma } from '@ev-charger/shared';
 import { requireOperator } from '../plugins/auth';
+import { requirePolicy } from '../plugins/authorization';
 import { getKeycloakAdminClient } from '../lib/keycloakAdmin';
 import { getSecurityPostureSnapshot } from '../lib/securityConfig';
 import { parseScimProvisioningEvent } from '../lib/scimContracts';
@@ -32,14 +33,14 @@ async function writeAudit(args: {
 
 export async function adminSecurityRoutes(app: FastifyInstance) {
   app.get('/admin/security/posture', {
-    preHandler: requireOperator,
+    preHandler: [requireOperator, requirePolicy('admin.security.posture.read')],
   }, async () => {
     return getSecurityPostureSnapshot();
   });
 
   app.post<{ Body: { userId: string; reason: string; incidentId: string; confirmEmergency: boolean; revokeSessions?: boolean } }>(
     '/admin/security/break-glass/grant-owner',
-    { preHandler: requireOperator },
+    { preHandler: [requireOperator, requirePolicy('admin.security.breakglass')] },
     async (req, reply) => {
       if (process.env.SECURITY_BREAK_GLASS_ENABLED !== 'true') {
         return reply.status(403).send({ error: 'Break-glass path is disabled' });
@@ -89,7 +90,7 @@ export async function adminSecurityRoutes(app: FastifyInstance) {
   );
 
   app.post<{ Params: { eventType: string }; Body: unknown }>('/admin/scim/hooks/:eventType', {
-    preHandler: requireOperator,
+    preHandler: [requireOperator, requirePolicy('admin.security.scim')],
   }, async (req, reply) => {
     if (process.env.SECURITY_SCIM_ENABLED !== 'true') {
       return reply.status(403).send({ error: 'SCIM hook is disabled' });

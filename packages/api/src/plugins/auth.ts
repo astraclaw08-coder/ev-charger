@@ -1,6 +1,7 @@
 import type { preHandlerHookHandler, FastifyRequest } from 'fastify';
 import { prisma } from '@ev-charger/shared';
 import { extractAuthProvider, normalizeRoleMetadata } from '../lib/authClaims';
+import { parsePortalAccessClaims, type PortalAccessClaimsV1 } from '../lib/portalAccessClaims';
 import { isBlocked, recordAuthFailure, recordAuthSuccess } from '../lib/authProtection';
 
 // Attach to request so route handlers can access the authenticated user
@@ -18,6 +19,7 @@ declare module 'fastify' {
       email?: string;
       provider?: 'google' | 'apple' | 'unknown';
       roles?: string[];
+      claims?: PortalAccessClaimsV1;
     };
   }
 }
@@ -95,7 +97,18 @@ export const requireOperator: preHandlerHookHandler = async (req, reply) => {
       return reply.status(401).send({ error: 'Unauthorized (dev mode: set x-dev-operator-id header)' });
     }
     recordAuthSuccess({ ip: req.ip, routeScope: 'operator' });
-    req.currentOperator = { id: devOperatorId };
+    req.currentOperator = {
+      id: devOperatorId,
+      roles: ['owner'],
+      claims: {
+        version: 1,
+        orgId: null,
+        roles: ['owner'],
+        siteIds: ['*'],
+        dataScopes: ['full'],
+        source: 'legacy',
+      },
+    };
     return;
   }
 
@@ -112,11 +125,23 @@ export const requireOperator: preHandlerHookHandler = async (req, reply) => {
     const payload = await verifyToken(token, { secretKey: clerkSecretKey });
     const clerk = createClerkClient({ secretKey: clerkSecretKey });
     const clerkUser = await clerk.users.getUser(payload.sub);
-    const roles = normalizeRoleMetadata(clerkUser.publicMetadata);
+    const legacyRoles = normalizeRoleMetadata(clerkUser.publicMetadata);
+    const claims = parsePortalAccessClaims({
+      tokenPayload: payload as Record<string, unknown>,
+      metadata: clerkUser.publicMetadata as Record<string, unknown>,
+    });
 
-    if (!roles.includes('operator') && !roles.includes('owner')) {
+    const effectiveRoles = claims.roles.length > 0 ? claims.roles : legacyRoles;
+
+    if (!effectiveRoles.includes('operator') && !effectiveRoles.includes('owner')) {
       recordAuthFailure({ ip: req.ip, routeScope: 'operator' });
-      return reply.status(403).send({ error: 'Operator access required' });
+      return reply.status(403).send({
+        error: 'Operator access required',
+        denyReason: {
+          code: 'INSUFFICIENT_OPERATOR_ROLE',
+          reason: 'Token does not include operator or owner role',
+        },
+      });
     }
 
     recordAuthSuccess({ ip: req.ip, routeScope: 'operator' });
@@ -124,7 +149,11 @@ export const requireOperator: preHandlerHookHandler = async (req, reply) => {
       id: payload.sub,
       email: clerkUser.emailAddresses[0]?.emailAddress,
       provider: extractAuthProvider(payload as Record<string, unknown>),
-      roles,
+      roles: effectiveRoles,
+      claims: {
+        ...claims,
+        roles: effectiveRoles,
+      },
     };
   } catch {
     recordAuthFailure({ ip: req.ip, routeScope: 'operator' });

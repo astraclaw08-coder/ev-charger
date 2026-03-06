@@ -4,6 +4,8 @@
 
 This runbook covers MFA baseline, SSO claim mapping readiness, SCIM hook onboarding, auth anomaly controls, token rotation policy tracking, and break-glass handling.
 
+For tiered portal authorization claims and backend policy enforcement, see `docs/security/TASK-0088_AUTHZ_RUNBOOK.md`.
+
 ## 1) Prerequisites
 
 Set required Keycloak admin env vars in API runtime:
