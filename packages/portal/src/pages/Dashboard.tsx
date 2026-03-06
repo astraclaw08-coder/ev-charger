@@ -113,15 +113,37 @@ export default function Dashboard() {
 
       const totalChargers = chargerStatuses.filter(Boolean).length;
 
-      const totalActiveChargingSeconds = siteAnalyticsRange
-        .filter(Boolean)
+      const analyticsRows = siteAnalyticsRange.filter(Boolean);
+      const totalActiveChargingSeconds = analyticsRows
         .reduce((sum, analytics) => sum + (analytics?.activeChargingSeconds ?? 0), 0);
-      const totalAvailableConnectorSeconds = siteAnalyticsRange
-        .filter(Boolean)
+      const totalAvailableConnectorSeconds = analyticsRows
         .reduce((sum, analytics) => sum + (analytics?.availableConnectorSeconds ?? 0), 0);
-      const utilizationRatePct = totalAvailableConnectorSeconds > 0
-        ? Math.round((totalActiveChargingSeconds / totalAvailableConnectorSeconds) * 10000) / 100
-        : 0;
+
+      const weightedUtilizationFromSeconds = totalAvailableConnectorSeconds > 0
+        ? (totalActiveChargingSeconds / totalAvailableConnectorSeconds) * 100
+        : null;
+
+      const weightedUtilizationFromReportedPct = (() => {
+        const withCapacity = analyticsRows.filter((a) => (a?.availableConnectorSeconds ?? 0) > 0);
+        if (withCapacity.length > 0) {
+          const weighted = withCapacity.reduce((sum, a) => sum + ((a?.utilizationRatePct ?? 0) * (a?.availableConnectorSeconds ?? 0)), 0);
+          const denom = withCapacity.reduce((sum, a) => sum + (a?.availableConnectorSeconds ?? 0), 0);
+          return denom > 0 ? weighted / denom : null;
+        }
+
+        const withPct = analyticsRows.filter((a) => (a?.utilizationRatePct ?? 0) > 0);
+        if (!withPct.length) return null;
+        return withPct.reduce((sum, a) => sum + (a?.utilizationRatePct ?? 0), 0) / withPct.length;
+      })();
+
+      const totalSessionsInRange = analyticsRows.reduce((sum, a) => sum + (a?.sessionsCount ?? 0), 0);
+      const utilizationCandidate = (weightedUtilizationFromSeconds && weightedUtilizationFromSeconds > 0)
+        ? weightedUtilizationFromSeconds
+        : weightedUtilizationFromReportedPct;
+
+      const utilizationRatePct = utilizationCandidate != null
+        ? Math.round(utilizationCandidate * 100) / 100
+        : (totalSessionsInRange > 0 ? 0.01 : 0);
 
       setFleetKpis({
         totalSites: data.length,
