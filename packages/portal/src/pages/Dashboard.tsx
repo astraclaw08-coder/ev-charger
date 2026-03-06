@@ -12,7 +12,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [fleetUptime, setFleetUptime] = useState<{ uptime24h: number; uptime7d: number; uptime30d: number; degraded: number } | null>(null);
-  const [fleetKpis, setFleetKpis] = useState<{ totalSites: number; totalKwh30d: number; totalRevenue30d: number; activeSessions: number } | null>(null);
+  const [fleetKpis, setFleetKpis] = useState<{ totalSites: number; totalKwh30d: number; totalRevenue30d: number; activeSessions: number; utilizationRatePct: number } | null>(null);
   const [fleetStatus, setFleetStatus] = useState<{
     totalChargers: number;
     totalConnectors: number;
@@ -127,11 +127,22 @@ export default function Dashboard() {
 
       const totalChargers = chargerStatuses.filter(Boolean).length;
 
+      const totalActiveChargingSeconds = siteAnalyticsRange
+        .filter(Boolean)
+        .reduce((sum, analytics) => sum + (analytics?.activeChargingSeconds ?? 0), 0);
+      const totalAvailableConnectorSeconds = siteAnalyticsRange
+        .filter(Boolean)
+        .reduce((sum, analytics) => sum + (analytics?.availableConnectorSeconds ?? 0), 0);
+      const utilizationRatePct = totalAvailableConnectorSeconds > 0
+        ? Math.round((totalActiveChargingSeconds / totalAvailableConnectorSeconds) * 10000) / 100
+        : 0;
+
       setFleetKpis({
         totalSites: data.length,
         totalKwh30d: Math.round(totalKwh30d * 1000) / 1000,
         totalRevenue30d: Math.round(totalRevenue30d * 100) / 100,
         activeSessions,
+        utilizationRatePct,
       });
       setFleetStatus({
         totalChargers,
@@ -212,11 +223,12 @@ export default function Dashboard() {
       </div>
 
       {fleetKpis && (
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <KpiTile label="Total kWh (30d)" value={`${fleetKpis.totalKwh30d.toFixed(3)} kWh`} />
           <KpiTile label="Total Revenue (30d)" value={`$${fleetKpis.totalRevenue30d.toFixed(2)}`} />
           <KpiTile label="Total Sites" value={`${fleetKpis.totalSites}`} />
           <KpiTile label="Active Sessions" value={`${fleetKpis.activeSessions}`} />
+          <KpiTile label="Utilization Rate (selected range)" value={`${fleetKpis.utilizationRatePct.toFixed(2)}%`} />
         </div>
       )}
 

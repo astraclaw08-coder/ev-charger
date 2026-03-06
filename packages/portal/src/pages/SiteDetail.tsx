@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { createApiClient, type SiteDetail as SiteDetailType, type ChargerUptime, type SiteUptime } from '../api/client';
+import { createApiClient, type SiteDetail as SiteDetailType, type ChargerUptime, type SiteUptime, type Analytics as SiteAnalytics } from '../api/client';
 import { useToken } from '../auth/TokenContext';
 import ChargerMap from '../components/ChargerMap';
 import StatusBadge from '../components/StatusBadge';
@@ -38,6 +38,7 @@ export default function SiteDetail() {
   const [editSiteForm, setEditSiteForm] = useState({ name: '', address: '', lat: '', lng: '' });
   const [chargerUptime, setChargerUptime] = useState<Record<string, ChargerUptime>>({});
   const [siteUptime, setSiteUptime] = useState<SiteUptime | null>(null);
+  const [siteAnalytics30d, setSiteAnalytics30d] = useState<SiteAnalytics | null>(null);
 
   const [tariff, setTariff] = useState<TariffConfig>({ pricePerKwhUsd: 0.35, idleFeePerMinUsd: 0.08, gracePeriodMin: 10 });
   const [assignments, setAssignments] = useState<RoleAssignment[]>([]);
@@ -56,11 +57,13 @@ export default function SiteDetail() {
       setAssignments(loadRoles(data.id));
       setAuditEvents(loadAudit(data.id));
 
-      const [siteUp, perCharger] = await Promise.all([
+      const [siteUp, analytics30d, perCharger] = await Promise.all([
         client.getSiteUptime(data.id).catch(() => null),
+        client.getAnalytics(data.id, { periodDays: 30 }).catch(() => null),
         Promise.all(data.chargers.map((c) => client.getChargerUptime(c.id).catch(() => null))),
       ]);
       if (siteUp) setSiteUptime(siteUp);
+      setSiteAnalytics30d(analytics30d);
       const map: Record<string, ChargerUptime> = {};
       perCharger.forEach((u) => { if (u) map[u.chargerId] = u; });
       setChargerUptime(map);
@@ -220,10 +223,11 @@ export default function SiteDetail() {
       {siteUptime && (
         <div className="rounded-xl border border-gray-200 bg-white p-4">
           <h2 className="mb-2 text-sm font-semibold text-gray-700">Site uptime summary (OCA v1.1)</h2>
-          <div className="grid gap-3 sm:grid-cols-4 text-sm">
+          <div className="grid gap-3 sm:grid-cols-5 text-sm">
             <div><p className="text-gray-500">24h</p><p className="font-semibold text-gray-900">{siteUptime.uptimePercent24h.toFixed(2)}%</p></div>
             <div><p className="text-gray-500">7d</p><p className="font-semibold text-gray-900">{siteUptime.uptimePercent7d.toFixed(2)}%</p></div>
             <div><p className="text-gray-500">30d</p><p className="font-semibold text-gray-900">{siteUptime.uptimePercent30d.toFixed(2)}%</p></div>
+            <div><p className="text-gray-500">Utilization (30d)</p><p className="font-semibold text-gray-900">{siteAnalytics30d ? `${siteAnalytics30d.utilizationRatePct.toFixed(2)}%` : '—'}</p></div>
             <div><p className="text-gray-500">Degraded</p><p className="font-semibold text-amber-700">{siteUptime.degradedChargers}</p></div>
           </div>
         </div>

@@ -184,6 +184,23 @@ export async function siteRoutes(app: FastifyInstance) {
     const kwhDelivered = sessions.reduce((sum: number, s: { kwhDelivered: number | null }) => sum + (s.kwhDelivered ?? 0), 0);
     const revenueCents = sessions.reduce((sum: number, s: { kwhDelivered: number | null; ratePerKwh: number | null; payment: { amountCents: number | null } | null }) => sum + getEffectiveAmountCents(s), 0);
 
+    // Utilization formula (period-aligned): active charging time / available connector time.
+    // - active charging time: sum of completed session durations, clipped to selected date range
+    // - available connector time: connector count * selected range duration
+    // Assumption: each connector can serve at most one active session at a time.
+    const periodSeconds = dayCount * 24 * 60 * 60;
+    const availableConnectorSeconds = connectorIds.length * periodSeconds;
+    const activeChargingSeconds = sessions.reduce((sum: number, s: { startedAt: Date; stoppedAt: Date | null }) => {
+      if (!s.stoppedAt) return sum;
+      const startedMs = Math.max(s.startedAt.getTime(), startDate.getTime());
+      const stoppedMs = Math.min(s.stoppedAt.getTime(), endDate.getTime());
+      if (stoppedMs <= startedMs) return sum;
+      return sum + Math.floor((stoppedMs - startedMs) / 1000);
+    }, 0);
+    const utilizationRatePct = availableConnectorSeconds > 0
+      ? Math.round((activeChargingSeconds / availableConnectorSeconds) * 10000) / 100
+      : 0;
+
     // Uptime approximation: % of chargers currently ONLINE
     const totalChargers = site.chargers.length;
     const onlineChargers = site.chargers.filter((c: { status: string }) => c.status === 'ONLINE').length;
@@ -215,6 +232,9 @@ export async function siteRoutes(app: FastifyInstance) {
       revenueCents,
       revenueUsd: revenueCents / 100,
       uptimePct,
+      activeChargingSeconds,
+      availableConnectorSeconds,
+      utilizationRatePct,
       daily,
     };
   });

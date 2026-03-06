@@ -64,6 +64,9 @@ export interface Analytics {
   revenueCents: number;
   revenueUsd: number;
   uptimePct: number;
+  activeChargingSeconds: number;
+  availableConnectorSeconds: number;
+  utilizationRatePct: number;
   daily: DailyEntry[];
 }
 
