@@ -1,6 +1,7 @@
 import type { preHandlerHookHandler, FastifyRequest } from 'fastify';
 import { prisma } from '@ev-charger/shared';
 import { extractAuthProvider, normalizeRoleMetadata } from '../lib/authClaims';
+import { isBlocked, recordAuthFailure, recordAuthSuccess } from '../lib/authProtection';
 
 // Attach to request so route handlers can access the authenticated user
 declare module 'fastify' {
@@ -61,22 +62,39 @@ async function getUserFromRequest(req: FastifyRequest) {
 }
 
 export const requireAuth: preHandlerHookHandler = async (req, reply) => {
+  const blocked = isBlocked({ ip: req.ip, routeScope: 'user' });
+  if (blocked.blocked) {
+    reply.header('Retry-After', String(blocked.retryAfterSeconds));
+    return reply.status(429).send({ error: 'Too many failed auth attempts', retryAfterSeconds: blocked.retryAfterSeconds });
+  }
+
   const user = await getUserFromRequest(req);
   if (!user) {
+    recordAuthFailure({ ip: req.ip, routeScope: 'user' });
     return reply.status(401).send({ error: 'Unauthorized' });
   }
+
+  recordAuthSuccess({ ip: req.ip, routeScope: 'user' });
   req.currentUser = user;
 };
 
 export const requireOperator: preHandlerHookHandler = async (req, reply) => {
+  const blocked = isBlocked({ ip: req.ip, routeScope: 'operator' });
+  if (blocked.blocked) {
+    reply.header('Retry-After', String(blocked.retryAfterSeconds));
+    return reply.status(429).send({ error: 'Too many failed auth attempts', retryAfterSeconds: blocked.retryAfterSeconds });
+  }
+
   const clerkSecretKey = process.env.CLERK_SECRET_KEY;
 
   // Dev mode: accept x-dev-operator-id header
   if (!clerkSecretKey) {
     const devOperatorId = req.headers['x-dev-operator-id'] as string | undefined;
     if (!devOperatorId) {
+      recordAuthFailure({ ip: req.ip, routeScope: 'operator' });
       return reply.status(401).send({ error: 'Unauthorized (dev mode: set x-dev-operator-id header)' });
     }
+    recordAuthSuccess({ ip: req.ip, routeScope: 'operator' });
     req.currentOperator = { id: devOperatorId };
     return;
   }
@@ -84,6 +102,7 @@ export const requireOperator: preHandlerHookHandler = async (req, reply) => {
   // Production: verify Clerk JWT and check operator role
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith('Bearer ')) {
+    recordAuthFailure({ ip: req.ip, routeScope: 'operator' });
     return reply.status(401).send({ error: 'Unauthorized' });
   }
 
@@ -96,9 +115,11 @@ export const requireOperator: preHandlerHookHandler = async (req, reply) => {
     const roles = normalizeRoleMetadata(clerkUser.publicMetadata);
 
     if (!roles.includes('operator') && !roles.includes('owner')) {
+      recordAuthFailure({ ip: req.ip, routeScope: 'operator' });
       return reply.status(403).send({ error: 'Operator access required' });
     }
 
+    recordAuthSuccess({ ip: req.ip, routeScope: 'operator' });
     req.currentOperator = {
       id: payload.sub,
       email: clerkUser.emailAddresses[0]?.emailAddress,
@@ -106,6 +127,7 @@ export const requireOperator: preHandlerHookHandler = async (req, reply) => {
       roles,
     };
   } catch {
+    recordAuthFailure({ ip: req.ip, routeScope: 'operator' });
     return reply.status(401).send({ error: 'Unauthorized' });
   }
 };

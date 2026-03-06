@@ -7,6 +7,7 @@ import { paymentRoutes } from './routes/payments';
 import { profileRoutes } from './routes/profile';
 import { authRoutes } from './routes/auth';
 import { adminUserRoutes } from './routes/adminUsers';
+import { adminSecurityRoutes } from './routes/adminSecurity';
 
 export async function buildServer() {
   const app = Fastify({
@@ -41,6 +42,7 @@ export async function buildServer() {
   await app.register(profileRoutes);
   await app.register(authRoutes);
   await app.register(adminUserRoutes);
+  await app.register(adminSecurityRoutes);
 
   return app;
 }

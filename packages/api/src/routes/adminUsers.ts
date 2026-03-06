@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { prisma } from '@ev-charger/shared';
 import { requireOperator } from '../plugins/auth';
 import { getKeycloakAdminClient } from '../lib/keycloakAdmin';
+import { recordSensitiveAction } from '../lib/sensitiveActionLimiter';
 
 const DEFAULT_ASSIGNABLE_ROLES = ['owner', 'operator', 'customer_support', 'network_reliability', 'analyst'];
 
@@ -49,6 +50,20 @@ async function writeAudit(args: {
   });
 }
 
+async function guardSensitiveAction(req: { currentOperator?: { id: string }; ip: string }, reply: { header: (n: string, v: string) => void; status: (code: number) => { send: (payload: unknown) => unknown } }) {
+  const operatorId = req.currentOperator?.id;
+  if (!operatorId) return;
+
+  const allowance = recordSensitiveAction(operatorId, req.ip);
+  if (!allowance.allowed) {
+    reply.header('Retry-After', String(allowance.retryAfterSeconds));
+    return reply.status(429).send({
+      error: 'Too many sensitive admin actions. Slow down and retry.',
+      retryAfterSeconds: allowance.retryAfterSeconds,
+    });
+  }
+}
+
 export async function adminUserRoutes(app: FastifyInstance) {
   app.get<{ Querystring: { search?: string; first?: string; max?: string } }>('/admin/users', {
     preHandler: requireOperator,
@@ -73,7 +88,7 @@ export async function adminUserRoutes(app: FastifyInstance) {
 
   app.post<{ Body: { email: string; firstName?: string; lastName?: string; sendInvite?: boolean; temporaryPassword?: string } }>(
     '/admin/users',
-    { preHandler: requireOperator },
+    { preHandler: [requireOperator, guardSensitiveAction as any] },
     async (req, reply) => {
       const email = normalizeEmail(req.body.email || '');
       if (!isValidEmail(email)) {
@@ -109,7 +124,7 @@ export async function adminUserRoutes(app: FastifyInstance) {
   );
 
   app.post<{ Params: { userId: string }; Body: { role: string; reason?: string } }>('/admin/users/:userId/roles/add', {
-    preHandler: requireOperator,
+    preHandler: [requireOperator, guardSensitiveAction as any],
   }, async (req, reply) => {
     const role = req.body.role?.trim();
     const assignableRoles = getAssignableRoles();
@@ -137,7 +152,7 @@ export async function adminUserRoutes(app: FastifyInstance) {
   });
 
   app.post<{ Params: { userId: string }; Body: { role: string; reason?: string; confirmPrivilegedRoleRemoval?: boolean } }>('/admin/users/:userId/roles/remove', {
-    preHandler: requireOperator,
+    preHandler: [requireOperator, guardSensitiveAction as any],
   }, async (req, reply) => {
     const role = req.body.role?.trim();
     const assignableRoles = getAssignableRoles();
@@ -170,7 +185,7 @@ export async function adminUserRoutes(app: FastifyInstance) {
   });
 
   app.post<{ Params: { userId: string }; Body: { reason?: string; revokeSessions?: boolean } }>('/admin/users/:userId/deactivate', {
-    preHandler: requireOperator,
+    preHandler: [requireOperator, guardSensitiveAction as any],
   }, async (req) => {
     const kc = getKeycloakAdminClient();
     const revokeSessions = req.body?.revokeSessions !== false;
@@ -193,7 +208,7 @@ export async function adminUserRoutes(app: FastifyInstance) {
   });
 
   app.post<{ Params: { userId: string }; Body: { reason?: string } }>('/admin/users/:userId/reactivate', {
-    preHandler: requireOperator,
+    preHandler: [requireOperator, guardSensitiveAction as any],
   }, async (req) => {
     const kc = getKeycloakAdminClient();
     await kc.setEnabled(req.params.userId, true);
@@ -209,7 +224,7 @@ export async function adminUserRoutes(app: FastifyInstance) {
   });
 
   app.post<{ Params: { userId: string }; Body: { reason?: string; revokeSessions?: boolean } }>('/admin/users/:userId/reset-credentials', {
-    preHandler: requireOperator,
+    preHandler: [requireOperator, guardSensitiveAction as any],
   }, async (req) => {
     const kc = getKeycloakAdminClient();
     const revokeSessions = req.body?.revokeSessions !== false;
@@ -233,7 +248,7 @@ export async function adminUserRoutes(app: FastifyInstance) {
   });
 
   app.post<{ Params: { userId: string }; Body: { reason?: string } }>('/admin/users/:userId/revoke-sessions', {
-    preHandler: requireOperator,
+    preHandler: [requireOperator, guardSensitiveAction as any],
   }, async (req) => {
     const kc = getKeycloakAdminClient();
     await kc.logoutUser(req.params.userId);
