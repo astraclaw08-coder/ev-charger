@@ -146,6 +146,7 @@ export default function TabsLayout() {
             title: 'Favorites',
             tabBarLabel: 'Favorites',
             tabBarIcon: ({ size }) => <TabIcon icon="❤️" size={size} />,
+            href: isGuest ? null : undefined,
           }}
         />
         <Tabs.Screen
@@ -154,6 +155,7 @@ export default function TabsLayout() {
             title: 'Session History',
             tabBarLabel: 'History',
             tabBarIcon: ({ size }) => <TabIcon icon="📋" size={size} />,
+            href: isGuest ? null : undefined,
           }}
         />
         <Tabs.Screen

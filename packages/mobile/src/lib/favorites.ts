@@ -21,3 +21,11 @@ export async function toggleFavorite(id: string): Promise<boolean> {
   await AsyncStorage.setItem(KEY, JSON.stringify(next));
   return idx === -1;
 }
+
+export async function clearFavorites(): Promise<void> {
+  try {
+    await AsyncStorage.removeItem(KEY);
+  } catch {
+    // ignore cleanup errors
+  }
+}

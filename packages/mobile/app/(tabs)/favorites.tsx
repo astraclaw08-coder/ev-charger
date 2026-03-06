@@ -12,6 +12,7 @@ import { api, type Charger } from '@/lib/api';
 import { getFavorites, toggleFavorite } from '@/lib/favorites';
 import { HeartButton } from '@/components/HeartButton';
 import { useAppTheme } from '@/theme';
+import { useAppAuth } from '@/providers/AuthProvider';
 
 function statusColor(c: Charger) {
   const s = c.connectors.map((x) => x.status);
@@ -44,18 +45,21 @@ function statusLabel(c: Charger) {
 export default function FavoritesScreen() {
   const router = useRouter();
   const { isDark } = useAppTheme();
+  const { isGuest } = useAppAuth();
   const queryClient = useQueryClient();
 
   const { data: favoriteIds = [], isLoading: favoritesLoading, refetch: refetchFavorites } = useQuery({
     queryKey: ['favorites'],
     queryFn: () => getFavorites(),
     refetchInterval: 15_000,
+    enabled: !isGuest,
   });
 
   const { data: chargers = [], isLoading: chargersLoading, refetch: refetchChargers } = useQuery({
     queryKey: ['chargers'],
     queryFn: () => api.chargers.list(),
     refetchInterval: 15_000,
+    enabled: !isGuest,
   });
 
   const [manualRefreshing, setManualRefreshing] = useState(false);
@@ -70,6 +74,15 @@ export default function FavoritesScreen() {
     } finally {
       setManualRefreshing(false);
     }
+  }
+
+  if (isGuest) {
+    return (
+      <View style={[styles.centered, { backgroundColor: isDark ? '#030712' : '#f9fafb', paddingHorizontal: 20 }]}>
+        <Text style={[styles.emptyTitle, { color: isDark ? '#f9fafb' : '#111827' }]}>Guest mode</Text>
+        <Text style={[styles.emptySub, { color: isDark ? '#9ca3af' : '#6b7280' }]}>Sign in to save and view favorites.</Text>
+      </View>
+    );
   }
 
   if (isLoading) {

@@ -10,13 +10,21 @@ const CLERK_KEY = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
 export const isDevMode = !CLERK_KEY;
 
-// Auth token holder — set by auth context
+// Auth state holders — set by auth context
 let _bearerToken: string | null = null;
+let _guestMode = false;
 export function setBearerToken(token: string | null) {
   _bearerToken = token;
 }
 
+export function setGuestMode(guest: boolean) {
+  _guestMode = guest;
+}
+
 async function authHeaders(): Promise<Record<string, string>> {
+  if (_guestMode) {
+    return {};
+  }
   if (isDevMode) {
     return { 'x-dev-user-id': DEV_USER_ID };
   }

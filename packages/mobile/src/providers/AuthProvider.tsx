@@ -4,7 +4,8 @@
  */
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { useRouter, useSegments } from 'expo-router';
-import { setBearerToken, isDevMode } from '@/lib/api';
+import { setBearerToken, setGuestMode, isDevMode } from '@/lib/api';
+import { clearFavorites } from '@/lib/favorites';
 
 type AppAuthContextValue = {
   isGuest: boolean;
@@ -19,9 +20,15 @@ const AppAuthContext = createContext<AppAuthContextValue | null>(null);
 function DevAuthProvider({ children }: { children: React.ReactNode }) {
   const [isGuest, setIsGuest] = useState(false);
 
+  useEffect(() => {
+    setGuestMode(isGuest);
+  }, [isGuest]);
+
   const value: AppAuthContextValue = {
     isGuest,
-    signOut: () => setIsGuest(true),
+    signOut: () => {
+      clearFavorites().finally(() => setIsGuest(true));
+    },
     signIn: () => setIsGuest(false),
   };
 
@@ -68,7 +75,10 @@ function ClerkAuthGuard({ children }: { children: React.ReactNode }) {
   }, [auth.isSignedIn, segments]);
 
   useEffect(() => {
-    if (!auth.isSignedIn) {
+    const guest = !auth.isSignedIn;
+    setGuestMode(guest);
+
+    if (guest) {
       setBearerToken(null);
       tokenRefreshed.current = false;
       return;
@@ -83,7 +93,10 @@ function ClerkAuthGuard({ children }: { children: React.ReactNode }) {
     signOut: () => {
       auth.signOut().finally(() => {
         setBearerToken(null);
-        router.replace('/(auth)/sign-in');
+        setGuestMode(true);
+        clearFavorites().finally(() => {
+          router.replace('/(auth)/sign-in');
+        });
       });
     },
   };

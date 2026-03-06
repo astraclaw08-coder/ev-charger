@@ -131,6 +131,7 @@ export default function SessionsScreen() {
     queryFn: () => api.sessions.list(20, 0),
     staleTime: 60_000,
     placeholderData: (prev) => prev,
+    enabled: !isGuest,
   });
 
   useFocusEffect(
