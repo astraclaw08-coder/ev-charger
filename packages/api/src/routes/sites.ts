@@ -165,11 +165,18 @@ export async function siteRoutes(app: FastifyInstance) {
     const dayCount = Math.max(1, Math.floor((endDate.getTime() - startDate.getTime()) / (24 * 60 * 60 * 1000)) + 1);
     const connectorIds = site.chargers.flatMap((c: { connectors: Array<{ id: string }> }) => c.connectors.map((cn) => cn.id));
 
+    const now = new Date();
     const sessions = await prisma.session.findMany({
       where: {
         connectorId: { in: connectorIds },
-        startedAt: { gte: startDate, lte: endDate },
-        status: 'COMPLETED',
+        // Include any session that overlaps the selected period window.
+        // This captures sessions that started before the window but continued into it,
+        // plus currently active sessions that haven't stopped yet.
+        startedAt: { lte: endDate },
+        OR: [
+          { stoppedAt: { gte: startDate } },
+          { stoppedAt: null, status: 'ACTIVE' },
+        ],
       },
       include: { payment: true },
     });
@@ -190,10 +197,13 @@ export async function siteRoutes(app: FastifyInstance) {
     // Assumption: each connector can serve at most one active session at a time.
     const periodSeconds = dayCount * 24 * 60 * 60;
     const availableConnectorSeconds = connectorIds.length * periodSeconds;
-    const activeChargingSeconds = sessions.reduce((sum: number, s: { startedAt: Date; stoppedAt: Date | null }) => {
-      if (!s.stoppedAt) return sum;
+    const activeChargingSeconds = sessions.reduce((sum: number, s: { startedAt: Date; stoppedAt: Date | null; status: 'ACTIVE' | 'COMPLETED' | 'FAILED' }) => {
+      // For active sessions, count charging time up to "now" (capped by selected endDate).
+      // For completed/failed sessions, use stoppedAt when present.
+      const sessionEnd = s.stoppedAt ?? (s.status === 'ACTIVE' ? now : null);
+      if (!sessionEnd) return sum;
       const startedMs = Math.max(s.startedAt.getTime(), startDate.getTime());
-      const stoppedMs = Math.min(s.stoppedAt.getTime(), endDate.getTime());
+      const stoppedMs = Math.min(sessionEnd.getTime(), endDate.getTime(), now.getTime());
       if (stoppedMs <= startedMs) return sum;
       return sum + Math.floor((stoppedMs - startedMs) / 1000);
     }, 0);
