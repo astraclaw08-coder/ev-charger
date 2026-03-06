@@ -143,14 +143,25 @@ export class KeycloakAdminClient {
     });
   }
 
-  async setEnabled(userId: string, enabled: boolean) {
+  async updateUser(userId: string, patch: Record<string, unknown>) {
     const current = await this.getUser(userId);
     await this.request<null>(`/users/${userId}`, {
       method: 'PUT',
       body: JSON.stringify({
         ...current,
-        enabled,
+        ...patch,
       }),
+    });
+  }
+
+  async setEnabled(userId: string, enabled: boolean) {
+    await this.updateUser(userId, { enabled });
+  }
+
+  async setPassword(userId: string, value: string, temporary = false) {
+    await this.request<null>(`/users/${userId}/reset-password`, {
+      method: 'PUT',
+      body: JSON.stringify({ type: 'password', temporary, value }),
     });
   }
 

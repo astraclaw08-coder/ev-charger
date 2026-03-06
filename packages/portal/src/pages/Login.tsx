@@ -1,6 +1,8 @@
+import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { AUTH_PROVIDER_LABELS, type AuthProvider } from '../auth/providerContracts';
 import { useAuthUx } from '../auth/AuthUxContext';
+import { usePasswordAuth } from '../auth/PasswordAuthContext';
 
 function AppleIcon() {
   return (
@@ -42,12 +44,16 @@ type LoginProps = {
 
 export default function Login({ error, devMode = false, devOperatorId = 'operator-001', onDevSignIn }: LoginProps) {
   const { sessionStatus, providerLoading, providerEnabled, signInWithProvider, lastError } = useAuthUx();
+  const { loginWithPassword, loading: passwordLoading, error: passwordError } = usePasswordAuth();
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
 
-  const resolvedError = error ?? lastError;
+  const passwordEnabled = !devMode;
+  const resolvedError = error ?? passwordError ?? lastError;
 
   function providerButton(provider: AuthProvider) {
     const loading = providerLoading === provider;
-    const disabled = !providerEnabled || providerLoading !== null || sessionStatus === 'loading';
+    const disabled = !providerEnabled || providerLoading !== null || sessionStatus === 'loading' || passwordLoading;
 
     return (
       <button
@@ -65,6 +71,12 @@ export default function Login({ error, devMode = false, devOperatorId = 'operato
     );
   }
 
+  async function onSubmitPassword(e: FormEvent) {
+    e.preventDefault();
+    if (!passwordEnabled) return;
+    await loginWithPassword(username, password);
+  }
+
   return (
     <div className="flex min-h-screen items-start justify-center bg-gray-50 px-4 py-10 md:items-center">
       <div className="w-full max-w-md rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
@@ -73,7 +85,7 @@ export default function Login({ error, devMode = false, devOperatorId = 'operato
           <p className="mt-1 text-sm text-gray-500">Enterprise login</p>
         </div>
 
-        <div className="space-y-3">
+        <form className="space-y-3" onSubmit={onSubmitPassword}>
           <div className="space-y-2">
             <label htmlFor="username" className="block text-sm font-medium text-gray-500">
               Username
@@ -83,6 +95,8 @@ export default function Login({ error, devMode = false, devOperatorId = 'operato
               name="username"
               type="text"
               autoComplete="username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
               placeholder="Enter your username"
               className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 placeholder:text-gray-500 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
             />
@@ -97,10 +111,20 @@ export default function Login({ error, devMode = false, devOperatorId = 'operato
               name="password"
               type="password"
               autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
               placeholder="Enter your password"
               className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 placeholder:text-gray-500 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
             />
           </div>
+
+          <button
+            type="submit"
+            disabled={!passwordEnabled || passwordLoading || !username.trim() || !password}
+            className="w-full rounded-md bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-500 disabled:opacity-70"
+          >
+            {!passwordEnabled ? 'Username/password disabled in dev mode' : passwordLoading ? 'Signing in...' : 'Sign in with Username + Password'}
+          </button>
 
           {(['apple', 'google'] as const).map(providerButton)}
 
@@ -113,7 +137,7 @@ export default function Login({ error, devMode = false, devOperatorId = 'operato
               Dev Mode — sign in as {devOperatorId}
             </button>
           )}
-        </div>
+        </form>
 
         <div
           role="alert"
@@ -121,10 +145,10 @@ export default function Login({ error, devMode = false, devOperatorId = 'operato
           className="mt-4 min-h-10 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
         >
           {resolvedError ?? (providerEnabled
-            ? 'Choose a provider to continue.'
+            ? 'Use username/password or choose a provider to continue.'
             : devMode
               ? 'Development mode: use the dev sign-in button to preview the full login shell and then enter the app.'
-              : 'Authentication providers are not wired yet. This is a frontend contract/hook phase.')}
+              : 'Use your Keycloak username/password to sign in. Social providers can also be enabled via Clerk.')} 
         </div>
 
         <p className="mt-4 text-center text-xs text-gray-500">

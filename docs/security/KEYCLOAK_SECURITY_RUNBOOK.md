@@ -15,7 +15,44 @@ Set required Keycloak admin env vars in API runtime:
 - `KEYCLOAK_ADMIN_CLIENT_ID`
 - `KEYCLOAK_ADMIN_CLIENT_SECRET`
 
+For portal username/password sign-in and token introspection (confidential backend-only client):
+
+- `KEYCLOAK_PORTAL_CLIENT_ID` (recommended, can fallback to admin client id)
+- `KEYCLOAK_PORTAL_CLIENT_SECRET` (recommended, can fallback to admin client secret)
+- `SUPER_ADMIN_BOOTSTRAP_SECRET` (one-time bootstrap guard secret)
+- `KEYCLOAK_OWNER_ROLES` (optional, default: `owner,operator`)
+
 Restart API after env updates.
+
+## 1.1) Bootstrap first owner (one-time)
+
+Call backend bootstrap endpoint once (from trusted operator terminal/network):
+
+```bash
+curl -sS -X POST "$API_BASE/auth/bootstrap-super-admin" \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "bootstrapSecret":"'$SUPER_ADMIN_BOOTSTRAP_SECRET'",
+    "username":"<son-username>",
+    "email":"<son-email>",
+    "password":"<temporary-strong-password>",
+    "firstName":"Son"
+  }'
+```
+
+Behavior:
+
+- Creates or updates account in Keycloak
+- Assigns owner-level roles (`KEYCLOAK_OWNER_ROLES`)
+- Sets temporary password + required action `UPDATE_PASSWORD`
+- Endpoint is guarded by rate-limit and one-time in-memory lock after success
+
+Immediately after success:
+
+1. Log in through portal username/password.
+2. Complete forced password update.
+3. Rotate `SUPER_ADMIN_BOOTSTRAP_SECRET` and restart API.
+4. Store rotated secret in your secret manager only (never in git).
 
 ## 2) Enable posture + baseline controls
 
@@ -115,7 +152,19 @@ On each admin client-secret rotation:
 4. Restart API
 5. Verify `nextRotationDueAt` in `/admin/security/posture`
 
-## 6) Incident response checks
+## 6) Portal password-login flow
+
+Portal sends username/password to API `POST /auth/password-login`.
+API exchanges credentials with Keycloak (password grant) using confidential client secret on backend only.
+Portal stores short-lived bearer token in session storage and uses normal `Authorization: Bearer ...` for operator routes.
+
+Guardrails:
+
+- login endpoint and bootstrap endpoint are both throttled by auth anomaly controls
+- login success/failure and bootstrap events are written to API audit logs (`portal-password-login-*`, `bootstrap-super-admin-*`)
+- operator routes accept Clerk JWT (existing) and Keycloak tokens via introspection fallback
+
+## 7) Incident response checks
 
 - Check recent auth throttles / lock patterns via API logs (429 on auth middleware)
 - Pull admin audit trail:
@@ -129,7 +178,7 @@ curl -sS "$API_BASE/admin/users/audit?limit=200" -H "Authorization: Bearer $TOKE
   - explicit reason
   - operator trace
 
-## 7) Rollback
+## 8) Rollback
 
 If this hardening blocks legitimate traffic:
 

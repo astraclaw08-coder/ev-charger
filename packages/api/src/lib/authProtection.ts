@@ -19,12 +19,12 @@ function settings() {
   };
 }
 
-function normalizedKey(input: { ip?: string; routeScope: 'user' | 'operator' }) {
+function normalizedKey(input: { ip?: string; routeScope: string }) {
   const ip = (input.ip ?? 'unknown').trim().toLowerCase();
   return `${input.routeScope}:${ip}`;
 }
 
-export function isBlocked(input: { ip?: string; routeScope: 'user' | 'operator' }) {
+export function isBlocked(input: { ip?: string; routeScope: string }) {
   const now = Date.now();
   const key = normalizedKey(input);
   const bucket = failuresByKey.get(key);
@@ -38,7 +38,7 @@ export function isBlocked(input: { ip?: string; routeScope: 'user' | 'operator' 
   return { blocked: false } as const;
 }
 
-export function recordAuthFailure(input: { ip?: string; routeScope: 'user' | 'operator' }) {
+export function recordAuthFailure(input: { ip?: string; routeScope: string }) {
   const now = Date.now();
   const key = normalizedKey(input);
   const cfg = settings();
@@ -56,7 +56,7 @@ export function recordAuthFailure(input: { ip?: string; routeScope: 'user' | 'op
   failuresByKey.set(key, existing);
 }
 
-export function recordAuthSuccess(input: { ip?: string; routeScope: 'user' | 'operator' }) {
+export function recordAuthSuccess(input: { ip?: string; routeScope: string }) {
   const key = normalizedKey(input);
   failuresByKey.delete(key);
 }

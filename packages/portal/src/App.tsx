@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
-import { ClerkProvider, SignedIn, SignedOut } from '@clerk/clerk-react';
-import { ClerkTokenProvider, DevTokenProvider } from './auth/TokenContext';
+import { ClerkProvider, useAuth } from '@clerk/clerk-react';
+import { HybridTokenProvider, DevTokenProvider } from './auth/TokenContext';
 import { ClerkAuthUxProvider, DevAuthUxProvider } from './auth/AuthUxContext';
+import { PasswordAuthProvider, usePasswordAuth } from './auth/PasswordAuthContext';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import Sites from './pages/Sites';
@@ -51,20 +52,25 @@ function SignedOutRoutes() {
   );
 }
 
-function ClerkApp() {
+function ClerkOrPasswordApp() {
+  const { isLoaded, isSignedIn } = useAuth();
+  const { session } = usePasswordAuth();
+  const isPasswordSignedIn = !!session && session.expiresAtMs > Date.now();
+
+  if (!isLoaded) return null;
+
+  if (isSignedIn || isPasswordSignedIn) {
+    return (
+      <HybridTokenProvider>
+        <PortalRoutes />
+      </HybridTokenProvider>
+    );
+  }
+
   return (
-    <>
-      <SignedIn>
-        <ClerkTokenProvider>
-          <PortalRoutes />
-        </ClerkTokenProvider>
-      </SignedIn>
-      <SignedOut>
-        <ClerkAuthUxProvider>
-          <SignedOutRoutes />
-        </ClerkAuthUxProvider>
-      </SignedOut>
-    </>
+    <ClerkAuthUxProvider>
+      <SignedOutRoutes />
+    </ClerkAuthUxProvider>
   );
 }
 
@@ -119,15 +125,19 @@ export default function App() {
       </div>
     );
   }
+
   if (CLERK_KEY) {
     return (
       <div className="portal-dark">
-        <ClerkProvider publishableKey={CLERK_KEY}>
-          <ClerkApp />
-        </ClerkProvider>
+        <PasswordAuthProvider>
+          <ClerkProvider publishableKey={CLERK_KEY}>
+            <ClerkOrPasswordApp />
+          </ClerkProvider>
+        </PasswordAuthProvider>
       </div>
     );
   }
+
   return (
     <div className="portal-dark">
       <DevApp />

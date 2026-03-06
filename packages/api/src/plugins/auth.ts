@@ -3,6 +3,7 @@ import { prisma } from '@ev-charger/shared';
 import { extractAuthProvider, normalizeRoleMetadata } from '../lib/authClaims';
 import { parsePortalAccessClaims, type PortalAccessClaimsV1 } from '../lib/portalAccessClaims';
 import { isBlocked, recordAuthFailure, recordAuthSuccess } from '../lib/authProtection';
+import { introspectAccessToken, keycloakPasswordAuthEnabled } from '../lib/keycloakOidc';
 
 // Attach to request so route handlers can access the authenticated user
 declare module 'fastify' {
@@ -17,11 +18,17 @@ declare module 'fastify' {
     currentOperator?: {
       id: string;
       email?: string;
-      provider?: 'google' | 'apple' | 'unknown';
+      provider?: 'google' | 'apple' | 'unknown' | 'keycloak-password';
       roles?: string[];
       claims?: PortalAccessClaimsV1;
     };
   }
+}
+
+function bearerToken(req: FastifyRequest) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith('Bearer ')) return null;
+  return authHeader.slice(7);
 }
 
 async function getUserFromRequest(req: FastifyRequest) {
@@ -35,10 +42,9 @@ async function getUserFromRequest(req: FastifyRequest) {
   }
 
   // Production: verify Clerk JWT
-  const authHeader = req.headers.authorization;
-  if (!authHeader?.startsWith('Bearer ')) return null;
+  const token = bearerToken(req);
+  if (!token) return null;
 
-  const token = authHeader.slice(7);
   try {
     const { verifyToken, createClerkClient } = await import('@clerk/backend');
     const payload = await verifyToken(token, { secretKey: clerkSecretKey });
@@ -57,7 +63,7 @@ async function getUserFromRequest(req: FastifyRequest) {
       });
     }
     return user;
-  } catch (err) {
+  } catch {
     req.log?.warn('Clerk token verification failed');
     return null;
   }
@@ -112,14 +118,12 @@ export const requireOperator: preHandlerHookHandler = async (req, reply) => {
     return;
   }
 
-  // Production: verify Clerk JWT and check operator role
-  const authHeader = req.headers.authorization;
-  if (!authHeader?.startsWith('Bearer ')) {
+  const token = bearerToken(req);
+  if (!token) {
     recordAuthFailure({ ip: req.ip, routeScope: 'operator' });
     return reply.status(401).send({ error: 'Unauthorized' });
   }
 
-  const token = authHeader.slice(7);
   try {
     const { verifyToken, createClerkClient } = await import('@clerk/backend');
     const payload = await verifyToken(token, { secretKey: clerkSecretKey });
@@ -155,6 +159,46 @@ export const requireOperator: preHandlerHookHandler = async (req, reply) => {
         roles: effectiveRoles,
       },
     };
+    return;
+  } catch {
+    // Fallback to Keycloak token introspection for portal password login.
+  }
+
+  if (!keycloakPasswordAuthEnabled()) {
+    recordAuthFailure({ ip: req.ip, routeScope: 'operator' });
+    return reply.status(401).send({ error: 'Unauthorized' });
+  }
+
+  try {
+    const payload = await introspectAccessToken(token);
+    const claims = parsePortalAccessClaims({
+      tokenPayload: (payload ?? {}) as Record<string, unknown>,
+      metadata: {},
+    });
+    const effectiveRoles = claims.roles;
+
+    if (!payload?.sub || (!effectiveRoles.includes('operator') && !effectiveRoles.includes('owner'))) {
+      recordAuthFailure({ ip: req.ip, routeScope: 'operator' });
+      return reply.status(403).send({
+        error: 'Operator access required',
+        denyReason: {
+          code: 'INSUFFICIENT_OPERATOR_ROLE',
+          reason: 'Token does not include operator or owner role',
+        },
+      });
+    }
+
+    req.currentOperator = {
+      id: payload.sub,
+      email: payload.email ?? payload.preferred_username,
+      provider: 'keycloak-password',
+      roles: effectiveRoles,
+      claims: {
+        ...claims,
+        roles: effectiveRoles,
+      },
+    };
+    recordAuthSuccess({ ip: req.ip, routeScope: 'operator' });
   } catch {
     recordAuthFailure({ ip: req.ip, routeScope: 'operator' });
     return reply.status(401).send({ error: 'Unauthorized' });
