@@ -4,7 +4,7 @@ import { createApiClient, type DailyEntry, type SiteListItem } from '../api/clie
 import DashboardSitesMap, { type DashboardSiteMapItem } from '../components/DashboardSitesMap';
 import { useToken } from '../auth/TokenContext';
 
-type RangePreset = '7d' | '30d' | '60d' | 'custom';
+type RangePreset = '7d' | '30d' | '60d';
 
 export default function Dashboard() {
   const getToken = useToken();
@@ -12,7 +12,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [fleetUptime, setFleetUptime] = useState<{ uptime24h: number; uptime7d: number; uptime30d: number; degraded: number } | null>(null);
-  const [fleetKpis, setFleetKpis] = useState<{ totalSites: number; totalKwh30d: number; totalRevenue30d: number; activeSessions: number; utilizationRatePct: number } | null>(null);
+  const [fleetKpis, setFleetKpis] = useState<{ totalSites: number; totalKwh: number; totalRevenue: number; activeSessions: number; utilizationRatePct: number } | null>(null);
   const [fleetStatus, setFleetStatus] = useState<{
     totalChargers: number;
     totalConnectors: number;
@@ -22,42 +22,28 @@ export default function Dashboard() {
     offline: number;
     byStatus: Array<{ status: string; count: number }>;
   } | null>(null);
-  const [rangePreset, setRangePreset] = useState<RangePreset>('7d');
-  const [customStartDate, setCustomStartDate] = useState('');
-  const [customEndDate, setCustomEndDate] = useState('');
-  const [rangeError, setRangeError] = useState('');
+  const [rangePreset, setRangePreset] = useState<RangePreset>('30d');
   const [fleetTrend, setFleetTrend] = useState<Array<{ date: string; label: string; sessions: number; kwhDelivered: number; revenueUsd: number }>>([]);
   const [siteMapItems, setSiteMapItems] = useState<DashboardSiteMapItem[]>([]);
 
 
   async function load() {
     try {
-      setRangeError('');
       const token = await getToken();
       const client = createApiClient(token);
       const data = await client.getSites();
       setSites(data);
 
-      const analyticsRange = (() => {
-        if (rangePreset === '7d') return { periodDays: 7 };
-        if (rangePreset === '30d') return { periodDays: 30 };
-        if (rangePreset === '60d') return { periodDays: 60 };
-        if (!customStartDate || !customEndDate) {
-          setRangeError('Custom range requires both start and end date.');
-          return null;
-        }
-        return { startDate: customStartDate, endDate: customEndDate };
-      })();
+      const periodDays = rangePreset === '7d' ? 7 : rangePreset === '30d' ? 30 : 60;
 
       const siteUp = await Promise.all(data.map((site) => client.getSiteUptime(site.id).catch(() => null)));
-      const [siteAnalytics30d, siteAnalyticsRange, siteDetails] = await Promise.all([
-        Promise.all(data.map((site) => client.getAnalytics(site.id, { periodDays: 30 }).catch(() => null))),
-        Promise.all(data.map((site) => client.getAnalytics(site.id, analyticsRange ?? { periodDays: 7 }).catch(() => null))),
+      const [siteAnalyticsRange, siteDetails] = await Promise.all([
+        Promise.all(data.map((site) => client.getAnalytics(site.id, { periodDays }).catch(() => null))),
         Promise.all(data.map((site) => client.getSite(site.id).catch(() => null))),
       ]);
 
-      const totalKwh30d = siteAnalytics30d.filter(Boolean).reduce((sum, a) => sum + (a?.kwhDelivered ?? 0), 0);
-      const totalRevenue30d = siteAnalytics30d.filter(Boolean).reduce((sum, a) => sum + ((a?.revenueCents ?? 0) / 100), 0);
+      const totalKwh = siteAnalyticsRange.filter(Boolean).reduce((sum, a) => sum + (a?.kwhDelivered ?? 0), 0);
+      const totalRevenue = siteAnalyticsRange.filter(Boolean).reduce((sum, a) => sum + ((a?.revenueCents ?? 0) / 100), 0);
 
       const chargerIds = siteDetails
         .filter(Boolean)
@@ -139,8 +125,8 @@ export default function Dashboard() {
 
       setFleetKpis({
         totalSites: data.length,
-        totalKwh30d: Math.round(totalKwh30d * 1000) / 1000,
-        totalRevenue30d: Math.round(totalRevenue30d * 100) / 100,
+        totalKwh: Math.round(totalKwh * 1000) / 1000,
+        totalRevenue: Math.round(totalRevenue * 100) / 100,
         activeSessions,
         utilizationRatePct,
       });
@@ -200,7 +186,7 @@ export default function Dashboard() {
     setLoading(true);
     load();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [getToken, rangePreset, customStartDate, customEndDate]);
+  }, [getToken, rangePreset]);
 
 
   if (loading) {
@@ -217,15 +203,29 @@ export default function Dashboard() {
 
   return (
     <div>
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-        <p className="mt-1 text-sm text-gray-500">Fleet overview and operations snapshot</p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+          <p className="mt-1 text-sm text-gray-500">Fleet overview and operations snapshot</p>
+        </div>
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wide text-gray-500">KPI time period</p>
+          <select
+            value={rangePreset}
+            onChange={(e) => setRangePreset(e.target.value as RangePreset)}
+            className="mt-1 rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+          >
+            <option value="7d">Last 7 days</option>
+            <option value="30d">Last 30 days</option>
+            <option value="60d">Last 60 days</option>
+          </select>
+        </div>
       </div>
 
       {fleetKpis && (
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          <KpiTile label="Total kWh (30d)" value={`${fleetKpis.totalKwh30d.toFixed(3)} kWh`} />
-          <KpiTile label="Total Revenue (30d)" value={`$${fleetKpis.totalRevenue30d.toFixed(2)}`} />
+          <KpiTile label={`Total kWh (${rangePreset})`} value={`${fleetKpis.totalKwh.toFixed(3)} kWh`} />
+          <KpiTile label={`Total Revenue (${rangePreset})`} value={`$${fleetKpis.totalRevenue.toFixed(2)}`} />
           <KpiTile label="Total Sites" value={`${fleetKpis.totalSites}`} />
           <KpiTile label="Active Sessions" value={`${fleetKpis.activeSessions}`} />
           <KpiTile label="Utilization Rate (selected range)" value={`${fleetKpis.utilizationRatePct.toFixed(2)}%`} />
@@ -268,45 +268,7 @@ export default function Dashboard() {
       <DashboardSitesMap sites={siteMapItems} />
 
       <div className="mt-4 rounded-xl border border-gray-200 bg-white p-4">
-        <div className="flex flex-wrap items-end gap-3">
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Rolling range</p>
-            <select
-              value={rangePreset}
-              onChange={(e) => setRangePreset(e.target.value as RangePreset)}
-              className="mt-1 rounded-md border border-gray-300 px-2 py-1.5 text-sm"
-            >
-              <option value="7d">Last 7 days</option>
-              <option value="30d">Last 30 days</option>
-              <option value="60d">Last 60 days</option>
-              <option value="custom">Custom</option>
-            </select>
-          </div>
-          {rangePreset === 'custom' && (
-            <>
-              <label className="text-xs text-gray-600">
-                Start date
-                <input
-                  type="date"
-                  value={customStartDate}
-                  onChange={(e) => setCustomStartDate(e.target.value)}
-                  className="mt-1 block rounded-md border border-gray-300 px-2 py-1.5 text-sm"
-                />
-              </label>
-              <label className="text-xs text-gray-600">
-                End date
-                <input
-                  type="date"
-                  value={customEndDate}
-                  onChange={(e) => setCustomEndDate(e.target.value)}
-                  className="mt-1 block rounded-md border border-gray-300 px-2 py-1.5 text-sm"
-                />
-              </label>
-            </>
-          )}
-        </div>
-
-        {rangeError && <p className="mt-2 text-xs text-red-600">{rangeError}</p>}
+        <p className="text-sm font-semibold text-gray-700">Fleet trend ({rangePreset})</p>
 
         <div className="mt-3 h-64">
           {loading ? (
