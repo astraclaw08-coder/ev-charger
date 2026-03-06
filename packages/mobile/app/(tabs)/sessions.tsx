@@ -1,5 +1,5 @@
 /**
- * Session History screen — driver's past and active sessions.
+ * Session History screen - driver's past and active sessions.
  */
 import React, { useMemo, useState } from 'react';
 import {
@@ -76,7 +76,7 @@ function SessionCard({ session, onPress, isDark }: { session: Session; onPress: 
       <View style={styles.statsRow}>
         <StatItem label="Date" value={formatDate(session.startedAt)} />
         <StatItem label="Duration" value={formatDuration(session.startedAt, session.endedAt)} />
-        <StatItem label="kWh" value={kwh > 0 ? formatKwh(kwh) : '—'} />
+        <StatItem label="kWh" value={kwh > 0 ? formatKwh(kwh) : '-'} />
         {cost && <StatItem label="Cost" value={cost} highlight />}
       </View>
 
@@ -112,7 +112,7 @@ function StatItem({
 
 function SummaryCard({ label, value, isDark }: { label: string; value: string; isDark: boolean }) {
   return (
-    <View style={[styles.summaryCard, { backgroundColor: isDark ? '#111827' : '#ffffff' }]}> 
+    <View style={[styles.summaryCard, { backgroundColor: isDark ? '#111827' : '#ffffff' }]}>
       <Text style={[styles.summaryLabel, { color: isDark ? '#9ca3af' : '#6b7280' }]}>{label}</Text>
       <Text style={[styles.summaryValue, { color: isDark ? '#f9fafb' : '#111827' }]}>{value}</Text>
     </View>
@@ -150,26 +150,6 @@ export default function SessionsScreen() {
     }
   }
 
-  if (isGuest) {
-    return (
-      <View style={[styles.centered, { backgroundColor: isDark ? '#030712' : '#f9fafb', paddingHorizontal: 20 }]}> 
-        <Text style={[styles.emptyTitle, { marginBottom: 8 }]}>Guest mode</Text>
-        <Text style={[styles.emptySubtitle, { marginBottom: 16 }]}>Sign in to view charging history.</Text>
-        <TouchableOpacity style={{ backgroundColor: '#10b981', borderRadius: 10, paddingHorizontal: 18, paddingVertical: 12 }} onPress={() => router.replace('/(auth)/sign-in' as any)}>
-          <Text style={{ color: '#fff', fontWeight: '700' }}>Sign In</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
-  if (isLoading) {
-    return (
-      <View style={[styles.centered, { backgroundColor: isDark ? '#030712' : '#f9fafb' }]}>
-        <ActivityIndicator size="large" color="#10b981" />
-      </View>
-    );
-  }
-
   const sessions = data?.sessions ?? [];
 
   const summary = useMemo(() => {
@@ -190,8 +170,28 @@ export default function SessionsScreen() {
     };
   }, [sessions, summaryRange]);
 
+  if (isGuest) {
+    return (
+      <View style={[styles.centered, { backgroundColor: isDark ? '#030712' : '#f9fafb', paddingHorizontal: 20 }]}> 
+        <Text style={[styles.emptyTitle, { marginBottom: 8 }]}>Guest mode</Text>
+        <Text style={[styles.emptySubtitle, { marginBottom: 16 }]}>Sign in to view charging history.</Text>
+        <TouchableOpacity style={{ backgroundColor: '#10b981', borderRadius: 10, paddingHorizontal: 18, paddingVertical: 12 }} onPress={() => router.replace('/(auth)/sign-in' as any)}>
+          <Text style={{ color: '#fff', fontWeight: '700' }}>Sign In</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <View style={[styles.centered, { backgroundColor: isDark ? '#030712' : '#f9fafb' }]}> 
+        <ActivityIndicator size="large" color="#10b981" />
+      </View>
+    );
+  }
+
   return (
-    <View style={[styles.container, { backgroundColor: isDark ? '#030712' : '#f9fafb' }]}> 
+    <View style={[styles.container, { backgroundColor: isDark ? '#030712' : '#f9fafb' }]}>
       <FlatList
         data={sessions}
         keyExtractor={(s) => s.id}
@@ -199,7 +199,7 @@ export default function SessionsScreen() {
         refreshControl={<RefreshControl refreshing={manualRefreshing} onRefresh={onPullRefresh} />}
         ListHeaderComponent={
           <View style={styles.headerWrap}>
-            <View style={[styles.segmentedControl, { backgroundColor: isDark ? '#111827' : '#e5e7eb' }]}> 
+            <View style={[styles.segmentedControl, { backgroundColor: isDark ? '#111827' : '#e5e7eb' }]}>
               {(['week', 'month', 'year'] as SummaryRange[]).map((range) => {
                 const selected = summaryRange === range;
                 return (
