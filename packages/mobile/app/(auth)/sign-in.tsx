@@ -32,7 +32,7 @@ export default function SignInScreen() {
             style={styles.button}
             onPress={() => {
               signIn?.();
-              router.replace('/(tabs)/index' as any);
+              router.replace('/' as any);
             }}
           >
             <Text style={styles.buttonText}>Continue to App</Text>
@@ -67,7 +67,7 @@ export function ClerkSignInForm() {
       const result = await signIn.create({ identifier: email, password });
       if (result.status === 'complete') {
         await setActive({ session: result.createdSessionId });
-        router.replace('/(tabs)/index' as any);
+        router.replace('/' as any);
       }
     } catch (err: unknown) {
       Alert.alert('Sign In Failed', (err as Error).message);

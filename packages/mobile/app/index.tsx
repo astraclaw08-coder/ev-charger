@@ -9,5 +9,5 @@ export default function RootIndex() {
     return <Redirect href="/(auth)/sign-in" />;
   }
 
-  return <Redirect href={'/(tabs)/index' as any} />;
+  return <Redirect href={'/(tabs)' as any} />;
 }

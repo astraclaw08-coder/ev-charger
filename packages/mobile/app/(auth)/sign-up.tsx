@@ -68,7 +68,7 @@ export default function SignUpScreen() {
       const result = await signUp.attemptEmailAddressVerification({ code });
       if (result.status === 'complete') {
         await setActive({ session: result.createdSessionId });
-        router.replace('/(tabs)/index' as any);
+        router.replace('/' as any);
       } else {
         Alert.alert('Verification incomplete', JSON.stringify(result.status));
       }
