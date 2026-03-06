@@ -24,8 +24,8 @@ export default function UserManagement() {
       api.listAdminUsers({ search: search || undefined, max: 100 }),
       api.listAdminAudit(30),
     ]);
-    setUsers(u);
-    setAudit(a);
+    setUsers(Array.isArray(u) ? u : []);
+    setAudit(Array.isArray(a) ? a : []);
   }
 
   useEffect(() => {
@@ -80,7 +80,7 @@ export default function UserManagement() {
         <div className="mb-3 flex items-center gap-2">
           <h2 className="text-sm font-semibold text-gray-700">Users</h2>
           <input className="rounded border px-2 py-1 text-sm" placeholder="search" value={search} onChange={(e) => setSearch(e.target.value)} />
-          <button className="rounded border px-2 py-1 text-xs" onClick={() => refresh()}>Refresh</button>
+          <button className="rounded border px-2 py-1 text-xs" onClick={() => refresh().catch((err) => window.alert(err instanceof Error ? err.message : 'Failed to refresh users'))}>Refresh</button>
         </div>
         <div className="space-y-3">
           {users.map((u) => {
