@@ -14,22 +14,35 @@ export default function UserManagement() {
   const [newFirstName, setNewFirstName] = useState('');
   const [newLastName, setNewLastName] = useState('');
   const [roleDraftByUser, setRoleDraftByUser] = useState<Record<string, string>>({});
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const trimmedEmail = useMemo(() => newEmail.trim(), [newEmail]);
 
   async function refresh() {
     const token = await getToken();
     const api = createApiClient(token);
-    const [u, a] = await Promise.all([
+    const [u, a] = await Promise.allSettled([
       api.listAdminUsers({ search: search || undefined, max: 100 }),
       api.listAdminAudit(30),
     ]);
-    setUsers(Array.isArray(u) ? u : []);
-    setAudit(Array.isArray(a) ? a : []);
+
+    if (u.status === 'fulfilled') {
+      setUsers(Array.isArray(u.value) ? u.value : []);
+      setLoadError(null);
+    } else {
+      setUsers([]);
+      setLoadError(u.reason instanceof Error ? u.reason.message : 'Failed to load users');
+    }
+
+    if (a.status === 'fulfilled') {
+      setAudit(Array.isArray(a.value) ? a.value : []);
+    } else {
+      setAudit([]);
+    }
   }
 
   useEffect(() => {
-    refresh().catch((err) => window.alert(err instanceof Error ? err.message : 'Failed to load users'));
+    refresh().catch((err) => setLoadError(err instanceof Error ? err.message : 'Failed to load users'));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -80,8 +93,9 @@ export default function UserManagement() {
         <div className="mb-3 flex items-center gap-2">
           <h2 className="text-sm font-semibold text-gray-700">Users</h2>
           <input className="rounded border px-2 py-1 text-sm" placeholder="search" value={search} onChange={(e) => setSearch(e.target.value)} />
-          <button className="rounded border px-2 py-1 text-xs" onClick={() => refresh().catch((err) => window.alert(err instanceof Error ? err.message : 'Failed to refresh users'))}>Refresh</button>
+          <button className="rounded border px-2 py-1 text-xs" onClick={() => refresh().catch((err) => setLoadError(err instanceof Error ? err.message : 'Failed to refresh users'))}>Refresh</button>
         </div>
+        {loadError && <p className="mb-2 text-xs text-red-600">{loadError}</p>}
         <div className="space-y-3">
           {users.map((u) => {
             const selectedRole = roleForUser(u.id);

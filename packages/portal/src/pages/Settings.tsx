@@ -55,12 +55,26 @@ export default function Settings() {
       setError(null);
       const token = await getToken();
       const api = createApiClient(token);
-      const [settingsBundle, auditItems] = await Promise.all([api.getAdminSettings(), api.listAdminAudit(40)]);
+      const [settingsRes, auditRes] = await Promise.allSettled([api.getAdminSettings(), api.listAdminAudit(40)]);
+
+      const settingsBundle = settingsRes.status === 'fulfilled'
+        ? settingsRes.value
+        : { settings: null, notificationPreferences: null, chargerModels: [] };
+
+      if (settingsRes.status === 'rejected') {
+        const msg = settingsRes.reason instanceof Error ? settingsRes.reason.message : 'Failed to load settings';
+        if (!/not found/i.test(msg)) {
+          setError(msg);
+        }
+      }
+
+      const auditItems = auditRes.status === 'fulfilled' ? auditRes.value : [];
+
       setNotifications(settingsBundle.notificationPreferences ?? {
         id: 'draft', operatorId: 'self', emailEnabled: true, smsEnabled: false, outageAlerts: true, billingAlerts: true, weeklyDigest: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
       });
       setModels(settingsBundle.chargerModels ?? []);
-      setAudit(auditItems.filter((a) => typeof a.action === 'string' && a.action.startsWith('admin.settings.')));
+      setAudit((auditItems ?? []).filter((a) => typeof a?.action === 'string' && a.action.startsWith('admin.settings.')));
       setOrg({
         organizationName: settingsBundle.settings?.organizationName ?? '',
         organizationBillingAddress: settingsBundle.settings?.organizationBillingAddress ?? '',
