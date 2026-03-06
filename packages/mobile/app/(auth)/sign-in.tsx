@@ -17,9 +17,6 @@ import { useAppAuth } from '@/providers/AuthProvider';
 export default function SignInScreen() {
   const router = useRouter();
   const { signIn } = useAppAuth();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
 
   // ── Dev mode: skip auth ───────────────────────────────────────────────────
   if (isDevMode) {
@@ -45,67 +42,12 @@ export default function SignInScreen() {
     );
   }
 
-  // ── Clerk sign-in ─────────────────────────────────────────────────────────
-  async function handleSignIn() {
-    if (!email || !password) {
-      Alert.alert('Error', 'Please enter your email and password.');
-      return;
-    }
-    setLoading(true);
-    try {
-      const { useSignIn } = require('@clerk/clerk-expo');
-      // This component is only rendered inside ClerkProvider so hooks are safe
-      Alert.alert('Sign In', 'Use the Clerk hook inside a component that has access to useSignIn.');
-    } catch (err: unknown) {
-      Alert.alert('Sign In Failed', (err as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
   return (
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <View style={styles.card}>
-        <Text style={styles.title}>Sign In</Text>
-        <Text style={styles.subtitle}>Charge smarter, not harder.</Text>
-
-        <TextInput
-          style={styles.input}
-          placeholder="Email"
-          value={email}
-          onChangeText={setEmail}
-          autoCapitalize="none"
-          keyboardType="email-address"
-          autoComplete="email"
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Password"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-          autoComplete="password"
-        />
-
-        <TouchableOpacity
-          style={[styles.button, loading && styles.buttonDisabled]}
-          onPress={handleSignIn}
-          disabled={loading}
-        >
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.buttonText}>Sign In</Text>
-          )}
-        </TouchableOpacity>
-
-        <Link href="/(auth)/sign-up" style={styles.link}>
-          Don't have an account? Sign up
-        </Link>
-      </View>
+      <ClerkSignInForm />
     </KeyboardAvoidingView>
   );
 }
