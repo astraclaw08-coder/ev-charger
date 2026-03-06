@@ -59,8 +59,8 @@ export default function Settings() {
       setNotifications(settingsBundle.notificationPreferences ?? {
         id: 'draft', operatorId: 'self', emailEnabled: true, smsEnabled: false, outageAlerts: true, billingAlerts: true, weeklyDigest: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
       });
-      setModels(settingsBundle.chargerModels);
-      setAudit(auditItems.filter((a) => a.action.startsWith('admin.settings.')));
+      setModels(settingsBundle.chargerModels ?? []);
+      setAudit(auditItems.filter((a) => typeof a.action === 'string' && a.action.startsWith('admin.settings.')));
       setOrg({
         organizationName: settingsBundle.settings?.organizationName ?? '',
         organizationBillingAddress: settingsBundle.settings?.organizationBillingAddress ?? '',
