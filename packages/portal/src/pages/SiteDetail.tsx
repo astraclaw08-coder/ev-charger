@@ -99,6 +99,7 @@ export default function SiteDetail() {
   const [rangePreset, setRangePreset] = useState<RangePreset>('30d');
   const [trend, setTrend] = useState<Array<{ date: string; label: string; sessions: number; kwhDelivered: number; revenueUsd: number }>>([]);
   const [activeSessions, setActiveSessions] = useState(0);
+  const [siteUtilizationPct, setSiteUtilizationPct] = useState<number | null>(null);
 
   const [tariff, setTariff] = useState<TariffConfig>({ pricePerKwhUsd: 0.35, idleFeePerMinUsd: 0.08, gracePeriodMin: 10, mode: 'flat', windows: [] });
   const [tariffMsg, setTariffMsg] = useState('');
@@ -127,13 +128,36 @@ export default function SiteDetail() {
       if (siteUp) setSiteUptime(siteUp);
       setSiteAnalytics(analytics);
 
-      // Active sessions count
-      const chargerStatuses = await Promise.all(
-        data.chargers.map((c) => client.getChargerStatus(c.id).catch(() => null)),
-      );
+      // Active sessions count + utilization based on actual session seconds in selected window
+      const [chargerStatuses, chargerSessions] = await Promise.all([
+        Promise.all(data.chargers.map((c) => client.getChargerStatus(c.id).catch(() => null))),
+        Promise.all(data.chargers.map((c) => client.getChargerSessions(c.id).catch(() => []))),
+      ]);
       setActiveSessions(
         chargerStatuses.filter(Boolean).reduce((sum, ch) => sum + (ch?.connectors.filter((c) => c.activeSession).length ?? 0), 0),
       );
+
+      const periodEndMs = Date.now();
+      const periodStartMs = periodEndMs - (periodDays * 24 * 60 * 60 * 1000);
+      const actualChargingSeconds = chargerSessions
+        .flat()
+        .reduce((sum, session) => {
+          const startMs = new Date(session.startedAt).getTime();
+          const stopMs = session.stoppedAt ? new Date(session.stoppedAt).getTime() : periodEndMs;
+          const overlapStart = Math.max(startMs, periodStartMs);
+          const overlapEnd = Math.min(stopMs, periodEndMs);
+          if (!Number.isFinite(overlapStart) || !Number.isFinite(overlapEnd) || overlapEnd <= overlapStart) return sum;
+          return sum + Math.floor((overlapEnd - overlapStart) / 1000);
+        }, 0);
+      const connectorCount = data.chargers.reduce((sum, ch) => sum + ch.connectors.length, 0);
+      const totalPossibleSeconds = connectorCount > 0 ? connectorCount * periodDays * 24 * 60 * 60 : 0;
+      if (totalPossibleSeconds > 0) {
+        setSiteUtilizationPct(Math.round((actualChargingSeconds / totalPossibleSeconds) * 10000) / 100);
+      } else if (analytics?.utilizationRatePct != null) {
+        setSiteUtilizationPct(Number(analytics.utilizationRatePct));
+      } else {
+        setSiteUtilizationPct(null);
+      }
 
       // Trend data from daily analytics
       const daily = new Map<string, { sessions: number; kwhDelivered: number; revenueCents: number }>();
@@ -185,7 +209,7 @@ export default function SiteDetail() {
 
   const totalKwh = siteAnalytics?.kwhDelivered ?? 0;
   const totalRevenue = (siteAnalytics?.revenueCents ?? 0) / 100;
-  const utilizationPct = siteAnalytics?.utilizationRatePct != null ? Number(siteAnalytics.utilizationRatePct) : null;
+  const utilizationPct = siteUtilizationPct;
   const totalConnectors = site.chargers.reduce((s, c) => s + c.connectors.length, 0);
 
   return (
@@ -205,18 +229,15 @@ export default function SiteDetail() {
           <p className="text-sm text-gray-500">{site.address}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-gray-500">KPI period</p>
-            <select
-              value={rangePreset}
-              onChange={(e) => setRangePreset(e.target.value as RangePreset)}
-              className="mt-1 rounded-md border border-gray-300 px-2 py-1.5 text-sm"
-            >
-              <option value="7d">Last 7 days</option>
-              <option value="30d">Last 30 days</option>
-              <option value="60d">Last 60 days</option>
-            </select>
-          </div>
+          <select
+            value={rangePreset}
+            onChange={(e) => setRangePreset(e.target.value as RangePreset)}
+            className="rounded-md border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            <option value="7d">Last 7 days</option>
+            <option value="30d">Last 30 days</option>
+            <option value="60d">Last 60 days</option>
+          </select>
           <button onClick={() => setShowEditSite((v) => !v)} className="rounded-md border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">Edit Site</button>
           <Link to={`/sites/${site.id}/analytics`} className="rounded-md border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50">Analytics</Link>
           <button onClick={() => setShowAddCharger(true)} className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">+ Add Charger</button>

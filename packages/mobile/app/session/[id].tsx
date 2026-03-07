@@ -205,7 +205,8 @@ function LiveSessionView({
 }) {
   const { isDark } = useAppTheme();
   const kwh = getLiveKwh(session);
-  const estimatedCost = kwh * RATE_PER_KWH;
+  const liveRate = session.ratePerKwh ?? RATE_PER_KWH;
+  const estimatedCost = kwh * liveRate;
   const duration = useLiveDuration(session.startedAt, true);
 
   function confirmStop() {
@@ -259,7 +260,7 @@ function LiveSessionView({
         </View>
         <View style={[styles.liveStatDivider, { backgroundColor: isDark ? '#334155' : '#e5e7eb' }]} />
         <View style={styles.liveStat}>
-          <Text style={[styles.liveStatValue, { color: isDark ? '#f8fafc' : '#111827' }]}>${RATE_PER_KWH.toFixed(2)}</Text>
+          <Text style={[styles.liveStatValue, { color: isDark ? '#f8fafc' : '#111827' }]}>${liveRate.toFixed(2)}</Text>
           <Text style={[styles.liveStatLabel, { color: isDark ? '#94a3b8' : '#9ca3af' }]}>Per kWh</Text>
         </View>
       </View>
