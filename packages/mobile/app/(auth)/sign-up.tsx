@@ -4,7 +4,6 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  TouchableWithoutFeedback,
   Pressable,
   StyleSheet,
   KeyboardAvoidingView,
@@ -168,133 +167,132 @@ export default function SignUpScreen() {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <Pressable style={styles.backdrop} onPress={goToSignIn}>
-        <TouchableWithoutFeedback>
-          <View style={styles.card}>
-            <TouchableOpacity style={styles.closeBtn} onPress={goToSignIn} hitSlop={10}>
-              <Text style={styles.closeBtnText}>×</Text>
-            </TouchableOpacity>
-            {pendingVerify ? (
-              <>
-                <Text style={styles.title}>Verify {verifyMethod === 'email_code' ? 'Email' : 'Phone'}</Text>
-                <Text style={styles.subtitle}>Enter the code sent to {verifyTargetLabel}</Text>
+      <View style={styles.backdrop}>
+        <Pressable style={styles.backdropDismissHitArea} onPress={goToSignIn} />
+        <View style={styles.card}>
+          <TouchableOpacity style={styles.closeBtn} onPress={goToSignIn} hitSlop={10}>
+            <Text style={styles.closeBtnText}>×</Text>
+          </TouchableOpacity>
+          {pendingVerify ? (
+            <>
+              <Text style={styles.title}>Verify {verifyMethod === 'email_code' ? 'Email' : 'Phone'}</Text>
+              <Text style={styles.subtitle}>Enter the code sent to {verifyTargetLabel}</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Verification code"
+                placeholderTextColor="#6b7280"
+                value={code}
+                onChangeText={setCode}
+                keyboardType="number-pad"
+              />
+              <TouchableOpacity
+                style={[styles.button, loading && styles.buttonDisabled]}
+                onPress={handleVerify}
+                disabled={loading}
+              >
+                {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Verify</Text>}
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              <Text style={styles.title}>Create Account</Text>
+              <Text style={styles.subtitle}>Sign up with phone, email, or SSO.</Text>
+
+              <View style={styles.methodSwitch}>
+                <TouchableOpacity
+                  style={[styles.methodBtn, method === 'email' && styles.methodBtnActive]}
+                  onPress={() => setMethod('email')}
+                >
+                  <Text style={[styles.methodText, method === 'email' && styles.methodTextActive]}>Email</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.methodBtn, method === 'phone' && styles.methodBtnActive]}
+                  onPress={() => setMethod('phone')}
+                >
+                  <Text style={[styles.methodText, method === 'phone' && styles.methodTextActive]}>Phone</Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.row}>
+                <TextInput
+                  style={[styles.input, styles.halfInput]}
+                  placeholder="First name"
+                  placeholderTextColor="#6b7280"
+                  value={firstName}
+                  onChangeText={setFirstName}
+                />
+                <TextInput
+                  style={[styles.input, styles.halfInput]}
+                  placeholder="Last name"
+                  placeholderTextColor="#6b7280"
+                  value={lastName}
+                  onChangeText={setLastName}
+                />
+              </View>
+
+              {method === 'email' ? (
                 <TextInput
                   style={styles.input}
-                  placeholder="Verification code"
+                  placeholder="Email"
                   placeholderTextColor="#6b7280"
-                  value={code}
-                  onChangeText={setCode}
-                  keyboardType="number-pad"
+                  value={email}
+                  onChangeText={setEmail}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                  autoComplete="email"
                 />
-                <TouchableOpacity
-                  style={[styles.button, loading && styles.buttonDisabled]}
-                  onPress={handleVerify}
-                  disabled={loading}
-                >
-                  {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Verify</Text>}
-                </TouchableOpacity>
-              </>
-            ) : (
-              <>
-                <Text style={styles.title}>Create Account</Text>
-                <Text style={styles.subtitle}>Sign up with phone, email, or SSO.</Text>
-
-                <View style={styles.methodSwitch}>
-                  <TouchableOpacity
-                    style={[styles.methodBtn, method === 'email' && styles.methodBtnActive]}
-                    onPress={() => setMethod('email')}
-                  >
-                    <Text style={[styles.methodText, method === 'email' && styles.methodTextActive]}>Email</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.methodBtn, method === 'phone' && styles.methodBtnActive]}
-                    onPress={() => setMethod('phone')}
-                  >
-                    <Text style={[styles.methodText, method === 'phone' && styles.methodTextActive]}>Phone</Text>
-                  </TouchableOpacity>
-                </View>
-
-                <View style={styles.row}>
-                  <TextInput
-                    style={[styles.input, styles.halfInput]}
-                    placeholder="First name"
-                    placeholderTextColor="#6b7280"
-                    value={firstName}
-                    onChangeText={setFirstName}
-                  />
-                  <TextInput
-                    style={[styles.input, styles.halfInput]}
-                    placeholder="Last name"
-                    placeholderTextColor="#6b7280"
-                    value={lastName}
-                    onChangeText={setLastName}
-                  />
-                </View>
-
-                {method === 'email' ? (
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Email"
-                    placeholderTextColor="#6b7280"
-                    value={email}
-                    onChangeText={setEmail}
-                    autoCapitalize="none"
-                    keyboardType="email-address"
-                    autoComplete="email"
-                  />
-                ) : (
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Phone (+1...)"
-                    placeholderTextColor="#6b7280"
-                    value={phone}
-                    onChangeText={setPhone}
-                    keyboardType="phone-pad"
-                    autoComplete="tel"
-                  />
-                )}
-
+              ) : (
                 <TextInput
                   style={styles.input}
-                  placeholder="Password"
+                  placeholder="Phone (+1...)"
                   placeholderTextColor="#6b7280"
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry
+                  value={phone}
+                  onChangeText={setPhone}
+                  keyboardType="phone-pad"
+                  autoComplete="tel"
                 />
+              )}
 
-                <TouchableOpacity
-                  style={[styles.button, loading && styles.buttonDisabled]}
-                  onPress={handleSignUp}
-                  disabled={loading}
-                >
-                  {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Create Account</Text>}
-                </TouchableOpacity>
+              <TextInput
+                style={styles.input}
+                placeholder="Password"
+                placeholderTextColor="#6b7280"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+              />
 
-                <View style={styles.dividerWrap}>
-                  <View style={styles.dividerLine} />
-                  <Text style={styles.dividerText}>OR</Text>
-                  <View style={styles.dividerLine} />
-                </View>
+              <TouchableOpacity
+                style={[styles.button, loading && styles.buttonDisabled]}
+                onPress={handleSignUp}
+                disabled={loading}
+              >
+                {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Create Account</Text>}
+              </TouchableOpacity>
 
-                <TouchableOpacity style={styles.oauthBtn} onPress={() => handleOAuth('google')} disabled={loading}>
-                  <AntDesign name="google" size={18} color="#ffffff" />
-                  <Text style={styles.oauthText}>Continue with Google</Text>
-                </TouchableOpacity>
+              <View style={styles.dividerWrap}>
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>OR</Text>
+                <View style={styles.dividerLine} />
+              </View>
 
-                <TouchableOpacity style={styles.oauthBtn} onPress={() => handleOAuth('apple')} disabled={loading}>
-                  <Ionicons name="logo-apple" size={18} color="#ffffff" />
-                  <Text style={styles.oauthText}>Continue with Apple</Text>
-                </TouchableOpacity>
+              <TouchableOpacity style={styles.oauthBtn} onPress={() => handleOAuth('google')} disabled={loading}>
+                <AntDesign name="google" size={18} color="#ffffff" />
+                <Text style={styles.oauthText}>Continue with Google</Text>
+              </TouchableOpacity>
 
-                <TouchableOpacity onPress={goToSignIn} style={styles.signInLinkBtn}>
-                  <Text style={styles.link}>Already have an account? Sign in</Text>
-                </TouchableOpacity>
-              </>
-            )}
-          </View>
-        </TouchableWithoutFeedback>
-      </Pressable>
+              <TouchableOpacity style={styles.oauthBtn} onPress={() => handleOAuth('apple')} disabled={loading}>
+                <Ionicons name="logo-apple" size={18} color="#ffffff" />
+                <Text style={styles.oauthText}>Continue with Apple</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity onPress={goToSignIn} style={styles.signInLinkBtn}>
+                <Text style={styles.link}>Already have an account? Sign in</Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
+      </View>
     </KeyboardAvoidingView>
   );
 }
@@ -309,6 +307,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 24,
     backgroundColor: 'rgba(2, 6, 23, 0.8)',
+    position: 'relative',
+  },
+  backdropDismissHitArea: {
+    ...StyleSheet.absoluteFillObject,
   },
   card: {
     backgroundColor: '#111827',
