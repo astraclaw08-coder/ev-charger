@@ -267,7 +267,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', marginBottom: 12, columnGap: 12 },
   rowItem: { flex: 1, marginRight: 0 },
   fieldWrap: { marginBottom: 12 },
-  label: { fontSize: 13, fontWeight: '600' },
+  label: { fontSize: 13, fontWeight: '600', marginBottom: 6 },
   input: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, fontSize: 15 },
   paymentBtn: { borderRadius: 12, paddingVertical: 14, alignItems: 'center', borderWidth: 1 },
   paymentBtnDark: { backgroundColor: '#374151', borderColor: '#4b5563' },
