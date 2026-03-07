@@ -178,15 +178,15 @@ export default function ProfileScreen() {
       <Field label="Email" value={profile.email} onChangeText={(v) => set('email', v)} isDark={isDark} keyboardType="email-address" autoCapitalize="none" />
       <Field label="Phone" value={profile.phone} onChangeText={(v) => set('phone', v)} isDark={isDark} keyboardType="phone-pad" />
       <Field label="Site Address" value={profile.homeSiteAddress} onChangeText={(v) => set('homeSiteAddress', v)} isDark={isDark} />
+      <Field label="City" value={profile.homeCity} onChangeText={(v) => set('homeCity', v)} isDark={isDark} autoCapitalize="words" />
       <View style={styles.row}>
-        <View style={styles.rowItem}>
-          <Field label="City" value={profile.homeCity} onChangeText={(v) => set('homeCity', v)} isDark={isDark} autoCapitalize="words" />
-        </View>
-        <View style={styles.rowItem}>
+        <View style={styles.stateItem}>
           <Field label="State" value={profile.homeState} onChangeText={(v) => set('homeState', v.toUpperCase())} isDark={isDark} autoCapitalize="characters" maxLength={2} />
         </View>
+        <View style={styles.zipItem}>
+          <Field label="Zip Code" value={profile.homeZipCode} onChangeText={(v) => set('homeZipCode', v)} isDark={isDark} keyboardType="number-pad" maxLength={10} />
+        </View>
       </View>
-      <Field label="Zip Code" value={profile.homeZipCode} onChangeText={(v) => set('homeZipCode', v)} isDark={isDark} keyboardType="number-pad" maxLength={10} />
 
       <TouchableOpacity
         style={[styles.saveBtn, (isLoading || saveMutation.isPending) && { opacity: 0.6 }]}
@@ -265,7 +265,8 @@ const styles = StyleSheet.create({
   paymentSummary: { fontSize: 13, marginBottom: 12 },
 
   row: { flexDirection: 'row', marginBottom: 12, columnGap: 12 },
-  rowItem: { flex: 1, marginRight: 0 },
+  stateItem: { width: 96 },
+  zipItem: { flex: 1 },
   fieldWrap: { marginBottom: 12 },
   label: { fontSize: 13, fontWeight: '600', marginBottom: 6 },
   input: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, fontSize: 15 },
