@@ -330,25 +330,29 @@ export default function SiteDetail() {
         <div className="mt-3">
           <button type="button" className="rounded-md bg-brand-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-700"
             onClick={async () => {
-              const overlapError = tariff.mode === 'tou' ? validateTouWindows(tariff.windows) : null;
-              if (overlapError) { setTariffMsg(overlapError); return; }
-              const token = await getToken();
-              await createApiClient(token).updateSite(site.id, {
-                name: site.name,
-                address: site.address,
-                lat: site.lat,
-                lng: site.lng,
-                pricingMode: tariff.mode,
-                pricePerKwhUsd: tariff.pricePerKwhUsd,
-                idleFeePerMinUsd: tariff.idleFeePerMinUsd,
-                gracePeriodMin: tariff.gracePeriodMin,
-                touWindows: tariff.mode === 'tou' ? tariff.windows : [],
-              });
-              setTariffMsg(tariff.mode === 'tou' ? `Saved TOU tariff (${tariff.windows.length} windows)` : 'Saved flat-rate tariff.');
-              pushAudit('tariff.updated', tariff.mode === 'tou'
-                ? `tou windows=${tariff.windows.length}, base=$${tariff.pricePerKwhUsd}/kWh idle=$${tariff.idleFeePerMinUsd}/min grace=${tariff.gracePeriodMin}m`
-                : `flat price=$${tariff.pricePerKwhUsd}/kWh, idle=$${tariff.idleFeePerMinUsd}/min, grace=${tariff.gracePeriodMin}m`);
-              await load();
+              try {
+                const overlapError = tariff.mode === 'tou' ? validateTouWindows(tariff.windows) : null;
+                if (overlapError) { setTariffMsg(overlapError); return; }
+                const token = await getToken();
+                const updated = await createApiClient(token).updateSite(site.id, {
+                  name: site.name,
+                  address: site.address,
+                  lat: site.lat,
+                  lng: site.lng,
+                  pricingMode: tariff.mode,
+                  pricePerKwhUsd: tariff.pricePerKwhUsd,
+                  idleFeePerMinUsd: tariff.idleFeePerMinUsd,
+                  gracePeriodMin: tariff.gracePeriodMin,
+                  touWindows: tariff.mode === 'tou' ? tariff.windows : [],
+                });
+                setTariffMsg(`Saved. Price per kWh is now $${Number(updated.pricePerKwhUsd ?? tariff.pricePerKwhUsd).toFixed(2)}.`);
+                pushAudit('tariff.updated', tariff.mode === 'tou'
+                  ? `tou windows=${tariff.windows.length}, base=$${tariff.pricePerKwhUsd}/kWh idle=$${tariff.idleFeePerMinUsd}/min grace=${tariff.gracePeriodMin}m`
+                  : `flat price=$${tariff.pricePerKwhUsd}/kWh, idle=$${tariff.idleFeePerMinUsd}/min, grace=${tariff.gracePeriodMin}m`);
+                await load();
+              } catch (err) {
+                setTariffMsg(`Save failed: ${err instanceof Error ? err.message : 'unknown error'}`);
+              }
             }}>Save tariff</button>
         </div>
       </div>
