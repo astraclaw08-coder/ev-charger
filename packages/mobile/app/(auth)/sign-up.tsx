@@ -14,12 +14,15 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { AntDesign, Ionicons } from '@expo/vector-icons';
+import { isDevMode } from '@/lib/api';
+import { useAppAuth } from '@/providers/AuthProvider';
 
 type SignUpMethod = 'email' | 'phone';
 type VerifyMethod = 'email_code' | 'phone_code';
 
 export default function SignUpScreen() {
   const router = useRouter();
+  const { signIn } = useAppAuth();
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [method, setMethod] = useState<SignUpMethod>('email');
@@ -55,6 +58,12 @@ export default function SignUpScreen() {
   const primaryIdentifier = useMemo(() => (method === 'email' ? email.trim() : phone.trim()), [method, email, phone]);
 
   async function handleSignUp() {
+    if (isDevMode) {
+      signIn?.();
+      router.replace('/' as any);
+      return;
+    }
+
     if (!isLoaded || !signUp) {
       Alert.alert('Error', 'Clerk is not configured. Set EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY.');
       return;
@@ -120,6 +129,12 @@ export default function SignUpScreen() {
   }
 
   async function handleOAuth(provider: 'google' | 'apple') {
+    if (isDevMode) {
+      signIn?.();
+      router.replace('/' as any);
+      return;
+    }
+
     if (!isLoaded || !setActive) {
       Alert.alert('Error', 'Clerk is not configured.');
       return;
