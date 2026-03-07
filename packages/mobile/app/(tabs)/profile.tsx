@@ -162,7 +162,13 @@ export default function ProfileScreen() {
         <Text style={[styles.paymentSummary, { color: isDark ? '#9ca3af' : '#4b5563' }]}>
           {profile.paymentProfile || 'No payment method added yet'}
         </Text>
-        <TouchableOpacity style={styles.paymentBtn} onPress={() => router.push('/profile/payment' as any)}>
+        <TouchableOpacity
+          style={[
+            styles.paymentBtn,
+            isDark ? styles.paymentBtnDark : styles.paymentBtnLight,
+          ]}
+          onPress={() => router.push('/profile/payment' as any)}
+        >
           <Text style={styles.paymentBtnText}>Add Payment Method</Text>
         </TouchableOpacity>
       </View>
@@ -263,7 +269,9 @@ const styles = StyleSheet.create({
   fieldWrap: { marginBottom: 12 },
   label: { fontSize: 13, fontWeight: '600' },
   input: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, fontSize: 15 },
-  paymentBtn: { backgroundColor: '#111827', borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
+  paymentBtn: { borderRadius: 12, paddingVertical: 14, alignItems: 'center', borderWidth: 1 },
+  paymentBtnDark: { backgroundColor: '#374151', borderColor: '#4b5563' },
+  paymentBtnLight: { backgroundColor: '#111827', borderColor: '#111827' },
   paymentBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
   saveBtn: { backgroundColor: '#10b981', borderRadius: 12, marginTop: 8, paddingVertical: 14, alignItems: 'center' },
   saveText: { color: '#fff', fontWeight: '700', fontSize: 16 },
