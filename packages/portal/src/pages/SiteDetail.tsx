@@ -28,26 +28,7 @@ type TariffConfig = {
 };
 type SiteAuditEvent = { id: string; action: string; actor: string; detail: string; createdAt: string };
 
-function tariffKey(siteId: string) { return `ev-portal:site:tariff:${siteId}`; }
-
 function auditKey(siteId: string) { return `ev-portal:site:audit:${siteId}`; }
-
-function loadTariff(siteId: string): TariffConfig {
-  try {
-    const raw = localStorage.getItem(tariffKey(siteId));
-    if (raw) {
-      const parsed = JSON.parse(raw) as Partial<TariffConfig>;
-      return {
-        pricePerKwhUsd: Number(parsed.pricePerKwhUsd ?? 0.35),
-        idleFeePerMinUsd: Number(parsed.idleFeePerMinUsd ?? 0.08),
-        gracePeriodMin: Number(parsed.gracePeriodMin ?? 10),
-        mode: parsed.mode === 'tou' ? 'tou' : 'flat',
-        windows: Array.isArray(parsed.windows) ? parsed.windows : [],
-      };
-    }
-  } catch {}
-  return { pricePerKwhUsd: 0.35, idleFeePerMinUsd: 0.08, gracePeriodMin: 10, mode: 'flat', windows: [] };
-}
 
 function loadAudit(siteId: string): SiteAuditEvent[] {
   try { const raw = localStorage.getItem(auditKey(siteId)); if (!raw) return []; const x = JSON.parse(raw) as SiteAuditEvent[]; return Array.isArray(x) ? x : []; } catch { return []; }
@@ -116,7 +97,13 @@ export default function SiteDetail() {
       const data = await client.getSite(id!);
       setSite(data);
       setEditSiteForm({ name: data.name, address: data.address, lat: String(data.lat), lng: String(data.lng) });
-      setTariff(loadTariff(data.id));
+      setTariff({
+        pricePerKwhUsd: Number(data.pricePerKwhUsd ?? 0.35),
+        idleFeePerMinUsd: Number(data.idleFeePerMinUsd ?? 0.08),
+        gracePeriodMin: Number(data.gracePeriodMin ?? 10),
+        mode: data.pricingMode === 'tou' ? 'tou' : 'flat',
+        windows: Array.isArray(data.touWindows) ? (data.touWindows as TouWindow[]) : [],
+      });
       setAuditEvents(loadAudit(data.id));
 
       const [siteUp, analytics, perCharger] = await Promise.all([
@@ -342,14 +329,26 @@ export default function SiteDetail() {
 
         <div className="mt-3">
           <button type="button" className="rounded-md bg-brand-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-700"
-            onClick={() => {
+            onClick={async () => {
               const overlapError = tariff.mode === 'tou' ? validateTouWindows(tariff.windows) : null;
               if (overlapError) { setTariffMsg(overlapError); return; }
-              localStorage.setItem(tariffKey(site.id), JSON.stringify(tariff));
+              const token = await getToken();
+              await createApiClient(token).updateSite(site.id, {
+                name: site.name,
+                address: site.address,
+                lat: site.lat,
+                lng: site.lng,
+                pricingMode: tariff.mode,
+                pricePerKwhUsd: tariff.pricePerKwhUsd,
+                idleFeePerMinUsd: tariff.idleFeePerMinUsd,
+                gracePeriodMin: tariff.gracePeriodMin,
+                touWindows: tariff.mode === 'tou' ? tariff.windows : [],
+              });
               setTariffMsg(tariff.mode === 'tou' ? `Saved TOU tariff (${tariff.windows.length} windows)` : 'Saved flat-rate tariff.');
               pushAudit('tariff.updated', tariff.mode === 'tou'
                 ? `tou windows=${tariff.windows.length}, base=$${tariff.pricePerKwhUsd}/kWh idle=$${tariff.idleFeePerMinUsd}/min grace=${tariff.gracePeriodMin}m`
                 : `flat price=$${tariff.pricePerKwhUsd}/kWh, idle=$${tariff.idleFeePerMinUsd}/min, grace=${tariff.gracePeriodMin}m`);
+              await load();
             }}>Save tariff</button>
         </div>
       </div>

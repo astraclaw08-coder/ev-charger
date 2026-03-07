@@ -58,15 +58,20 @@ enum UptimeEventType {
 // ─── Models ───────────────────────────────────────────────────────────────────
 
 model Site {
-  id         String    @id @default(uuid())
-  name       String
-  address    String
-  lat        Float
-  lng        Float
-  operatorId String
-  chargers   Charger[]
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  id               String    @id @default(uuid())
+  name             String
+  address          String
+  lat              Float
+  lng              Float
+  operatorId       String
+  pricingMode      String    @default("flat") // flat | tou
+  pricePerKwhUsd   Float     @default(0.35)
+  idleFeePerMinUsd Float     @default(0.08)
+  gracePeriodMin   Int       @default(10)
+  touWindows       Json?
+  chargers         Charger[]
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   @@index([operatorId])
 }

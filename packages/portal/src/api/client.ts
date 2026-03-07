@@ -6,6 +6,11 @@ export interface SiteListItem {
   address: string;
   lat: number;
   lng: number;
+  pricingMode?: 'flat' | 'tou';
+  pricePerKwhUsd?: number;
+  idleFeePerMinUsd?: number;
+  gracePeriodMin?: number;
+  touWindows?: unknown;
   createdAt: string;
   chargerCount: number;
   statusSummary: { online: number; offline: number; faulted: number };
@@ -44,6 +49,11 @@ export interface SiteDetail {
   address: string;
   lat: number;
   lng: number;
+  pricingMode?: 'flat' | 'tou';
+  pricePerKwhUsd?: number;
+  idleFeePerMinUsd?: number;
+  gracePeriodMin?: number;
+  touWindows?: unknown;
   createdAt: string;
   chargers: ChargerInfo[];
 }
@@ -273,7 +283,20 @@ export function createApiClient(token: string | null | undefined) {
         body: JSON.stringify(body),
       }),
 
-    updateSite: (id: string, body: { name: string; address: string; lat: number; lng: number }) =>
+    updateSite: (
+      id: string,
+      body: {
+        name: string;
+        address: string;
+        lat: number;
+        lng: number;
+        pricingMode?: 'flat' | 'tou';
+        pricePerKwhUsd?: number;
+        idleFeePerMinUsd?: number;
+        gracePeriodMin?: number;
+        touWindows?: unknown;
+      },
+    ) =>
       request<SiteDetail>(`/sites/${id}`, token, {
         method: 'PUT',
         body: JSON.stringify(body),

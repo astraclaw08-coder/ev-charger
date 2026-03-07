@@ -25,7 +25,7 @@ import { useFavorites } from '@/hooks/useFavorites';
 import { HeartButton } from '@/components/HeartButton';
 import { useAppAuth } from '@/providers/AuthProvider';
 
-const RATE_PER_KWH = 0.35; // $/kWh (matches hardcoded server value)
+const RATE_PER_KWH = 0.35; // fallback only
 
 // ── Payment Setup Modal ───────────────────────────────────────────────────────
 
@@ -92,6 +92,7 @@ function ConnectorRow({
   chargerId,
   onSessionStarted,
   isDark,
+  ratePerKwh,
 }: {
   connector: Connector;
   chargerId: string;
@@ -101,6 +102,7 @@ function ConnectorRow({
     connectorStatus: Connector['status'],
   ) => void;
   isDark: boolean;
+  ratePerKwh: number;
 }) {
   const isStartable = connector.status === 'AVAILABLE' || connector.status === 'PREPARING' || connector.status === 'SUSPENDED_EV';
   const isCharging = connector.status === 'CHARGING' || connector.status === 'FINISHING';
@@ -110,7 +112,7 @@ function ConnectorRow({
       <View style={styles.connectorLeft}>
         <Text style={[styles.connectorLabel, { color: isDark ? '#e5e7eb' : '#374151' }]}>Connector {connector.connectorId}</Text>
         <ConnectorStatusBadge status={connector.status} />
-        <Text style={[styles.rateText, { color: isDark ? '#9ca3af' : '#9ca3af' }]}>${RATE_PER_KWH.toFixed(2)}/kWh</Text>
+        <Text style={[styles.rateText, { color: isDark ? '#9ca3af' : '#9ca3af' }]}>${ratePerKwh.toFixed(2)}/kWh</Text>
       </View>
 
       {isStartable && (
@@ -438,6 +440,7 @@ export default function ChargerDetailScreen() {
               connector={connector}
               chargerId={selectedCharger.id}
               isDark={isDark}
+              ratePerKwh={selectedCharger.site.pricePerKwhUsd ?? RATE_PER_KWH}
               onSessionStarted={(cid, connId, connectorStatus) => {
                 if (startMutation.isPending) return;
                 handleStartSession(cid, connId, connectorStatus);
@@ -486,7 +489,7 @@ export default function ChargerDetailScreen() {
         {/* Price info */}
         <View style={[styles.priceNote, { backgroundColor: isDark ? '#1f2937' : '#f3f4f6' }]}>
           <Text style={[styles.priceNoteText, { color: isDark ? '#d1d5db' : '#6b7280' }]}>
-            ⚡ Rate: ${RATE_PER_KWH.toFixed(2)}/kWh · Billed based on energy delivered
+            ⚡ Rate: ${(selectedCharger?.site.pricePerKwhUsd ?? RATE_PER_KWH).toFixed(2)}/kWh · Billed based on energy delivered
           </Text>
         </View>
       </ScrollView>

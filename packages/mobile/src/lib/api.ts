@@ -89,6 +89,11 @@ export interface Charger {
     address: string;
     lat: number;
     lng: number;
+    pricePerKwhUsd?: number;
+    idleFeePerMinUsd?: number;
+    gracePeriodMin?: number;
+    pricingMode?: 'flat' | 'tou';
+    touWindows?: unknown;
   };
   connectors: Connector[];
 }

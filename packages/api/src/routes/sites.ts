@@ -21,7 +21,17 @@ export async function siteRoutes(app: FastifyInstance) {
     });
 
     return sites.map((site: {
-      id: string; name: string; address: string; lat: number; lng: number; createdAt: Date;
+      id: string;
+      name: string;
+      address: string;
+      lat: number;
+      lng: number;
+      pricingMode: string;
+      pricePerKwhUsd: number;
+      idleFeePerMinUsd: number;
+      gracePeriodMin: number;
+      touWindows: unknown;
+      createdAt: Date;
       chargers: Array<{ status: string }>;
     }) => ({
       id: site.id,
@@ -29,6 +39,11 @@ export async function siteRoutes(app: FastifyInstance) {
       address: site.address,
       lat: site.lat,
       lng: site.lng,
+      pricingMode: site.pricingMode,
+      pricePerKwhUsd: site.pricePerKwhUsd,
+      idleFeePerMinUsd: site.idleFeePerMinUsd,
+      gracePeriodMin: site.gracePeriodMin,
+      touWindows: site.touWindows,
       createdAt: site.createdAt,
       chargerCount: site.chargers.length,
       statusSummary: {
@@ -61,6 +76,11 @@ export async function siteRoutes(app: FastifyInstance) {
       address: site.address,
       lat: site.lat,
       lng: site.lng,
+      pricingMode: site.pricingMode,
+      pricePerKwhUsd: site.pricePerKwhUsd,
+      idleFeePerMinUsd: site.idleFeePerMinUsd,
+      gracePeriodMin: site.gracePeriodMin,
+      touWindows: site.touWindows,
       createdAt: site.createdAt,
       chargers: site.chargers.map(({ password: _pw, ...c }: { password: string; [k: string]: unknown }) => c),
     };
@@ -85,7 +105,17 @@ export async function siteRoutes(app: FastifyInstance) {
   // PUT /sites/:id — operator updates site details
   app.put<{
     Params: { id: string };
-    Body: { name: string; address: string; lat: number; lng: number };
+    Body: {
+      name: string;
+      address: string;
+      lat: number;
+      lng: number;
+      pricingMode?: 'flat' | 'tou';
+      pricePerKwhUsd?: number;
+      idleFeePerMinUsd?: number;
+      gracePeriodMin?: number;
+      touWindows?: unknown;
+    };
   }>('/sites/:id', {
     preHandler: [requireOperator, requirePolicy('site.update', { getResourceSiteId: (req) => req.params.id })],
   }, async (req, reply) => {
@@ -95,10 +125,20 @@ export async function siteRoutes(app: FastifyInstance) {
       return reply.status(404).send({ error: 'Site not found' });
     }
 
-    const { name, address, lat, lng } = req.body;
+    const { name, address, lat, lng, pricingMode, pricePerKwhUsd, idleFeePerMinUsd, gracePeriodMin, touWindows } = req.body;
     const site = await prisma.site.update({
       where: { id: req.params.id },
-      data: { name, address, lat, lng },
+      data: {
+        name,
+        address,
+        lat,
+        lng,
+        ...(pricingMode ? { pricingMode } : {}),
+        ...(pricePerKwhUsd != null ? { pricePerKwhUsd } : {}),
+        ...(idleFeePerMinUsd != null ? { idleFeePerMinUsd } : {}),
+        ...(gracePeriodMin != null ? { gracePeriodMin } : {}),
+        ...(Array.isArray(touWindows) ? { touWindows } : {}),
+      },
     });
 
     return site;

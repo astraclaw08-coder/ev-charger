@@ -1,7 +1,7 @@
 import { prisma } from '@ev-charger/shared';
 import type { StartTransactionRequest, StartTransactionResponse } from '@ev-charger/shared';
 
-const DEFAULT_RATE_PER_KWH = 0.35; // USD — set per charger/site in Phase 3
+const DEFAULT_RATE_PER_KWH = 0.35; // USD fallback when site pricing is missing
 const TX_ID_MIN = 10000;
 const TX_ID_MAX = 99999;
 const TX_ID_MAX_ATTEMPTS = 30;
@@ -23,6 +23,15 @@ export async function handleStartTransaction(
     prisma.user.findUnique({ where: { idTag } }),
     prisma.connector.findUnique({
       where: { chargerId_connectorId: { chargerId, connectorId } },
+      include: {
+        charger: {
+          include: {
+            site: {
+              select: { pricePerKwhUsd: true },
+            },
+          },
+        },
+      },
     }),
   ]);
 
@@ -56,7 +65,7 @@ export async function handleStartTransaction(
           idTag,
           startedAt: new Date(timestamp),
           meterStart,
-          ratePerKwh: DEFAULT_RATE_PER_KWH,
+          ratePerKwh: connector.charger.site.pricePerKwhUsd ?? DEFAULT_RATE_PER_KWH,
           status: 'ACTIVE',
         },
       });
