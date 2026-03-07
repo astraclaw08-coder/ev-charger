@@ -253,7 +253,7 @@ export default function Dashboard() {
           <KpiTile label={`Total Revenue (${rangePreset})`} value={`$${fleetKpis.totalRevenue.toFixed(2)}`} />
           <KpiTile label="Total Sites" value={`${fleetKpis.totalSites}`} />
           <KpiTile label="Active Sessions" value={`${fleetKpis.activeSessions}`} />
-          <KpiTile label="Utilization Rate (selected range)" value={`${fleetKpis.utilizationRatePct.toFixed(2)}%`} />
+          <KpiTile label={`Utilization Rate (${rangePreset})`} value={`${fleetKpis.utilizationRatePct.toFixed(2)}%`} />
         </div>
       )}
 
@@ -293,7 +293,7 @@ export default function Dashboard() {
       <DashboardSitesMap sites={siteMapItems} />
 
       <div className="mt-4 rounded-xl border border-gray-200 bg-white p-4">
-        <p className="text-sm font-semibold text-gray-700">Fleet trend ({rangePreset})</p>
+        <p className="text-sm font-semibold text-gray-700">Energy (kWh) | Revenue ($) | Transactions <span className="ml-1 text-xs font-normal text-gray-400">({rangePreset})</span></p>
 
         <div className="mt-3 h-64">
           {loading ? (
