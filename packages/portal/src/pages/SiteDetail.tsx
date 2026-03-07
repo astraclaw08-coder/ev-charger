@@ -1,11 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { createApiClient, type SiteDetail as SiteDetailType, type ChargerUptime, type SiteUptime, type Analytics as SiteAnalytics } from '../api/client';
+import { Bar, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { createApiClient, type SiteDetail as SiteDetailType, type ChargerUptime, type SiteUptime, type Analytics as SiteAnalytics, type DailyEntry } from '../api/client';
 import { useToken } from '../auth/TokenContext';
 import ChargerMap from '../components/ChargerMap';
 import StatusBadge from '../components/StatusBadge';
 import AddChargerDialog from '../components/AddChargerDialog';
 import { formatDate } from '../lib/utils';
+
+type RangePreset = '7d' | '30d' | '60d';
 
 
 type TouWindow = {
@@ -92,7 +95,10 @@ export default function SiteDetail() {
   const [editSiteForm, setEditSiteForm] = useState({ name: '', address: '', lat: '', lng: '' });
   const [chargerUptime, setChargerUptime] = useState<Record<string, ChargerUptime>>({});
   const [siteUptime, setSiteUptime] = useState<SiteUptime | null>(null);
-  const [siteAnalytics30d, setSiteAnalytics30d] = useState<SiteAnalytics | null>(null);
+  const [siteAnalytics, setSiteAnalytics] = useState<SiteAnalytics | null>(null);
+  const [rangePreset, setRangePreset] = useState<RangePreset>('30d');
+  const [trend, setTrend] = useState<Array<{ date: string; label: string; sessions: number; kwhDelivered: number; revenueUsd: number }>>([]);
+  const [activeSessions, setActiveSessions] = useState(0);
 
   const [tariff, setTariff] = useState<TariffConfig>({ pricePerKwhUsd: 0.35, idleFeePerMinUsd: 0.08, gracePeriodMin: 10, mode: 'flat', windows: [] });
   const [tariffMsg, setTariffMsg] = useState('');
@@ -104,20 +110,52 @@ export default function SiteDetail() {
     try {
       const token = await getToken();
       const client = createApiClient(token);
+      const periodDays = rangePreset === '7d' ? 7 : rangePreset === '30d' ? 30 : 60;
+
       const data = await client.getSite(id!);
       setSite(data);
       setEditSiteForm({ name: data.name, address: data.address, lat: String(data.lat), lng: String(data.lng) });
       setTariff(loadTariff(data.id));
-
       setAuditEvents(loadAudit(data.id));
 
-      const [siteUp, analytics30d, perCharger] = await Promise.all([
+      const [siteUp, analytics, perCharger] = await Promise.all([
         client.getSiteUptime(data.id).catch(() => null),
-        client.getAnalytics(data.id, { periodDays: 30 }).catch(() => null),
+        client.getAnalytics(data.id, { periodDays }).catch(() => null),
         Promise.all(data.chargers.map((c) => client.getChargerUptime(c.id).catch(() => null))),
       ]);
+
       if (siteUp) setSiteUptime(siteUp);
-      setSiteAnalytics30d(analytics30d);
+      setSiteAnalytics(analytics);
+
+      // Active sessions count
+      const chargerStatuses = await Promise.all(
+        data.chargers.map((c) => client.getChargerStatus(c.id).catch(() => null)),
+      );
+      setActiveSessions(
+        chargerStatuses.filter(Boolean).reduce((sum, ch) => sum + (ch?.connectors.filter((c) => c.activeSession).length ?? 0), 0),
+      );
+
+      // Trend data from daily analytics
+      const daily = new Map<string, { sessions: number; kwhDelivered: number; revenueCents: number }>();
+      (analytics?.daily ?? []).forEach((d: DailyEntry) => {
+        const row = daily.get(d.date) ?? { sessions: 0, kwhDelivered: 0, revenueCents: 0 };
+        row.sessions += d.sessions;
+        row.kwhDelivered += d.kwhDelivered;
+        row.revenueCents += d.revenueCents;
+        daily.set(d.date, row);
+      });
+      setTrend(
+        Array.from(daily.entries())
+          .sort((a, b) => a[0].localeCompare(b[0]))
+          .map(([date, row]) => ({
+            date,
+            label: date.slice(5),
+            sessions: row.sessions,
+            kwhDelivered: Math.round(row.kwhDelivered * 1000) / 1000,
+            revenueUsd: Math.round(row.revenueCents) / 100,
+          })),
+      );
+
       const map: Record<string, ChargerUptime> = {};
       perCharger.forEach((u) => { if (u) map[u.chargerId] = u; });
       setChargerUptime(map);
@@ -126,7 +164,7 @@ export default function SiteDetail() {
     } finally {
       setLoading(false);
     }
-  }, [id, getToken]);
+  }, [id, getToken, rangePreset]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -145,25 +183,47 @@ export default function SiteDetail() {
     localStorage.setItem(auditKey(site.id), JSON.stringify(next.slice(0, 250)));
   };
 
+  const totalKwh = siteAnalytics?.kwhDelivered ?? 0;
+  const totalRevenue = (siteAnalytics?.revenueCents ?? 0) / 100;
+  const utilizationPct = siteAnalytics?.utilizationRatePct != null ? Number(siteAnalytics.utilizationRatePct) : null;
+  const totalConnectors = site.chargers.reduce((s, c) => s + c.connectors.length, 0);
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+
+      {/* ── Header ── */}
+      <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <div className="flex items-center gap-2 text-sm text-gray-500">
             <Link to="/" className="hover:text-gray-700">Dashboard</Link>
+            <span>/</span>
+            <Link to="/sites" className="hover:text-gray-700">Sites</Link>
             <span>/</span>
             <span className="text-gray-900">{site.name}</span>
           </div>
           <h1 className="mt-1 text-2xl font-bold text-gray-900">{site.name}</h1>
           <p className="text-sm text-gray-500">{site.address}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-gray-500">KPI period</p>
+            <select
+              value={rangePreset}
+              onChange={(e) => setRangePreset(e.target.value as RangePreset)}
+              className="mt-1 rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+            >
+              <option value="7d">Last 7 days</option>
+              <option value="30d">Last 30 days</option>
+              <option value="60d">Last 60 days</option>
+            </select>
+          </div>
           <button onClick={() => setShowEditSite((v) => !v)} className="rounded-md border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">Edit Site</button>
           <Link to={`/sites/${site.id}/analytics`} className="rounded-md border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50">Analytics</Link>
           <button onClick={() => setShowAddCharger(true)} className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">+ Add Charger</button>
         </div>
       </div>
 
+      {/* ── Edit site form ── */}
       {showEditSite && (
         <div className="rounded-xl border border-gray-200 bg-white p-4">
           <h2 className="mb-3 text-sm font-semibold text-gray-700">Edit site details</h2>
@@ -182,144 +242,136 @@ export default function SiteDetail() {
             </label>
           </div>
           <div className="mt-3 flex gap-2">
-            <button
-              className="rounded-md bg-brand-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-700"
+            <button className="rounded-md bg-brand-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-700"
               onClick={async () => {
                 const token = await getToken();
-                const payload = {
-                  name: editSiteForm.name.trim(),
-                  address: editSiteForm.address.trim(),
-                  lat: Number(editSiteForm.lat),
-                  lng: Number(editSiteForm.lng),
-                };
+                const payload = { name: editSiteForm.name.trim(), address: editSiteForm.address.trim(), lat: Number(editSiteForm.lat), lng: Number(editSiteForm.lng) };
                 await createApiClient(token).updateSite(site.id, payload);
-                pushAudit('site.updated', `${payload.name} @ ${payload.address} (${payload.lat}, ${payload.lng})`);
+                pushAudit('site.updated', `${payload.name} @ ${payload.address}`);
                 setShowEditSite(false);
                 await load();
-              }}
-            >Save site</button>
+              }}>Save site</button>
             <button className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50" onClick={() => setShowEditSite(false)}>Cancel</button>
           </div>
         </div>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <div className="rounded-xl border border-gray-200 bg-white p-4">
-          <h2 className="mb-3 text-sm font-semibold text-gray-700">Pricing / tariff controls</h2>
-          <div className="space-y-2 text-sm">
-            <label className="block">Pricing mode
-              <select className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5" value={tariff.mode} onChange={(e) => setTariff({ ...tariff, mode: e.target.value as TariffConfig['mode'] })}>
-                <option value="flat">Flat rate</option>
-                <option value="tou">Time-of-Use (TOU)</option>
-              </select>
-            </label>
-            <label className="block">Price per kWh (USD)
-              <input type="number" step="0.01" className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5" value={tariff.pricePerKwhUsd} onChange={(e)=>setTariff({...tariff, pricePerKwhUsd:Number(e.target.value)})} />
-            </label>
-            <label className="block">Idle fee per min (USD)
-              <input type="number" step="0.01" className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5" value={tariff.idleFeePerMinUsd} onChange={(e)=>setTariff({...tariff, idleFeePerMinUsd:Number(e.target.value)})} />
-            </label>
-            <label className="block">Grace period (minutes)
-              <input type="number" className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5" value={tariff.gracePeriodMin} onChange={(e)=>setTariff({...tariff, gracePeriodMin:Number(e.target.value)})} />
-            </label>
+      {/* ── KPI tiles (dashboard style) ── */}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <SiteKpiTile label={`Total kWh (${rangePreset})`} value={`${totalKwh.toFixed(2)} kWh`} />
+        <SiteKpiTile label={`Total Revenue (${rangePreset})`} value={`$${totalRevenue.toFixed(2)}`} />
+        <SiteKpiTile label="Active Sessions" value={`${activeSessions}`} live />
+        <SiteKpiTile label="Total Connectors" value={`${totalConnectors}`} live />
+        <SiteKpiTile label={`Utilization (${rangePreset})`} value={utilizationPct != null ? `${utilizationPct.toFixed(2)}%` : '—'} />
+      </div>
 
-            {tariff.mode === 'tou' && (
-              <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
-                <div className="mb-2 flex items-center justify-between">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-600">TOU windows</p>
-                  <button
-                    type="button"
-                    className="rounded-md border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 hover:bg-gray-100"
-                    onClick={() => setTariff((prev) => ({
-                      ...prev,
-                      windows: [...prev.windows, { id: crypto.randomUUID(), day: 1, start: '09:00', end: '17:00', pricePerKwhUsd: prev.pricePerKwhUsd, idleFeePerMinUsd: prev.idleFeePerMinUsd }],
-                    }))}
-                  >
-                    + Add window
-                  </button>
-                </div>
-
-                {tariff.windows.length === 0 ? (
-                  <p className="text-xs text-gray-500">No TOU windows yet. Add at least one window to activate TOU pricing.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {tariff.windows.map((w) => (
-                      <div key={w.id} className="grid gap-2 rounded-md border border-gray-200 bg-white p-2 md:grid-cols-6">
-                        <select className="rounded-md border border-gray-300 px-2 py-1.5 text-xs" value={w.day} onChange={(e) => setTariff((prev) => ({ ...prev, windows: prev.windows.map((x) => x.id === w.id ? { ...x, day: Number(e.target.value) } : x) }))}>
-                          {DAY_NAMES.map((name, idx) => <option key={name} value={idx}>{name}</option>)}
-                        </select>
-                        <input type="time" className="rounded-md border border-gray-300 px-2 py-1.5 text-xs" value={w.start} onChange={(e) => setTariff((prev) => ({ ...prev, windows: prev.windows.map((x) => x.id === w.id ? { ...x, start: e.target.value } : x) }))} />
-                        <input type="time" className="rounded-md border border-gray-300 px-2 py-1.5 text-xs" value={w.end} onChange={(e) => setTariff((prev) => ({ ...prev, windows: prev.windows.map((x) => x.id === w.id ? { ...x, end: e.target.value } : x) }))} />
-                        <input type="number" step="0.01" className="rounded-md border border-gray-300 px-2 py-1.5 text-xs" value={w.pricePerKwhUsd} onChange={(e) => setTariff((prev) => ({ ...prev, windows: prev.windows.map((x) => x.id === w.id ? { ...x, pricePerKwhUsd: Number(e.target.value) } : x) }))} placeholder="$/kWh" />
-                        <input type="number" step="0.01" className="rounded-md border border-gray-300 px-2 py-1.5 text-xs" value={w.idleFeePerMinUsd} onChange={(e) => setTariff((prev) => ({ ...prev, windows: prev.windows.map((x) => x.id === w.id ? { ...x, idleFeePerMinUsd: Number(e.target.value) } : x) }))} placeholder="$/min" />
-                        <button type="button" className="rounded-md border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-700 hover:bg-red-100" onClick={() => setTariff((prev) => ({ ...prev, windows: prev.windows.filter((x) => x.id !== w.id) }))}>Remove</button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {tariff.windows.length > 0 && (
-                  <div className="mt-3 rounded-md border border-gray-200 bg-white p-2">
-                    <p className="mb-1 text-xs font-medium text-gray-600">Active TOU schedule</p>
-                    <div className="space-y-1 text-xs text-gray-700">
-                      {tariff.windows
-                        .slice()
-                        .sort((a, b) => (a.day - b.day) || (timeToMinutes(a.start) - timeToMinutes(b.start)))
-                        .map((w) => (
-                          <div key={`summary-${w.id}`} className="flex items-center justify-between">
-                            <span>{DAY_NAMES[w.day]} {w.start}–{w.end}</span>
-                            <span>${w.pricePerKwhUsd.toFixed(2)}/kWh · ${w.idleFeePerMinUsd.toFixed(2)}/min</span>
-                          </div>
-                        ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {tariffMsg && <p className="text-xs text-gray-600">{tariffMsg}</p>}
-
-            <button
-              type="button"
-              className="rounded-md bg-brand-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-700"
-              onClick={()=>{
-                const overlapError = tariff.mode === 'tou' ? validateTouWindows(tariff.windows) : null;
-                if (overlapError) {
-                  setTariffMsg(overlapError);
-                  return;
-                }
-
-                localStorage.setItem(tariffKey(site.id), JSON.stringify(tariff));
-                setTariffMsg(tariff.mode === 'tou' ? `Saved TOU tariff with ${tariff.windows.length} windows.` : 'Saved flat-rate tariff.');
-                pushAudit('tariff.updated', tariff.mode === 'tou'
-                  ? `tou windows=${tariff.windows.length}, base=$${tariff.pricePerKwhUsd}/kWh idle=$${tariff.idleFeePerMinUsd}/min grace=${tariff.gracePeriodMin}m`
-                  : `flat price=$${tariff.pricePerKwhUsd}/kWh, idle=$${tariff.idleFeePerMinUsd}/min, grace=${tariff.gracePeriodMin}m`);
-              }}
-            >Save tariff</button>
-          </div>
+      {/* ── Tariff (full width, below tiles) ── */}
+      <div className="rounded-xl border border-gray-200 bg-white p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-gray-700">Pricing / Tariff</h2>
+          {tariffMsg && <p className="text-xs text-gray-500">{tariffMsg}</p>}
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <label className="text-sm text-gray-700">Pricing mode
+            <select className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5" value={tariff.mode} onChange={(e) => setTariff({ ...tariff, mode: e.target.value as TariffConfig['mode'] })}>
+              <option value="flat">Flat rate</option>
+              <option value="tou">Time-of-Use (TOU)</option>
+            </select>
+          </label>
+          <label className="text-sm text-gray-700">Price per kWh (USD)
+            <input type="number" step="0.01" className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5" value={tariff.pricePerKwhUsd} onChange={(e) => setTariff({ ...tariff, pricePerKwhUsd: Number(e.target.value) })} />
+          </label>
+          <label className="text-sm text-gray-700">Idle fee per min (USD)
+            <input type="number" step="0.01" className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5" value={tariff.idleFeePerMinUsd} onChange={(e) => setTariff({ ...tariff, idleFeePerMinUsd: Number(e.target.value) })} />
+          </label>
+          <label className="text-sm text-gray-700">Grace period (min)
+            <input type="number" className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5" value={tariff.gracePeriodMin} onChange={(e) => setTariff({ ...tariff, gracePeriodMin: Number(e.target.value) })} />
+          </label>
         </div>
 
-        <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 lg:col-span-2">
-          <p className="text-xs text-gray-500">Site role assignments have been moved to <strong>Settings → Site role assignments</strong>.</p>
+        {tariff.mode === 'tou' && (
+          <div className="mt-4 rounded-md border border-gray-200 bg-gray-50 p-3">
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-600">TOU windows</p>
+              <button type="button" className="rounded-md border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 hover:bg-gray-100"
+                onClick={() => setTariff((prev) => ({ ...prev, windows: [...prev.windows, { id: crypto.randomUUID(), day: 1, start: '09:00', end: '17:00', pricePerKwhUsd: prev.pricePerKwhUsd, idleFeePerMinUsd: prev.idleFeePerMinUsd }] }))}>
+                + Add window
+              </button>
+            </div>
+            {tariff.windows.length === 0 ? (
+              <p className="text-xs text-gray-500">No TOU windows yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {tariff.windows.map((w) => (
+                  <div key={w.id} className="grid gap-2 rounded-md border border-gray-200 bg-white p-2 md:grid-cols-6">
+                    <select className="rounded-md border border-gray-300 px-2 py-1.5 text-xs" value={w.day} onChange={(e) => setTariff((p) => ({ ...p, windows: p.windows.map((x) => x.id === w.id ? { ...x, day: Number(e.target.value) } : x) }))}>
+                      {DAY_NAMES.map((name, idx) => <option key={name} value={idx}>{name}</option>)}
+                    </select>
+                    <input type="time" className="rounded-md border border-gray-300 px-2 py-1.5 text-xs" value={w.start} onChange={(e) => setTariff((p) => ({ ...p, windows: p.windows.map((x) => x.id === w.id ? { ...x, start: e.target.value } : x) }))} />
+                    <input type="time" className="rounded-md border border-gray-300 px-2 py-1.5 text-xs" value={w.end} onChange={(e) => setTariff((p) => ({ ...p, windows: p.windows.map((x) => x.id === w.id ? { ...x, end: e.target.value } : x) }))} />
+                    <input type="number" step="0.01" className="rounded-md border border-gray-300 px-2 py-1.5 text-xs" value={w.pricePerKwhUsd} onChange={(e) => setTariff((p) => ({ ...p, windows: p.windows.map((x) => x.id === w.id ? { ...x, pricePerKwhUsd: Number(e.target.value) } : x) }))} placeholder="$/kWh" />
+                    <input type="number" step="0.01" className="rounded-md border border-gray-300 px-2 py-1.5 text-xs" value={w.idleFeePerMinUsd} onChange={(e) => setTariff((p) => ({ ...p, windows: p.windows.map((x) => x.id === w.id ? { ...x, idleFeePerMinUsd: Number(e.target.value) } : x) }))} placeholder="$/min" />
+                    <button type="button" className="rounded-md border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-700 hover:bg-red-100" onClick={() => setTariff((p) => ({ ...p, windows: p.windows.filter((x) => x.id !== w.id) }))}>Remove</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="mt-3">
+          <button type="button" className="rounded-md bg-brand-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-700"
+            onClick={() => {
+              const overlapError = tariff.mode === 'tou' ? validateTouWindows(tariff.windows) : null;
+              if (overlapError) { setTariffMsg(overlapError); return; }
+              localStorage.setItem(tariffKey(site.id), JSON.stringify(tariff));
+              setTariffMsg(tariff.mode === 'tou' ? `Saved TOU tariff (${tariff.windows.length} windows)` : 'Saved flat-rate tariff.');
+              pushAudit('tariff.updated', tariff.mode === 'tou'
+                ? `tou windows=${tariff.windows.length}, base=$${tariff.pricePerKwhUsd}/kWh idle=$${tariff.idleFeePerMinUsd}/min grace=${tariff.gracePeriodMin}m`
+                : `flat price=$${tariff.pricePerKwhUsd}/kWh, idle=$${tariff.idleFeePerMinUsd}/min, grace=${tariff.gracePeriodMin}m`);
+            }}>Save tariff</button>
         </div>
       </div>
 
+      {/* ── Trend chart (dashboard style) ── */}
+      <div className="rounded-xl border border-gray-200 bg-white p-4">
+        <p className="text-sm font-semibold text-gray-700">
+          Energy (kWh) | Revenue ($) | Sessions <span className="ml-1 text-xs font-normal text-gray-400">({rangePreset})</span>
+        </p>
+        <div className="mt-3 h-64">
+          {trend.length === 0 ? (
+            <div className="flex h-full items-center justify-center text-sm text-gray-400">No trend data for selected period.</div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={trend} margin={{ top: 4, right: 16, bottom: 0, left: 0 }}>
+                <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+                <YAxis yAxisId="kwh" tick={{ fontSize: 10 }} />
+                <YAxis yAxisId="rev" orientation="right" tick={{ fontSize: 10 }} tickFormatter={(v: number) => `$${v}`} />
+                <Tooltip formatter={(v: number, name: string) => name === 'revenueUsd' ? [`$${v.toFixed(2)}`, 'Revenue'] : name === 'kwhDelivered' ? [`${v} kWh`, 'Energy'] : [v, 'Sessions']} />
+                <Bar yAxisId="kwh" dataKey="kwhDelivered" fill="#10b981" opacity={0.7} name="kwhDelivered" />
+                <Line yAxisId="rev" type="monotone" dataKey="revenueUsd" stroke="#6366f1" dot={false} strokeWidth={2} name="revenueUsd" />
+                <Line yAxisId="kwh" type="monotone" dataKey="sessions" stroke="#f59e0b" dot={false} strokeWidth={1.5} name="sessions" />
+              </ComposedChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      </div>
 
+      {/* ── Uptime summary ── */}
       {siteUptime && (
-        <div className="rounded-xl border border-gray-200 bg-white p-4">
-          <h2 className="mb-2 text-sm font-semibold text-gray-700">Site uptime summary (OCA v1.1)</h2>
-          <div className="grid gap-3 sm:grid-cols-5 text-sm">
-            <div><p className="text-gray-500">24h</p><p className="font-semibold text-gray-900">{siteUptime.uptimePercent24h.toFixed(2)}%</p></div>
-            <div><p className="text-gray-500">7d</p><p className="font-semibold text-gray-900">{siteUptime.uptimePercent7d.toFixed(2)}%</p></div>
-            <div><p className="text-gray-500">30d</p><p className="font-semibold text-gray-900">{siteUptime.uptimePercent30d.toFixed(2)}%</p></div>
-            <div><p className="text-gray-500">Utilization (30d)</p><p className="font-semibold text-gray-900">{siteAnalytics30d?.utilizationRatePct != null ? `${Number(siteAnalytics30d.utilizationRatePct).toFixed(2)}%` : '—'}</p></div>
-            <div><p className="text-gray-500">Degraded</p><p className="font-semibold text-amber-700">{siteUptime.degradedChargers}</p></div>
-          </div>
+        <div className="grid gap-3 sm:grid-cols-5">
+          <div className="rounded-lg border border-gray-200 bg-white p-3 text-center"><p className="text-xs text-gray-500">Uptime 24h</p><p className="mt-1 text-lg font-semibold text-gray-900">{siteUptime.uptimePercent24h.toFixed(1)}%</p></div>
+          <div className="rounded-lg border border-gray-200 bg-white p-3 text-center"><p className="text-xs text-gray-500">Uptime 7d</p><p className="mt-1 text-lg font-semibold text-gray-900">{siteUptime.uptimePercent7d.toFixed(1)}%</p></div>
+          <div className="rounded-lg border border-gray-200 bg-white p-3 text-center"><p className="text-xs text-gray-500">Uptime 30d</p><p className="mt-1 text-lg font-semibold text-gray-900">{siteUptime.uptimePercent30d.toFixed(1)}%</p></div>
+          <div className="rounded-lg border border-gray-200 bg-white p-3 text-center"><p className="text-xs text-gray-500">Degraded</p><p className="mt-1 text-lg font-semibold text-amber-700">{siteUptime.degradedChargers}</p></div>
+          <div className="rounded-lg border border-gray-200 bg-white p-3 text-center"><p className="text-xs text-gray-500">Total chargers</p><p className="mt-1 text-lg font-semibold text-gray-900">{site.chargers.length}</p></div>
         </div>
       )}
 
+      {/* ── Map ── */}
       <ChargerMap lat={site.lat} lng={site.lng} siteName={site.name} chargers={site.chargers} />
 
+      {/* ── Charger list ── */}
       <div>
         <h2 className="mb-3 text-lg font-semibold text-gray-900">Chargers ({site.chargers.length})</h2>
         {site.chargers.length === 0 ? (
@@ -331,24 +383,22 @@ export default function SiteDetail() {
         ) : site.chargers.length > 4 ? (
           <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
             <div className="hidden grid-cols-[1.6fr_1fr_1.8fr_0.8fr] gap-3 border-b border-gray-200 bg-gray-50 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500 md:grid">
-              <span>Charger</span>
-              <span>Status</span>
-              <span>Connectors</span>
-              <span className="text-right">Action</span>
+              <span>Charger</span><span>Status</span><span>Connectors</span><span className="text-right">Action</span>
             </div>
             <div className="divide-y divide-gray-100">
-              {site.chargers.map((charger) => (
-                <ChargerListRow key={charger.id} charger={charger} uptime={chargerUptime[charger.id]} />
-              ))}
+              {site.chargers.map((charger) => <ChargerListRow key={charger.id} charger={charger} uptime={chargerUptime[charger.id]} />)}
             </div>
           </div>
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{site.chargers.map((charger) => (<ChargerCard key={charger.id} charger={charger} uptime={chargerUptime[charger.id]} />))}</div>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {site.chargers.map((charger) => <ChargerCard key={charger.id} charger={charger} uptime={chargerUptime[charger.id]} />)}
+          </div>
         )}
       </div>
 
+      {/* ── Audit trail ── */}
       <div className="rounded-xl border border-gray-200 bg-white p-4">
-        <h2 className="mb-3 text-sm font-semibold text-gray-700">Audit trail view</h2>
+        <h2 className="mb-3 text-sm font-semibold text-gray-700">Audit trail</h2>
         <div className="space-y-2">
           {auditEvents.length === 0 && <p className="text-xs text-gray-500">No audit events yet.</p>}
           {auditEvents.slice(0, 20).map((e) => (
@@ -373,6 +423,18 @@ export default function SiteDetail() {
           onClose={() => setShowAddCharger(false)}
         />
       )}
+    </div>
+  );
+}
+
+function SiteKpiTile({ label, value, live }: { label: string; value: string; live?: boolean }) {
+  return (
+    <div className="rounded-lg border border-gray-200 bg-white p-4">
+      <div className="flex items-center gap-1.5">
+        <p className="text-xs font-medium uppercase tracking-wide text-gray-500">{label}</p>
+        {live && <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-500" title="Live" />}
+      </div>
+      <p className="mt-1 text-2xl font-semibold text-gray-900">{value}</p>
     </div>
   );
 }
