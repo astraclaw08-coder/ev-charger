@@ -3,6 +3,8 @@ import { createApiClient, type AdminAuditEvent, type ChargerModelCatalogItem, ty
 import { useToken } from '../auth/TokenContext';
 import UserManagement from './UserManagement';
 import SiteRoleAssignment from './SiteRoleAssignment';
+import { cn } from '../lib/utils';
+import { usePortalTheme } from '../theme/ThemeContext';
 
 type OrgDraft = {
   organizationName: string;
@@ -34,8 +36,26 @@ const EMPTY_ORG: OrgDraft = {
   reason: '',
 };
 
+function SunIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.9">
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v2.5M12 19.5V22M4.93 4.93l1.77 1.77M17.3 17.3l1.77 1.77M2 12h2.5M19.5 12H22M4.93 19.07 6.7 17.3M17.3 6.7l1.77-1.77" />
+    </svg>
+  );
+}
+
+function MoonIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.9">
+      <path d="M21 14.2A8.8 8.8 0 1 1 9.8 3a7.2 7.2 0 1 0 11.2 11.2Z" />
+    </svg>
+  );
+}
+
 export default function Settings() {
   const getToken = useToken();
+  const { theme, toggleTheme } = usePortalTheme();
   const [org, setOrg] = useState<OrgDraft>(EMPTY_ORG);
   const [notifications, setNotifications] = useState<OperatorNotificationPreference | null>(null);
   const [models, setModels] = useState<ChargerModelCatalogItem[]>([]);
@@ -164,10 +184,27 @@ export default function Settings() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-gray-900">Settings</h1>
-        <p className="text-sm text-gray-500">RBAC-gated admin settings with reason-required, audit-friendly updates.</p>
-        {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold text-gray-900">Settings</h1>
+          <p className="text-sm text-gray-500">RBAC-gated admin settings with reason-required, audit-friendly updates.</p>
+          {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+        </div>
+        <button
+          type="button"
+          onClick={toggleTheme}
+          className={cn(
+            'inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-1',
+            theme === 'dark'
+              ? 'border-gray-600 bg-gray-800 text-gray-100 hover:bg-gray-700 hover:text-white'
+              : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-100 hover:text-gray-900',
+          )}
+          aria-label={theme === 'dark' ? 'Dark theme active' : 'Light theme active'}
+          title={theme === 'dark' ? 'Dark theme active' : 'Light theme active'}
+        >
+          {theme === 'dark' ? <MoonIcon /> : <SunIcon />}
+          <span>{theme === 'dark' ? 'Dark' : 'Light'}</span>
+        </button>
       </div>
 
       <section className="rounded-xl border border-gray-200 bg-white p-4">
