@@ -268,10 +268,56 @@ export async function siteRoutes(app: FastifyInstance) {
       ? Math.round((activeChargingSeconds / availableConnectorSeconds) * 10000) / 100
       : 0;
 
-    // Uptime approximation: % of chargers currently ONLINE
-    const totalChargers = site.chargers.length;
-    const onlineChargers = site.chargers.filter((c: { status: string }) => c.status === 'ONLINE').length;
-    const uptimePct = totalChargers > 0 ? Math.round((onlineChargers / totalChargers) * 100) : 0;
+    // Uptime (period-aligned): derive per-charger uptime from uptime events over selected window.
+    const mapEventToStatus = (event: string): 'ONLINE' | 'OFFLINE' | 'DEGRADED' | 'FAULTED' => (
+      event === 'ONLINE' || event === 'RECOVERED'
+        ? 'ONLINE'
+        : event === 'FAULTED'
+          ? 'FAULTED'
+          : event === 'DEGRADED'
+            ? 'DEGRADED'
+            : 'OFFLINE'
+    );
+
+    const chargerUptimePct = await Promise.all(site.chargers.map(async (charger: { id: string; status: string }) => {
+      const [eventsInRange, beforeRange] = await Promise.all([
+        prisma.uptimeEvent.findMany({
+          where: { chargerId: charger.id, createdAt: { gte: startDate, lte: endDate } },
+          orderBy: { createdAt: 'asc' },
+        }),
+        prisma.uptimeEvent.findFirst({
+          where: { chargerId: charger.id, createdAt: { lt: startDate } },
+          orderBy: { createdAt: 'desc' },
+        }),
+      ]);
+
+      let state: 'ONLINE' | 'OFFLINE' | 'DEGRADED' | 'FAULTED' = beforeRange
+        ? mapEventToStatus(beforeRange.event)
+        : (charger.status as 'ONLINE' | 'OFFLINE' | 'DEGRADED' | 'FAULTED');
+
+      let upMs = 0;
+      let cursor = startDate.getTime();
+      const endMs = endDate.getTime();
+
+      for (const e of eventsInRange) {
+        const ts = e.createdAt.getTime();
+        if (ts <= cursor) {
+          state = mapEventToStatus(e.event);
+          continue;
+        }
+        if (state === 'ONLINE') upMs += ts - cursor;
+        cursor = ts;
+        state = mapEventToStatus(e.event);
+      }
+
+      if (state === 'ONLINE') upMs += endMs - cursor;
+      const totalMs = endMs - startDate.getTime();
+      return totalMs > 0 ? Math.max(0, Math.min(100, (upMs / totalMs) * 100)) : 0;
+    }));
+
+    const uptimePct = chargerUptimePct.length
+      ? Math.round((chargerUptimePct.reduce((s, v) => s + v, 0) / chargerUptimePct.length) * 100) / 100
+      : 0;
 
     // Build daily breakdown: group sessions by UTC date, fill gaps with zeros
     const dailyMap: Record<string, { date: string; sessions: number; kwhDelivered: number; revenueCents: number }> = {};
