@@ -7,8 +7,7 @@ import StatusBadge from '../components/StatusBadge';
 import AddChargerDialog from '../components/AddChargerDialog';
 import { formatDate } from '../lib/utils';
 
-type RoleName = 'owner' | 'operator' | 'customer-service' | 'nre' | 'analyst';
-type RoleAssignment = { id: string; email: string; roles: RoleName[]; createdAt: string };
+
 type TouWindow = {
   id: string;
   day: number; // 0=Sun ... 6=Sat
@@ -27,7 +26,7 @@ type TariffConfig = {
 type SiteAuditEvent = { id: string; action: string; actor: string; detail: string; createdAt: string };
 
 function tariffKey(siteId: string) { return `ev-portal:site:tariff:${siteId}`; }
-function rolesKey(siteId: string) { return `ev-portal:site:roles:${siteId}`; }
+
 function auditKey(siteId: string) { return `ev-portal:site:audit:${siteId}`; }
 
 function loadTariff(siteId: string): TariffConfig {
@@ -46,9 +45,7 @@ function loadTariff(siteId: string): TariffConfig {
   } catch {}
   return { pricePerKwhUsd: 0.35, idleFeePerMinUsd: 0.08, gracePeriodMin: 10, mode: 'flat', windows: [] };
 }
-function loadRoles(siteId: string): RoleAssignment[] {
-  try { const raw = localStorage.getItem(rolesKey(siteId)); if (!raw) return []; const x = JSON.parse(raw) as RoleAssignment[]; return Array.isArray(x) ? x : []; } catch { return []; }
-}
+
 function loadAudit(siteId: string): SiteAuditEvent[] {
   try { const raw = localStorage.getItem(auditKey(siteId)); if (!raw) return []; const x = JSON.parse(raw) as SiteAuditEvent[]; return Array.isArray(x) ? x : []; } catch { return []; }
 }
@@ -99,10 +96,9 @@ export default function SiteDetail() {
 
   const [tariff, setTariff] = useState<TariffConfig>({ pricePerKwhUsd: 0.35, idleFeePerMinUsd: 0.08, gracePeriodMin: 10, mode: 'flat', windows: [] });
   const [tariffMsg, setTariffMsg] = useState('');
-  const [assignments, setAssignments] = useState<RoleAssignment[]>([]);
+
   const [auditEvents, setAuditEvents] = useState<SiteAuditEvent[]>([]);
-  const [emailInput, setEmailInput] = useState('');
-  const [roleDraft, setRoleDraft] = useState<RoleName[]>(['operator']);
+
 
   const load = useCallback(async () => {
     try {
@@ -112,7 +108,7 @@ export default function SiteDetail() {
       setSite(data);
       setEditSiteForm({ name: data.name, address: data.address, lat: String(data.lat), lng: String(data.lng) });
       setTariff(loadTariff(data.id));
-      setAssignments(loadRoles(data.id));
+
       setAuditEvents(loadAudit(data.id));
 
       const [siteUp, analytics30d, perCharger] = await Promise.all([
