@@ -11,7 +11,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Link, useRouter } from 'expo-router';
-import { AntDesign } from '@expo/vector-icons';
+import { AntDesign, Ionicons } from '@expo/vector-icons';
 
 type SignUpMethod = 'email' | 'phone';
 type VerifyMethod = 'email_code' | 'phone_code';
@@ -253,7 +253,7 @@ export default function SignUpScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.oauthBtn} onPress={() => handleOAuth('apple')} disabled={loading}>
-              <AntDesign name="apple1" size={18} color="#ffffff" />
+              <Ionicons name="logo-apple" size={18} color="#ffffff" />
               <Text style={styles.oauthText}>Continue with Apple</Text>
             </TouchableOpacity>
 
