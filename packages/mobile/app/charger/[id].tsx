@@ -189,6 +189,12 @@ export default function ChargerDetailScreen() {
     enabled: Boolean(selectedCharger?.id ?? id),
   });
 
+  const { data: profile } = useQuery({
+    queryKey: ['me-profile'],
+    queryFn: () => api.profile.get(),
+    enabled: !isGuest,
+  });
+
   useFocusEffect(
     React.useCallback(() => {
       refetch();
@@ -351,6 +357,19 @@ export default function ChargerDetailScreen() {
     c.connectors.some((connector) => connector.status === 'AVAILABLE'),
   ).length;
 
+  const hasDefaultPaymentMethod = Boolean(profile?.paymentProfile?.trim());
+  const pricePerKwhUsd = Number(selectedCharger?.site.pricePerKwhUsd ?? 0);
+  const idleFeePerMinUsd = Number(selectedCharger?.site.idleFeePerMinUsd ?? 0);
+  const activationFeeUsd = Number(
+    ((selectedCharger?.site as any)?.activationFeeUsd ?? ((selectedCharger?.site as any)?.activationFeeCents != null
+      ? Number((selectedCharger?.site as any).activationFeeCents) / 100
+      : 0)) ?? 0,
+  );
+  const hasBillablePricing = [pricePerKwhUsd, idleFeePerMinUsd, activationFeeUsd].some(
+    (value) => Number.isFinite(value) && value > 0,
+  );
+  const showPaymentSetupBanner = !isGuest && !hasDefaultPaymentMethod && hasBillablePricing;
+
   return (
     <>
       <Stack.Screen
@@ -399,8 +418,8 @@ export default function ChargerDetailScreen() {
           )}
         </View>
 
-        {/* Payment setup (dev mode: skipped silently) */}
-        <PaymentSetupBanner onSetupComplete={() => {}} isDark={isDark} />
+        {/* Payment setup: show only for signed-in users without a default payment method on billable sites */}
+        {showPaymentSetupBanner && <PaymentSetupBanner onSetupComplete={() => {}} isDark={isDark} />}
 
         {/* Chargers at this site */}
         <View style={[styles.section, { backgroundColor: isDark ? '#111827' : '#fff' }]}>
