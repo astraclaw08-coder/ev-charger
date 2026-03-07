@@ -67,17 +67,27 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
       {/* Main content */}
       <main className="flex-1 overflow-auto">
-        <div className="sticky top-0 z-20 border-b border-gray-200 bg-gray-50/95 backdrop-blur">
+        <div
+          className={cn(
+            'sticky top-0 z-20 border-b backdrop-blur',
+            theme === 'dark' ? 'border-gray-700 bg-gray-900/95' : 'border-gray-200 bg-gray-50/95',
+          )}
+        >
           <div className="mx-auto flex max-w-6xl items-center justify-end px-6 py-3">
             <button
               type="button"
               onClick={toggleTheme}
-              className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 transition hover:bg-gray-100 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-1"
-              aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
-              title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+              className={cn(
+                'inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-1',
+                theme === 'dark'
+                  ? 'border-gray-600 bg-gray-800 text-gray-100 hover:bg-gray-700 hover:text-white'
+                  : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-100 hover:text-gray-900',
+              )}
+              aria-label={theme === 'dark' ? 'Dark theme active' : 'Light theme active'}
+              title={theme === 'dark' ? 'Dark theme active' : 'Light theme active'}
             >
-              {theme === 'dark' ? <SunIcon /> : <MoonIcon />}
-              <span>{theme === 'dark' ? 'Light' : 'Dark'}</span>
+              {theme === 'dark' ? <MoonIcon /> : <SunIcon />}
+              <span>{theme === 'dark' ? 'Dark' : 'Light'}</span>
             </button>
           </div>
         </div>
