@@ -69,6 +69,8 @@ model Site {
   idleFeePerMinUsd Float     @default(0.08)
   gracePeriodMin   Int       @default(10)
   touWindows       Json?
+  organizationName String?
+  portfolioName    String?
   chargers         Charger[]
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
@@ -220,6 +222,8 @@ model PortalSettings {
   id                       String   @id @default(uuid())
   scopeKey                 String   @unique
   organizationName         String?
+  organizationDefaultSite  String?
+  organizationPortfolio    String?
   organizationBillingAddress String?
   supportContactEmail      String?
   supportContactPhone      String?

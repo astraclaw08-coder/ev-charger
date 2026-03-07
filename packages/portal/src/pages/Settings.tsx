@@ -8,6 +8,8 @@ import { usePortalTheme } from '../theme/ThemeContext';
 
 type OrgDraft = {
   organizationName: string;
+  organizationDefaultSite: string;
+  organizationPortfolio: string;
   organizationBillingAddress: string;
   supportContactEmail: string;
   supportContactPhone: string;
@@ -23,6 +25,8 @@ type OrgDraft = {
 
 const EMPTY_ORG: OrgDraft = {
   organizationName: '',
+  organizationDefaultSite: '',
+  organizationPortfolio: '',
   organizationBillingAddress: '',
   supportContactEmail: '',
   supportContactPhone: '',
@@ -98,6 +102,8 @@ export default function Settings() {
       setAudit((auditItems ?? []).filter((a) => typeof a?.action === 'string' && a.action.startsWith('admin.settings.')));
       setOrg({
         organizationName: settingsBundle.settings?.organizationName ?? '',
+        organizationDefaultSite: settingsBundle.settings?.organizationDefaultSite ?? '',
+        organizationPortfolio: settingsBundle.settings?.organizationPortfolio ?? '',
         organizationBillingAddress: settingsBundle.settings?.organizationBillingAddress ?? '',
         supportContactEmail: settingsBundle.settings?.supportContactEmail ?? '',
         supportContactPhone: settingsBundle.settings?.supportContactPhone ?? '',

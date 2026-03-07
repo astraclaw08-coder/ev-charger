@@ -73,7 +73,7 @@ export default function SiteDetail() {
   const [error, setError] = useState('');
   const [showAddCharger, setShowAddCharger] = useState(false);
   const [showEditSite, setShowEditSite] = useState(false);
-  const [editSiteForm, setEditSiteForm] = useState({ name: '', address: '', lat: '', lng: '' });
+  const [editSiteForm, setEditSiteForm] = useState({ name: '', address: '', lat: '', lng: '', organizationName: '', portfolioName: '' });
   const [chargerUptime, setChargerUptime] = useState<Record<string, ChargerUptime>>({});
   const [siteUptime, setSiteUptime] = useState<SiteUptime | null>(null);
   const [siteAnalytics, setSiteAnalytics] = useState<SiteAnalytics | null>(null);
@@ -96,7 +96,14 @@ export default function SiteDetail() {
 
       const data = await client.getSite(id!);
       setSite(data);
-      setEditSiteForm({ name: data.name, address: data.address, lat: String(data.lat), lng: String(data.lng) });
+      setEditSiteForm({
+        name: data.name,
+        address: data.address,
+        lat: String(data.lat),
+        lng: String(data.lng),
+        organizationName: data.organizationName ?? '',
+        portfolioName: data.portfolioName ?? '',
+      });
       setTariff({
         pricePerKwhUsd: Number(data.pricePerKwhUsd ?? 0.35),
         idleFeePerMinUsd: Number(data.idleFeePerMinUsd ?? 0.08),
@@ -248,14 +255,27 @@ export default function SiteDetail() {
             <label className="text-sm text-gray-700">Longitude
               <input type="number" step="0.000001" className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5" value={editSiteForm.lng} onChange={(e) => setEditSiteForm((f) => ({ ...f, lng: e.target.value }))} />
             </label>
+            <label className="text-sm text-gray-700">Organization
+              <input className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5" value={editSiteForm.organizationName} onChange={(e) => setEditSiteForm((f) => ({ ...f, organizationName: e.target.value }))} />
+            </label>
+            <label className="text-sm text-gray-700">Portfolio
+              <input className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5" value={editSiteForm.portfolioName} onChange={(e) => setEditSiteForm((f) => ({ ...f, portfolioName: e.target.value }))} />
+            </label>
           </div>
           <div className="mt-3 flex gap-2">
             <button className="rounded-md bg-brand-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-700"
               onClick={async () => {
                 const token = await getToken();
-                const payload = { name: editSiteForm.name.trim(), address: editSiteForm.address.trim(), lat: Number(editSiteForm.lat), lng: Number(editSiteForm.lng) };
+                const payload = {
+                  name: editSiteForm.name.trim(),
+                  address: editSiteForm.address.trim(),
+                  lat: Number(editSiteForm.lat),
+                  lng: Number(editSiteForm.lng),
+                  organizationName: editSiteForm.organizationName.trim(),
+                  portfolioName: editSiteForm.portfolioName.trim(),
+                };
                 await createApiClient(token).updateSite(site.id, payload);
-                pushAudit('site.updated', `${payload.name} @ ${payload.address}`);
+                pushAudit('site.updated', `${payload.name} @ ${payload.address} | org=${payload.organizationName || '-'} portfolio=${payload.portfolioName || '-'}`);
                 setShowEditSite(false);
                 await load();
               }}>Save site</button>

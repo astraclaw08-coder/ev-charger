@@ -11,6 +11,8 @@ export interface SiteListItem {
   idleFeePerMinUsd?: number;
   gracePeriodMin?: number;
   touWindows?: unknown;
+  organizationName?: string | null;
+  portfolioName?: string | null;
   createdAt: string;
   chargerCount: number;
   statusSummary: { online: number; offline: number; faulted: number };
@@ -54,6 +56,8 @@ export interface SiteDetail {
   idleFeePerMinUsd?: number;
   gracePeriodMin?: number;
   touWindows?: unknown;
+  organizationName?: string | null;
+  portfolioName?: string | null;
   createdAt: string;
   chargers: ChargerInfo[];
 }
@@ -180,6 +184,8 @@ export interface PortalSettings {
   id: string;
   scopeKey: string;
   organizationName?: string | null;
+  organizationDefaultSite?: string | null;
+  organizationPortfolio?: string | null;
   organizationBillingAddress?: string | null;
   supportContactEmail?: string | null;
   supportContactPhone?: string | null;
@@ -295,6 +301,8 @@ export function createApiClient(token: string | null | undefined) {
         idleFeePerMinUsd?: number;
         gracePeriodMin?: number;
         touWindows?: unknown;
+        organizationName?: string;
+        portfolioName?: string;
       },
     ) =>
       request<SiteDetail>(`/sites/${id}`, token, {

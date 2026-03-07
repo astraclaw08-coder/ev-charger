@@ -31,6 +31,8 @@ export async function siteRoutes(app: FastifyInstance) {
       idleFeePerMinUsd: number;
       gracePeriodMin: number;
       touWindows: unknown;
+      organizationName: string | null;
+      portfolioName: string | null;
       createdAt: Date;
       chargers: Array<{ status: string }>;
     }) => ({
@@ -44,6 +46,8 @@ export async function siteRoutes(app: FastifyInstance) {
       idleFeePerMinUsd: site.idleFeePerMinUsd,
       gracePeriodMin: site.gracePeriodMin,
       touWindows: site.touWindows,
+      organizationName: site.organizationName,
+      portfolioName: site.portfolioName,
       createdAt: site.createdAt,
       chargerCount: site.chargers.length,
       statusSummary: {
@@ -81,6 +85,8 @@ export async function siteRoutes(app: FastifyInstance) {
       idleFeePerMinUsd: site.idleFeePerMinUsd,
       gracePeriodMin: site.gracePeriodMin,
       touWindows: site.touWindows,
+      organizationName: site.organizationName,
+      portfolioName: site.portfolioName,
       createdAt: site.createdAt,
       chargers: site.chargers.map(({ password: _pw, ...c }: { password: string; [k: string]: unknown }) => c),
     };
@@ -88,15 +94,22 @@ export async function siteRoutes(app: FastifyInstance) {
 
   // POST /sites — operator creates a site
   app.post<{
-    Body: { name: string; address: string; lat: number; lng: number };
+    Body: {
+      name: string;
+      address: string;
+      lat: number;
+      lng: number;
+      organizationName?: string;
+      portfolioName?: string;
+    };
   }>('/sites', {
     preHandler: [requireOperator, requirePolicy('site.create')],
   }, async (req, reply) => {
     const operator = req.currentOperator!;
-    const { name, address, lat, lng } = req.body;
+    const { name, address, lat, lng, organizationName, portfolioName } = req.body;
 
     const site = await prisma.site.create({
-      data: { name, address, lat, lng, operatorId: operator.id },
+      data: { name, address, lat, lng, operatorId: operator.id, organizationName, portfolioName },
     });
 
     return reply.status(201).send(site);
@@ -115,6 +128,8 @@ export async function siteRoutes(app: FastifyInstance) {
       idleFeePerMinUsd?: number;
       gracePeriodMin?: number;
       touWindows?: unknown;
+      organizationName?: string;
+      portfolioName?: string;
     };
   }>('/sites/:id', {
     preHandler: [requireOperator, requirePolicy('site.update', { getResourceSiteId: (req) => req.params.id })],
@@ -125,7 +140,7 @@ export async function siteRoutes(app: FastifyInstance) {
       return reply.status(404).send({ error: 'Site not found' });
     }
 
-    const { name, address, lat, lng, pricingMode, pricePerKwhUsd, idleFeePerMinUsd, gracePeriodMin, touWindows } = req.body;
+    const { name, address, lat, lng, pricingMode, pricePerKwhUsd, idleFeePerMinUsd, gracePeriodMin, touWindows, organizationName, portfolioName } = req.body;
     const site = await prisma.site.update({
       where: { id: req.params.id },
       data: {
@@ -138,6 +153,8 @@ export async function siteRoutes(app: FastifyInstance) {
         ...(idleFeePerMinUsd != null ? { idleFeePerMinUsd } : {}),
         ...(gracePeriodMin != null ? { gracePeriodMin } : {}),
         ...(Array.isArray(touWindows) ? { touWindows } : {}),
+        ...(organizationName !== undefined ? { organizationName } : {}),
+        ...(portfolioName !== undefined ? { portfolioName } : {}),
       },
     });
 

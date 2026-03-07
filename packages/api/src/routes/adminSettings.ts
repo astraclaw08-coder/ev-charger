@@ -54,6 +54,8 @@ function validateSettings(body: Record<string, unknown>) {
 
   return {
     organizationName: trimOrNull(body.organizationName, 120),
+    organizationDefaultSite: trimOrNull(body.organizationDefaultSite, 120),
+    organizationPortfolio: trimOrNull(body.organizationPortfolio, 120),
     organizationBillingAddress: trimOrNull(body.organizationBillingAddress, 250),
     supportContactEmail: trimOrNull(body.supportContactEmail, 200),
     supportContactPhone: trimOrNull(body.supportContactPhone, 40),
