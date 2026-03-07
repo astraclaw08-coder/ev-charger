@@ -30,7 +30,20 @@ export async function chargerRoutes(app: FastifyInstance) {
           }
         : undefined,
       include: {
-        site: { select: { id: true, name: true, address: true, lat: true, lng: true } },
+        site: {
+          select: {
+            id: true,
+            name: true,
+            address: true,
+            lat: true,
+            lng: true,
+            pricingMode: true,
+            pricePerKwhUsd: true,
+            idleFeePerMinUsd: true,
+            gracePeriodMin: true,
+            touWindows: true,
+          },
+        },
         connectors: { select: { id: true, connectorId: true, status: true } },
       },
     });
