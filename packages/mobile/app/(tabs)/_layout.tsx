@@ -78,22 +78,23 @@ export default function TabsLayout() {
   const { data, refetch } = useQuery({
     queryKey: ['sessions'],
     queryFn: () => api.sessions.list(20, 0),
-    refetchInterval: 5_000,
+    refetchInterval: isGuest ? false : 5_000,
+    enabled: !isGuest,
   });
 
   useFocusEffect(
     React.useCallback(() => {
-      refetch();
+      if (!isGuest) refetch();
       return undefined;
-    }, [refetch]),
+    }, [isGuest, refetch]),
   );
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') refetch();
+      if (!isGuest && state === 'active') refetch();
     });
     return () => sub.remove();
-  }, [refetch]);
+  }, [isGuest, refetch]);
 
   const active = useMemo(() => data?.sessions.find((s) => s.status === 'ACTIVE') ?? null, [data]);
   const currentTab = segments[segments.length - 1];
