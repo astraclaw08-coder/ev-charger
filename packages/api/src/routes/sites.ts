@@ -264,9 +264,12 @@ export async function siteRoutes(app: FastifyInstance) {
       if (stoppedMs <= startedMs) return sum;
       return sum + Math.floor((stoppedMs - startedMs) / 1000);
     }, 0);
-    const utilizationRatePct = availableConnectorSeconds > 0
+    const rawUtilizationRatePct = availableConnectorSeconds > 0
       ? Math.round((activeChargingSeconds / availableConnectorSeconds) * 10000) / 100
       : 0;
+    const utilizationRatePct = rawUtilizationRatePct > 0
+      ? rawUtilizationRatePct
+      : (sessionsCount > 0 ? 0.01 : 0);
 
     // Uptime (period-aligned): derive per-charger uptime from uptime events over selected window.
     const mapEventToStatus = (event: string): 'ONLINE' | 'OFFLINE' | 'DEGRADED' | 'FAULTED' => (

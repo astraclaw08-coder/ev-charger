@@ -107,12 +107,16 @@ export default function FleetAnalytics() {
     const kwhDelivered = merged.reduce((sum, d) => sum + d.kwhDelivered, 0);
     const revenueUsd = merged.reduce((sum, d) => sum + d.revenueCents, 0) / 100;
 
-    const uptimeRows = selectedSiteIds
-      .map((siteId) => analyticsBySite[siteId]?.uptimePct)
-      .filter((v): v is number => typeof v === 'number');
-    const uptimePct = uptimeRows.length ? uptimeRows.reduce((a, b) => a + b, 0) / uptimeRows.length : 0;
+    const utilRows = selectedSiteIds
+      .map((siteId) => analyticsBySite[siteId])
+      .filter((v): v is Analytics => !!v);
+    const totalAvailable = utilRows.reduce((s, r) => s + (r.availableConnectorSeconds || 0), 0);
+    const weightedUtil = totalAvailable > 0
+      ? utilRows.reduce((s, r) => s + ((r.utilizationRatePct || 0) * (r.availableConnectorSeconds || 0)), 0) / totalAvailable
+      : (utilRows.length ? utilRows.reduce((s, r) => s + (r.utilizationRatePct || 0), 0) / utilRows.length : 0);
+    const utilizationRatePct = weightedUtil > 0 ? weightedUtil : (sessionsCount > 0 ? 0.01 : 0);
 
-    return { sessionsCount, kwhDelivered, revenueUsd, uptimePct };
+    return { sessionsCount, kwhDelivered, revenueUsd, utilizationRatePct };
   }, [merged, selectedSiteIds, analyticsBySite]);
 
   const chartData = useMemo(
@@ -207,7 +211,7 @@ export default function FleetAnalytics() {
         <KpiTile label="Transactions" value={scopedSummary.sessionsCount.toString()} />
         <KpiTile label="Total kWh" value={scopedSummary.kwhDelivered.toFixed(1)} />
         <KpiTile label="Total Revenue" value={Number.isNaN(scopedSummary.revenueUsd) ? 'Restricted' : `$${scopedSummary.revenueUsd.toFixed(2)}`} />
-        <KpiTile label="Uptime" value={`${scopedSummary.uptimePct.toFixed(2)}%`} />
+        <KpiTile label="Utilization" value={`${scopedSummary.utilizationRatePct.toFixed(2)}%`} />
       </div>
 
       <ChartCard title="Sessions per Day">

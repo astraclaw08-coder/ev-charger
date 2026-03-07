@@ -252,7 +252,7 @@ export default function Analytics() {
           value={Number.isNaN(scopedSummary.revenueUsd) ? 'Restricted' : `$${scopedSummary.revenueUsd.toFixed(2)}`}
           icon="💵"
         />
-        <SummaryCard label="Uptime" value={`${data.uptimePct}%`} icon="📶" />
+        <SummaryCard label="Utilization" value={`${Math.max(data.utilizationRatePct, data.sessionsCount > 0 ? 0.01 : 0).toFixed(2)}%`} icon="📶" />
       </div>
 
       <div className="rounded-xl border border-gray-200 bg-white p-4">
