@@ -293,7 +293,14 @@ export default function Dashboard() {
       <DashboardSitesMap sites={siteMapItems} />
 
       <div className="mt-4 rounded-xl border border-gray-200 bg-white p-4">
-        <p className="text-sm font-semibold text-gray-700">Energy (kWh) | Revenue ($) | Transactions <span className="ml-1 text-xs font-normal text-gray-400">({rangePreset})</span></p>
+        <p className="text-sm font-semibold">
+          <span className="text-blue-600">Energy (kWh)</span>
+          <span className="text-gray-400"> | </span>
+          <span className="text-emerald-600">Revenue ($)</span>
+          <span className="text-gray-400"> | </span>
+          <span className="text-amber-500">Transactions</span>
+          <span className="ml-1 text-xs font-normal text-gray-400">({rangePreset})</span>
+        </p>
 
         <div className="mt-3 h-64">
           {loading ? (
@@ -307,8 +314,8 @@ export default function Dashboard() {
                 <YAxis yAxisId="left" tick={{ fontSize: 11 }} />
                 <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11 }} />
                 <Tooltip />
-                <Bar yAxisId="left" dataKey="kwhDelivered" name="kWh" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                <Line yAxisId="right" type="monotone" dataKey="revenueUsd" name="Revenue (USD)" stroke="#10b981" strokeWidth={2} dot={false} />
+                <Bar yAxisId="left" dataKey="kwhDelivered" name="Energy (kWh)" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                <Line yAxisId="right" type="monotone" dataKey="revenueUsd" name="Revenue ($)" stroke="#10b981" strokeWidth={2} dot={false} />
                 <Line yAxisId="left" type="monotone" dataKey="sessions" name="Transactions" stroke="#f59e0b" strokeWidth={2} dot={false} />
               </ComposedChart>
             </ResponsiveContainer>

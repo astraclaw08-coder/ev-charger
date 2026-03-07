@@ -359,8 +359,13 @@ export default function SiteDetail() {
 
       {/* ── Trend chart (dashboard style) ── */}
       <div className="rounded-xl border border-gray-200 bg-white p-4">
-        <p className="text-sm font-semibold text-gray-700">
-          Energy (kWh) | Revenue ($) | Sessions <span className="ml-1 text-xs font-normal text-gray-400">({rangePreset})</span>
+        <p className="text-sm font-semibold">
+          <span className="text-blue-600">Energy (kWh)</span>
+          <span className="text-gray-400"> | </span>
+          <span className="text-emerald-600">Revenue ($)</span>
+          <span className="text-gray-400"> | </span>
+          <span className="text-amber-500">Transactions</span>
+          <span className="ml-1 text-xs font-normal text-gray-400">({rangePreset})</span>
         </p>
         <div className="mt-3 h-64">
           {trend.length === 0 ? (
@@ -371,10 +376,10 @@ export default function SiteDetail() {
                 <XAxis dataKey="label" tick={{ fontSize: 10 }} />
                 <YAxis yAxisId="kwh" tick={{ fontSize: 10 }} />
                 <YAxis yAxisId="rev" orientation="right" tick={{ fontSize: 10 }} tickFormatter={(v: number) => `$${v}`} />
-                <Tooltip formatter={(v: number, name: string) => name === 'revenueUsd' ? [`$${v.toFixed(2)}`, 'Revenue'] : name === 'kwhDelivered' ? [`${v} kWh`, 'Energy'] : [v, 'Sessions']} />
-                <Bar yAxisId="kwh" dataKey="kwhDelivered" fill="#10b981" opacity={0.7} name="kwhDelivered" />
-                <Line yAxisId="rev" type="monotone" dataKey="revenueUsd" stroke="#6366f1" dot={false} strokeWidth={2} name="revenueUsd" />
-                <Line yAxisId="kwh" type="monotone" dataKey="sessions" stroke="#f59e0b" dot={false} strokeWidth={1.5} name="sessions" />
+                <Tooltip formatter={(v: number, name: string) => name === 'revenueUsd' ? [`$${v.toFixed(2)}`, 'Revenue ($)'] : name === 'kwhDelivered' ? [`${v} kWh`, 'Energy (kWh)'] : [v, 'Transactions']} />
+                <Bar yAxisId="kwh" dataKey="kwhDelivered" fill="#3b82f6" opacity={0.7} name="Energy (kWh)" />
+                <Line yAxisId="rev" type="monotone" dataKey="revenueUsd" stroke="#10b981" dot={false} strokeWidth={2} name="Revenue ($)" />
+                <Line yAxisId="kwh" type="monotone" dataKey="sessions" stroke="#f59e0b" dot={false} strokeWidth={1.5} name="Transactions" />
               </ComposedChart>
             </ResponsiveContainer>
           )}
