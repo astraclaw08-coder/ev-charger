@@ -91,6 +91,7 @@ export interface Charger {
     lng: number;
     pricePerKwhUsd?: number;
     idleFeePerMinUsd?: number;
+    activationFeeUsd?: number;
     gracePeriodMin?: number;
     pricingMode?: 'flat' | 'tou';
     touWindows?: unknown;

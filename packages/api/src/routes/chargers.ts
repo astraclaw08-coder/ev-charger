@@ -40,6 +40,7 @@ export async function chargerRoutes(app: FastifyInstance) {
             pricingMode: true,
             pricePerKwhUsd: true,
             idleFeePerMinUsd: true,
+            activationFeeUsd: true,
             gracePeriodMin: true,
             touWindows: true,
           },

@@ -9,6 +9,7 @@ export interface SiteListItem {
   pricingMode?: 'flat' | 'tou';
   pricePerKwhUsd?: number;
   idleFeePerMinUsd?: number;
+  activationFeeUsd?: number;
   gracePeriodMin?: number;
   touWindows?: unknown;
   organizationName?: string | null;
@@ -54,6 +55,7 @@ export interface SiteDetail {
   pricingMode?: 'flat' | 'tou';
   pricePerKwhUsd?: number;
   idleFeePerMinUsd?: number;
+  activationFeeUsd?: number;
   gracePeriodMin?: number;
   touWindows?: unknown;
   organizationName?: string | null;
@@ -299,6 +301,7 @@ export function createApiClient(token: string | null | undefined) {
         pricingMode?: 'flat' | 'tou';
         pricePerKwhUsd?: number;
         idleFeePerMinUsd?: number;
+        activationFeeUsd?: number;
         gracePeriodMin?: number;
         touWindows?: unknown;
         organizationName?: string;

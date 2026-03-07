@@ -29,6 +29,7 @@ export async function siteRoutes(app: FastifyInstance) {
       pricingMode: string;
       pricePerKwhUsd: number;
       idleFeePerMinUsd: number;
+      activationFeeUsd: number;
       gracePeriodMin: number;
       touWindows: unknown;
       organizationName: string | null;
@@ -44,6 +45,7 @@ export async function siteRoutes(app: FastifyInstance) {
       pricingMode: site.pricingMode,
       pricePerKwhUsd: site.pricePerKwhUsd,
       idleFeePerMinUsd: site.idleFeePerMinUsd,
+      activationFeeUsd: site.activationFeeUsd,
       gracePeriodMin: site.gracePeriodMin,
       touWindows: site.touWindows,
       organizationName: site.organizationName,
@@ -83,6 +85,7 @@ export async function siteRoutes(app: FastifyInstance) {
       pricingMode: site.pricingMode,
       pricePerKwhUsd: site.pricePerKwhUsd,
       idleFeePerMinUsd: site.idleFeePerMinUsd,
+      activationFeeUsd: site.activationFeeUsd,
       gracePeriodMin: site.gracePeriodMin,
       touWindows: site.touWindows,
       organizationName: site.organizationName,
@@ -126,6 +129,7 @@ export async function siteRoutes(app: FastifyInstance) {
       pricingMode?: 'flat' | 'tou';
       pricePerKwhUsd?: number;
       idleFeePerMinUsd?: number;
+      activationFeeUsd?: number;
       gracePeriodMin?: number;
       touWindows?: unknown;
       organizationName?: string;
@@ -140,7 +144,7 @@ export async function siteRoutes(app: FastifyInstance) {
       return reply.status(404).send({ error: 'Site not found' });
     }
 
-    const { name, address, lat, lng, pricingMode, pricePerKwhUsd, idleFeePerMinUsd, gracePeriodMin, touWindows, organizationName, portfolioName } = req.body;
+    const { name, address, lat, lng, pricingMode, pricePerKwhUsd, idleFeePerMinUsd, activationFeeUsd, gracePeriodMin, touWindows, organizationName, portfolioName } = req.body;
     const site = await prisma.site.update({
       where: { id: req.params.id },
       data: {
@@ -151,6 +155,7 @@ export async function siteRoutes(app: FastifyInstance) {
         ...(pricingMode ? { pricingMode } : {}),
         ...(pricePerKwhUsd != null ? { pricePerKwhUsd } : {}),
         ...(idleFeePerMinUsd != null ? { idleFeePerMinUsd } : {}),
+        ...(activationFeeUsd != null ? { activationFeeUsd } : {}),
         ...(gracePeriodMin != null ? { gracePeriodMin } : {}),
         ...(Array.isArray(touWindows) ? { touWindows } : {}),
         ...(organizationName !== undefined ? { organizationName } : {}),

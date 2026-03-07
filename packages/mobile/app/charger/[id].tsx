@@ -478,9 +478,9 @@ export default function ChargerDetailScreen() {
         )}
 
         {activationMessage && !showActivationModal && (
-          <View style={[styles.startingOverlay, { backgroundColor: isDark ? '#1e293b' : '#eff6ff' }]}> 
+          <View style={[styles.startingOverlay, { backgroundColor: isDark ? '#1e293b' : '#eff6ff' }]}>
             <ActivityIndicator color={isDark ? '#93c5fd' : '#2563eb'} />
-            <Text style={[styles.startingText, { color: isDark ? '#bfdbfe' : '#1d4ed8' }]}> 
+            <Text style={[styles.startingText, { color: isDark ? '#bfdbfe' : '#1d4ed8' }]}>
               {activationMessage}
             </Text>
           </View>
@@ -507,8 +507,8 @@ export default function ChargerDetailScreen() {
 
         {/* Price info */}
         <View style={[styles.priceNote, { backgroundColor: isDark ? '#1f2937' : '#f3f4f6' }]}>
-          <Text style={[styles.priceNoteText, { color: isDark ? '#d1d5db' : '#6b7280' }]}>
-            ⚡ Rate: ${(selectedCharger?.site.pricePerKwhUsd ?? RATE_PER_KWH).toFixed(2)}/kWh · Billed based on energy delivered
+          <Text style={[styles.priceNoteText, { color: isDark ? '#d1d5db' : '#6b7280' }]}> 
+            ⚡ Rate: ${(selectedCharger?.site.pricePerKwhUsd ?? RATE_PER_KWH).toFixed(2)}/kWh{activationFeeUsd > 0 ? ` · Activation fee: $${activationFeeUsd.toFixed(2)}` : ''} · Billed based on energy delivered
           </Text>
         </View>
       </ScrollView>

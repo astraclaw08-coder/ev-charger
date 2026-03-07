@@ -22,6 +22,7 @@ type TouWindow = {
 type TariffConfig = {
   pricePerKwhUsd: number;
   idleFeePerMinUsd: number;
+  activationFeeUsd: number;
   gracePeriodMin: number;
   mode: 'flat' | 'tou';
   windows: TouWindow[];
@@ -82,7 +83,7 @@ export default function SiteDetail() {
   const [activeSessions, setActiveSessions] = useState(0);
   const [siteUtilizationPct, setSiteUtilizationPct] = useState<number | null>(null);
 
-  const [tariff, setTariff] = useState<TariffConfig>({ pricePerKwhUsd: 0.35, idleFeePerMinUsd: 0.08, gracePeriodMin: 10, mode: 'flat', windows: [] });
+  const [tariff, setTariff] = useState<TariffConfig>({ pricePerKwhUsd: 0.35, idleFeePerMinUsd: 0.08, activationFeeUsd: 0, gracePeriodMin: 10, mode: 'flat', windows: [] });
   const [tariffMsg, setTariffMsg] = useState('');
 
   const [auditEvents, setAuditEvents] = useState<SiteAuditEvent[]>([]);
@@ -107,6 +108,7 @@ export default function SiteDetail() {
       setTariff({
         pricePerKwhUsd: Number(data.pricePerKwhUsd ?? 0.35),
         idleFeePerMinUsd: Number(data.idleFeePerMinUsd ?? 0.08),
+        activationFeeUsd: Number(data.activationFeeUsd ?? 0),
         gracePeriodMin: Number(data.gracePeriodMin ?? 10),
         mode: data.pricingMode === 'tou' ? 'tou' : 'flat',
         windows: Array.isArray(data.touWindows) ? (data.touWindows as TouWindow[]) : [],
@@ -299,7 +301,7 @@ export default function SiteDetail() {
           <h2 className="text-sm font-semibold text-gray-700">Pricing / Tariff</h2>
           {tariffMsg && <p className="text-xs text-gray-500">{tariffMsg}</p>}
         </div>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <label className="text-sm text-gray-700">Pricing mode
             <select className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5" value={tariff.mode} onChange={(e) => setTariff({ ...tariff, mode: e.target.value as TariffConfig['mode'] })}>
               <option value="flat">Flat rate</option>
@@ -311,6 +313,9 @@ export default function SiteDetail() {
           </label>
           <label className="text-sm text-gray-700">Idle fee per min (USD)
             <input type="number" step="0.01" className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5" value={tariff.idleFeePerMinUsd} onChange={(e) => setTariff({ ...tariff, idleFeePerMinUsd: Number(e.target.value) })} />
+          </label>
+          <label className="text-sm text-gray-700">Activation fee (USD)
+            <input type="number" step="0.01" className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5" value={tariff.activationFeeUsd} onChange={(e) => setTariff({ ...tariff, activationFeeUsd: Number(e.target.value) })} />
           </label>
           <label className="text-sm text-gray-700">Grace period (min)
             <input type="number" className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5" value={tariff.gracePeriodMin} onChange={(e) => setTariff({ ...tariff, gracePeriodMin: Number(e.target.value) })} />
@@ -362,13 +367,14 @@ export default function SiteDetail() {
                   pricingMode: tariff.mode,
                   pricePerKwhUsd: tariff.pricePerKwhUsd,
                   idleFeePerMinUsd: tariff.idleFeePerMinUsd,
+                  activationFeeUsd: tariff.activationFeeUsd,
                   gracePeriodMin: tariff.gracePeriodMin,
                   touWindows: tariff.mode === 'tou' ? tariff.windows : [],
                 });
-                setTariffMsg(`Saved. Price per kWh is now $${Number(updated.pricePerKwhUsd ?? tariff.pricePerKwhUsd).toFixed(2)}.`);
+                setTariffMsg(`Saved. Price per kWh is now $${Number(updated.pricePerKwhUsd ?? tariff.pricePerKwhUsd).toFixed(2)} and activation fee is $${Number(updated.activationFeeUsd ?? tariff.activationFeeUsd).toFixed(2)}.`);
                 pushAudit('tariff.updated', tariff.mode === 'tou'
-                  ? `tou windows=${tariff.windows.length}, base=$${tariff.pricePerKwhUsd}/kWh idle=$${tariff.idleFeePerMinUsd}/min grace=${tariff.gracePeriodMin}m`
-                  : `flat price=$${tariff.pricePerKwhUsd}/kWh, idle=$${tariff.idleFeePerMinUsd}/min, grace=${tariff.gracePeriodMin}m`);
+                  ? `tou windows=${tariff.windows.length}, base=$${tariff.pricePerKwhUsd}/kWh idle=$${tariff.idleFeePerMinUsd}/min activation=$${tariff.activationFeeUsd} grace=${tariff.gracePeriodMin}m`
+                  : `flat price=$${tariff.pricePerKwhUsd}/kWh, idle=$${tariff.idleFeePerMinUsd}/min, activation=$${tariff.activationFeeUsd}, grace=${tariff.gracePeriodMin}m`);
                 await load();
               } catch (err) {
                 setTariffMsg(`Save failed: ${err instanceof Error ? err.message : 'unknown error'}`);

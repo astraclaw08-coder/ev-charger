@@ -67,6 +67,7 @@ model Site {
   pricingMode      String    @default("flat") // flat | tou
   pricePerKwhUsd   Float     @default(0.35)
   idleFeePerMinUsd Float     @default(0.08)
+  activationFeeUsd Float     @default(0)
   gracePeriodMin   Int       @default(10)
   touWindows       Json?
   organizationName String?
