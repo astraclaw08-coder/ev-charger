@@ -16,6 +16,7 @@ import CustomerSupport from './pages/CustomerSupport';
 import NetworkOps from './pages/NetworkOps';
 import UserManagement from './pages/UserManagement';
 import Settings from './pages/Settings';
+import { ThemeProvider, usePortalTheme } from './theme/ThemeContext';
 
 const CLERK_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined;
 const DEV_LOGIN_FLAG_KEY = 'portal.dev.signedIn';
@@ -115,10 +116,12 @@ function DevApp() {
   );
 }
 
-export default function App() {
+function ThemedShell() {
+  const { themeClass } = usePortalTheme();
+
   if (import.meta.env.VITE_FORCE_LOGIN_SCREEN === '1') {
     return (
-      <div className="portal-dark">
+      <div className={themeClass}>
         <BrowserRouter>
           <Routes>
             <Route path="*" element={<Login />} />
@@ -130,7 +133,7 @@ export default function App() {
 
   if (CLERK_KEY) {
     return (
-      <div className="portal-dark">
+      <div className={themeClass}>
         <PasswordAuthProvider>
           <ClerkProvider publishableKey={CLERK_KEY}>
             <ClerkOrPasswordApp />
@@ -141,8 +144,16 @@ export default function App() {
   }
 
   return (
-    <div className="portal-dark">
+    <div className={themeClass}>
       <DevApp />
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <ThemeProvider>
+      <ThemedShell />
+    </ThemeProvider>
   );
 }

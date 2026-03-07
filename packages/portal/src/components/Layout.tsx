@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { cn } from '../lib/utils';
+import { usePortalTheme } from '../theme/ThemeContext';
 
 const NAV = [
   { label: 'Dashboard', href: '/', icon: '🏠' },
@@ -11,8 +12,26 @@ const NAV = [
   { label: 'Settings', href: '/settings', icon: '⚙️' },
 ];
 
+function SunIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.9">
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v2.5M12 19.5V22M4.93 4.93l1.77 1.77M17.3 17.3l1.77 1.77M2 12h2.5M19.5 12H22M4.93 19.07 6.7 17.3M17.3 6.7l1.77-1.77" />
+    </svg>
+  );
+}
+
+function MoonIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.9">
+      <path d="M21 14.2A8.8 8.8 0 1 1 9.8 3a7.2 7.2 0 1 0 11.2 11.2Z" />
+    </svg>
+  );
+}
+
 export default function Layout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
+  const { theme, toggleTheme } = usePortalTheme();
 
   return (
     <div className="flex min-h-screen bg-gray-50">
@@ -48,6 +67,20 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
       {/* Main content */}
       <main className="flex-1 overflow-auto">
+        <div className="sticky top-0 z-20 border-b border-gray-200 bg-gray-50/95 backdrop-blur">
+          <div className="mx-auto flex max-w-6xl items-center justify-end px-6 py-3">
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 transition hover:bg-gray-100 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-1"
+              aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+              title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+            >
+              {theme === 'dark' ? <SunIcon /> : <MoonIcon />}
+              <span>{theme === 'dark' ? 'Light' : 'Dark'}</span>
+            </button>
+          </div>
+        </div>
         <div className="mx-auto max-w-6xl p-6">{children}</div>
       </main>
     </div>

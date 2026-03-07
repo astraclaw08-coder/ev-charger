@@ -2,6 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Theme shells for EV Portal */
+.portal-light,
+.portal-light body,
+.portal-light #root {
+  background: #f9fafb;
+  color: #111827;
+}
+
 /* Global dark theme skin for EV Portal (Astra Dashboard style) */
 .portal-dark,
 .portal-dark body,
