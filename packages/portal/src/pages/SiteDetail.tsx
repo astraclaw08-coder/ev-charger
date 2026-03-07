@@ -312,7 +312,7 @@ export default function SiteDetail() {
             <div><p className="text-gray-500">24h</p><p className="font-semibold text-gray-900">{siteUptime.uptimePercent24h.toFixed(2)}%</p></div>
             <div><p className="text-gray-500">7d</p><p className="font-semibold text-gray-900">{siteUptime.uptimePercent7d.toFixed(2)}%</p></div>
             <div><p className="text-gray-500">30d</p><p className="font-semibold text-gray-900">{siteUptime.uptimePercent30d.toFixed(2)}%</p></div>
-            <div><p className="text-gray-500">Utilization (30d)</p><p className="font-semibold text-gray-900">{siteAnalytics30d ? `${siteAnalytics30d.utilizationRatePct.toFixed(2)}%` : '—'}</p></div>
+            <div><p className="text-gray-500">Utilization (30d)</p><p className="font-semibold text-gray-900">{siteAnalytics30d?.utilizationRatePct != null ? `${Number(siteAnalytics30d.utilizationRatePct).toFixed(2)}%` : '—'}</p></div>
             <div><p className="text-gray-500">Degraded</p><p className="font-semibold text-amber-700">{siteUptime.degradedChargers}</p></div>
           </div>
         </div>
