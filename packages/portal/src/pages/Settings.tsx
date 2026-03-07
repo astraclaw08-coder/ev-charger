@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { createApiClient, type AdminAuditEvent, type ChargerModelCatalogItem, type OperatorNotificationPreference, type PortalSettings } from '../api/client';
 import { useToken } from '../auth/TokenContext';
 import UserManagement from './UserManagement';
+import SiteRoleAssignment from './SiteRoleAssignment';
 
 type OrgDraft = {
   organizationName: string;
@@ -220,6 +221,12 @@ export default function Settings() {
       <section className="rounded-xl border border-gray-200 bg-white p-4">
         <h2 className="mb-3 text-sm font-semibold text-gray-700">User management</h2>
         <UserManagement />
+      </section>
+
+      <section className="rounded-xl border border-gray-200 bg-white p-4">
+        <h2 className="mb-1 text-sm font-semibold text-gray-700">Site role assignments</h2>
+        <p className="mb-3 text-xs text-gray-500">Assign or remove stackable per-site roles across all sites.</p>
+        <SiteRoleAssignment />
       </section>
 
       <section className="rounded-xl border border-gray-200 bg-white p-4">

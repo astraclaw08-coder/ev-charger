@@ -9,7 +9,21 @@ import { formatDate } from '../lib/utils';
 
 type RoleName = 'owner' | 'operator' | 'customer-service' | 'nre' | 'analyst';
 type RoleAssignment = { id: string; email: string; roles: RoleName[]; createdAt: string };
-type TariffConfig = { pricePerKwhUsd: number; idleFeePerMinUsd: number; gracePeriodMin: number };
+type TouWindow = {
+  id: string;
+  day: number; // 0=Sun ... 6=Sat
+  start: string; // HH:mm
+  end: string; // HH:mm
+  pricePerKwhUsd: number;
+  idleFeePerMinUsd: number;
+};
+type TariffConfig = {
+  pricePerKwhUsd: number;
+  idleFeePerMinUsd: number;
+  gracePeriodMin: number;
+  mode: 'flat' | 'tou';
+  windows: TouWindow[];
+};
 type SiteAuditEvent = { id: string; action: string; actor: string; detail: string; createdAt: string };
 
 function tariffKey(siteId: string) { return `ev-portal:site:tariff:${siteId}`; }
@@ -17,14 +31,57 @@ function rolesKey(siteId: string) { return `ev-portal:site:roles:${siteId}`; }
 function auditKey(siteId: string) { return `ev-portal:site:audit:${siteId}`; }
 
 function loadTariff(siteId: string): TariffConfig {
-  try { const raw = localStorage.getItem(tariffKey(siteId)); if (raw) return JSON.parse(raw) as TariffConfig; } catch {}
-  return { pricePerKwhUsd: 0.35, idleFeePerMinUsd: 0.08, gracePeriodMin: 10 };
+  try {
+    const raw = localStorage.getItem(tariffKey(siteId));
+    if (raw) {
+      const parsed = JSON.parse(raw) as Partial<TariffConfig>;
+      return {
+        pricePerKwhUsd: Number(parsed.pricePerKwhUsd ?? 0.35),
+        idleFeePerMinUsd: Number(parsed.idleFeePerMinUsd ?? 0.08),
+        gracePeriodMin: Number(parsed.gracePeriodMin ?? 10),
+        mode: parsed.mode === 'tou' ? 'tou' : 'flat',
+        windows: Array.isArray(parsed.windows) ? parsed.windows : [],
+      };
+    }
+  } catch {}
+  return { pricePerKwhUsd: 0.35, idleFeePerMinUsd: 0.08, gracePeriodMin: 10, mode: 'flat', windows: [] };
 }
 function loadRoles(siteId: string): RoleAssignment[] {
   try { const raw = localStorage.getItem(rolesKey(siteId)); if (!raw) return []; const x = JSON.parse(raw) as RoleAssignment[]; return Array.isArray(x) ? x : []; } catch { return []; }
 }
 function loadAudit(siteId: string): SiteAuditEvent[] {
   try { const raw = localStorage.getItem(auditKey(siteId)); if (!raw) return []; const x = JSON.parse(raw) as SiteAuditEvent[]; return Array.isArray(x) ? x : []; } catch { return []; }
+}
+
+const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+function timeToMinutes(v: string): number {
+  const [h, m] = v.split(':').map(Number);
+  if (Number.isNaN(h) || Number.isNaN(m)) return -1;
+  return h * 60 + m;
+}
+
+function validateTouWindows(windows: TouWindow[]): string | null {
+  for (const w of windows) {
+    const start = timeToMinutes(w.start);
+    const end = timeToMinutes(w.end);
+    if (start < 0 || end < 0 || end <= start) {
+      return `Invalid time range in ${DAY_NAMES[w.day]} (${w.start} - ${w.end})`;
+    }
+  }
+
+  for (let day = 0; day < 7; day += 1) {
+    const dayWindows = windows.filter((w) => w.day === day).sort((a, b) => timeToMinutes(a.start) - timeToMinutes(b.start));
+    for (let i = 1; i < dayWindows.length; i += 1) {
+      const prev = dayWindows[i - 1];
+      const curr = dayWindows[i];
+      if (timeToMinutes(curr.start) < timeToMinutes(prev.end)) {
+        return `Overlapping windows on ${DAY_NAMES[day]} (${prev.start}-${prev.end} and ${curr.start}-${curr.end})`;
+      }
+    }
+  }
+
+  return null;
 }
 
 export default function SiteDetail() {
@@ -40,7 +97,8 @@ export default function SiteDetail() {
   const [siteUptime, setSiteUptime] = useState<SiteUptime | null>(null);
   const [siteAnalytics30d, setSiteAnalytics30d] = useState<SiteAnalytics | null>(null);
 
-  const [tariff, setTariff] = useState<TariffConfig>({ pricePerKwhUsd: 0.35, idleFeePerMinUsd: 0.08, gracePeriodMin: 10 });
+  const [tariff, setTariff] = useState<TariffConfig>({ pricePerKwhUsd: 0.35, idleFeePerMinUsd: 0.08, gracePeriodMin: 10, mode: 'flat', windows: [] });
+  const [tariffMsg, setTariffMsg] = useState('');
   const [assignments, setAssignments] = useState<RoleAssignment[]>([]);
   const [auditEvents, setAuditEvents] = useState<SiteAuditEvent[]>([]);
   const [emailInput, setEmailInput] = useState('');
@@ -153,6 +211,12 @@ export default function SiteDetail() {
         <div className="rounded-xl border border-gray-200 bg-white p-4">
           <h2 className="mb-3 text-sm font-semibold text-gray-700">Pricing / tariff controls</h2>
           <div className="space-y-2 text-sm">
+            <label className="block">Pricing mode
+              <select className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5" value={tariff.mode} onChange={(e) => setTariff({ ...tariff, mode: e.target.value as TariffConfig['mode'] })}>
+                <option value="flat">Flat rate</option>
+                <option value="tou">Time-of-Use (TOU)</option>
+              </select>
+            </label>
             <label className="block">Price per kWh (USD)
               <input type="number" step="0.01" className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5" value={tariff.pricePerKwhUsd} onChange={(e)=>setTariff({...tariff, pricePerKwhUsd:Number(e.target.value)})} />
             </label>
@@ -162,60 +226,85 @@ export default function SiteDetail() {
             <label className="block">Grace period (minutes)
               <input type="number" className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5" value={tariff.gracePeriodMin} onChange={(e)=>setTariff({...tariff, gracePeriodMin:Number(e.target.value)})} />
             </label>
+
+            {tariff.mode === 'tou' && (
+              <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-600">TOU windows</p>
+                  <button
+                    type="button"
+                    className="rounded-md border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 hover:bg-gray-100"
+                    onClick={() => setTariff((prev) => ({
+                      ...prev,
+                      windows: [...prev.windows, { id: crypto.randomUUID(), day: 1, start: '09:00', end: '17:00', pricePerKwhUsd: prev.pricePerKwhUsd, idleFeePerMinUsd: prev.idleFeePerMinUsd }],
+                    }))}
+                  >
+                    + Add window
+                  </button>
+                </div>
+
+                {tariff.windows.length === 0 ? (
+                  <p className="text-xs text-gray-500">No TOU windows yet. Add at least one window to activate TOU pricing.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {tariff.windows.map((w) => (
+                      <div key={w.id} className="grid gap-2 rounded-md border border-gray-200 bg-white p-2 md:grid-cols-6">
+                        <select className="rounded-md border border-gray-300 px-2 py-1.5 text-xs" value={w.day} onChange={(e) => setTariff((prev) => ({ ...prev, windows: prev.windows.map((x) => x.id === w.id ? { ...x, day: Number(e.target.value) } : x) }))}>
+                          {DAY_NAMES.map((name, idx) => <option key={name} value={idx}>{name}</option>)}
+                        </select>
+                        <input type="time" className="rounded-md border border-gray-300 px-2 py-1.5 text-xs" value={w.start} onChange={(e) => setTariff((prev) => ({ ...prev, windows: prev.windows.map((x) => x.id === w.id ? { ...x, start: e.target.value } : x) }))} />
+                        <input type="time" className="rounded-md border border-gray-300 px-2 py-1.5 text-xs" value={w.end} onChange={(e) => setTariff((prev) => ({ ...prev, windows: prev.windows.map((x) => x.id === w.id ? { ...x, end: e.target.value } : x) }))} />
+                        <input type="number" step="0.01" className="rounded-md border border-gray-300 px-2 py-1.5 text-xs" value={w.pricePerKwhUsd} onChange={(e) => setTariff((prev) => ({ ...prev, windows: prev.windows.map((x) => x.id === w.id ? { ...x, pricePerKwhUsd: Number(e.target.value) } : x) }))} placeholder="$/kWh" />
+                        <input type="number" step="0.01" className="rounded-md border border-gray-300 px-2 py-1.5 text-xs" value={w.idleFeePerMinUsd} onChange={(e) => setTariff((prev) => ({ ...prev, windows: prev.windows.map((x) => x.id === w.id ? { ...x, idleFeePerMinUsd: Number(e.target.value) } : x) }))} placeholder="$/min" />
+                        <button type="button" className="rounded-md border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-700 hover:bg-red-100" onClick={() => setTariff((prev) => ({ ...prev, windows: prev.windows.filter((x) => x.id !== w.id) }))}>Remove</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {tariff.windows.length > 0 && (
+                  <div className="mt-3 rounded-md border border-gray-200 bg-white p-2">
+                    <p className="mb-1 text-xs font-medium text-gray-600">Active TOU schedule</p>
+                    <div className="space-y-1 text-xs text-gray-700">
+                      {tariff.windows
+                        .slice()
+                        .sort((a, b) => (a.day - b.day) || (timeToMinutes(a.start) - timeToMinutes(b.start)))
+                        .map((w) => (
+                          <div key={`summary-${w.id}`} className="flex items-center justify-between">
+                            <span>{DAY_NAMES[w.day]} {w.start}–{w.end}</span>
+                            <span>${w.pricePerKwhUsd.toFixed(2)}/kWh · ${w.idleFeePerMinUsd.toFixed(2)}/min</span>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {tariffMsg && <p className="text-xs text-gray-600">{tariffMsg}</p>}
+
             <button
               type="button"
               className="rounded-md bg-brand-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-700"
               onClick={()=>{
+                const overlapError = tariff.mode === 'tou' ? validateTouWindows(tariff.windows) : null;
+                if (overlapError) {
+                  setTariffMsg(overlapError);
+                  return;
+                }
+
                 localStorage.setItem(tariffKey(site.id), JSON.stringify(tariff));
-                pushAudit('tariff.updated', `price=$${tariff.pricePerKwhUsd}/kWh, idle=$${tariff.idleFeePerMinUsd}/min, grace=${tariff.gracePeriodMin}m`);
+                setTariffMsg(tariff.mode === 'tou' ? `Saved TOU tariff with ${tariff.windows.length} windows.` : 'Saved flat-rate tariff.');
+                pushAudit('tariff.updated', tariff.mode === 'tou'
+                  ? `tou windows=${tariff.windows.length}, base=$${tariff.pricePerKwhUsd}/kWh idle=$${tariff.idleFeePerMinUsd}/min grace=${tariff.gracePeriodMin}m`
+                  : `flat price=$${tariff.pricePerKwhUsd}/kWh, idle=$${tariff.idleFeePerMinUsd}/min, grace=${tariff.gracePeriodMin}m`);
               }}
             >Save tariff</button>
           </div>
         </div>
 
-        <div className="rounded-xl border border-gray-200 bg-white p-4 lg:col-span-2">
-          <h2 className="mb-3 text-sm font-semibold text-gray-700">Stackable role assignments</h2>
-          <div className="flex flex-wrap items-end gap-2">
-            <input className="min-w-56 flex-1 rounded-md border border-gray-300 px-2 py-2 text-sm" placeholder="user email" value={emailInput} onChange={(e)=>setEmailInput(e.target.value)} />
-            <select className="rounded-md border border-gray-300 px-2 py-2 text-sm" onChange={(e)=>setRoleDraft([e.target.value as RoleName])} value={roleDraft[0]}>
-              <option value="owner">owner</option><option value="operator">operator</option><option value="customer-service">customer-service</option><option value="nre">nre</option><option value="analyst">analyst</option>
-            </select>
-            <button
-              type="button"
-              className="rounded-md border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
-              onClick={()=>{
-                const email=emailInput.trim().toLowerCase(); if(!email) return;
-                const existing=assignments.find(a=>a.email===email);
-                let next: RoleAssignment[];
-                if(existing){
-                  const merged=Array.from(new Set([...existing.roles, ...roleDraft]));
-                  next=assignments.map(a=>a.email===email?{...a,roles:merged}:a);
-                  pushAudit('rbac.role.granted', `${email} +${roleDraft.join(',')}`);
-                } else {
-                  next=[{id:crypto.randomUUID(), email, roles:roleDraft, createdAt:new Date().toISOString()}, ...assignments];
-                  pushAudit('rbac.user.added', `${email} roles=${roleDraft.join(',')}`);
-                }
-                setAssignments(next);
-                localStorage.setItem(rolesKey(site.id), JSON.stringify(next.slice(0,200)));
-                setEmailInput('');
-              }}
-            >Assign role</button>
-          </div>
-          <div className="mt-3 space-y-2">
-            {assignments.length===0 && <p className="text-xs text-gray-500">No role assignments yet.</p>}
-            {assignments.map((a)=>(
-              <div key={a.id} className="flex items-center justify-between rounded-md border border-gray-200 px-3 py-2">
-                <div>
-                  <p className="text-sm font-medium text-gray-900">{a.email}</p>
-                  <p className="text-xs text-gray-500">{a.roles.join(', ')}</p>
-                </div>
-                <button type="button" className="rounded-md border border-red-300 bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100" onClick={()=>{
-                  const next=assignments.filter(x=>x.id!==a.id); setAssignments(next); localStorage.setItem(rolesKey(site.id), JSON.stringify(next));
-                  pushAudit('rbac.user.removed', a.email);
-                }}>Remove</button>
-              </div>
-            ))}
-          </div>
+        <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 lg:col-span-2">
+          <p className="text-xs text-gray-500">Site role assignments have been moved to <strong>Settings → Site role assignments</strong>.</p>
         </div>
       </div>
 
