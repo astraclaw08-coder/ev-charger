@@ -179,7 +179,7 @@ export default function ProfileScreen() {
       <Field label="Phone" value={profile.phone} onChangeText={(v) => set('phone', v)} isDark={isDark} keyboardType="phone-pad" />
       <Field label="Site Address" value={profile.homeSiteAddress} onChangeText={(v) => set('homeSiteAddress', v)} isDark={isDark} />
       <View style={styles.row}>
-        <View style={[styles.rowItem, { marginRight: 0 }]}>
+        <View style={styles.rowItem}>
           <Field label="City" value={profile.homeCity} onChangeText={(v) => set('homeCity', v)} isDark={isDark} autoCapitalize="words" />
         </View>
         <View style={styles.rowItem}>
@@ -264,8 +264,8 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 14, fontWeight: '700', marginBottom: 10 },
   paymentSummary: { fontSize: 13, marginBottom: 12 },
 
-  row: { flexDirection: 'row', marginBottom: 12 },
-  rowItem: { flex: 1, marginRight: 10 },
+  row: { flexDirection: 'row', marginBottom: 12, columnGap: 12 },
+  rowItem: { flex: 1, marginRight: 0 },
   fieldWrap: { marginBottom: 12 },
   label: { fontSize: 13, fontWeight: '600' },
   input: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, fontSize: 15 },
