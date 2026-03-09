@@ -1,6 +1,7 @@
 import http from 'http';
 import crypto from 'crypto';
 import { prisma } from '@ev-charger/shared';
+import { clientRegistry } from './clientRegistry';
 import { remoteStartTransaction, remoteStopTransaction, remoteReset } from './remote';
 
 function parseBody(req: http.IncomingMessage): Promise<Record<string, unknown>> {
@@ -38,8 +39,24 @@ export function attachInternalRoutes(httpServer: http.Server): void {
       return sendJson(res, 200, { status: 'ok' });
     }
 
+    // GET /status — live connection state, bypasses Railway log delay entirely
+    if (method === 'GET' && url === '/status') {
+      const connected = Array.from(clientRegistry.all().keys());
+      const chargers = await prisma.charger.findMany({
+        select: { ocppId: true, status: true, lastHeartbeat: true },
+        orderBy: { lastHeartbeat: 'desc' },
+        take: 20,
+      });
+      return sendJson(res, 200, {
+        ts: new Date().toISOString(),
+        onlineCount: connected.length,
+        connected,
+        recentChargers: chargers,
+      });
+    }
+
     if (url === '/remote-start' || url === '/remote-stop' || url === '/reset' ||
-        url === '/charger-reset-password' || url === '/charger-clear-password') {
+        url === '/charger-reset-password' || url === '/charger-clear-password' || url === '/charger-add') {
       if (method !== 'POST') {
         return sendJson(res, 405, { error: 'Method not allowed' });
       }
@@ -96,6 +113,42 @@ export function attachInternalRoutes(httpServer: http.Server): void {
           });
         }
 
+        // POST /charger-add — register a new charger directly (no Clerk auth required).
+        // Used for onboarding real hardware without going through the portal.
+        if (url === '/charger-add') {
+          const { ocppId, siteId, serialNumber, model, vendor } = body as {
+            ocppId: string; siteId: string; serialNumber?: string; model?: string; vendor?: string;
+          };
+          if (!ocppId || !siteId) return sendJson(res, 400, { error: 'ocppId and siteId required' });
+
+          const existing = await prisma.charger.findUnique({ where: { ocppId } });
+          if (existing) return sendJson(res, 409, { error: `ocppId "${ocppId}" already registered`, charger: existing });
+
+          const rawPassword = crypto.randomBytes(16).toString('hex');
+          const hashedPassword = crypto.createHash('sha256').update(rawPassword).digest('hex');
+
+          const charger = await prisma.charger.create({
+            data: {
+              ocppId,
+              siteId,
+              serialNumber: serialNumber ?? ocppId,
+              model: model ?? 'Unknown',
+              vendor: vendor ?? 'Unknown',
+              password: '',  // passwordless — charger connects without password
+              connectors: { create: [{ connectorId: 1 }] },
+            },
+          });
+
+          console.log(`[InternalHTTP] Registered new charger ocppId=${ocppId} siteId=${siteId}`);
+          return sendJson(res, 201, {
+            id: charger.id,
+            ocppId: charger.ocppId,
+            ocppEndpoint: `wss://ocpp-server-production.up.railway.app/${ocppId}`,
+            ocppPassword: null,
+            note: 'Charger registered with no password. Connect using the ocppEndpoint above.',
+          });
+        }
+
         // POST /charger-clear-password — allow a charger to connect with NO password.
         // Use when the charger doesn't send a password or you want to disable password auth.
         if (url === '/charger-clear-password') {
@@ -124,5 +177,5 @@ export function attachInternalRoutes(httpServer: http.Server): void {
     // The OCPP server returns 404 for non-WebSocket HTTP requests.
   });
 
-  console.log('[InternalHTTP] Management routes attached (/health, /remote-start, /remote-stop, /reset, /charger-reset-password, /charger-clear-password)');
+  console.log('[InternalHTTP] Management routes attached (/health, /status, /remote-start, /remote-stop, /reset, /charger-add, /charger-reset-password, /charger-clear-password)');
 }
