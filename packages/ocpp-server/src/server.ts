@@ -29,23 +29,37 @@ export async function startServer(port: number): Promise<OcppServerHandle> {
   // ── Authentication ──────────────────────────────────────────────────────────
   server.auth(async (accept: any, reject: any, handshake: any) => {
     const ocppId: string = handshake.identity;
+    const req = handshake.req ?? handshake.request;
+    const remote = req?.headers?.['cf-connecting-ip']
+      || req?.headers?.['x-forwarded-for']
+      || req?.socket?.remoteAddress
+      || 'n/a';
+    const ua = req?.headers?.['user-agent'] ?? 'n/a';
+    const path = req?.url ?? 'n/a';
+    const host = req?.headers?.host ?? 'n/a';
+
+    console.log(`[Auth] Attempt identity=${ocppId} host=${host} path=${path} remote=${remote} ua=${ua}`);
 
     const charger = await prisma.charger.findUnique({ where: { ocppId } });
     if (!charger) {
-      console.warn(`[Auth] Unknown charger identity: "${ocppId}"`);
+      console.warn(`[Auth] Reject identity=${ocppId} reason=unknown_identity remote=${remote} host=${host} path=${path}`);
       reject(401, 'Unknown charger identity');
       return;
     }
 
-    if (handshake.password) {
+    // Only enforce password if BOTH the charger sends one AND the DB has a non-empty hash.
+    // Empty string password in DB = passwordless auth is allowed for this charger.
+    if (handshake.password && charger.password) {
       const provided = handshake.password.toString('utf8');
       const hashed = createHash('sha256').update(provided).digest('hex');
       if (hashed !== charger.password) {
-        console.warn(`[Auth] Bad password for charger: "${ocppId}"`);
+        console.warn(`[Auth] Reject identity=${ocppId} reason=invalid_password remote=${remote} host=${host} path=${path}`);
         reject(401, 'Invalid password');
         return;
       }
     }
+
+    console.log(`[Auth] Accept identity=${ocppId} chargerId=${charger.id} remote=${remote} host=${host} path=${path}`);
 
     // Attach charger DB id to session so handlers can use it without a lookup
     accept({ chargerId: charger.id, ocppId: charger.ocppId });
@@ -127,9 +141,19 @@ export async function startServer(port: number): Promise<OcppServerHandle> {
       return response;
     });
 
-    // ── Disconnect ────────────────────────────────────────────────────────────
-    client.on('disconnect', () => {
-      console.log(`[Server] Disconnected: ${ocppId}`);
+    // ── Disconnect / diagnostics ──────────────────────────────────────────────
+    client.on('error', (err: any) => {
+      console.error(`[Server] Client error ${ocppId}:`, err?.message ?? err);
+    });
+
+    client.on('disconnect', (...args: any[]) => {
+      const [code, reason] = args;
+      const reasonText = typeof reason === 'string'
+        ? reason
+        : Buffer.isBuffer(reason)
+          ? reason.toString('utf8')
+          : (reason ? String(reason) : '');
+      console.warn(`[Server] Disconnected: ${ocppId} code=${code ?? 'n/a'} reason=${reasonText || 'n/a'}`);
       clientRegistry.unregister(ocppId);
 
       prisma.charger.update({
@@ -151,7 +175,24 @@ export async function startServer(port: number): Promise<OcppServerHandle> {
   // port as the OCPP WebSocket server. This is required on Railway where only
   // the single declared PORT is reachable on the private network.
   const httpServer = http.createServer();
-  httpServer.on('upgrade', server.handleUpgrade);
+  httpServer.on('upgrade', (req: http.IncomingMessage, socket, head) => {
+    const forwardedFor = req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    const proto = req.headers['sec-websocket-protocol'];
+    const ua = req.headers['user-agent'];
+    const host = req.headers.host ?? 'n/a';
+    const key = req.headers['sec-websocket-key'];
+    const keyHint = typeof key === 'string' ? `${key.slice(0, 6)}...` : 'n/a';
+    console.log(`[WS upgrade] host=${host} url=${req.url} from=${forwardedFor} proto=${proto ?? 'n/a'} key=${keyHint} ua=${ua ?? 'n/a'} headBytes=${head?.length ?? 0}`);
+
+    socket.once('error', (err) => {
+      console.warn(`[WS socket error] host=${host} url=${req.url} from=${forwardedFor} err=${err?.message ?? err}`);
+    });
+    socket.once('close', (hadError: boolean) => {
+      console.warn(`[WS socket close] host=${host} url=${req.url} from=${forwardedFor} hadError=${hadError}`);
+    });
+
+    server.handleUpgrade(req, socket, head);
+  });
 
   const host = '::'; // IPv6 dual-stack — required for Railway private network
   await new Promise<void>((resolve, reject) => {
