@@ -10,13 +10,21 @@ const CLERK_KEY = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
 export const isDevMode = !CLERK_KEY;
 
-// Auth token holder — set by auth context
+// Auth state holders — set by auth context
 let _bearerToken: string | null = null;
+let _guestMode = false;
 export function setBearerToken(token: string | null) {
   _bearerToken = token;
 }
 
+export function setGuestMode(guest: boolean) {
+  _guestMode = guest;
+}
+
 async function authHeaders(): Promise<Record<string, string>> {
+  if (_guestMode) {
+    return {};
+  }
   if (isDevMode) {
     return { 'x-dev-user-id': DEV_USER_ID };
   }
@@ -81,6 +89,12 @@ export interface Charger {
     address: string;
     lat: number;
     lng: number;
+    pricePerKwhUsd?: number;
+    idleFeePerMinUsd?: number;
+    activationFeeUsd?: number;
+    gracePeriodMin?: number;
+    pricingMode?: 'flat' | 'tou';
+    touWindows?: unknown;
   };
   connectors: Connector[];
 }
@@ -96,6 +110,7 @@ export interface Session {
   startedAt: string;
   endedAt: string | null;
   costEstimateCents?: number | null;
+  effectiveAmountCents?: number | null;
   connector: {
     connectorId: number;
     charger: {
@@ -149,16 +164,29 @@ export interface ChargerUptime {
 
 // ── API calls ────────────────────────────────────────────────────────────────
 
+function normalizeCharger(charger: Charger): Charger {
+  const chargerStatus = String(charger.status || '').toUpperCase();
+  if (chargerStatus === 'OFFLINE') {
+    return {
+      ...charger,
+      connectors: charger.connectors.map((c) => ({ ...c, status: 'UNAVAILABLE' })),
+    };
+  }
+  return charger;
+}
+
 export const api = {
   chargers: {
-    list(bbox?: { minLat: number; maxLat: number; minLng: number; maxLng: number }) {
+    async list(bbox?: { minLat: number; maxLat: number; minLng: number; maxLng: number }) {
       const params = bbox
         ? `?minLat=${bbox.minLat}&maxLat=${bbox.maxLat}&minLng=${bbox.minLng}&maxLng=${bbox.maxLng}`
         : '';
-      return request<Charger[]>(`/chargers${params}`);
+      const rows = await request<Charger[]>(`/chargers${params}`);
+      return rows.map(normalizeCharger);
     },
-    get(id: string) {
-      return request<Charger>(`/chargers/${id}`);
+    async get(id: string) {
+      const row = await request<Charger>(`/chargers/${id}`);
+      return normalizeCharger(row);
     },
     uptime(id: string) {
       return request<ChargerUptime>(`/chargers/${id}/uptime`);

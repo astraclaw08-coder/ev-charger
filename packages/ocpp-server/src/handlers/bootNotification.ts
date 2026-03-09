@@ -22,7 +22,7 @@ export async function handleBootNotification(
 
   return {
     currentTime: new Date().toISOString(),
-    interval: 300,
+    interval: 900,
     status: 'Accepted',
   };
 }

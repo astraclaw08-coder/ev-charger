@@ -1,4 +1,4 @@
-export type SupportedAuthProvider = 'google' | 'apple' | 'unknown';
+export type SupportedAuthProvider = 'google' | 'apple' | 'unknown' | 'keycloak-password';
 
 export type ClerkJwtPayloadLike = {
   sub?: string;

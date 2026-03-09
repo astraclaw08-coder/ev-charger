@@ -36,18 +36,31 @@ type SiteAggregate = {
   distanceKm?: number;
 };
 
-function statusColorFromStatuses(statuses: string[]): string {
-  if (statuses.some((s) => s === 'AVAILABLE')) return '#10b981';
-  if (statuses.some((s) => s === 'CHARGING' || s === 'PREPARING' || s === 'FINISHING')) return '#f59e0b';
-  if (statuses.some((s) => s === 'FAULTED')) return '#ef4444';
-  return '#9ca3af';
+function statusColorFromStatuses(statuses: string[], chargerStatuses: string[]): string {
+  const hasAvailable = statuses.some((s) => s === 'AVAILABLE');
+  const hasInUse = statuses.some((s) => s === 'CHARGING' || s === 'PREPARING' || s === 'FINISHING' || s === 'SUSPENDED_EV' || s === 'SUSPENDED_EVSE');
+  const hasFaulted = statuses.some((s) => s === 'FAULTED');
+  const isOffline = chargerStatuses.some((s) => s === 'OFFLINE') && !hasAvailable && !hasInUse;
+
+  if (hasAvailable) return '#10b981';
+  if (hasInUse) return '#f59e0b';
+  if (hasFaulted) return '#ef4444';
+  if (isOffline) return '#9ca3af';
+  return '#6b7280';
 }
 
-function statusLabelFromStatuses(statuses: string[]): string {
-  if (statuses.some((s) => s === 'AVAILABLE')) return 'Available';
-  if (statuses.some((s) => s === 'CHARGING' || s === 'PREPARING' || s === 'FINISHING')) return 'In Use';
-  if (statuses.some((s) => s === 'FAULTED')) return 'Faulted';
-  return 'Offline';
+function statusLabelFromStatuses(statuses: string[], chargerStatuses: string[]): string {
+  const hasAvailable = statuses.some((s) => s === 'AVAILABLE');
+  const hasInUse = statuses.some((s) => s === 'CHARGING' || s === 'PREPARING' || s === 'FINISHING' || s === 'SUSPENDED_EV' || s === 'SUSPENDED_EVSE');
+  const hasFaulted = statuses.some((s) => s === 'FAULTED');
+  const hasUnavailable = statuses.some((s) => s === 'UNAVAILABLE' || s === 'OFFLINE');
+  const isOffline = chargerStatuses.some((s) => s === 'OFFLINE') && !hasAvailable && !hasInUse;
+
+  if (hasAvailable) return 'Available';
+  if (hasInUse) return 'In Use';
+  if (hasFaulted) return 'Faulted';
+  if (isOffline || hasUnavailable) return 'Offline';
+  return 'Unknown';
 }
 
 function distanceKm(a: Coord, b: Coord): number {
@@ -76,8 +89,9 @@ export default function MapScreen() {
   const [userLocation, setUserLocation] = useState<Coord | null>(null);
   const [search, setSearch] = useState('');
   const [committedSearch, setCommittedSearch] = useState('');
+  const [manualRefreshing, setManualRefreshing] = useState(false);
 
-  const { data: chargers = [], isLoading, refetch, isRefetching } = useQuery({
+  const { data: chargers = [], isLoading, refetch } = useQuery({
     queryKey: ['chargers'],
     queryFn: () => api.chargers.list(),
     staleTime: 60_000,
@@ -199,6 +213,15 @@ export default function MapScreen() {
     }
   }
 
+  async function onManualRefresh() {
+    setManualRefreshing(true);
+    try {
+      await refetch();
+    } finally {
+      setManualRefreshing(false);
+    }
+  }
+
 
   useEffect(() => {
     const q = committedSearch.trim();
@@ -278,8 +301,9 @@ export default function MapScreen() {
         >
           {filteredSites.map((site) => {
             const allStatuses = site.chargers.flatMap((c) => c.connectors.map((x) => x.status));
-            const pinColor = statusColorFromStatuses(allStatuses);
-            const label = statusLabelFromStatuses(allStatuses);
+            const chargerStatuses = site.chargers.map((c) => String(c.status || '').toUpperCase());
+            const pinColor = statusColorFromStatuses(allStatuses, chargerStatuses);
+            const label = statusLabelFromStatuses(allStatuses, chargerStatuses);
             return (
               <Marker
                 key={site.siteId}
@@ -350,7 +374,7 @@ export default function MapScreen() {
       {/* 1/4 screen nearest list */}
       <ScrollView
         style={[styles.bottomSheet, { backgroundColor: isDark ? '#0b1220' : '#ffffff' }]}
-        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}
+        refreshControl={<RefreshControl refreshing={manualRefreshing} onRefresh={onManualRefresh} />}
       >
         <Text style={[styles.sectionTitle, { color: isDark ? '#f9fafb' : '#111827' }]}>Closest chargers</Text>
         <Text style={[styles.sectionSubtitle, { color: isDark ? '#9ca3af' : '#6b7280' }]}>Top 2-3 stations nearest your current location</Text>
@@ -365,8 +389,9 @@ export default function MapScreen() {
 
           {nearest.map((item) => {
             const statuses = item.chargers.flatMap((c) => c.connectors.map((x) => x.status));
-            const color = statusColorFromStatuses(statuses);
-            const label = statusLabelFromStatuses(statuses);
+            const chargerStatuses = item.chargers.map((c) => String(c.status || '').toUpperCase());
+            const color = statusColorFromStatuses(statuses, chargerStatuses);
+            const label = statusLabelFromStatuses(statuses, chargerStatuses);
             return (
               <TouchableOpacity
                 key={item.siteId}

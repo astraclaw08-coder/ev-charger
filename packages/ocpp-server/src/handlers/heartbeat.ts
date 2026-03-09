@@ -11,12 +11,14 @@ export async function handleHeartbeat(
   console.log(`[Heartbeat] chargerId=${chargerId}`);
 
   const current = await prisma.charger.findUnique({ where: { id: chargerId }, select: { status: true } });
+  const shouldRecover = current?.status === 'DEGRADED' || current?.status === 'OFFLINE';
+
   await prisma.charger.update({
     where: { id: chargerId },
-    data: { lastHeartbeat: now, status: current?.status === 'DEGRADED' ? 'ONLINE' : undefined },
+    data: { lastHeartbeat: now, status: shouldRecover ? 'ONLINE' : undefined },
   });
 
-  if (current?.status === 'DEGRADED') {
+  if (shouldRecover) {
     await recordUptimeEvent(chargerId, 'RECOVERED', { reason: 'Heartbeat restored' });
   }
 

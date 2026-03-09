@@ -1,5 +1,5 @@
 /**
- * Live session screen — polls for kWh + cost, shows Stop button.
+ * Live session screen - polls for kWh + cost, shows Stop button.
  * After stop: shows session summary (kWh, duration, cost).
  */
 import React, { useEffect, useState } from 'react';
@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, type Session } from '@/lib/api';
+import { api, isDevMode, type Session } from '@/lib/api';
 import { useAppTheme } from '@/theme';
 
 const RATE_PER_KWH = 0.35;
@@ -45,6 +45,14 @@ function formatKwh(value: number): string {
   return value.toFixed(4).replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1');
 }
 
+function getLiveKwh(session: Session): number {
+  if (session.kwhDelivered != null) return session.kwhDelivered;
+  if (session.meterStop != null && session.meterStart != null) {
+    return Math.max(0, (session.meterStop - session.meterStart) / 1000);
+  }
+  return 0;
+}
+
 // ── Live ticker (updates every second for duration display) ───────────────────
 
 function useLiveDuration(startedAt: string, active: boolean): string {
@@ -59,32 +67,57 @@ function useLiveDuration(startedAt: string, active: boolean): string {
 
 // ── Session Summary (completed) ───────────────────────────────────────────────
 
-function SessionSummary({ session }: { session: Session }) {
+function SessionSummary({ session, fallbackKwh }: { session: Session; fallbackKwh?: number }) {
   const router = useRouter();
-  const kwh = session.kwhDelivered ?? 0;
+  const { isDark } = useAppTheme();
+  const ratePerKwh = session.ratePerKwh ?? RATE_PER_KWH;
+  const meterDerivedKwh =
+    session.meterStop != null ? Math.max(0, (session.meterStop - session.meterStart) / 1000) : 0;
+  const sessionDerivedKwh = getLiveKwh(session);
+  const paymentDerivedCost = session.payment?.amountCents != null ? session.payment.amountCents / 100 : null;
+  const estimateDerivedCost = session.costEstimateCents != null ? session.costEstimateCents / 100 : null;
+
   const cost =
-    session.payment?.amountCents != null
-      ? session.payment.amountCents / 100
-      : kwh * RATE_PER_KWH;
+    paymentDerivedCost ??
+    estimateDerivedCost ??
+    (sessionDerivedKwh > 0 ? sessionDerivedKwh * ratePerKwh : meterDerivedKwh * ratePerKwh);
+
+  const finalKwh =
+    meterDerivedKwh > 0
+      ? meterDerivedKwh
+      : sessionDerivedKwh > 0
+        ? sessionDerivedKwh
+        : (fallbackKwh ?? 0) > 0
+          ? (fallbackKwh ?? 0)
+          : cost > 0 && ratePerKwh > 0
+            ? cost / ratePerKwh
+            : 0;
+  const paymentMethod = isDevMode
+    ? ''
+    : session.payment?.stripeCustomerId
+      ? 'Card on file'
+      : '-';
 
   return (
     <View style={styles.summaryContainer}>
       <Text style={styles.summaryCheckmark}>✓</Text>
-      <Text style={styles.summaryTitle}>Session Complete</Text>
-      <Text style={styles.summarySubtitle}>{session.connector.charger.site.name}</Text>
+      <Text style={[styles.summaryTitle, { color: isDark ? '#e2e8f0' : '#111827' }]}>Session Complete</Text>
+      <Text style={[styles.summarySubtitle, { color: isDark ? '#cbd5e1' : '#6b7280' }]}>{session.connector.charger.site.name}</Text>
+      <Text style={[styles.summaryAddress, { color: isDark ? '#94a3b8' : '#6b7280' }]}>{session.connector.charger.site.address}</Text>
 
       <View style={styles.summaryStats}>
-        <SummaryStatCard label="Energy" value={`${formatKwh(kwh)} kWh`} icon="⚡" />
+        <SummaryStatCard label="ENERGY (kWh)" value={formatKwh(finalKwh)} icon="⚡" isDark={isDark} />
         <SummaryStatCard
-          label="Duration"
+          label="DURATION"
           value={formatDuration(session.startedAt, session.endedAt)}
           icon="⏱"
+          isDark={isDark}
         />
         <SummaryStatCard
-          label="Total Cost"
+          label="TOTAL COST"
           value={`$${cost.toFixed(2)}`}
-          icon="💳"
-          highlight
+          icon="money-outline"
+          isDark={isDark}
         />
       </View>
 
@@ -102,12 +135,15 @@ function SessionSummary({ session }: { session: Session }) {
         </View>
       )}
 
-      <View style={styles.summaryMeta}>
-        <Text style={styles.metaText}>Started: {formatDate(session.startedAt)}</Text>
+      <View style={[styles.summaryMeta, { backgroundColor: isDark ? '#111827' : '#f3f4f6' }]}>
+        <Text style={[styles.metaText, { color: isDark ? '#cbd5e1' : '#6b7280' }]}>Started: {formatDate(session.startedAt)}</Text>
         {session.endedAt && (
-          <Text style={styles.metaText}>Ended: {formatDate(session.endedAt)}</Text>
+          <Text style={[styles.metaText, { color: isDark ? '#cbd5e1' : '#6b7280' }]}>Ended: {formatDate(session.endedAt)}</Text>
         )}
-        <Text style={styles.metaText}>Rate: ${RATE_PER_KWH.toFixed(2)}/kWh</Text>
+        <Text style={[styles.metaText, { color: isDark ? '#cbd5e1' : '#6b7280' }]}>Transaction #: {session.transactionId ?? '-'}</Text>
+        <Text style={[styles.metaText, { color: isDark ? '#cbd5e1' : '#6b7280' }]}>Charger Serial/Name: {session.connector.charger.ocppId}</Text>
+        <Text style={[styles.metaText, { color: isDark ? '#cbd5e1' : '#6b7280' }]}>Rate: ${ratePerKwh.toFixed(2)}/kWh</Text>
+        <Text style={[styles.metaText, { color: isDark ? '#cbd5e1' : '#6b7280' }]}>Payment Method: {paymentMethod}</Text>
       </View>
 
       <TouchableOpacity
@@ -125,17 +161,31 @@ function SummaryStatCard({
   value,
   icon,
   highlight,
+  isDark,
 }: {
   label: string;
   value: string;
   icon: string;
   highlight?: boolean;
+  isDark: boolean;
 }) {
   return (
-    <View style={[styles.statCard, highlight && styles.statCardHighlight]}>
-      <Text style={styles.statIcon}>{icon}</Text>
-      <Text style={[styles.statValue, highlight && styles.statValueHighlight]}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
+    <View style={[
+      styles.statCard,
+      { backgroundColor: isDark ? '#111827' : '#fff' },
+      highlight && (isDark ? styles.statCardHighlightDark : styles.statCardHighlight),
+    ]}>
+      <View style={styles.statIconSlot}>
+        {icon === 'money-outline' ? (
+          <View style={[styles.moneyIconCircle, { borderColor: isDark ? '#94a3b8' : '#6b7280' }]}>
+            <Text style={[styles.moneyIconText, { color: isDark ? '#e2e8f0' : '#374151' }]}>$</Text>
+          </View>
+        ) : (
+          <Text style={styles.statIcon}>{icon}</Text>
+        )}
+      </View>
+      <Text numberOfLines={1} style={[styles.statValue, { color: isDark ? '#f8fafc' : '#111827' }, highlight && styles.statValueHighlight]}>{value}</Text>
+      <Text numberOfLines={1} style={[styles.statLabel, { color: isDark ? '#94a3b8' : '#9ca3af' }]}>{label}</Text>
     </View>
   );
 }
@@ -146,13 +196,17 @@ function LiveSessionView({
   session,
   onStop,
   stopping,
+  showConnectorLabel,
 }: {
   session: Session;
   onStop: () => void;
   stopping: boolean;
+  showConnectorLabel: boolean;
 }) {
-  const kwh = session.kwhDelivered ?? 0;
-  const estimatedCost = kwh * RATE_PER_KWH;
+  const { isDark } = useAppTheme();
+  const kwh = getLiveKwh(session);
+  const liveRate = session.ratePerKwh ?? RATE_PER_KWH;
+  const estimatedCost = kwh * liveRate;
   const duration = useLiveDuration(session.startedAt, true);
 
   function confirmStop() {
@@ -167,7 +221,7 @@ function LiveSessionView({
   }
 
   return (
-    <View style={styles.liveContainer}>
+    <View style={[styles.liveContainer, { backgroundColor: isDark ? '#030712' : '#f9fafb' }]}>
       {/* Pulsing status indicator */}
       <View style={styles.liveHeader}>
         <View style={styles.liveDot} />
@@ -175,35 +229,39 @@ function LiveSessionView({
       </View>
 
       {/* Site name */}
-      <Text style={styles.liveSiteName}>{session.connector.charger.site.name}</Text>
-      <Text style={styles.liveConnector}>
-        {session.connector.charger.vendor} {session.connector.charger.model} ·
-        Connector {session.connector.connectorId}
+      <Text style={[styles.liveSiteName, { color: isDark ? '#f9fafb' : '#111827' }]}>{session.connector.charger.site.name}</Text>
+      <Text style={[styles.liveChargerSerial, { color: isDark ? '#94a3b8' : '#6b7280' }]}> 
+        Charger Serial/Name: {session.connector.charger.ocppId}
       </Text>
+      {showConnectorLabel ? (
+        <Text style={[styles.liveConnector, { color: isDark ? '#9ca3af' : '#6b7280' }]}> 
+          Connector {session.connector.connectorId}
+        </Text>
+      ) : null}
 
       {/* Big kWh counter */}
       <View style={styles.kwhContainer}>
         <Text style={styles.kwhValue}>{formatKwh(kwh)}</Text>
-        <Text style={styles.kwhUnit}>kWh delivered</Text>
+        <Text style={[styles.kwhUnit, { color: isDark ? '#94a3b8' : '#6b7280' }]}>ENERGY (kWh)</Text>
       </View>
 
       {/* Stats row */}
-      <View style={styles.liveStats}>
+      <View style={[styles.liveStats, { backgroundColor: isDark ? '#0f172a' : '#fff', borderColor: isDark ? '#1f2937' : '#e5e7eb', borderWidth: 1 }]}>
         <View style={styles.liveStat}>
-          <Text style={styles.liveStatValue}>{duration}</Text>
-          <Text style={styles.liveStatLabel}>Duration</Text>
+          <Text style={[styles.liveStatValue, { color: isDark ? '#f8fafc' : '#111827' }]}>{duration}</Text>
+          <Text style={[styles.liveStatLabel, { color: isDark ? '#94a3b8' : '#9ca3af' }]}>Duration</Text>
         </View>
-        <View style={styles.liveStatDivider} />
+        <View style={[styles.liveStatDivider, { backgroundColor: isDark ? '#334155' : '#e5e7eb' }]} />
         <View style={styles.liveStat}>
           <Text style={[styles.liveStatValue, styles.costValue]}>
             ${estimatedCost.toFixed(2)}
           </Text>
-          <Text style={styles.liveStatLabel}>Est. Cost</Text>
+          <Text style={[styles.liveStatLabel, { color: isDark ? '#94a3b8' : '#9ca3af' }]}>Est. Cost</Text>
         </View>
-        <View style={styles.liveStatDivider} />
+        <View style={[styles.liveStatDivider, { backgroundColor: isDark ? '#334155' : '#e5e7eb' }]} />
         <View style={styles.liveStat}>
-          <Text style={styles.liveStatValue}>${RATE_PER_KWH.toFixed(2)}</Text>
-          <Text style={styles.liveStatLabel}>Per kWh</Text>
+          <Text style={[styles.liveStatValue, { color: isDark ? '#f8fafc' : '#111827' }]}>${liveRate.toFixed(2)}</Text>
+          <Text style={[styles.liveStatLabel, { color: isDark ? '#94a3b8' : '#9ca3af' }]}>Per kWh</Text>
         </View>
       </View>
 
@@ -220,7 +278,7 @@ function LiveSessionView({
         )}
       </TouchableOpacity>
 
-      <Text style={styles.pollingNote}>Updating every 10 seconds</Text>
+      <Text style={styles.pollingNote}>Updating every 3 seconds</Text>
     </View>
   );
 }
@@ -232,15 +290,33 @@ export default function SessionScreen() {
   const { isDark } = useAppTheme();
   const router = useRouter();
   const queryClient = useQueryClient();
+  const [lastObservedKwh, setLastObservedKwh] = useState(0);
 
   const { data: session, isLoading } = useQuery({
     queryKey: ['session', id],
     queryFn: () => api.sessions.get(id),
     refetchInterval: (query) => {
       // Poll aggressively while active
-      return query.state.data?.status === 'ACTIVE' ? 10_000 : false;
+      return query.state.data?.status === 'ACTIVE' ? 3_000 : false;
     },
   });
+
+  const { data: chargerDetails } = useQuery({
+    queryKey: ['charger', session?.connector.charger.id],
+    queryFn: () => api.chargers.get(session!.connector.charger.id),
+    enabled: Boolean(session?.connector.charger.id),
+    staleTime: 30_000,
+  });
+
+  const showConnectorLabel = (chargerDetails?.connectors?.length ?? 1) > 1;
+
+  useEffect(() => {
+    if (!session) return;
+    const observed = getLiveKwh(session);
+    if (observed > lastObservedKwh) {
+      setLastObservedKwh(observed);
+    }
+  }, [session, lastObservedKwh]);
 
   const stopMutation = useMutation({
     mutationFn: () => api.sessions.stop(id),
@@ -260,7 +336,7 @@ export default function SessionScreen() {
 
   if (isLoading) {
     return (
-      <View style={[styles.centered, { backgroundColor: isDark ? '#030712' : '#f9fafb' }]}> 
+      <View style={[styles.centered, { backgroundColor: isDark ? '#030712' : '#f9fafb' }]}>
         <ActivityIndicator size="large" color="#10b981" />
       </View>
     );
@@ -268,7 +344,7 @@ export default function SessionScreen() {
 
   if (!session) {
     return (
-      <View style={[styles.centered, { backgroundColor: isDark ? '#030712' : '#f9fafb' }]}> 
+      <View style={[styles.centered, { backgroundColor: isDark ? '#030712' : '#f9fafb' }]}>
         <Text style={styles.errorText}>Session not found.</Text>
       </View>
     );
@@ -280,17 +356,28 @@ export default function SessionScreen() {
         options={{
           title: session.status === 'ACTIVE' ? 'Charging' : 'Session Details',
           headerShown: true,
+          headerStyle: {
+            backgroundColor:
+              session.status === 'ACTIVE' ? '#030712' : isDark ? '#030712' : '#f9fafb',
+          },
+          headerTintColor: session.status === 'ACTIVE' ? '#f8fafc' : isDark ? '#f8fafc' : '#111827',
+          headerBackButtonDisplayMode: 'minimal',
+          headerTitleStyle: {
+            color: session.status === 'ACTIVE' ? '#f8fafc' : isDark ? '#f8fafc' : '#111827',
+          },
+          headerShadowVisible: false,
         }}
       />
-      <ScrollView contentContainerStyle={[styles.scrollContent, { backgroundColor: isDark ? '#030712' : '#f9fafb' }]}> 
+      <ScrollView contentContainerStyle={[styles.scrollContent, { backgroundColor: isDark ? '#030712' : '#f9fafb' }]}>
         {session.status === 'ACTIVE' ? (
           <LiveSessionView
             session={session}
             onStop={() => stopMutation.mutate()}
             stopping={stopMutation.isPending}
+            showConnectorLabel={showConnectorLabel}
           />
         ) : (
-          <SessionSummary session={session} />
+          <SessionSummary session={session} fallbackKwh={lastObservedKwh} />
         )}
       </ScrollView>
     </>
@@ -339,7 +426,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#6b7280',
     textAlign: 'center',
-    marginBottom: 32,
+    marginBottom: 4,
+  },
+  liveChargerSerial: {
+    fontSize: 12,
+    textAlign: 'center',
+    marginBottom: 28,
   },
   kwhContainer: { alignItems: 'center', marginBottom: 32 },
   kwhValue: { fontSize: 72, fontWeight: '800', color: '#10b981', lineHeight: 80 },
@@ -383,7 +475,8 @@ const styles = StyleSheet.create({
   },
   summaryCheckmark: { fontSize: 56, marginBottom: 12 },
   summaryTitle: { fontSize: 24, fontWeight: '800', color: '#111827', marginBottom: 4 },
-  summarySubtitle: { fontSize: 14, color: '#6b7280', marginBottom: 28 },
+  summarySubtitle: { fontSize: 14, color: '#6b7280', marginBottom: 4 },
+  summaryAddress: { fontSize: 13, marginBottom: 24, textAlign: 'center' },
   summaryStats: {
     flexDirection: 'row',
     gap: 12,
@@ -396,16 +489,40 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 14,
     alignItems: 'center',
+    justifyContent: 'flex-start',
+    minHeight: 112,
     shadowColor: '#000',
     shadowOpacity: 0.06,
     shadowRadius: 6,
     elevation: 2,
   },
   statCardHighlight: { backgroundColor: '#ecfdf5' },
-  statIcon: { fontSize: 24, marginBottom: 6 },
-  statValue: { fontSize: 18, fontWeight: '700', color: '#111827' },
+  statCardHighlightDark: { backgroundColor: '#052e2b', borderWidth: 1, borderColor: '#065f46' },
+  statIconSlot: {
+    height: 26,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  statIcon: { fontSize: 24, marginBottom: 0 },
+  moneyIconCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 0,
+    backgroundColor: 'transparent',
+  },
+  moneyIconText: {
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 14,
+  },
+  statValue: { fontSize: 18, fontWeight: '700', color: '#111827', textAlign: 'center', minHeight: 22 },
   statValueHighlight: { color: '#10b981' },
-  statLabel: { fontSize: 11, color: '#9ca3af', marginTop: 2, textTransform: 'uppercase' },
+  statLabel: { fontSize: 10, color: '#9ca3af', marginTop: 2, textTransform: 'none' },
   paymentSuccess: {
     backgroundColor: '#d1fae5',
     borderRadius: 10,

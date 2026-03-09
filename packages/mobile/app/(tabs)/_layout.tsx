@@ -1,12 +1,13 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { AppState } from 'react-native';
 import { Tabs, useRouter, useSegments } from 'expo-router';
 import { TouchableOpacity, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useQuery } from '@tanstack/react-query';
-import { api } from '@/lib/api';
+import { api, type Session } from '@/lib/api';
 import { useAppTheme } from '@/theme';
 import { useAppAuth } from '@/providers/AuthProvider';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 function formatElapsed(startedAt: string): string {
   const start = new Date(startedAt).getTime();
@@ -17,50 +18,24 @@ function formatElapsed(startedAt: string): string {
   return `${h}h ${m}m`;
 }
 
-function ActiveSessionBanner() {
+function ActiveSessionBanner({ active }: { active: Session }) {
   const router = useRouter();
-  const segments = useSegments();
   const { isDark } = useAppTheme();
-  const [, setTick] = useState(0);
-
-  const { data, refetch } = useQuery({
-    queryKey: ['sessions'],
-    queryFn: () => api.sessions.list(20, 0),
-  });
-
-  useEffect(() => {
-    const timer = setInterval(() => setTick((t) => t + 1), 30_000);
-    return () => clearInterval(timer);
-  }, []);
-
-  useFocusEffect(
-    React.useCallback(() => {
-      refetch();
-      return undefined;
-    }, [refetch]),
-  );
-
-  useEffect(() => {
-    const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') refetch();
-    });
-    return () => sub.remove();
-  }, [refetch]);
-
-  const active = useMemo(() => data?.sessions.find((s) => s.status === 'ACTIVE') ?? null, [data]);
-  const currentTab = segments[segments.length - 1];
-  if (!active || currentTab === 'sessions') return null;
-
+  const insets = useSafeAreaInsets();
   const kwh = active.kwhDelivered ?? 0;
   const siteName = active.connector.charger.site.name;
 
   return (
     <View style={{
       position: 'absolute',
-      left: 12,
-      right: 12,
-      top: 8,
-      zIndex: 20,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      zIndex: 1,
+      backgroundColor: isDark ? '#030712' : '#f9fafb',
+      paddingHorizontal: 12,
+      paddingBottom: Math.max(insets.bottom, 8),
+      paddingTop: 4,
     }}>
       <TouchableOpacity
         style={{
@@ -97,9 +72,39 @@ function ActiveSessionBanner() {
 export default function TabsLayout() {
   const { isDark } = useAppTheme();
   const { isGuest } = useAppAuth();
+  const segments = useSegments();
+  const insets = useSafeAreaInsets();
+
+  const { data, refetch } = useQuery({
+    queryKey: ['sessions'],
+    queryFn: () => api.sessions.list(20, 0),
+    refetchInterval: isGuest ? false : 5_000,
+    enabled: !isGuest,
+  });
+
+  useFocusEffect(
+    React.useCallback(() => {
+      if (!isGuest) refetch();
+      return undefined;
+    }, [isGuest, refetch]),
+  );
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (!isGuest && state === 'active') refetch();
+    });
+    return () => sub.remove();
+  }, [isGuest, refetch]);
+
+  const active = useMemo(() => data?.sessions.find((s) => s.status === 'ACTIVE') ?? null, [data]);
+  const currentTab = segments[segments.length - 1];
+  const bannerVisible = Boolean(active);
+  const tabIconGap = 6;
+  const tabBottomGap = bannerVisible ? tabIconGap : Math.max(insets.bottom, 8);
 
   return (
     <>
+      {active && bannerVisible ? <ActiveSessionBanner active={active} /> : null}
       <Tabs
         screenOptions={{
           tabBarActiveTintColor: '#10b981',
@@ -107,7 +112,20 @@ export default function TabsLayout() {
           tabBarStyle: {
             borderTopColor: isDark ? '#1f2937' : '#e5e7eb',
             backgroundColor: isDark ? '#0b1220' : '#ffffff',
-            paddingBottom: 4,
+            paddingBottom: tabBottomGap,
+            paddingTop: tabIconGap,
+            height: 62 + tabBottomGap,
+            marginBottom: bannerVisible ? 72 + Math.max(insets.bottom, 8) : 0,
+          },
+          tabBarItemStyle: {
+            justifyContent: 'center',
+            alignItems: 'center',
+            paddingVertical: 2,
+          },
+          tabBarLabelStyle: {
+            marginTop: 2,
+            paddingTop: 0,
+            lineHeight: 14,
           },
           sceneStyle: { backgroundColor: isDark ? '#030712' : '#f9fafb' },
           headerStyle: { backgroundColor: isDark ? '#0b1220' : '#fff' },
@@ -129,6 +147,7 @@ export default function TabsLayout() {
             title: 'Favorites',
             tabBarLabel: 'Favorites',
             tabBarIcon: ({ size }) => <TabIcon icon="❤️" size={size} />,
+            href: isGuest ? null : undefined,
           }}
         />
         <Tabs.Screen
@@ -137,6 +156,7 @@ export default function TabsLayout() {
             title: 'Session History',
             tabBarLabel: 'History',
             tabBarIcon: ({ size }) => <TabIcon icon="📋" size={size} />,
+            href: isGuest ? null : undefined,
           }}
         />
         <Tabs.Screen
@@ -149,7 +169,6 @@ export default function TabsLayout() {
           }}
         />
       </Tabs>
-      <ActiveSessionBanner />
     </>
   );
 }

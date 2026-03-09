@@ -2,7 +2,10 @@ import { prisma } from '@ev-charger/shared';
 import type { StopTransactionRequest, StopTransactionResponse } from '@ev-charger/shared';
 
 
-function extractTransactionEndWh(params: StopTransactionRequest): number | null {
+function extractTransactionContextWh(
+  params: StopTransactionRequest,
+  targetContext: 'Transaction.Begin' | 'Transaction.End',
+): number | null {
   const points = params.transactionData ?? [];
   let bestTs = -1;
   let bestWh: number | null = null;
@@ -12,7 +15,7 @@ function extractTransactionEndWh(params: StopTransactionRequest): number | null 
     for (const sv of mv.sampledValue ?? []) {
       const context = sv.context ?? '';
       const measurand = sv.measurand ?? 'Energy.Active.Import.Register';
-      if (context !== 'Transaction.End') continue;
+      if (context !== targetContext) continue;
       if (measurand !== 'Energy.Active.Import.Register') continue;
 
       const raw = Number(sv.value);
@@ -54,18 +57,25 @@ export async function handleStopTransaction(
     return {};
   }
 
-  // For LOOP EX-1762 chargers, transactionData/Transaction.End is the most
-  // accurate terminal reading (can include sub-Wh decimals). Prefer it when present.
-  const transactionEndWh = extractTransactionEndWh(params);
+  const transactionBeginWh = extractTransactionContextWh(params, 'Transaction.Begin');
+  const transactionEndWh = extractTransactionContextWh(params, 'Transaction.End');
 
-  // Fallback precedence: Transaction.End > latest MeterValues > StopTransaction.meterStop.
+  // Fallback precedence for persisted meterStop: Transaction.End > latest MeterValues > StopTransaction.meterStop.
   const finalMeterStop = transactionEndWh ?? Math.max(meterStop, session.meterStop ?? meterStop);
 
-  const kwhDelivered = session.meterStart != null
-    ? Math.max(0, (finalMeterStop - session.meterStart) / 1000)
-    : 0;
+  // Requested billing rule:
+  // 1) kWh = (Transaction.End - Transaction.Begin)
+  // 2) if Begin missing, assume 0
+  // 3) if both Begin and End missing, use (meterStop - meterStart)
+  const kwhDelivered = transactionEndWh != null
+    ? Math.max(0, (transactionEndWh - (transactionBeginWh ?? 0)) / 1000)
+    : session.meterStart != null
+      ? Math.max(0, (finalMeterStop - session.meterStart) / 1000)
+      : 0;
 
-  console.log(`[StopTransaction] finalMeterStop=${finalMeterStop}Wh transactionEndWh=${transactionEndWh ?? 'n/a'} sessionMeterStop=${session.meterStop ?? 'n/a'}`);
+  console.log(
+    `[StopTransaction] finalMeterStop=${finalMeterStop}Wh txBegin=${transactionBeginWh ?? 'n/a'} txEnd=${transactionEndWh ?? 'n/a'} sessionMeterStart=${session.meterStart ?? 'n/a'} sessionMeterStop=${session.meterStop ?? 'n/a'} kWh=${kwhDelivered.toFixed(6)}`,
+  );
 
   await prisma.session.update({
     where: { id: session.id },

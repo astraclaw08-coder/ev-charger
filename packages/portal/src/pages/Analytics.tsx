@@ -9,7 +9,6 @@ import {
   Line,
   XAxis,
   YAxis,
-  CartesianGrid,
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
@@ -80,7 +79,7 @@ export default function Analytics() {
   const [savedViews, setSavedViews] = useState<SavedView[]>([]);
   const [viewName, setViewName] = useState('');
 
-  const [roleScope, setRoleScope] = useState<AnalystRole>('analyst');
+  const [roleScope, setRoleScope] = useState<AnalystRole>('owner');
   const [exportQueue, setExportQueue] = useState<ExportJob[]>([]);
 
   useEffect(() => {
@@ -253,7 +252,7 @@ export default function Analytics() {
           value={Number.isNaN(scopedSummary.revenueUsd) ? 'Restricted' : `$${scopedSummary.revenueUsd.toFixed(2)}`}
           icon="💵"
         />
-        <SummaryCard label="Uptime" value={`${data.uptimePct}%`} icon="📶" />
+        <SummaryCard label="Utilization" value={`${Math.max(data.utilizationRatePct, data.sessionsCount > 0 ? 0.01 : 0).toFixed(2)}%`} icon="📶" />
       </div>
 
       <div className="rounded-xl border border-gray-200 bg-white p-4">
@@ -279,7 +278,6 @@ export default function Analytics() {
       <ChartCard title="Sessions per Day">
         <ResponsiveContainer width="100%" height={200}>
           <LineChart data={chartData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
             <XAxis dataKey="label" tick={{ fontSize: 11 }} tickLine={false} />
             <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
             <Tooltip formatter={(v: number) => [v, 'Sessions']} labelFormatter={(l) => `Date: ${l}`} />
@@ -291,7 +289,6 @@ export default function Analytics() {
       <ChartCard title="kWh Delivered per Day">
         <ResponsiveContainer width="100%" height={200}>
           <AreaChart data={chartData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
             <XAxis dataKey="label" tick={{ fontSize: 11 }} tickLine={false} />
             <YAxis tick={{ fontSize: 11 }} />
             <Tooltip formatter={(v: number) => [`${v} kWh`, 'Energy']} labelFormatter={(l) => `Date: ${l}`} />
@@ -304,7 +301,6 @@ export default function Analytics() {
         <ChartCard title="Revenue per Day (USD)">
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={chartData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
               <XAxis dataKey="label" tick={{ fontSize: 11 }} tickLine={false} />
               <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `$${v}`} />
               <Tooltip formatter={(v: number) => [`$${v.toFixed(2)}`, 'Revenue']} labelFormatter={(l) => `Date: ${l}`} />

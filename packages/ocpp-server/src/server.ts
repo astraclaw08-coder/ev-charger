@@ -9,6 +9,7 @@ import { handleAuthorize } from './handlers/authorize';
 import { handleStartTransaction } from './handlers/startTransaction';
 import { handleStopTransaction } from './handlers/stopTransaction';
 import { handleMeterValues } from './handlers/meterValues';
+import { logOcppMessage } from './ocppLogger';
 
 // ocpp-rpc ships as CommonJS without bundled TS types
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -28,23 +29,37 @@ export async function startServer(port: number): Promise<OcppServerHandle> {
   // ── Authentication ──────────────────────────────────────────────────────────
   server.auth(async (accept: any, reject: any, handshake: any) => {
     const ocppId: string = handshake.identity;
+    const req = handshake.req ?? handshake.request;
+    const remote = req?.headers?.['cf-connecting-ip']
+      || req?.headers?.['x-forwarded-for']
+      || req?.socket?.remoteAddress
+      || 'n/a';
+    const ua = req?.headers?.['user-agent'] ?? 'n/a';
+    const path = req?.url ?? 'n/a';
+    const host = req?.headers?.host ?? 'n/a';
+
+    console.log(`[Auth] Attempt identity=${ocppId} host=${host} path=${path} remote=${remote} ua=${ua}`);
 
     const charger = await prisma.charger.findUnique({ where: { ocppId } });
     if (!charger) {
-      console.warn(`[Auth] Unknown charger identity: "${ocppId}"`);
+      console.warn(`[Auth] Reject identity=${ocppId} reason=unknown_identity remote=${remote} host=${host} path=${path}`);
       reject(401, 'Unknown charger identity');
       return;
     }
 
-    if (handshake.password) {
+    // Only enforce password if BOTH the charger sends one AND the DB has a non-empty hash.
+    // Empty string password in DB = passwordless auth is allowed for this charger.
+    if (handshake.password && charger.password) {
       const provided = handshake.password.toString('utf8');
       const hashed = createHash('sha256').update(provided).digest('hex');
       if (hashed !== charger.password) {
-        console.warn(`[Auth] Bad password for charger: "${ocppId}"`);
+        console.warn(`[Auth] Reject identity=${ocppId} reason=invalid_password remote=${remote} host=${host} path=${path}`);
         reject(401, 'Invalid password');
         return;
       }
     }
+
+    console.log(`[Auth] Accept identity=${ocppId} chargerId=${charger.id} remote=${remote} host=${host} path=${path}`);
 
     // Attach charger DB id to session so handlers can use it without a lookup
     accept({ chargerId: charger.id, ocppId: charger.ocppId });
@@ -58,67 +73,100 @@ export async function startServer(port: number): Promise<OcppServerHandle> {
     console.log(`[Server] Connected: ${ocppId} (db=${chargerId})`);
     clientRegistry.register(ocppId, client);
 
+    const registerInboundHandler = (
+      action: string,
+      fn: (params: any) => Promise<any> | any,
+    ) => {
+      client.handle(action, async ({ params, messageId }: any) => {
+        await logOcppMessage(chargerId, 'INBOUND', action, params, messageId);
+        const response = await fn(params);
+        await logOcppMessage(chargerId, 'OUTBOUND', action, response ?? {}, messageId ? `${messageId}:response` : undefined);
+        return response;
+      });
+    };
+
     // ── Inbound handlers ──────────────────────────────────────────────────────
-    client.handle('BootNotification', async ({ params }: any) =>
+    registerInboundHandler('BootNotification', (params) =>
       handleBootNotification(client, chargerId, params));
 
-    client.handle('Heartbeat', async ({ params }: any) =>
+    registerInboundHandler('Heartbeat', (params) =>
       handleHeartbeat(client, chargerId, params));
 
-    client.handle('StatusNotification', async ({ params }: any) =>
+    registerInboundHandler('StatusNotification', (params) =>
       handleStatusNotification(client, chargerId, params));
 
-    client.handle('Authorize', async ({ params }: any) =>
+    registerInboundHandler('Authorize', (params) =>
       handleAuthorize(client, chargerId, params));
 
-    client.handle('StartTransaction', async ({ params }: any) =>
+    registerInboundHandler('StartTransaction', (params) =>
       handleStartTransaction(client, chargerId, params));
 
-    client.handle('StopTransaction', async ({ params }: any) =>
+    registerInboundHandler('StopTransaction', (params) =>
       handleStopTransaction(client, chargerId, params));
 
-    client.handle('MeterValues', async ({ params }: any) =>
+    registerInboundHandler('MeterValues', (params) =>
       handleMeterValues(client, chargerId, params));
 
     // ── Stub handlers for common vendor messages ──────────────────────────────
     // Real chargers often send these; return sensible defaults to avoid CALLERROR.
 
-    client.handle('GetConfiguration', async ({ params }: any) => {
+    registerInboundHandler('GetConfiguration', (params) => {
       const keys: string[] = params?.key ?? [];
       console.log(`[GetConfiguration] chargerId=${chargerId} keys=${keys.join(',') || '*'}`);
       return { configurationKey: [], unknownKey: keys };
     });
 
-    client.handle('DataTransfer', async ({ params }: any) => {
+    registerInboundHandler('DataTransfer', (params) => {
       console.log(`[DataTransfer] chargerId=${chargerId} vendorId=${params?.vendorId} messageId=${params?.messageId}`);
       return { status: 'Accepted' };
     });
 
-    client.handle('FirmwareStatusNotification', async ({ params }: any) => {
+    registerInboundHandler('FirmwareStatusNotification', (params) => {
       console.log(`[FirmwareStatusNotification] chargerId=${chargerId} status=${params?.status}`);
       return {};
     });
 
-    client.handle('DiagnosticsStatusNotification', async ({ params }: any) => {
+    registerInboundHandler('DiagnosticsStatusNotification', (params) => {
       console.log(`[DiagnosticsStatusNotification] chargerId=${chargerId} status=${params?.status}`);
       return {};
     });
 
     // Catch-all: log and return empty object — never throw (would send CALLERROR
     // which can cause real chargers to disconnect or log faults).
-    client.handle(({ method, params }: any) => {
+    client.handle(async ({ method, params, messageId }: any) => {
       console.warn(`[Server] Unhandled action: ${method}`, JSON.stringify(params));
-      return {};
+      await logOcppMessage(chargerId, 'INBOUND', method, params, messageId);
+      const response = {};
+      await logOcppMessage(chargerId, 'OUTBOUND', method, response, messageId ? `${messageId}:response` : undefined);
+      return response;
     });
 
-    // ── Disconnect ────────────────────────────────────────────────────────────
-    client.on('disconnect', () => {
-      console.log(`[Server] Disconnected: ${ocppId}`);
+    // ── Disconnect / diagnostics ──────────────────────────────────────────────
+    client.on('error', (err: any) => {
+      console.error(`[Server] Client error ${ocppId}:`, err?.message ?? err);
+    });
+
+    client.on('disconnect', (...args: any[]) => {
+      const [code, reason] = args;
+      const reasonText = typeof reason === 'string'
+        ? reason
+        : Buffer.isBuffer(reason)
+          ? reason.toString('utf8')
+          : (reason ? String(reason) : '');
+      console.warn(`[Server] Disconnected: ${ocppId} code=${code ?? 'n/a'} reason=${reasonText || 'n/a'}`);
       clientRegistry.unregister(ocppId);
 
       prisma.charger.update({
         where: { id: chargerId },
-        data: { status: 'OFFLINE' },
+        data: { status: 'DEGRADED' },
+      }).catch(console.error);
+
+      prisma.uptimeEvent.create({
+        data: {
+          chargerId,
+          event: 'DEGRADED',
+          reason: 'WebSocket disconnected; pending offline confirmation window',
+        },
       }).catch(console.error);
     });
   });
@@ -127,7 +175,24 @@ export async function startServer(port: number): Promise<OcppServerHandle> {
   // port as the OCPP WebSocket server. This is required on Railway where only
   // the single declared PORT is reachable on the private network.
   const httpServer = http.createServer();
-  httpServer.on('upgrade', server.handleUpgrade);
+  httpServer.on('upgrade', (req: http.IncomingMessage, socket, head) => {
+    const forwardedFor = req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    const proto = req.headers['sec-websocket-protocol'];
+    const ua = req.headers['user-agent'];
+    const host = req.headers.host ?? 'n/a';
+    const key = req.headers['sec-websocket-key'];
+    const keyHint = typeof key === 'string' ? `${key.slice(0, 6)}...` : 'n/a';
+    console.log(`[WS upgrade] host=${host} url=${req.url} from=${forwardedFor} proto=${proto ?? 'n/a'} key=${keyHint} ua=${ua ?? 'n/a'} headBytes=${head?.length ?? 0}`);
+
+    socket.once('error', (err) => {
+      console.warn(`[WS socket error] host=${host} url=${req.url} from=${forwardedFor} err=${err?.message ?? err}`);
+    });
+    socket.once('close', (hadError: boolean) => {
+      console.warn(`[WS socket close] host=${host} url=${req.url} from=${forwardedFor} hadError=${hadError}`);
+    });
+
+    server.handleUpgrade(req, socket, head);
+  });
 
   const host = '::'; // IPv6 dual-stack — required for Railway private network
   await new Promise<void>((resolve, reject) => {

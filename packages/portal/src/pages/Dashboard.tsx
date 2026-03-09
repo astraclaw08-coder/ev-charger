@@ -1,24 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Bar, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { createApiClient, type DailyEntry, type SiteListItem } from '../api/client';
+import DashboardSitesMap, { type DashboardSiteMapItem } from '../components/DashboardSitesMap';
 import { useToken } from '../auth/TokenContext';
 
-type CreateSiteForm = {
-  name: string;
-  address: string;
-  lat: string;
-  lng: string;
-};
-
-type RangePreset = '7d' | '30d' | '60d' | 'custom';
-
-const EMPTY_FORM: CreateSiteForm = {
-  name: '',
-  address: '',
-  lat: '',
-  lng: '',
-};
+type RangePreset = '7d' | '30d' | '60d';
 
 export default function Dashboard() {
   const getToken = useToken();
@@ -26,7 +12,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [fleetUptime, setFleetUptime] = useState<{ uptime24h: number; uptime7d: number; uptime30d: number; degraded: number } | null>(null);
-  const [fleetKpis, setFleetKpis] = useState<{ totalSites: number; totalKwh30d: number; activeSessions: number } | null>(null);
+  const [fleetKpis, setFleetKpis] = useState<{ totalSites: number; totalKwh: number; totalRevenue: number; activeSessions: number; utilizationRatePct: number } | null>(null);
   const [fleetStatus, setFleetStatus] = useState<{
     totalChargers: number;
     totalConnectors: number;
@@ -36,43 +22,28 @@ export default function Dashboard() {
     offline: number;
     byStatus: Array<{ status: string; count: number }>;
   } | null>(null);
-  const [rangePreset, setRangePreset] = useState<RangePreset>('7d');
-  const [customStartDate, setCustomStartDate] = useState('');
-  const [customEndDate, setCustomEndDate] = useState('');
-  const [rangeError, setRangeError] = useState('');
+  const [rangePreset, setRangePreset] = useState<RangePreset>('30d');
   const [fleetTrend, setFleetTrend] = useState<Array<{ date: string; label: string; sessions: number; kwhDelivered: number; revenueUsd: number }>>([]);
-  const [showAddSiteModal, setShowAddSiteModal] = useState(false);
-  const [createLoading, setCreateLoading] = useState(false);
-  const [createMsg, setCreateMsg] = useState('');
-  const [form, setForm] = useState<CreateSiteForm>(EMPTY_FORM);
+  const [siteMapItems, setSiteMapItems] = useState<DashboardSiteMapItem[]>([]);
+
 
   async function load() {
     try {
-      setRangeError('');
       const token = await getToken();
       const client = createApiClient(token);
       const data = await client.getSites();
       setSites(data);
 
-      const analyticsRange = (() => {
-        if (rangePreset === '7d') return { periodDays: 7 };
-        if (rangePreset === '30d') return { periodDays: 30 };
-        if (rangePreset === '60d') return { periodDays: 60 };
-        if (!customStartDate || !customEndDate) {
-          setRangeError('Custom range requires both start and end date.');
-          return null;
-        }
-        return { startDate: customStartDate, endDate: customEndDate };
-      })();
+      const periodDays = rangePreset === '7d' ? 7 : rangePreset === '30d' ? 30 : 60;
 
       const siteUp = await Promise.all(data.map((site) => client.getSiteUptime(site.id).catch(() => null)));
-      const [siteAnalytics30d, siteAnalyticsRange, siteDetails] = await Promise.all([
-        Promise.all(data.map((site) => client.getAnalytics(site.id, { periodDays: 30 }).catch(() => null))),
-        Promise.all(data.map((site) => client.getAnalytics(site.id, analyticsRange ?? { periodDays: 7 }).catch(() => null))),
+      const [siteAnalyticsRange, siteDetails] = await Promise.all([
+        Promise.all(data.map((site) => client.getAnalytics(site.id, { periodDays }).catch(() => null))),
         Promise.all(data.map((site) => client.getSite(site.id).catch(() => null))),
       ]);
 
-      const totalKwh30d = siteAnalytics30d.filter(Boolean).reduce((sum, a) => sum + (a?.kwhDelivered ?? 0), 0);
+      const totalKwh = siteAnalyticsRange.filter(Boolean).reduce((sum, a) => sum + (a?.kwhDelivered ?? 0), 0);
+      const totalRevenue = siteAnalyticsRange.filter(Boolean).reduce((sum, a) => sum + ((a?.revenueCents ?? 0) / 100), 0);
 
       const chargerIds = siteDetails
         .filter(Boolean)
@@ -81,35 +52,108 @@ export default function Dashboard() {
       const chargerStatuses = await Promise.all(
         chargerIds.map((chargerId) => client.getChargerStatus(chargerId).catch(() => null)),
       );
+      const chargerSessions = await Promise.all(
+        chargerIds.map((chargerId) => client.getChargerSessions(chargerId).catch(() => [])),
+      );
       const activeSessions = chargerStatuses
         .filter(Boolean)
         .reduce((sum, ch) => sum + (ch?.connectors.filter((c) => c.activeSession).length ?? 0), 0);
+
+      const statusByChargerId = new Map(
+        chargerStatuses
+          .filter(Boolean)
+          .map((ch) => [ch!.id, ch!] as const),
+      );
+
+      const mapRows: DashboardSiteMapItem[] = siteDetails
+        .filter(Boolean)
+        .map((site) => {
+          const totalChargers = site!.chargers.length;
+          const availableChargers = site!.chargers.reduce((count, charger) => {
+            const live = statusByChargerId.get(charger.id);
+            const chargerStatus = String((live?.status ?? charger.status) || '').toUpperCase();
+            const connectors = (live?.connectors ?? charger.connectors) || [];
+            const hasAvailableConnector = connectors.some((cn) => String(cn.status || '').toUpperCase() === 'AVAILABLE');
+            return count + (chargerStatus !== 'OFFLINE' && hasAvailableConnector ? 1 : 0);
+          }, 0);
+
+          return {
+            id: site!.id,
+            name: site!.name,
+            address: site!.address,
+            lat: site!.lat,
+            lng: site!.lng,
+            availableChargers,
+            totalChargers,
+          };
+        });
+      setSiteMapItems(mapRows);
 
       const statusCountMap = new Map<string, number>();
       let totalConnectors = 0;
       let available = 0;
       let charging = 0;
       let faulted = 0;
+      let offline = 0;
+
+      const OFFLINE_TIMEOUT_MS = 5 * 60 * 1000;
 
       chargerStatuses.filter(Boolean).forEach((ch) => {
+        const hbMs = ch?.lastHeartbeat ? new Date(ch.lastHeartbeat).getTime() : 0;
+        const staleHeartbeat = !hbMs || (Date.now() - hbMs) > OFFLINE_TIMEOUT_MS;
+        const chargerOffline = ch?.status?.toUpperCase() === 'OFFLINE' && staleHeartbeat;
         ch?.connectors.forEach((connector) => {
           totalConnectors += 1;
-          const status = connector.status.toUpperCase();
+          const status = chargerOffline ? 'OFFLINE' : connector.status.toUpperCase();
           statusCountMap.set(status, (statusCountMap.get(status) ?? 0) + 1);
 
           if (status === 'AVAILABLE') available += 1;
           if (status === 'FAULTED') faulted += 1;
-          if (status === 'PREPARING' || status === 'CHARGING' || status === 'FINISHING') charging += 1;
+          if (status === 'PREPARING' || status === 'CHARGING' || status === 'FINISHING' || status === 'SUSPENDED_EV' || status === 'SUSPENDED_EVSE') charging += 1;
+          if (status === 'UNAVAILABLE' || status === 'OFFLINE') offline += 1;
         });
       });
 
       const totalChargers = chargerStatuses.filter(Boolean).length;
-      const offline = chargerStatuses.filter((ch) => ch?.status?.toUpperCase() === 'OFFLINE').length;
+
+      const analyticsRows = siteAnalyticsRange.filter(Boolean);
+      const periodEndMs = Date.now();
+      const periodStartMs = periodEndMs - (periodDays * 24 * 60 * 60 * 1000);
+
+      const actualChargingSeconds = chargerSessions
+        .flat()
+        .reduce((sum, session) => {
+          const startMs = new Date(session.startedAt).getTime();
+          const stopMs = session.stoppedAt ? new Date(session.stoppedAt).getTime() : periodEndMs;
+          const overlapStart = Math.max(startMs, periodStartMs);
+          const overlapEnd = Math.min(stopMs, periodEndMs);
+          if (!Number.isFinite(overlapStart) || !Number.isFinite(overlapEnd) || overlapEnd <= overlapStart) {
+            return sum;
+          }
+          return sum + Math.floor((overlapEnd - overlapStart) / 1000);
+        }, 0);
+
+      const totalConnectorsForUtil = siteDetails
+        .filter(Boolean)
+        .reduce((sum, site) => sum + (site?.chargers.reduce((inner, ch) => inner + ch.connectors.length, 0) ?? 0), 0);
+
+      const totalPossibleChargingSeconds = totalConnectorsForUtil > 0
+        ? totalConnectorsForUtil * periodDays * 24 * 60 * 60
+        : 0;
+
+      const utilizationRatePct = totalPossibleChargingSeconds > 0
+        ? Math.round((actualChargingSeconds / totalPossibleChargingSeconds) * 10000) / 100
+        : (() => {
+            const totalSessionsInRange = analyticsRows.reduce((sum, a) => sum + (a?.sessionsCount ?? 0), 0);
+            return totalSessionsInRange > 0 ? 0.01 : 0;
+          })();
 
       setFleetKpis({
         totalSites: data.length,
-        totalKwh30d: Math.round(totalKwh30d * 1000) / 1000,
+        totalKwh: Math.round(totalKwh * 1000) / 1000,
+        totalRevenue: Math.round(totalRevenue * 100) / 100,
         activeSessions,
+        utilizationRatePct,
       });
       setFleetStatus({
         totalChargers,
@@ -167,38 +211,8 @@ export default function Dashboard() {
     setLoading(true);
     load();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [getToken, rangePreset, customStartDate, customEndDate]);
+  }, [getToken, rangePreset]);
 
-  async function handleCreateSite(e: React.FormEvent) {
-    e.preventDefault();
-    setCreateMsg('');
-
-    const lat = Number(form.lat);
-    const lng = Number(form.lng);
-    if (!form.name.trim() || !form.address.trim() || Number.isNaN(lat) || Number.isNaN(lng)) {
-      setCreateMsg('Please fill all fields with valid coordinates.');
-      return;
-    }
-
-    setCreateLoading(true);
-    try {
-      const token = await getToken();
-      await createApiClient(token).createSite({
-        name: form.name.trim(),
-        address: form.address.trim(),
-        lat,
-        lng,
-      });
-      setCreateMsg('Site created successfully.');
-      setForm(EMPTY_FORM);
-      setShowAddSiteModal(false);
-      await load();
-    } catch (err: unknown) {
-      setCreateMsg(err instanceof Error ? err.message : 'Failed to create site');
-    } finally {
-      setCreateLoading(false);
-    }
-  }
 
   if (loading) {
     return (
@@ -214,38 +228,39 @@ export default function Dashboard() {
 
   return (
     <div>
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-          <p className="mt-1 text-sm text-gray-500">All your charging sites</p>
+          <p className="mt-1 text-sm text-gray-500">Fleet overview and operations snapshot</p>
         </div>
-        <button
-          onClick={() => {
-            setCreateMsg('');
-            setShowAddSiteModal(true);
-          }}
-          className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
-        >
-          + Add Site
-        </button>
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wide text-gray-500">KPI time period</p>
+          <select
+            value={rangePreset}
+            onChange={(e) => setRangePreset(e.target.value as RangePreset)}
+            className="mt-1 rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+          >
+            <option value="7d">Last 7 days</option>
+            <option value="30d">Last 30 days</option>
+            <option value="60d">Last 60 days</option>
+          </select>
+        </div>
       </div>
 
-      {createMsg && !showAddSiteModal && (
-        <p className="mt-2 text-xs text-gray-500">{createMsg}</p>
-      )}
-
       {fleetKpis && (
-        <div className="mt-4 grid gap-3 sm:grid-cols-3">
-          <KpiTile label="Total kWh (30d)" value={`${fleetKpis.totalKwh30d.toFixed(3)} kWh`} />
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <KpiTile label={`Total kWh (${rangePreset})`} value={`${fleetKpis.totalKwh.toFixed(3)} kWh`} />
+          <KpiTile label={`Total Revenue (${rangePreset})`} value={`$${fleetKpis.totalRevenue.toFixed(2)}`} />
           <KpiTile label="Total Sites" value={`${fleetKpis.totalSites}`} />
           <KpiTile label="Active Sessions" value={`${fleetKpis.activeSessions}`} />
+          <KpiTile label={`Utilization Rate (${rangePreset})`} value={`${fleetKpis.utilizationRatePct.toFixed(2)}%`} />
         </div>
       )}
 
       {fleetStatus && (
         <div className="mt-3 rounded-xl border border-gray-200 bg-white p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm font-semibold text-gray-700">Fleet charger/connectors status breakdown</p>
+            <p className="text-sm font-semibold text-gray-700">Connector Statuses</p>
             <p className="text-xs text-gray-500">
               Chargers: <span className="font-semibold text-gray-900">{fleetStatus.totalChargers}</span>
               {' · '}
@@ -264,55 +279,28 @@ export default function Dashboard() {
           </div>
 
           <div className="mt-3 flex flex-wrap gap-2">
-            {fleetStatus.byStatus.map((entry) => (
-              <span key={entry.status} className="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs text-gray-700">
-                {entry.status}: {entry.count}
-              </span>
-            ))}
+            {fleetStatus.byStatus
+              .filter((entry) => !['AVAILABLE', 'PREPARING', 'CHARGING', 'FINISHING', 'SUSPENDED_EV', 'SUSPENDED_EVSE', 'FAULTED', 'UNAVAILABLE', 'OFFLINE'].includes(entry.status))
+              .map((entry) => (
+                <span key={entry.status} className="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs text-gray-700">
+                  {entry.status}: {entry.count}
+                </span>
+              ))}
           </div>
         </div>
       )}
 
-      <div className="mt-4 rounded-xl border border-gray-200 bg-white p-4">
-        <div className="flex flex-wrap items-end gap-3">
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Rolling range</p>
-            <select
-              value={rangePreset}
-              onChange={(e) => setRangePreset(e.target.value as RangePreset)}
-              className="mt-1 rounded-md border border-gray-300 px-2 py-1.5 text-sm"
-            >
-              <option value="7d">Last 7 days</option>
-              <option value="30d">Last 30 days</option>
-              <option value="60d">Last 60 days</option>
-              <option value="custom">Custom</option>
-            </select>
-          </div>
-          {rangePreset === 'custom' && (
-            <>
-              <label className="text-xs text-gray-600">
-                Start date
-                <input
-                  type="date"
-                  value={customStartDate}
-                  onChange={(e) => setCustomStartDate(e.target.value)}
-                  className="mt-1 block rounded-md border border-gray-300 px-2 py-1.5 text-sm"
-                />
-              </label>
-              <label className="text-xs text-gray-600">
-                End date
-                <input
-                  type="date"
-                  value={customEndDate}
-                  onChange={(e) => setCustomEndDate(e.target.value)}
-                  className="mt-1 block rounded-md border border-gray-300 px-2 py-1.5 text-sm"
-                />
-              </label>
-            </>
-          )}
-        </div>
+      <DashboardSitesMap sites={siteMapItems} />
 
-        {rangeError && <p className="mt-2 text-xs text-red-600">{rangeError}</p>}
+      <div className="mt-4 rounded-xl border border-gray-200 bg-white p-4">
+        <p className="text-sm font-semibold">
+          <span className="text-blue-600">Energy (kWh)</span>
+          <span className="text-gray-400"> | </span>
+          <span className="text-emerald-600">Revenue ($)</span>
+          <span className="text-gray-400"> | </span>
+          <span className="text-amber-500">Transactions</span>
+          <span className="ml-1 text-xs font-normal text-gray-400">({rangePreset})</span>
+        </p>
 
         <div className="mt-3 h-64">
           {loading ? (
@@ -322,13 +310,12 @@ export default function Dashboard() {
           ) : (
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={fleetTrend} margin={{ top: 8, right: 16, left: 4, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                 <XAxis dataKey="label" tick={{ fontSize: 11 }} />
                 <YAxis yAxisId="left" tick={{ fontSize: 11 }} />
                 <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11 }} />
                 <Tooltip />
-                <Bar yAxisId="left" dataKey="kwhDelivered" name="kWh" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                <Line yAxisId="right" type="monotone" dataKey="revenueUsd" name="Revenue (USD)" stroke="#10b981" strokeWidth={2} dot={false} />
+                <Bar yAxisId="left" dataKey="kwhDelivered" name="Energy (kWh)" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                <Line yAxisId="right" type="monotone" dataKey="revenueUsd" name="Revenue ($)" stroke="#10b981" strokeWidth={2} dot={false} />
                 <Line yAxisId="left" type="monotone" dataKey="sessions" name="Transactions" stroke="#f59e0b" strokeWidth={2} dot={false} />
               </ComposedChart>
             </ResponsiveContainer>
@@ -348,76 +335,6 @@ export default function Dashboard() {
         </div>
       )}
 
-      {sites.length === 0 ? (
-        <div className="mt-12 text-center text-gray-400">
-          <p className="text-4xl">📍</p>
-          <p className="mt-2 font-medium">No sites yet</p>
-          <p className="text-sm">Click + Add Site to create your first site.</p>
-        </div>
-      ) : (
-        <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {sites.map((site) => (
-            <SiteCard key={site.id} site={site} />
-          ))}
-        </div>
-      )}
-
-      {showAddSiteModal && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 p-4" onClick={() => setShowAddSiteModal(false)}>
-          <div className="w-full max-w-lg rounded-xl border border-gray-200 bg-white p-5" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-lg font-semibold text-gray-900">Add Site</h2>
-            <p className="mt-1 text-xs text-gray-500">Owner/Operator action — create a new charging site.</p>
-            <form className="mt-4 space-y-3" onSubmit={handleCreateSite}>
-              <input
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                placeholder="Site name"
-                value={form.name}
-                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              />
-              <input
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                placeholder="Address"
-                value={form.address}
-                onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
-              />
-              <div className="grid grid-cols-2 gap-3">
-                <input
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                  placeholder="Latitude"
-                  value={form.lat}
-                  onChange={(e) => setForm((f) => ({ ...f, lat: e.target.value }))}
-                />
-                <input
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                  placeholder="Longitude"
-                  value={form.lng}
-                  onChange={(e) => setForm((f) => ({ ...f, lng: e.target.value }))}
-                />
-              </div>
-
-              {createMsg && <p className="text-xs text-gray-500">{createMsg}</p>}
-
-              <div className="mt-2 flex justify-end gap-2">
-                <button
-                  type="button"
-                  className="rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                  onClick={() => setShowAddSiteModal(false)}
-                  disabled={createLoading}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="rounded-md bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
-                  disabled={createLoading}
-                >
-                  {createLoading ? 'Creating…' : 'Create Site'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -431,63 +348,3 @@ function KpiTile({ label, value }: { label: string; value: string }) {
   );
 }
 
-function SiteCard({ site }: { site: SiteListItem }) {
-  const total = site.chargerCount;
-  const { online, offline, faulted } = site.statusSummary;
-
-  return (
-    <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm transition hover:shadow-md">
-      <div className="flex items-start justify-between">
-        <div className="min-w-0">
-          <h3 className="truncate font-semibold text-gray-900">{site.name}</h3>
-          <p className="mt-0.5 truncate text-xs text-gray-500">{site.address}</p>
-        </div>
-        <span className="ml-2 shrink-0 text-2xl">🔌</span>
-      </div>
-
-      <div className="mt-4 flex gap-3">
-        <Stat label="Total" value={total} color="text-gray-700" />
-        <Stat label="Online" value={online} color="text-green-700" />
-        {faulted > 0 && <Stat label="Faulted" value={faulted} color="text-red-700" />}
-        {offline > 0 && <Stat label="Offline" value={offline} color="text-gray-500" />}
-      </div>
-
-      {total > 0 && (
-        <div className="mt-3 flex h-1.5 overflow-hidden rounded-full bg-gray-100">
-          <div
-            className="bg-green-500 transition-all"
-            style={{ width: `${(online / total) * 100}%` }}
-          />
-          <div
-            className="bg-red-400 transition-all"
-            style={{ width: `${(faulted / total) * 100}%` }}
-          />
-        </div>
-      )}
-
-      <div className="mt-4 flex gap-2">
-        <Link
-          to={`/sites/${site.id}`}
-          className="flex-1 rounded-md bg-brand-600 px-3 py-1.5 text-center text-xs font-medium text-white hover:bg-brand-700"
-        >
-          View Site
-        </Link>
-        <Link
-          to={`/sites/${site.id}/analytics`}
-          className="flex-1 rounded-md border border-gray-200 px-3 py-1.5 text-center text-xs font-medium text-gray-600 hover:bg-gray-50"
-        >
-          Analytics
-        </Link>
-      </div>
-    </div>
-  );
-}
-
-function Stat({ label, value, color }: { label: string; value: number; color: string }) {
-  return (
-    <div className="text-center">
-      <p className={`text-xl font-bold leading-none ${color}`}>{value}</p>
-      <p className="mt-0.5 text-xs text-gray-400">{label}</p>
-    </div>
-  );
-}
