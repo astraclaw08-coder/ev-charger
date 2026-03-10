@@ -1,0 +1,12 @@
+name: ci
+
+on:
+  pull_request:
+    branches: [ main, dev ]
+
+jobs:
+  required-checks-always-report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Required check marker
+        run: echo "required-checks-always-report passed"
