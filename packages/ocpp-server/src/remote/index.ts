@@ -72,3 +72,53 @@ export async function remoteReset(
     return 'Rejected';
   }
 }
+
+/**
+ * Send TriggerMessage (e.g. Heartbeat, MeterValues, StatusNotification)
+ */
+export async function remoteTriggerMessage(
+  ocppId: string,
+  requestedMessage: 'Heartbeat' | 'MeterValues' | 'StatusNotification' | 'BootNotification',
+  connectorId?: number,
+): Promise<'Accepted' | 'Rejected'> {
+  const client = clientRegistry.get(ocppId);
+  if (!client) {
+    console.warn(`[RemoteTriggerMessage] Charger ${ocppId} is not connected`);
+    return 'Rejected';
+  }
+
+  try {
+    const payload: any = { requestedMessage };
+    if (typeof connectorId === 'number') payload.connectorId = connectorId;
+    const result = await client.call('TriggerMessage', payload);
+    console.log(`[RemoteTriggerMessage] Charger ${ocppId} requestedMessage=${requestedMessage} responded: ${result.status}`);
+    return result.status as 'Accepted' | 'Rejected';
+  } catch (err) {
+    console.error(`[RemoteTriggerMessage] Error calling charger ${ocppId}:`, err);
+    return 'Rejected';
+  }
+}
+
+/**
+ * Send GetConfiguration to a connected charger.
+ */
+export async function remoteGetConfiguration(
+  ocppId: string,
+  key?: string[],
+): Promise<{ configurationKey?: unknown[]; unknownKey?: string[] } | { error: string }> {
+  const client = clientRegistry.get(ocppId);
+  if (!client) {
+    console.warn(`[RemoteGetConfiguration] Charger ${ocppId} is not connected`);
+    return { error: 'Charger not connected' };
+  }
+
+  try {
+    const payload = key && key.length > 0 ? { key } : {};
+    const result = await client.call('GetConfiguration', payload);
+    console.log(`[RemoteGetConfiguration] Charger ${ocppId} returned config keys=${result?.configurationKey?.length ?? 0}`);
+    return result as { configurationKey?: unknown[]; unknownKey?: string[] };
+  } catch (err) {
+    console.error(`[RemoteGetConfiguration] Error calling charger ${ocppId}:`, err);
+    return { error: 'GetConfiguration failed' };
+  }
+}

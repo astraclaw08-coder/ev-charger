@@ -2,7 +2,7 @@ import http from 'http';
 import crypto from 'crypto';
 import { prisma } from '@ev-charger/shared';
 import { clientRegistry } from './clientRegistry';
-import { remoteStartTransaction, remoteStopTransaction, remoteReset } from './remote';
+import { remoteStartTransaction, remoteStopTransaction, remoteReset, remoteTriggerMessage, remoteGetConfiguration } from './remote';
 
 function parseBody(req: http.IncomingMessage): Promise<Record<string, unknown>> {
   return new Promise((resolve, reject) => {
@@ -55,7 +55,7 @@ export function attachInternalRoutes(httpServer: http.Server): void {
       });
     }
 
-    if (url === '/remote-start' || url === '/remote-stop' || url === '/reset' ||
+    if (url === '/remote-start' || url === '/remote-stop' || url === '/reset' || url === '/trigger-message' || url === '/get-configuration' ||
         url === '/charger-reset-password' || url === '/charger-clear-password' || url === '/charger-add') {
       if (method !== 'POST') {
         return sendJson(res, 405, { error: 'Method not allowed' });
@@ -86,6 +86,28 @@ export function attachInternalRoutes(httpServer: http.Server): void {
           };
           const status = await remoteReset(ocppId, type ?? 'Soft');
           return sendJson(res, 200, { status });
+        }
+
+        // POST /trigger-message — request charger to send a specific OCPP message (e.g., Heartbeat)
+        if (url === '/trigger-message') {
+          const { ocppId, requestedMessage, connectorId } = body as {
+            ocppId: string;
+            requestedMessage: 'Heartbeat' | 'MeterValues' | 'StatusNotification' | 'BootNotification';
+            connectorId?: number;
+          };
+          if (!ocppId || !requestedMessage) {
+            return sendJson(res, 400, { error: 'ocppId and requestedMessage required' });
+          }
+          const status = await remoteTriggerMessage(ocppId, requestedMessage, connectorId);
+          return sendJson(res, 200, { status });
+        }
+
+        // POST /get-configuration — pull OCPP configuration keys from a connected charger
+        if (url === '/get-configuration') {
+          const { ocppId, key } = body as { ocppId: string; key?: string[] };
+          if (!ocppId) return sendJson(res, 400, { error: 'ocppId required' });
+          const response = await remoteGetConfiguration(ocppId, key);
+          return sendJson(res, 200, response);
         }
 
         // POST /charger-reset-password — set a new known OCPP password for a charger.
@@ -177,5 +199,5 @@ export function attachInternalRoutes(httpServer: http.Server): void {
     // The OCPP server returns 404 for non-WebSocket HTTP requests.
   });
 
-  console.log('[InternalHTTP] Management routes attached (/health, /status, /remote-start, /remote-stop, /reset, /charger-add, /charger-reset-password, /charger-clear-password)');
+  console.log('[InternalHTTP] Management routes attached (/health, /status, /remote-start, /remote-stop, /reset, /trigger-message, /get-configuration, /charger-add, /charger-reset-password, /charger-clear-password)');
 }
