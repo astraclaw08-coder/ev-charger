@@ -71,6 +71,8 @@ const NAV = [
   { label: 'Settings', href: '/settings', Icon: SettingsIcon },
 ];
 
+const portalVersion = import.meta.env.VITE_APP_VERSION ?? `${new Date().getFullYear()}.${String(new Date().getMonth() + 1).padStart(2, '0')}.${String(new Date().getDate()).padStart(2, '0')}.0`;
+
 export default function Layout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
 
@@ -110,7 +112,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         </nav>
 
         <div className="border-t border-gray-200 p-3 text-xs text-gray-400">
-          OCPP 1.6J Central System
+          <div>OCPP 1.6J Central System</div>
+          <div className="mt-1">Version {portalVersion}</div>
         </div>
       </aside>
 

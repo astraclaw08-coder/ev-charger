@@ -41,6 +41,9 @@ const EMPTY: DriverProfile = {
   paymentProfile: '',
 };
 
+const mobileVersion = process.env.EXPO_PUBLIC_APP_VERSION
+  ?? `${new Date().getFullYear()}.${String(new Date().getMonth() + 1).padStart(2, '0')}.${String(new Date().getDate()).padStart(2, '0')}.0`;
+
 export default function ProfileScreen() {
   const { isDark, setMode } = useAppTheme();
   const router = useRouter();
@@ -207,6 +210,8 @@ export default function ProfileScreen() {
       >
         <Text style={styles.logoutText}>Log Out</Text>
       </TouchableOpacity>
+
+      <Text style={[styles.versionText, { color: isDark ? '#6b7280' : '#9ca3af' }]}>Version {mobileVersion}</Text>
     </ScrollView>
   );
 }
@@ -280,4 +285,5 @@ const styles = StyleSheet.create({
   createAccountText: { color: '#fff', fontWeight: '700', fontSize: 16 },
   logoutBtn: { backgroundColor: '#991b1b', borderRadius: 12, marginTop: 12, paddingVertical: 14, alignItems: 'center' },
   logoutText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+  versionText: { marginTop: 16, textAlign: 'center', fontSize: 12, fontWeight: '500' },
 });
