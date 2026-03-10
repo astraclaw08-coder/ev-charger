@@ -25,7 +25,7 @@ import { useFavorites } from '@/hooks/useFavorites';
 import { HeartButton } from '@/components/HeartButton';
 import { useAppAuth } from '@/providers/AuthProvider';
 
-const RATE_PER_KWH = 0.35; // $/kWh (matches hardcoded server value)
+const RATE_PER_KWH = 0.35; // fallback only
 
 // ── Payment Setup Modal ───────────────────────────────────────────────────────
 
@@ -92,11 +92,17 @@ function ConnectorRow({
   chargerId,
   onSessionStarted,
   isDark,
+  ratePerKwh,
 }: {
   connector: Connector;
   chargerId: string;
-  onSessionStarted: (chargerId: string, connectorId: number) => void;
+  onSessionStarted: (
+    chargerId: string,
+    connectorId: number,
+    connectorStatus: Connector['status'],
+  ) => void;
   isDark: boolean;
+  ratePerKwh: number;
 }) {
   const isStartable = connector.status === 'AVAILABLE' || connector.status === 'PREPARING' || connector.status === 'SUSPENDED_EV';
   const isCharging = connector.status === 'CHARGING' || connector.status === 'FINISHING';
@@ -106,13 +112,13 @@ function ConnectorRow({
       <View style={styles.connectorLeft}>
         <Text style={[styles.connectorLabel, { color: isDark ? '#e5e7eb' : '#374151' }]}>Connector {connector.connectorId}</Text>
         <ConnectorStatusBadge status={connector.status} />
-        <Text style={[styles.rateText, { color: isDark ? '#9ca3af' : '#9ca3af' }]}>${RATE_PER_KWH.toFixed(2)}/kWh</Text>
+        <Text style={[styles.rateText, { color: isDark ? '#9ca3af' : '#9ca3af' }]}>${ratePerKwh.toFixed(2)}/kWh</Text>
       </View>
 
       {isStartable && (
         <TouchableOpacity
           style={styles.startButton}
-          onPress={() => onSessionStarted(chargerId, connector.connectorId)}
+          onPress={() => onSessionStarted(chargerId, connector.connectorId, connector.status)}
         >
           <Text style={styles.startButtonText}>Start</Text>
         </TouchableOpacity>
@@ -139,6 +145,7 @@ export default function ChargerDetailScreen() {
   const [activationDeadlineMs, setActivationDeadlineMs] = useState<number | null>(null);
   const [countdownText, setCountdownText] = useState('02:00');
   const activationPollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const startContextRef = useRef<{ alreadyPlugged: boolean } | null>(null);
   const { isDark } = useAppTheme();
   const { toggle, isFav } = useFavorites();
   const { isGuest } = useAppAuth();
@@ -182,6 +189,12 @@ export default function ChargerDetailScreen() {
     enabled: Boolean(selectedCharger?.id ?? id),
   });
 
+  const { data: profile } = useQuery({
+    queryKey: ['me-profile'],
+    queryFn: () => api.profile.get(),
+    enabled: !isGuest,
+  });
+
   useFocusEffect(
     React.useCallback(() => {
       refetch();
@@ -220,9 +233,16 @@ export default function ChargerDetailScreen() {
       queryClient.invalidateQueries({ queryKey: ['charger', id] });
       queryClient.invalidateQueries({ queryKey: ['sessions'] });
 
-      setActivationMessage('Your charger has been successfully activated. Please plug in the connector to your vehicle to start charging.');
-      setShowActivationModal(true);
-      setActivationDeadlineMs(Date.now() + 120000);
+      const alreadyPlugged = startContextRef.current?.alreadyPlugged ?? false;
+      if (alreadyPlugged) {
+        setActivationMessage('Charger activated. Starting your session…');
+        setShowActivationModal(false);
+        setActivationDeadlineMs(null);
+      } else {
+        setActivationMessage('Your charger has been successfully activated. Please plug in the connector to your vehicle to start charging.');
+        setShowActivationModal(true);
+        setActivationDeadlineMs(Date.now() + 120000);
+      }
 
       const startedAt = Date.now();
       const timeoutMs = 120000;
@@ -295,7 +315,11 @@ export default function ChargerDetailScreen() {
     };
   }, []);
 
-  function handleStartSession(chargerId: string, connectorId: number) {
+  function handleStartSession(
+    chargerId: string,
+    connectorId: number,
+    connectorStatus: Connector['status'],
+  ) {
     if (isGuest) {
       Alert.alert('Sign in required', 'Please sign in to start a charging session.', [
         { text: 'Cancel', style: 'cancel' },
@@ -307,6 +331,9 @@ export default function ChargerDetailScreen() {
       clearTimeout(activationPollRef.current);
       activationPollRef.current = null;
     }
+    startContextRef.current = {
+      alreadyPlugged: connectorStatus === 'PREPARING' || connectorStatus === 'SUSPENDED_EV',
+    };
     startMutation.mutate({ chargerId, connectorId });
   }
 
@@ -330,6 +357,19 @@ export default function ChargerDetailScreen() {
     c.connectors.some((connector) => connector.status === 'AVAILABLE'),
   ).length;
 
+  const hasDefaultPaymentMethod = Boolean(profile?.paymentProfile?.trim());
+  const pricePerKwhUsd = Number(selectedCharger?.site.pricePerKwhUsd ?? 0);
+  const idleFeePerMinUsd = Number(selectedCharger?.site.idleFeePerMinUsd ?? 0);
+  const activationFeeUsd = Number(
+    ((selectedCharger?.site as any)?.activationFeeUsd ?? ((selectedCharger?.site as any)?.activationFeeCents != null
+      ? Number((selectedCharger?.site as any).activationFeeCents) / 100
+      : 0)) ?? 0,
+  );
+  const hasBillablePricing = [pricePerKwhUsd, idleFeePerMinUsd, activationFeeUsd].some(
+    (value) => Number.isFinite(value) && value > 0,
+  );
+  const showPaymentSetupBanner = !isGuest && !hasDefaultPaymentMethod && hasBillablePricing;
+
   return (
     <>
       <Stack.Screen
@@ -339,6 +379,7 @@ export default function ChargerDetailScreen() {
           headerStyle: { backgroundColor: isDark ? '#0b1220' : '#ffffff' },
           headerTintColor: isDark ? '#f9fafb' : '#111827',
           headerShadowVisible: false,
+          headerBackButtonDisplayMode: 'minimal',
           headerRight: () => (
             <HeartButton
               isFavorited={isFav(selectedCharger?.id ?? charger.id)}
@@ -377,8 +418,8 @@ export default function ChargerDetailScreen() {
           )}
         </View>
 
-        {/* Payment setup (dev mode: skipped silently) */}
-        <PaymentSetupBanner onSetupComplete={() => {}} isDark={isDark} />
+        {/* Payment setup: show only for signed-in users without a default payment method on billable sites */}
+        {showPaymentSetupBanner && <PaymentSetupBanner onSetupComplete={() => {}} isDark={isDark} />}
 
         {/* Chargers at this site */}
         <View style={[styles.section, { backgroundColor: isDark ? '#111827' : '#fff' }]}>
@@ -418,9 +459,10 @@ export default function ChargerDetailScreen() {
               connector={connector}
               chargerId={selectedCharger.id}
               isDark={isDark}
-              onSessionStarted={(cid, connId) => {
+              ratePerKwh={selectedCharger.site.pricePerKwhUsd ?? RATE_PER_KWH}
+              onSessionStarted={(cid, connId, connectorStatus) => {
                 if (startMutation.isPending) return;
-                handleStartSession(cid, connId);
+                handleStartSession(cid, connId, connectorStatus);
               }}
             />
           ))}
@@ -436,9 +478,9 @@ export default function ChargerDetailScreen() {
         )}
 
         {activationMessage && !showActivationModal && (
-          <View style={[styles.startingOverlay, { backgroundColor: isDark ? '#1e293b' : '#eff6ff' }]}> 
+          <View style={[styles.startingOverlay, { backgroundColor: isDark ? '#1e293b' : '#eff6ff' }]}>
             <ActivityIndicator color={isDark ? '#93c5fd' : '#2563eb'} />
-            <Text style={[styles.startingText, { color: isDark ? '#bfdbfe' : '#1d4ed8' }]}> 
+            <Text style={[styles.startingText, { color: isDark ? '#bfdbfe' : '#1d4ed8' }]}>
               {activationMessage}
             </Text>
           </View>
@@ -465,8 +507,8 @@ export default function ChargerDetailScreen() {
 
         {/* Price info */}
         <View style={[styles.priceNote, { backgroundColor: isDark ? '#1f2937' : '#f3f4f6' }]}>
-          <Text style={[styles.priceNoteText, { color: isDark ? '#d1d5db' : '#6b7280' }]}>
-            ⚡ Rate: ${RATE_PER_KWH.toFixed(2)}/kWh · Billed based on energy delivered
+          <Text style={[styles.priceNoteText, { color: isDark ? '#d1d5db' : '#6b7280' }]}> 
+            ⚡ Rate: ${(selectedCharger?.site.pricePerKwhUsd ?? RATE_PER_KWH).toFixed(2)}/kWh{activationFeeUsd > 0 ? ` · Activation fee: $${activationFeeUsd.toFixed(2)}` : ''} · Billed based on energy delivered
           </Text>
         </View>
       </ScrollView>

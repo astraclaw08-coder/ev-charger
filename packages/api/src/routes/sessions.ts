@@ -99,10 +99,29 @@ export async function sessionRoutes(app: FastifyInstance) {
       prisma.session.count({ where: { userId: user.id } }),
     ]);
 
-    const sessionsForClient = sessions.map((s: { stoppedAt: Date | null; [k: string]: unknown }) => ({
-      ...s,
-      endedAt: s.stoppedAt,
-    }));
+    const sessionsForClient = sessions.map((s: any) => {
+      const meterDerivedKwh =
+        s.meterStop != null && s.meterStart != null
+          ? Math.max(0, (s.meterStop - s.meterStart) / 1000)
+          : null;
+      const computedKwh = meterDerivedKwh != null
+        ? Math.max(s.kwhDelivered ?? 0, meterDerivedKwh)
+        : s.kwhDelivered;
+      const effectiveAmountCents =
+        s.payment?.amountCents != null
+          ? s.payment.amountCents
+          : computedKwh != null && s.ratePerKwh != null
+            ? Math.round(computedKwh * s.ratePerKwh * 100)
+            : null;
+      return {
+        ...s,
+        ocppTransactionId: s.transactionId,
+        kwhDelivered: computedKwh,
+        endedAt: s.stoppedAt,
+        effectiveAmountCents,
+        costEstimateCents: effectiveAmountCents,
+      };
+    });
 
     return { sessions: sessionsForClient, total, limit, offset };
   });
@@ -133,13 +152,24 @@ export async function sessionRoutes(app: FastifyInstance) {
     if (!session) return reply.status(404).send({ error: 'Session not found' });
     if (session.userId !== user.id) return reply.status(403).send({ error: 'Not your session' });
 
+    const meterDerivedKwh =
+      session.meterStop != null && session.meterStart != null
+        ? Math.max(0, (session.meterStop - session.meterStart) / 1000)
+        : null;
+
+    const computedKwh = meterDerivedKwh != null
+      ? Math.max(session.kwhDelivered ?? 0, meterDerivedKwh)
+      : session.kwhDelivered;
+
     const costEstimateCents =
-      session.kwhDelivered != null && session.ratePerKwh != null
-        ? Math.round(session.kwhDelivered * session.ratePerKwh * 100)
+      computedKwh != null && session.ratePerKwh != null
+        ? Math.round(computedKwh * session.ratePerKwh * 100)
         : null;
 
     return {
       ...session,
+      ocppTransactionId: session.transactionId,
+      kwhDelivered: computedKwh,
       endedAt: session.stoppedAt,
       costEstimateCents,
     };

@@ -1,45 +1,89 @@
 /**
  * Favorites tab — list of favorited chargers with live status.
  */
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, type Charger } from '@/lib/api';
-import { useFavorites } from '@/hooks/useFavorites';
+import { getFavorites, toggleFavorite } from '@/lib/favorites';
 import { HeartButton } from '@/components/HeartButton';
 import { useAppTheme } from '@/theme';
+import { useAppAuth } from '@/providers/AuthProvider';
 
 function statusColor(c: Charger) {
   const s = c.connectors.map((x) => x.status);
-  if (s.some((x) => x === 'AVAILABLE')) return '#10b981';
-  if (s.some((x) => x === 'CHARGING' || x === 'PREPARING')) return '#f59e0b';
-  if (s.some((x) => x === 'FAULTED')) return '#ef4444';
-  return '#9ca3af';
+  const hasAvailable = s.some((x) => x === 'AVAILABLE');
+  const hasInUse = s.some((x) => x === 'CHARGING' || x === 'PREPARING' || x === 'FINISHING' || x === 'SUSPENDED_EV' || x === 'SUSPENDED_EVSE');
+  const hasFaulted = s.some((x) => x === 'FAULTED');
+  const isOffline = String(c.status || '').toUpperCase() === 'OFFLINE' && !hasAvailable && !hasInUse;
+
+  if (hasAvailable) return '#10b981';
+  if (hasInUse) return '#f59e0b';
+  if (hasFaulted) return '#ef4444';
+  if (isOffline || s.some((x) => x === 'UNAVAILABLE')) return '#9ca3af';
+  return '#6b7280';
 }
 
 function statusLabel(c: Charger) {
   const s = c.connectors.map((x) => x.status);
-  if (s.some((x) => x === 'AVAILABLE')) return 'Available';
-  if (s.some((x) => x === 'CHARGING')) return 'In Use';
-  if (s.some((x) => x === 'FAULTED')) return 'Faulted';
-  return 'Offline';
+  const hasAvailable = s.some((x) => x === 'AVAILABLE');
+  const hasInUse = s.some((x) => x === 'CHARGING' || x === 'PREPARING' || x === 'FINISHING' || x === 'SUSPENDED_EV' || x === 'SUSPENDED_EVSE');
+  const hasFaulted = s.some((x) => x === 'FAULTED');
+  const isOffline = String(c.status || '').toUpperCase() === 'OFFLINE' && !hasAvailable && !hasInUse;
+
+  if (hasAvailable) return 'Available';
+  if (hasInUse) return 'In Use';
+  if (hasFaulted) return 'Faulted';
+  if (isOffline || s.some((x) => x === 'UNAVAILABLE')) return 'Offline';
+  return 'Unknown';
 }
 
 export default function FavoritesScreen() {
   const router = useRouter();
   const { isDark } = useAppTheme();
-  const { favorites, toggle, isFav } = useFavorites();
-  const { data: chargers = [], isLoading, refetch, isRefetching } = useQuery({
-    queryKey: ['chargers'],
-    queryFn: () => api.chargers.list(),
-    refetchInterval: 30_000,
+  const { isGuest } = useAppAuth();
+  const queryClient = useQueryClient();
+
+  const { data: favoriteIds = [], isLoading: favoritesLoading, refetch: refetchFavorites } = useQuery({
+    queryKey: ['favorites'],
+    queryFn: () => getFavorites(),
+    refetchInterval: 15_000,
+    enabled: !isGuest,
   });
 
-  const favChargers = chargers.filter((c) => isFav(c.id));
+  const { data: chargers = [], isLoading: chargersLoading, refetch: refetchChargers } = useQuery({
+    queryKey: ['chargers'],
+    queryFn: () => api.chargers.list(),
+    refetchInterval: 15_000,
+    enabled: !isGuest,
+  });
+
+  const [manualRefreshing, setManualRefreshing] = useState(false);
+  const isLoading = favoritesLoading || chargersLoading;
+
+  const favChargers = chargers.filter((c) => favoriteIds.includes(c.id));
+
+  async function onManualRefresh() {
+    setManualRefreshing(true);
+    try {
+      await Promise.all([refetchFavorites(), refetchChargers()]);
+    } finally {
+      setManualRefreshing(false);
+    }
+  }
+
+  if (isGuest) {
+    return (
+      <View style={[styles.centered, { backgroundColor: isDark ? '#030712' : '#f9fafb', paddingHorizontal: 20 }]}>
+        <Text style={[styles.emptyTitle, { color: isDark ? '#f9fafb' : '#111827' }]}>Guest mode</Text>
+        <Text style={[styles.emptySub, { color: isDark ? '#9ca3af' : '#6b7280' }]}>Sign in to save and view favorites.</Text>
+      </View>
+    );
+  }
 
   if (isLoading) {
     return <View style={styles.centered}><ActivityIndicator size="large" color="#10b981" /></View>;
@@ -50,7 +94,7 @@ export default function FavoritesScreen() {
       <FlatList
         data={favChargers}
         keyExtractor={(c) => c.id}
-        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}
+        refreshControl={<RefreshControl refreshing={manualRefreshing} onRefresh={onManualRefresh} />}
         contentContainerStyle={favChargers.length === 0 ? styles.emptyContainer : { padding: 12 }}
         ListEmptyComponent={
           <View style={styles.emptyInner}>
@@ -77,7 +121,14 @@ export default function FavoritesScreen() {
                 </Text>
               </View>
               <Text style={{ color, fontWeight: '700', fontSize: 12, marginRight: 8 }}>{statusLabel(item)}</Text>
-              <HeartButton isFavorited={isFav(item.id)} onToggle={() => toggle(item.id)} />
+              <HeartButton
+                isFavorited={favoriteIds.includes(item.id)}
+                onToggle={async () => {
+                  await toggleFavorite(item.id);
+                  queryClient.invalidateQueries({ queryKey: ['favorites'] });
+                  queryClient.invalidateQueries({ queryKey: ['chargers'] });
+                }}
+              />
             </TouchableOpacity>
           );
         }}

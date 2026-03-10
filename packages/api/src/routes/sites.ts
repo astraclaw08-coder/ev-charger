@@ -1,23 +1,40 @@
 import type { FastifyInstance } from 'fastify';
 import { prisma } from '@ev-charger/shared';
 import { requireOperator } from '../plugins/auth';
+import { requirePolicy } from '../plugins/authorization';
 import { getChargerUptime } from '../lib/uptime';
 
 export async function siteRoutes(app: FastifyInstance) {
   // GET /sites — list operator's sites with charger counts
   app.get('/sites', {
-    preHandler: requireOperator,
+    preHandler: [requireOperator, requirePolicy('site.list')],
   }, async (req) => {
     const operator = req.currentOperator!;
+    const scopedSiteIds = operator.claims?.siteIds ?? [];
 
     const sites = await prisma.site.findMany({
-      where: { operatorId: operator.id },
+      where: scopedSiteIds.length > 0 && !scopedSiteIds.includes('*')
+        ? { id: { in: scopedSiteIds } }
+        : { operatorId: operator.id },
       include: { chargers: { include: { connectors: true } } },
       orderBy: { createdAt: 'desc' },
     });
 
     return sites.map((site: {
-      id: string; name: string; address: string; lat: number; lng: number; createdAt: Date;
+      id: string;
+      name: string;
+      address: string;
+      lat: number;
+      lng: number;
+      pricingMode: string;
+      pricePerKwhUsd: number;
+      idleFeePerMinUsd: number;
+      activationFeeUsd: number;
+      gracePeriodMin: number;
+      touWindows: unknown;
+      organizationName: string | null;
+      portfolioName: string | null;
+      createdAt: Date;
       chargers: Array<{ status: string }>;
     }) => ({
       id: site.id,
@@ -25,6 +42,14 @@ export async function siteRoutes(app: FastifyInstance) {
       address: site.address,
       lat: site.lat,
       lng: site.lng,
+      pricingMode: site.pricingMode,
+      pricePerKwhUsd: site.pricePerKwhUsd,
+      idleFeePerMinUsd: site.idleFeePerMinUsd,
+      activationFeeUsd: site.activationFeeUsd,
+      gracePeriodMin: site.gracePeriodMin,
+      touWindows: site.touWindows,
+      organizationName: site.organizationName,
+      portfolioName: site.portfolioName,
       createdAt: site.createdAt,
       chargerCount: site.chargers.length,
       statusSummary: {
@@ -37,7 +62,7 @@ export async function siteRoutes(app: FastifyInstance) {
 
   // GET /sites/:id — site detail with chargers (no passwords)
   app.get<{ Params: { id: string } }>('/sites/:id', {
-    preHandler: requireOperator,
+    preHandler: [requireOperator, requirePolicy('site.read', { getResourceSiteId: (req) => req.params.id })],
   }, async (req, reply) => {
     const site = await prisma.site.findUnique({
       where: { id: req.params.id },
@@ -57,6 +82,14 @@ export async function siteRoutes(app: FastifyInstance) {
       address: site.address,
       lat: site.lat,
       lng: site.lng,
+      pricingMode: site.pricingMode,
+      pricePerKwhUsd: site.pricePerKwhUsd,
+      idleFeePerMinUsd: site.idleFeePerMinUsd,
+      activationFeeUsd: site.activationFeeUsd,
+      gracePeriodMin: site.gracePeriodMin,
+      touWindows: site.touWindows,
+      organizationName: site.organizationName,
+      portfolioName: site.portfolioName,
       createdAt: site.createdAt,
       chargers: site.chargers.map(({ password: _pw, ...c }: { password: string; [k: string]: unknown }) => c),
     };
@@ -64,25 +97,80 @@ export async function siteRoutes(app: FastifyInstance) {
 
   // POST /sites — operator creates a site
   app.post<{
-    Body: { name: string; address: string; lat: number; lng: number };
+    Body: {
+      name: string;
+      address: string;
+      lat: number;
+      lng: number;
+      organizationName?: string;
+      portfolioName?: string;
+    };
   }>('/sites', {
-    preHandler: requireOperator,
+    preHandler: [requireOperator, requirePolicy('site.create')],
   }, async (req, reply) => {
     const operator = req.currentOperator!;
-    const { name, address, lat, lng } = req.body;
+    const { name, address, lat, lng, organizationName, portfolioName } = req.body;
 
     const site = await prisma.site.create({
-      data: { name, address, lat, lng, operatorId: operator.id },
+      data: { name, address, lat, lng, operatorId: operator.id, organizationName, portfolioName },
     });
 
     return reply.status(201).send(site);
+  });
+
+  // PUT /sites/:id — operator updates site details
+  app.put<{
+    Params: { id: string };
+    Body: {
+      name: string;
+      address: string;
+      lat: number;
+      lng: number;
+      pricingMode?: 'flat' | 'tou';
+      pricePerKwhUsd?: number;
+      idleFeePerMinUsd?: number;
+      activationFeeUsd?: number;
+      gracePeriodMin?: number;
+      touWindows?: unknown;
+      organizationName?: string;
+      portfolioName?: string;
+    };
+  }>('/sites/:id', {
+    preHandler: [requireOperator, requirePolicy('site.update', { getResourceSiteId: (req) => req.params.id })],
+  }, async (req, reply) => {
+    const operator = req.currentOperator!;
+    const existing = await prisma.site.findUnique({ where: { id: req.params.id } });
+    if (!existing || existing.operatorId !== operator.id) {
+      return reply.status(404).send({ error: 'Site not found' });
+    }
+
+    const { name, address, lat, lng, pricingMode, pricePerKwhUsd, idleFeePerMinUsd, activationFeeUsd, gracePeriodMin, touWindows, organizationName, portfolioName } = req.body;
+    const site = await prisma.site.update({
+      where: { id: req.params.id },
+      data: {
+        name,
+        address,
+        lat,
+        lng,
+        ...(pricingMode ? { pricingMode } : {}),
+        ...(pricePerKwhUsd != null ? { pricePerKwhUsd } : {}),
+        ...(idleFeePerMinUsd != null ? { idleFeePerMinUsd } : {}),
+        ...(activationFeeUsd != null ? { activationFeeUsd } : {}),
+        ...(gracePeriodMin != null ? { gracePeriodMin } : {}),
+        ...(Array.isArray(touWindows) ? { touWindows } : {}),
+        ...(organizationName !== undefined ? { organizationName } : {}),
+        ...(portfolioName !== undefined ? { portfolioName } : {}),
+      },
+    });
+
+    return site;
   });
 
 
 
   // GET /sites/:id/uptime — aggregate uptime across site chargers
   app.get<{ Params: { id: string } }>('/sites/:id/uptime', {
-    preHandler: requireOperator,
+    preHandler: [requireOperator, requirePolicy('site.uptime.read', { getResourceSiteId: (req) => req.params.id })],
   }, async (req, reply) => {
     const site = await prisma.site.findUnique({
       where: { id: req.params.id },
@@ -110,7 +198,7 @@ export async function siteRoutes(app: FastifyInstance) {
 
   // GET /sites/:id/analytics — variable range: sessions, kWh, revenue, uptime
   app.get<{ Params: { id: string }; Querystring: { periodDays?: string; startDate?: string; endDate?: string } }>('/sites/:id/analytics', {
-    preHandler: requireOperator,
+    preHandler: [requireOperator, requirePolicy('site.analytics.read', { getResourceSiteId: (req) => req.params.id })],
   }, async (req, reply) => {
     const site = await prisma.site.findUnique({
       where: { id: req.params.id },
@@ -139,32 +227,114 @@ export async function siteRoutes(app: FastifyInstance) {
     const dayCount = Math.max(1, Math.floor((endDate.getTime() - startDate.getTime()) / (24 * 60 * 60 * 1000)) + 1);
     const connectorIds = site.chargers.flatMap((c: { connectors: Array<{ id: string }> }) => c.connectors.map((cn) => cn.id));
 
+    const now = new Date();
     const sessions = await prisma.session.findMany({
       where: {
         connectorId: { in: connectorIds },
-        startedAt: { gte: startDate, lte: endDate },
-        status: 'COMPLETED',
+        // Include any session that overlaps the selected period window.
+        // This captures sessions that started before the window but continued into it,
+        // plus currently active sessions that haven't stopped yet.
+        startedAt: { lte: endDate },
+        OR: [
+          { stoppedAt: { gte: startDate } },
+          { stoppedAt: null, status: 'ACTIVE' },
+        ],
       },
       include: { payment: true },
     });
 
+    const getEffectiveAmountCents = (s: { kwhDelivered: number | null; ratePerKwh: number | null; payment: { amountCents: number | null } | null }) => {
+      if (s.payment?.amountCents != null) return s.payment.amountCents;
+      if (s.kwhDelivered != null && s.ratePerKwh != null) return Math.round(s.kwhDelivered * s.ratePerKwh * 100);
+      return 0;
+    };
+
     const sessionsCount = sessions.length;
     const kwhDelivered = sessions.reduce((sum: number, s: { kwhDelivered: number | null }) => sum + (s.kwhDelivered ?? 0), 0);
-    const revenueCents = sessions.reduce((sum: number, s: { payment: { amountCents: number | null } | null }) => sum + (s.payment?.amountCents ?? 0), 0);
+    const revenueCents = sessions.reduce((sum: number, s: { kwhDelivered: number | null; ratePerKwh: number | null; payment: { amountCents: number | null } | null }) => sum + getEffectiveAmountCents(s), 0);
 
-    // Uptime approximation: % of chargers currently ONLINE
-    const totalChargers = site.chargers.length;
-    const onlineChargers = site.chargers.filter((c: { status: string }) => c.status === 'ONLINE').length;
-    const uptimePct = totalChargers > 0 ? Math.round((onlineChargers / totalChargers) * 100) : 0;
+    // Utilization formula (period-aligned): active charging time / available connector time.
+    // - active charging time: sum of completed session durations, clipped to selected date range
+    // - available connector time: connector count * selected range duration
+    // Assumption: each connector can serve at most one active session at a time.
+    const periodSeconds = dayCount * 24 * 60 * 60;
+    const availableConnectorSeconds = connectorIds.length * periodSeconds;
+    const activeChargingSeconds = sessions.reduce((sum: number, s: { startedAt: Date; stoppedAt: Date | null; status: 'ACTIVE' | 'COMPLETED' | 'FAILED' }) => {
+      // For active sessions, count charging time up to "now" (capped by selected endDate).
+      // For completed/failed sessions, use stoppedAt when present.
+      const sessionEnd = s.stoppedAt ?? (s.status === 'ACTIVE' ? now : null);
+      if (!sessionEnd) return sum;
+      const startedMs = Math.max(s.startedAt.getTime(), startDate.getTime());
+      const stoppedMs = Math.min(sessionEnd.getTime(), endDate.getTime(), now.getTime());
+      if (stoppedMs <= startedMs) return sum;
+      return sum + Math.floor((stoppedMs - startedMs) / 1000);
+    }, 0);
+    const rawUtilizationRatePct = availableConnectorSeconds > 0
+      ? Math.round((activeChargingSeconds / availableConnectorSeconds) * 10000) / 100
+      : 0;
+    const utilizationRatePct = rawUtilizationRatePct > 0
+      ? rawUtilizationRatePct
+      : (sessionsCount > 0 ? 0.01 : 0);
+
+    // Uptime (period-aligned): derive per-charger uptime from uptime events over selected window.
+    const mapEventToStatus = (event: string): 'ONLINE' | 'OFFLINE' | 'DEGRADED' | 'FAULTED' => (
+      event === 'ONLINE' || event === 'RECOVERED'
+        ? 'ONLINE'
+        : event === 'FAULTED'
+          ? 'FAULTED'
+          : event === 'DEGRADED'
+            ? 'DEGRADED'
+            : 'OFFLINE'
+    );
+
+    const chargerUptimePct = await Promise.all(site.chargers.map(async (charger: { id: string; status: string }) => {
+      const [eventsInRange, beforeRange] = await Promise.all([
+        prisma.uptimeEvent.findMany({
+          where: { chargerId: charger.id, createdAt: { gte: startDate, lte: endDate } },
+          orderBy: { createdAt: 'asc' },
+        }),
+        prisma.uptimeEvent.findFirst({
+          where: { chargerId: charger.id, createdAt: { lt: startDate } },
+          orderBy: { createdAt: 'desc' },
+        }),
+      ]);
+
+      let state: 'ONLINE' | 'OFFLINE' | 'DEGRADED' | 'FAULTED' = beforeRange
+        ? mapEventToStatus(beforeRange.event)
+        : (charger.status as 'ONLINE' | 'OFFLINE' | 'DEGRADED' | 'FAULTED');
+
+      let upMs = 0;
+      let cursor = startDate.getTime();
+      const endMs = endDate.getTime();
+
+      for (const e of eventsInRange) {
+        const ts = e.createdAt.getTime();
+        if (ts <= cursor) {
+          state = mapEventToStatus(e.event);
+          continue;
+        }
+        if (state === 'ONLINE') upMs += ts - cursor;
+        cursor = ts;
+        state = mapEventToStatus(e.event);
+      }
+
+      if (state === 'ONLINE') upMs += endMs - cursor;
+      const totalMs = endMs - startDate.getTime();
+      return totalMs > 0 ? Math.max(0, Math.min(100, (upMs / totalMs) * 100)) : 0;
+    }));
+
+    const uptimePct = chargerUptimePct.length
+      ? Math.round((chargerUptimePct.reduce((s, v) => s + v, 0) / chargerUptimePct.length) * 100) / 100
+      : 0;
 
     // Build daily breakdown: group sessions by UTC date, fill gaps with zeros
     const dailyMap: Record<string, { date: string; sessions: number; kwhDelivered: number; revenueCents: number }> = {};
-    sessions.forEach((s: { startedAt: Date; kwhDelivered: number | null; payment: { amountCents: number | null } | null }) => {
+    sessions.forEach((s: { startedAt: Date; kwhDelivered: number | null; ratePerKwh: number | null; payment: { amountCents: number | null } | null }) => {
       const day = s.startedAt.toISOString().slice(0, 10);
       if (!dailyMap[day]) dailyMap[day] = { date: day, sessions: 0, kwhDelivered: 0, revenueCents: 0 };
       dailyMap[day].sessions++;
       dailyMap[day].kwhDelivered = Math.round((dailyMap[day].kwhDelivered + (s.kwhDelivered ?? 0)) * 1000) / 1000;
-      dailyMap[day].revenueCents += s.payment?.amountCents ?? 0;
+      dailyMap[day].revenueCents += getEffectiveAmountCents(s);
     });
 
     // Fill missing days with zeros so charts have a continuous selected range
@@ -183,6 +353,9 @@ export async function siteRoutes(app: FastifyInstance) {
       revenueCents,
       revenueUsd: revenueCents / 100,
       uptimePct,
+      activeChargingSeconds,
+      availableConnectorSeconds,
+      utilizationRatePct,
       daily,
     };
   });

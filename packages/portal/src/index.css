@@ -2,6 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Theme shells for EV Portal */
+.portal-light,
+.portal-light body,
+.portal-light #root {
+  background: #f9fafb;
+  color: #111827;
+}
+
 /* Global dark theme skin for EV Portal (Astra Dashboard style) */
 .portal-dark,
 .portal-dark body,
@@ -47,4 +55,44 @@
   height: 100%;
   width: 100%;
   border-radius: 0.5rem;
+}
+
+.site-count-marker-wrap {
+  background: transparent;
+  border: 0;
+}
+
+.site-count-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 9999px;
+  background: #2563eb;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  border: 2px solid rgba(255, 255, 255, 0.7);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35);
+}
+
+.portal-dark .leaflet-container {
+  background: #020617;
+}
+
+.portal-dark .leaflet-popup-content-wrapper,
+.portal-dark .leaflet-popup-tip {
+  background: #0f172a;
+  color: #e5e7eb;
+}
+
+.portal-dark .leaflet-popup-content {
+  color: #e5e7eb;
+}
+
+.portal-dark .leaflet-control-zoom a {
+  background: #111827;
+  color: #e5e7eb;
+  border-color: #374151;
 }

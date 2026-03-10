@@ -35,18 +35,6 @@ export async function handleMeterValues(
   const { connectorId, transactionId, meterValue } = params;
   console.log(`[MeterValues] chargerId=${chargerId} connector=${connectorId} transactionId=${transactionId} readings=${meterValue.length}`);
 
-  // Persist to OcppLog for audit and analytics
-  await prisma.ocppLog.create({
-    data: {
-      chargerId,
-      direction: 'INBOUND',
-      messageType: 2,
-      messageId: `mv-${Date.now()}`,
-      action: 'MeterValues',
-      payload: params as object,
-    },
-  });
-
   // Update ACTIVE session with live meter/kWh so mobile app can show real-time energy.
   const latestWh = extractLatestEnergyWh(params);
   if (transactionId && latestWh != null) {

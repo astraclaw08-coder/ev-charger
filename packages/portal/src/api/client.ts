@@ -6,6 +6,14 @@ export interface SiteListItem {
   address: string;
   lat: number;
   lng: number;
+  pricingMode?: 'flat' | 'tou';
+  pricePerKwhUsd?: number;
+  idleFeePerMinUsd?: number;
+  activationFeeUsd?: number;
+  gracePeriodMin?: number;
+  touWindows?: unknown;
+  organizationName?: string | null;
+  portfolioName?: string | null;
   createdAt: string;
   chargerCount: number;
   statusSummary: { online: number; offline: number; faulted: number };
@@ -26,12 +34,16 @@ export interface ChargerInfo {
   serialNumber: string;
   model: string;
   vendor: string;
-  status: 'ONLINE' | 'OFFLINE' | 'FAULTED';
+  status: 'ONLINE' | 'OFFLINE' | 'FAULTED' | 'DEGRADED';
   lastHeartbeat: string | null;
   siteId: string;
   connectors: ConnectorInfo[];
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ChargerListItem extends ChargerInfo {
+  site: { id: string; name: string; address: string; lat: number; lng: number };
 }
 
 export interface SiteDetail {
@@ -40,6 +52,14 @@ export interface SiteDetail {
   address: string;
   lat: number;
   lng: number;
+  pricingMode?: 'flat' | 'tou';
+  pricePerKwhUsd?: number;
+  idleFeePerMinUsd?: number;
+  activationFeeUsd?: number;
+  gracePeriodMin?: number;
+  touWindows?: unknown;
+  organizationName?: string | null;
+  portfolioName?: string | null;
   createdAt: string;
   chargers: ChargerInfo[];
 }
@@ -60,6 +80,9 @@ export interface Analytics {
   revenueCents: number;
   revenueUsd: number;
   uptimePct: number;
+  activeChargingSeconds: number;
+  availableConnectorSeconds: number;
+  utilizationRatePct: number;
   daily: DailyEntry[];
 }
 
@@ -86,6 +109,7 @@ export interface ChargerStatus {
 
 export interface SessionRecord {
   id: string;
+  transactionId: number | null;
   startedAt: string;
   stoppedAt: string | null;
   status: string;
@@ -95,6 +119,7 @@ export interface SessionRecord {
   connector: { connectorId: number };
   user: { name: string | null; email: string } | null;
   payment: { status: string; amountCents: number | null } | null;
+  effectiveAmountCents?: number | null;
 }
 
 export interface CreatedCharger {
@@ -135,6 +160,75 @@ export interface SiteUptime {
   incidents: Array<UptimeIncident & { chargerId: string }>;
 }
 
+export interface AdminUser {
+  id: string;
+  username?: string;
+  email?: string;
+  firstName?: string;
+  lastName?: string;
+  enabled?: boolean;
+  emailVerified?: boolean;
+  createdTimestamp?: number;
+  realmRoles?: string[];
+}
+
+export interface AdminAuditEvent {
+  id: string;
+  operatorId: string;
+  action: string;
+  targetUserId?: string;
+  targetEmail?: string;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface PortalSettings {
+  id: string;
+  scopeKey: string;
+  organizationName?: string | null;
+  organizationDefaultSite?: string | null;
+  organizationPortfolio?: string | null;
+  organizationBillingAddress?: string | null;
+  supportContactEmail?: string | null;
+  supportContactPhone?: string | null;
+  profileDisplayName?: string | null;
+  profileTimezone?: string | null;
+  remittanceBankName?: string | null;
+  remittanceAccountType?: string | null;
+  remittanceEmail?: string | null;
+  routingNumber?: string | null;
+  accountNumber?: string | null;
+  updatedByOperatorId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface OperatorNotificationPreference {
+  id: string;
+  operatorId: string;
+  emailEnabled: boolean;
+  smsEnabled: boolean;
+  outageAlerts: boolean;
+  billingAlerts: boolean;
+  weeklyDigest: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ChargerModelCatalogItem {
+  id: string;
+  scopeKey: string;
+  modelCode: string;
+  vendor: string;
+  displayName: string;
+  maxKw: number;
+  connectorType: string;
+  isActive: boolean;
+  updatedByOperatorId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // ─── Client ──────────────────────────────────────────────────────────────────
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
@@ -173,6 +267,7 @@ export function createApiClient(token: string | null | undefined) {
   return {
     getSites: () => request<SiteListItem[]>('/sites', token),
     getSite: (id: string) => request<SiteDetail>(`/sites/${id}`, token),
+    getChargers: () => request<ChargerListItem[]>('/chargers', token),
     getAnalytics: (siteId: string, params?: { periodDays?: number; startDate?: string; endDate?: string }) => {
       const query = new URLSearchParams();
       if (params?.periodDays) query.set('periodDays', String(params.periodDays));
@@ -196,6 +291,28 @@ export function createApiClient(token: string | null | undefined) {
         body: JSON.stringify(body),
       }),
 
+    updateSite: (
+      id: string,
+      body: {
+        name: string;
+        address: string;
+        lat: number;
+        lng: number;
+        pricingMode?: 'flat' | 'tou';
+        pricePerKwhUsd?: number;
+        idleFeePerMinUsd?: number;
+        activationFeeUsd?: number;
+        gracePeriodMin?: number;
+        touWindows?: unknown;
+        organizationName?: string;
+        portfolioName?: string;
+      },
+    ) =>
+      request<SiteDetail>(`/sites/${id}`, token, {
+        method: 'PUT',
+        body: JSON.stringify(body),
+      }),
+
     createCharger: (body: {
       siteId: string;
       ocppId: string;
@@ -216,6 +333,85 @@ export function createApiClient(token: string | null | undefined) {
 
     remoteStartCharger: (id: string, body: { connectorId: number; idTag: string }) =>
       request<{ status: string }>(`/chargers/${id}/remote-start`, token, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+
+    listAdminUsers: (params?: { search?: string; max?: number }) => {
+      const qs = new URLSearchParams();
+      if (params?.search) qs.set('search', params.search);
+      if (params?.max != null) qs.set('max', String(params.max));
+      return request<AdminUser[]>(`/admin/users${qs.toString() ? `?${qs}` : ''}`, token);
+    },
+
+    createAdminUser: (body: { email: string; firstName?: string; lastName?: string; sendInvite?: boolean; temporaryPassword?: string }) =>
+      request<AdminUser>('/admin/users', token, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+
+    addAdminUserRole: (userId: string, role: string, reason?: string) =>
+      request<{ ok: boolean }>(`/admin/users/${userId}/roles/add`, token, {
+        method: 'POST',
+        body: JSON.stringify({ role, reason }),
+      }),
+
+    removeAdminUserRole: (userId: string, role: string, options?: { reason?: string; confirmPrivilegedRoleRemoval?: boolean }) =>
+      request<{ ok: boolean }>(`/admin/users/${userId}/roles/remove`, token, {
+        method: 'POST',
+        body: JSON.stringify({ role, reason: options?.reason, confirmPrivilegedRoleRemoval: options?.confirmPrivilegedRoleRemoval }),
+      }),
+
+    deactivateAdminUser: (userId: string, options?: { reason?: string; revokeSessions?: boolean }) =>
+      request<{ ok: boolean }>(`/admin/users/${userId}/deactivate`, token, {
+        method: 'POST',
+        body: JSON.stringify(options ?? {}),
+      }),
+
+    reactivateAdminUser: (userId: string, reason?: string) =>
+      request<{ ok: boolean }>(`/admin/users/${userId}/reactivate`, token, {
+        method: 'POST',
+        body: JSON.stringify({ reason }),
+      }),
+
+    triggerPasswordReset: (userId: string, options?: { reason?: string; revokeSessions?: boolean }) =>
+      request<{ ok: boolean }>(`/admin/users/${userId}/reset-credentials`, token, {
+        method: 'POST',
+        body: JSON.stringify(options ?? {}),
+      }),
+
+    revokeAdminUserSessions: (userId: string, reason?: string) =>
+      request<{ ok: boolean }>(`/admin/users/${userId}/revoke-sessions`, token, {
+        method: 'POST',
+        body: JSON.stringify({ reason }),
+      }),
+
+    listAdminAudit: (limit = 50) =>
+      request<AdminAuditEvent[]>(`/admin/users/audit?limit=${limit}`, token),
+
+    getAdminSettings: () =>
+      request<{ settings: PortalSettings | null; notificationPreferences: OperatorNotificationPreference | null; chargerModels: ChargerModelCatalogItem[] }>('/admin/settings', token),
+
+    updateOrgProfileSettings: (body: Record<string, unknown>) =>
+      request<PortalSettings>('/admin/settings/org-profile', token, {
+        method: 'PUT',
+        body: JSON.stringify(body),
+      }),
+
+    updateNotificationSettings: (body: { emailEnabled?: boolean; smsEnabled?: boolean; outageAlerts?: boolean; billingAlerts?: boolean; weeklyDigest?: boolean; reason: string }) =>
+      request<OperatorNotificationPreference>('/admin/settings/notifications', token, {
+        method: 'PUT',
+        body: JSON.stringify(body),
+      }),
+
+    createChargerModelCatalogItem: (body: { modelCode: string; vendor: string; displayName: string; maxKw: number; connectorType: string; reason: string }) =>
+      request<ChargerModelCatalogItem>('/admin/settings/charger-models', token, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+
+    toggleChargerModelCatalogItem: (id: string, body: { isActive: boolean; reason: string }) =>
+      request<ChargerModelCatalogItem>(`/admin/settings/charger-models/${id}/toggle`, token, {
         method: 'POST',
         body: JSON.stringify(body),
       }),

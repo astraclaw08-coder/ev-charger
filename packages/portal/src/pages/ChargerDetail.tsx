@@ -230,6 +230,7 @@ export default function ChargerDetail() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50 text-left text-xs font-medium text-gray-500">
+                  <th className="px-5 py-3">Txn #</th>
                   <th className="px-5 py-3">Connector</th>
                   <th className="px-5 py-3">Driver</th>
                   <th className="px-5 py-3">Started</th>
@@ -242,6 +243,9 @@ export default function ChargerDetail() {
               <tbody className="divide-y divide-gray-50">
                 {sessions.map((s) => (
                   <tr key={s.id} className="hover:bg-gray-50">
+                    <td className="px-5 py-3 font-mono text-xs text-gray-700">
+                      {s.transactionId ?? '—'}
+                    </td>
                     <td className="px-5 py-3 font-mono text-xs text-gray-500">
                       #{s.connector.connectorId}
                     </td>
@@ -265,8 +269,8 @@ export default function ChargerDetail() {
                     </td>
                     <td className="px-5 py-3 text-gray-500 text-xs">
                       {s.payment
-                        ? `${s.payment.status}${s.payment.amountCents != null ? ` · $${(s.payment.amountCents / 100).toFixed(2)}` : ''}`
-                        : '—'}
+                        ? `${s.payment.status}${(s.effectiveAmountCents ?? s.payment.amountCents) != null ? ` · $${(((s.effectiveAmountCents ?? s.payment.amountCents) as number) / 100).toFixed(2)}` : ''}`
+                        : (s.effectiveAmountCents != null ? `$${(s.effectiveAmountCents / 100).toFixed(2)}` : '—')}
                     </td>
                   </tr>
                 ))}

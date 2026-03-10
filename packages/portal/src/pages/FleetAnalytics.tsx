@@ -8,7 +8,6 @@ import {
   Line,
   XAxis,
   YAxis,
-  CartesianGrid,
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
@@ -30,8 +29,10 @@ export default function FleetAnalytics() {
   const [chargersBySite, setChargersBySite] = useState<Record<string, ChargerInfo[]>>({});
 
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('30d');
-  const [roleScope, setRoleScope] = useState<AnalystRole>('analyst');
+  const [roleScope, setRoleScope] = useState<AnalystRole>('owner');
   const [siteFilter, setSiteFilter] = useState<'all' | string>('all');
+  const [orgFilter, setOrgFilter] = useState<'all' | string>('all');
+  const [portfolioFilter, setPortfolioFilter] = useState<'all' | string>('all');
   const [chargerFilter, setChargerFilter] = useState<'all' | string>('all');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -74,7 +75,16 @@ export default function FleetAnalytics() {
     setChargerFilter('all');
   }, [siteFilter]);
 
-  const selectedSiteIds = useMemo(() => (siteFilter === 'all' ? sites.map((s) => s.id) : [siteFilter]), [siteFilter, sites]);
+  const filteredSites = useMemo(() => {
+    return sites.filter((s) => {
+      const orgOk = orgFilter === 'all' || (s.organizationName ?? '') === orgFilter;
+      const portfolioOk = portfolioFilter === 'all' || (s.portfolioName ?? '') === portfolioFilter;
+      const siteOk = siteFilter === 'all' || s.id === siteFilter;
+      return orgOk && portfolioOk && siteOk;
+    });
+  }, [sites, orgFilter, portfolioFilter, siteFilter]);
+
+  const selectedSiteIds = useMemo(() => filteredSites.map((s) => s.id), [filteredSites]);
 
   const merged = useMemo(() => {
     const map = new Map<string, DailyMerged>();
@@ -97,12 +107,16 @@ export default function FleetAnalytics() {
     const kwhDelivered = merged.reduce((sum, d) => sum + d.kwhDelivered, 0);
     const revenueUsd = merged.reduce((sum, d) => sum + d.revenueCents, 0) / 100;
 
-    const uptimeRows = selectedSiteIds
-      .map((siteId) => analyticsBySite[siteId]?.uptimePct)
-      .filter((v): v is number => typeof v === 'number');
-    const uptimePct = uptimeRows.length ? uptimeRows.reduce((a, b) => a + b, 0) / uptimeRows.length : 0;
+    const utilRows = selectedSiteIds
+      .map((siteId) => analyticsBySite[siteId])
+      .filter((v): v is Analytics => !!v);
+    const totalAvailable = utilRows.reduce((s, r) => s + (r.availableConnectorSeconds || 0), 0);
+    const weightedUtil = totalAvailable > 0
+      ? utilRows.reduce((s, r) => s + ((r.utilizationRatePct || 0) * (r.availableConnectorSeconds || 0)), 0) / totalAvailable
+      : (utilRows.length ? utilRows.reduce((s, r) => s + (r.utilizationRatePct || 0), 0) / utilRows.length : 0);
+    const utilizationRatePct = weightedUtil > 0 ? weightedUtil : (sessionsCount > 0 ? 0.01 : 0);
 
-    return { sessionsCount, kwhDelivered, revenueUsd, uptimePct };
+    return { sessionsCount, kwhDelivered, revenueUsd, utilizationRatePct };
   }, [merged, selectedSiteIds, analyticsBySite]);
 
   const chartData = useMemo(
@@ -124,6 +138,9 @@ export default function FleetAnalytics() {
     if (siteFilter === 'all') return [] as ChargerInfo[];
     return chargersBySite[siteFilter] ?? [];
   }, [siteFilter, chargersBySite]);
+
+  const orgOptions = useMemo(() => Array.from(new Set(sites.map((s) => s.organizationName ?? '').filter(Boolean))).sort(), [sites]);
+  const portfolioOptions = useMemo(() => Array.from(new Set(sites.map((s) => s.portfolioName ?? '').filter(Boolean))).sort(), [sites]);
 
   if (loading) return <div className="flex h-64 items-center justify-center text-gray-400">Loading analytics…</div>;
   if (error) return <div className="rounded-lg bg-red-50 p-4 text-sm text-red-700">{error}</div>;
@@ -152,10 +169,22 @@ export default function FleetAnalytics() {
           </>
         )}
 
+        <label className="ml-2 text-xs font-medium uppercase tracking-wide text-gray-500">Organization</label>
+        <select value={orgFilter} onChange={(e) => setOrgFilter(e.target.value)} className="rounded-md border border-gray-300 px-2 py-1 text-sm">
+          <option value="all">All Organizations</option>
+          {orgOptions.map((o) => <option key={o} value={o}>{o}</option>)}
+        </select>
+
+        <label className="ml-2 text-xs font-medium uppercase tracking-wide text-gray-500">Portfolio</label>
+        <select value={portfolioFilter} onChange={(e) => setPortfolioFilter(e.target.value)} className="rounded-md border border-gray-300 px-2 py-1 text-sm">
+          <option value="all">All Portfolios</option>
+          {portfolioOptions.map((p) => <option key={p} value={p}>{p}</option>)}
+        </select>
+
         <label className="ml-2 text-xs font-medium uppercase tracking-wide text-gray-500">Site</label>
         <select value={siteFilter} onChange={(e) => setSiteFilter(e.target.value)} className="rounded-md border border-gray-300 px-2 py-1 text-sm">
           <option value="all">All Sites</option>
-          {sites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          {filteredSites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
 
         <label className="ml-2 text-xs font-medium uppercase tracking-wide text-gray-500">Charger</label>
@@ -178,17 +207,16 @@ export default function FleetAnalytics() {
         </div>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <SummaryCard label="Sessions" value={scopedSummary.sessionsCount.toString()} icon="⚡" />
-        <SummaryCard label="kWh Delivered" value={scopedSummary.kwhDelivered.toFixed(1)} icon="🔋" />
-        <SummaryCard label="Revenue" value={Number.isNaN(scopedSummary.revenueUsd) ? 'Restricted' : `$${scopedSummary.revenueUsd.toFixed(2)}`} icon="💵" />
-        <SummaryCard label="Uptime" value={`${scopedSummary.uptimePct.toFixed(2)}%`} icon="📶" />
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiTile label="Transactions" value={scopedSummary.sessionsCount.toString()} />
+        <KpiTile label="Total kWh" value={scopedSummary.kwhDelivered.toFixed(1)} />
+        <KpiTile label="Total Revenue" value={Number.isNaN(scopedSummary.revenueUsd) ? 'Restricted' : `$${scopedSummary.revenueUsd.toFixed(2)}`} />
+        <KpiTile label="Utilization" value={`${scopedSummary.utilizationRatePct.toFixed(2)}%`} />
       </div>
 
       <ChartCard title="Sessions per Day">
         <ResponsiveContainer width="100%" height={200}>
           <LineChart data={chartData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
             <XAxis dataKey="label" tick={{ fontSize: 11 }} tickLine={false} />
             <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
             <Tooltip formatter={(v: number) => [v, 'Sessions']} labelFormatter={(l) => `Date: ${l}`} />
@@ -200,7 +228,6 @@ export default function FleetAnalytics() {
       <ChartCard title="kWh Delivered per Day">
         <ResponsiveContainer width="100%" height={200}>
           <AreaChart data={chartData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
             <XAxis dataKey="label" tick={{ fontSize: 11 }} tickLine={false} />
             <YAxis tick={{ fontSize: 11 }} />
             <Tooltip formatter={(v: number) => [`${v} kWh`, 'Energy']} labelFormatter={(l) => `Date: ${l}`} />
@@ -213,7 +240,6 @@ export default function FleetAnalytics() {
         <ChartCard title="Revenue per Day (USD)">
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={chartData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
               <XAxis dataKey="label" tick={{ fontSize: 11 }} tickLine={false} />
               <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `$${v}`} />
               <Tooltip formatter={(v: number) => [`$${v.toFixed(2)}`, 'Revenue']} labelFormatter={(l) => `Date: ${l}`} />
@@ -230,16 +256,11 @@ export default function FleetAnalytics() {
   );
 }
 
-function SummaryCard({ label, value, icon }: { label: string; value: string; icon: string }) {
+function KpiTile({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-      <div className="flex items-center gap-3">
-        <span className="text-2xl">{icon}</span>
-        <div>
-          <p className="text-2xl font-bold text-gray-900">{value}</p>
-          <p className="text-xs text-gray-500">{label}</p>
-        </div>
-      </div>
+    <div className="rounded-lg border border-gray-200 bg-white p-4">
+      <p className="text-xs font-medium uppercase tracking-wide text-gray-500">{label}</p>
+      <p className="mt-1 text-2xl font-semibold text-gray-900">{value}</p>
     </div>
   );
 }

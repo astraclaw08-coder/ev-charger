@@ -51,7 +51,7 @@ export default function AddChargerDialog({ siteId, onAdd, onClose }: Props) {
 
   return (
     /* Backdrop */
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+    <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/40" onClick={onClose}>
       <div
         className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl"
         onClick={(e) => e.stopPropagation()}

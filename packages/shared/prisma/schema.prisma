@@ -58,15 +58,23 @@ enum UptimeEventType {
 // ─── Models ───────────────────────────────────────────────────────────────────
 
 model Site {
-  id         String    @id @default(uuid())
-  name       String
-  address    String
-  lat        Float
-  lng        Float
-  operatorId String
-  chargers   Charger[]
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  id               String    @id @default(uuid())
+  name             String
+  address          String
+  lat              Float
+  lng              Float
+  operatorId       String
+  pricingMode      String    @default("flat") // flat | tou
+  pricePerKwhUsd   Float     @default(0.35)
+  idleFeePerMinUsd Float     @default(0.08)
+  activationFeeUsd Float     @default(0)
+  gracePeriodMin   Int       @default(10)
+  touWindows       Json?
+  organizationName String?
+  portfolioName    String?
+  chargers         Charger[]
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   @@index([operatorId])
 }
@@ -195,4 +203,70 @@ model UptimeEvent {
   @@index([chargerId, createdAt])
   @@index([createdAt])
   @@index([event])
+}
+
+model AdminAuditEvent {
+  id           String   @id @default(uuid())
+  operatorId   String
+  action       String
+  targetUserId String?
+  targetEmail  String?
+  metadata     Json?
+  createdAt    DateTime @default(now())
+
+  @@index([operatorId, createdAt])
+  @@index([action, createdAt])
+  @@index([targetUserId])
+}
+
+model PortalSettings {
+  id                       String   @id @default(uuid())
+  scopeKey                 String   @unique
+  organizationName         String?
+  organizationDefaultSite  String?
+  organizationPortfolio    String?
+  organizationBillingAddress String?
+  supportContactEmail      String?
+  supportContactPhone      String?
+  profileDisplayName       String?
+  profileTimezone          String?
+  remittanceBankName       String?
+  remittanceAccountType    String?
+  remittanceEmail          String?
+  routingNumber            String?
+  accountNumber            String?
+  updatedByOperatorId      String
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  @@index([scopeKey])
+}
+
+model OperatorNotificationPreference {
+  id            String   @id @default(uuid())
+  operatorId    String   @unique
+  emailEnabled  Boolean  @default(true)
+  smsEnabled    Boolean  @default(false)
+  outageAlerts  Boolean  @default(true)
+  billingAlerts Boolean  @default(true)
+  weeklyDigest  Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model ChargerModelCatalog {
+  id                  String   @id @default(uuid())
+  scopeKey            String
+  modelCode           String
+  vendor              String
+  displayName         String
+  maxKw               Float
+  connectorType       String
+  isActive            Boolean  @default(true)
+  updatedByOperatorId String
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@unique([scopeKey, modelCode])
+  @@index([scopeKey, isActive])
 }
