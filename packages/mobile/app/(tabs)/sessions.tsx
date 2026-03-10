@@ -14,11 +14,22 @@ import {
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { useQuery } from '@tanstack/react-query';
-import { api, type Session } from '@/lib/api';
+import {
+  api,
+  isEvcPlatformReadModelEnabled,
+  type EnrichedTransaction,
+  type Session,
+} from '@/lib/api';
 import { useAppTheme } from '@/theme';
 import { useAppAuth } from '@/providers/AuthProvider';
 
 type SummaryRange = 'week' | 'month' | 'year';
+
+type ReadModelData = {
+  portfolioSummary: Awaited<ReturnType<typeof api.analytics.portfolioSummary>> | null;
+  enrichedTransactions: Awaited<ReturnType<typeof api.transactions.enriched>> | null;
+  rebateIntervals: Awaited<ReturnType<typeof api.rebates.intervals>> | null;
+};
 
 function formatDuration(startedAt: string, endedAt: string | null): string {
   const start = new Date(startedAt).getTime();
@@ -53,6 +64,42 @@ function getRangeStart(range: SummaryRange): Date {
   return new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
 }
 
+function mapEnrichedToSession(tx: EnrichedTransaction): Session {
+  return {
+    id: tx.sessionId,
+    transactionId: tx.transactionId,
+    status: tx.status === 'ACTIVE' ? 'ACTIVE' : tx.status === 'COMPLETED' ? 'COMPLETED' : 'FAILED',
+    meterStart: tx.meterStart ?? 0,
+    meterStop: tx.meterStop,
+    kwhDelivered: tx.energyKwh,
+    ratePerKwh: null,
+    startedAt: tx.startedAt,
+    endedAt: tx.stoppedAt,
+    costEstimateCents: tx.payment?.amountCents ?? Math.round((tx.revenueUsd ?? 0) * 100),
+    effectiveAmountCents: tx.payment?.amountCents ?? Math.round((tx.revenueUsd ?? 0) * 100),
+    connector: {
+      connectorId: 1,
+      charger: {
+        id: tx.charger.id,
+        ocppId: tx.charger.ocppId,
+        model: tx.charger.model,
+        vendor: tx.charger.vendor,
+        status: tx.status,
+        site: { name: tx.site.name, address: '' },
+      },
+    },
+    payment: tx.payment
+      ? {
+          id: tx.id,
+          status: tx.payment.status,
+          amountCents: tx.payment.amountCents,
+          stripeCustomerId: null,
+          stripeIntentId: null,
+        }
+      : null,
+  };
+}
+
 function SessionCard({ session, onPress, isDark }: { session: Session; onPress: () => void; isDark: boolean }) {
   const isActive = session.status === 'ACTIVE';
   const charger = session.connector.charger;
@@ -71,7 +118,9 @@ function SessionCard({ session, onPress, isDark }: { session: Session; onPress: 
         )}
       </View>
 
-      <Text style={[styles.address, { color: isDark ? '#9ca3af' : '#6b7280' }]}>{charger.site.address}</Text>
+      {charger.site.address ? (
+        <Text style={[styles.address, { color: isDark ? '#9ca3af' : '#6b7280' }]}>{charger.site.address}</Text>
+      ) : null}
 
       <View style={styles.statsRow}>
         <StatItem label="Date" value={formatDate(session.startedAt)} />
@@ -134,27 +183,75 @@ export default function SessionsScreen() {
     enabled: !isGuest,
   });
 
+  const { data: readModelData, refetch: refetchReadModel } = useQuery({
+    queryKey: ['sessions-read-model'],
+    enabled: !isGuest && isEvcPlatformReadModelEnabled,
+    staleTime: 60_000,
+    queryFn: async (): Promise<ReadModelData> => {
+      const [portfolioSummary, enrichedTransactions, rebateIntervals] = await Promise.allSettled([
+        api.analytics.portfolioSummary(),
+        api.transactions.enriched({ limit: 200, offset: 0 }),
+        api.rebates.intervals({ limit: 500, offset: 0 }),
+      ]);
+
+      return {
+        portfolioSummary: portfolioSummary.status === 'fulfilled' ? portfolioSummary.value : null,
+        enrichedTransactions: enrichedTransactions.status === 'fulfilled' ? enrichedTransactions.value : null,
+        rebateIntervals: rebateIntervals.status === 'fulfilled' ? rebateIntervals.value : null,
+      };
+    },
+  });
+
   useFocusEffect(
     React.useCallback(() => {
       refetch();
+      if (isEvcPlatformReadModelEnabled) {
+        refetchReadModel();
+      }
       return undefined;
-    }, [refetch]),
+    }, [refetch, refetchReadModel]),
   );
 
   async function onPullRefresh() {
     setManualRefreshing(true);
     try {
       await refetch();
+      if (isEvcPlatformReadModelEnabled) {
+        await refetchReadModel();
+      }
     } finally {
       setManualRefreshing(false);
     }
   }
 
-  const sessions = data?.sessions ?? [];
+  const fallbackSessions = data?.sessions ?? [];
+  const enrichedRows = readModelData?.enrichedTransactions?.transactions ?? [];
+  const sessions = useMemo(() => {
+    if (!isEvcPlatformReadModelEnabled || enrichedRows.length === 0) return fallbackSessions;
+    return enrichedRows
+      .map(mapEnrichedToSession)
+      .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
+  }, [fallbackSessions, enrichedRows]);
 
   const summary = useMemo(() => {
     const rangeStart = getRangeStart(summaryRange).getTime();
-    const inRange = sessions.filter((s) => new Date(s.startedAt).getTime() >= rangeStart);
+
+    if (isEvcPlatformReadModelEnabled && enrichedRows.length > 0) {
+      const inRange = enrichedRows.filter((row) => new Date(row.startedAt).getTime() >= rangeStart);
+      const portfolioTotals = readModelData?.portfolioSummary?.totals;
+      const rebatesSummary = readModelData?.rebateIntervals?.summary;
+
+      const totalKwh = inRange.reduce((sum, row) => sum + (row.energyKwh ?? 0), 0);
+      const totalSpend = inRange.reduce((sum, row) => sum + (row.revenueUsd ?? 0), 0);
+
+      return {
+        transactions: inRange.length,
+        totalKwh: totalKwh > 0 ? totalKwh : (rebatesSummary?.totalEnergyKwh ?? 0),
+        totalSpend: totalSpend > 0 ? totalSpend : (portfolioTotals?.totalRevenueUsd ?? 0),
+      };
+    }
+
+    const inRange = fallbackSessions.filter((s) => new Date(s.startedAt).getTime() >= rangeStart);
 
     const totalKwh = inRange.reduce((sum, s) => sum + (s.kwhDelivered ?? 0), 0);
     const totalSpend = inRange.reduce((sum, s) => {
@@ -168,7 +265,7 @@ export default function SessionsScreen() {
       totalKwh,
       totalSpend,
     };
-  }, [sessions, summaryRange]);
+  }, [fallbackSessions, summaryRange, enrichedRows, readModelData]);
 
   if (isGuest) {
     return (
@@ -191,7 +288,7 @@ export default function SessionsScreen() {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: isDark ? '#030712' : '#f9fafb' }]}>
+    <View style={[styles.container, { backgroundColor: isDark ? '#030712' : '#f9fafb' }]}> 
       <FlatList
         data={sessions}
         keyExtractor={(s) => s.id}
@@ -212,7 +309,7 @@ export default function SessionsScreen() {
                     onPress={() => setSummaryRange(range)}
                     activeOpacity={0.8}
                   >
-                    <Text style={[styles.segmentText, { color: selected ? '#10b981' : isDark ? '#9ca3af' : '#6b7280' }]}>
+                    <Text style={[styles.segmentText, { color: selected ? '#10b981' : isDark ? '#9ca3af' : '#6b7280' }]}> 
                       {range === 'week' ? 'Week' : range === 'month' ? 'Month' : 'Year'}
                     </Text>
                   </TouchableOpacity>
@@ -226,7 +323,7 @@ export default function SessionsScreen() {
               <SummaryCard label="Total Spent" value={`$${summary.totalSpend.toFixed(2)}`} isDark={isDark} />
             </View>
 
-            <Text style={[styles.countText, { color: isDark ? '#9ca3af' : '#6b7280' }]}>
+            <Text style={[styles.countText, { color: isDark ? '#9ca3af' : '#6b7280' }]}> 
               {sessions.length} total session{sessions.length !== 1 ? 's' : ''}
             </Text>
           </View>
