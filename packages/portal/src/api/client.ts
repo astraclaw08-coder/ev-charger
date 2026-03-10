@@ -337,6 +337,16 @@ export function createApiClient(token: string | null | undefined) {
         body: JSON.stringify(body),
       }),
 
+    triggerHeartbeat: (id: string) =>
+      request<{ status: string }>(`/chargers/${id}/trigger-heartbeat`, token, {
+        method: 'POST',
+      }),
+
+    getChargerConfiguration: (id: string) =>
+      request<{ configurationKey?: Array<{ key?: string; value?: string; readonly?: boolean }>; unknownKey?: string[]; error?: string }>(`/chargers/${id}/get-configuration`, token, {
+        method: 'POST',
+      }),
+
     listAdminUsers: (params?: { search?: string; max?: number }) => {
       const qs = new URLSearchParams();
       if (params?.search) qs.set('search', params.search);

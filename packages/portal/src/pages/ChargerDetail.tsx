@@ -21,6 +21,10 @@ export default function ChargerDetail() {
   const [remoteStartMsg, setRemoteStartMsg] = useState('');
   const [idTag, setIdTag] = useState('TESTDRIVER0001');
   const [connectorId, setConnectorId] = useState<number>(1);
+  const [heartbeatLoading, setHeartbeatLoading] = useState(false);
+  const [heartbeatMsg, setHeartbeatMsg] = useState('');
+  const [configLoading, setConfigLoading] = useState(false);
+  const [configMsg, setConfigMsg] = useState('');
 
   const load = useCallback(async () => {
     try {
@@ -77,6 +81,41 @@ export default function ChargerDetail() {
       setResetMsg(err instanceof Error ? err.message : 'Reset failed');
     } finally {
       setResetLoading(false);
+    }
+  }
+
+  async function handleTriggerHeartbeat() {
+    setHeartbeatMsg('');
+    setHeartbeatLoading(true);
+    try {
+      const token = await getToken();
+      const result = await createApiClient(token).triggerHeartbeat(id!);
+      setHeartbeatMsg(`Heartbeat trigger sent — charger responded: ${result.status}`);
+      setTimeout(load, 1200);
+    } catch (err: unknown) {
+      setHeartbeatMsg(err instanceof Error ? err.message : 'Heartbeat trigger failed');
+    } finally {
+      setHeartbeatLoading(false);
+    }
+  }
+
+  async function handleGetConfiguration() {
+    setConfigMsg('');
+    setConfigLoading(true);
+    try {
+      const token = await getToken();
+      const result = await createApiClient(token).getChargerConfiguration(id!);
+      if ('error' in result && result.error) {
+        setConfigMsg(`GetConfiguration failed: ${result.error}`);
+      } else {
+        const keyCount = result.configurationKey?.length ?? 0;
+        const unknownCount = result.unknownKey?.length ?? 0;
+        setConfigMsg(`GetConfiguration returned ${keyCount} key(s)${unknownCount ? `, unknown: ${unknownCount}` : ''}`);
+      }
+    } catch (err: unknown) {
+      setConfigMsg(err instanceof Error ? err.message : 'GetConfiguration failed');
+    } finally {
+      setConfigLoading(false);
     }
   }
 
@@ -155,8 +194,30 @@ export default function ChargerDetail() {
               Hard Reset
             </button>
           </div>
+          <div className="flex gap-2">
+            <button
+              onClick={handleTriggerHeartbeat}
+              disabled={heartbeatLoading}
+              className="rounded-md border border-brand-200 px-4 py-2 text-sm font-medium text-brand-700 hover:bg-brand-50 disabled:opacity-50"
+            >
+              {heartbeatLoading ? 'Requesting…' : 'Request Heartbeat'}
+            </button>
+            <button
+              onClick={handleGetConfiguration}
+              disabled={configLoading}
+              className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            >
+              {configLoading ? 'Fetching…' : 'Get Configuration'}
+            </button>
+          </div>
           {resetMsg && (
             <p className="text-xs text-gray-500">{resetMsg}</p>
+          )}
+          {heartbeatMsg && (
+            <p className="text-xs text-gray-500">{heartbeatMsg}</p>
+          )}
+          {configMsg && (
+            <p className="text-xs text-gray-500">{configMsg}</p>
           )}
         </div>
       </div>
