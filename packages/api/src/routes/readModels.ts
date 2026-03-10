@@ -268,7 +268,7 @@ export async function readModelRoutes(app: FastifyInstance) {
       total,
       limit,
       offset,
-      transactions: rows.map((row) => ({
+      transactions: rows.map((row: any) => ({
         id: row.id,
         sessionId: row.sessionId,
         transactionId: row.session.transactionId,
@@ -340,7 +340,7 @@ export async function readModelRoutes(app: FastifyInstance) {
       prisma.rebateInterval15m.count({ where }),
     ]);
 
-    const summary = rows.reduce((acc, row) => {
+    const summary = rows.reduce((acc: any, row: any) => {
       acc.totalEnergyKwh += toNumber(row.energyKwh);
       acc.avgPowerKwSum += toNumber(row.avgPowerKw);
       if (row.maxPowerKw != null) {
@@ -362,7 +362,7 @@ export async function readModelRoutes(app: FastifyInstance) {
         avgPowerKw: rows.length ? Number((summary.avgPowerKwSum / rows.length).toFixed(6)) : 0,
         maxPowerKw: Number(summary.maxPowerKw.toFixed(6)),
       },
-      intervals: rows.map((row) => ({
+      intervals: rows.map((row: any) => ({
         id: row.id,
         site: row.site,
         charger: row.charger,

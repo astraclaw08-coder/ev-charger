@@ -15,10 +15,6 @@
     "test:ocpp-sim": "npm run build --workspace=packages/shared && npm run test:ocpp-sim --workspace=packages/ocpp-server",
     "test:e2e": "npm run test:e2e --workspace=packages/api"
   },
-  "overrides": {
-    "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0"
-  },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "concurrently": "^9.0.0",

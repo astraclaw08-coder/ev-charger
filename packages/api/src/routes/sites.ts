@@ -179,7 +179,7 @@ export async function siteRoutes(app: FastifyInstance) {
 
     if (!site) return reply.status(404).send({ error: 'Site not found' });
 
-    const perCharger = await Promise.all(site.chargers.map((c) => getChargerUptime(c.id)));
+    const perCharger = await Promise.all(site.chargers.map((c: { id: string }) => getChargerUptime(c.id)));
     const rows = perCharger.filter(Boolean) as NonNullable<Awaited<ReturnType<typeof getChargerUptime>>>[];
 
     const avg = (arr: number[]) => arr.length ? Math.round((arr.reduce((a,b)=>a+b,0)/arr.length) * 100) / 100 : 0;
