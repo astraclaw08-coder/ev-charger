@@ -9,6 +9,7 @@ const DEV_USER_ID = process.env.EXPO_PUBLIC_DEV_USER_ID || 'user-test-driver-001
 const CLERK_KEY = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
 export const isDevMode = !CLERK_KEY;
+export const isEvcPlatformReadModelEnabled = process.env.EXPO_PUBLIC_EVC_PLATFORM_BUSINESS_VIEWS === '1';
 
 // Auth state holders — set by auth context
 let _bearerToken: string | null = null;
@@ -162,6 +163,65 @@ export interface ChargerUptime {
   uptimePercent30d: number;
 }
 
+
+export interface PortfolioSummaryResponse {
+  range: { startDate: string; endDate: string };
+  totals: {
+    siteCount: number;
+    sessionsCount: number;
+    totalEnergyKwh: number;
+    totalRevenueUsd: number;
+  };
+}
+
+export interface EnrichedTransaction {
+  id: string;
+  sessionId: string;
+  transactionId: number | null;
+  status: string;
+  startedAt: string;
+  stoppedAt: string | null;
+  energyKwh: number;
+  revenueUsd: number;
+  payment: { status: string; amountCents: number | null } | null;
+  meterStart: number | null;
+  meterStop: number | null;
+  site: { id: string; name: string };
+  charger: { id: string; ocppId: string; model: string; vendor: string };
+}
+
+export interface EnrichedTransactionsResponse {
+  total: number;
+  limit: number;
+  offset: number;
+  transactions: EnrichedTransaction[];
+}
+
+export interface RebateInterval {
+  id: string;
+  site: { id: string; name: string };
+  charger: { id: string; ocppId: string };
+  session: { id: string; transactionId: number | null } | null;
+  intervalStart: string;
+  intervalEnd: string;
+  intervalMinutes: number;
+  energyKwh: number;
+  avgPowerKw: number;
+}
+
+export interface RebateIntervalsResponse {
+  total: number;
+  limit: number;
+  offset: number;
+  range: { startDate: string; endDate: string };
+  summary: {
+    totalEnergyKwh: number;
+    avgPowerKw: number;
+    maxPowerKw: number;
+  };
+  intervals: RebateInterval[];
+}
+
 // ── API calls ────────────────────────────────────────────────────────────────
 
 function normalizeCharger(charger: Charger): Charger {
@@ -176,6 +236,15 @@ function normalizeCharger(charger: Charger): Charger {
 }
 
 export const api = {
+  analytics: {
+    portfolioSummary(params?: { startDate?: string; endDate?: string }) {
+      const query = new URLSearchParams();
+      if (params?.startDate) query.set('startDate', params.startDate);
+      if (params?.endDate) query.set('endDate', params.endDate);
+      const qs = query.toString();
+      return request<PortfolioSummaryResponse>(`/analytics/portfolio-summary${qs ? `?${qs}` : ''}`);
+    },
+  },
   chargers: {
     async list(bbox?: { minLat: number; maxLat: number; minLng: number; maxLng: number }) {
       const params = bbox
@@ -212,6 +281,30 @@ export const api = {
     },
     get(id: string) {
       return request<Session>(`/sessions/${id}`);
+    },
+  },
+
+  transactions: {
+    enriched(params?: { startDate?: string; endDate?: string; limit?: number; offset?: number }) {
+      const query = new URLSearchParams();
+      if (params?.startDate) query.set('startDate', params.startDate);
+      if (params?.endDate) query.set('endDate', params.endDate);
+      if (params?.limit != null) query.set('limit', String(params.limit));
+      if (params?.offset != null) query.set('offset', String(params.offset));
+      const qs = query.toString();
+      return request<EnrichedTransactionsResponse>(`/transactions/enriched${qs ? `?${qs}` : ''}`);
+    },
+  },
+
+  rebates: {
+    intervals(params?: { startDate?: string; endDate?: string; limit?: number; offset?: number }) {
+      const query = new URLSearchParams();
+      if (params?.startDate) query.set('startDate', params.startDate);
+      if (params?.endDate) query.set('endDate', params.endDate);
+      if (params?.limit != null) query.set('limit', String(params.limit));
+      if (params?.offset != null) query.set('offset', String(params.offset));
+      const qs = query.toString();
+      return request<RebateIntervalsResponse>(`/rebates/intervals${qs ? `?${qs}` : ''}`);
     },
   },
 
