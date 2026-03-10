@@ -11,13 +11,23 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
-import { createApiClient, type Analytics, type ChargerInfo, type SiteListItem } from '../api/client';
+import {
+  createApiClient,
+  type Analytics,
+  type ChargerInfo,
+  type EnrichedTransaction,
+  type PortfolioSummaryResponse,
+  type RebateInterval,
+  type SiteListItem,
+} from '../api/client';
 import { useToken } from '../auth/TokenContext';
 
 type TimeFilter = '7d' | '30d' | '60d' | 'custom';
 type AnalystRole = 'owner' | 'operator' | 'analyst';
 
 type DailyMerged = { date: string; sessions: number; kwhDelivered: number; revenueCents: number };
+
+const ENABLE_EVC_PLATFORM_BUSINESS_VIEWS = import.meta.env.VITE_EVC_PLATFORM_BUSINESS_VIEWS === '1';
 
 export default function FleetAnalytics() {
   const getToken = useToken();
@@ -27,6 +37,10 @@ export default function FleetAnalytics() {
   const [sites, setSites] = useState<SiteListItem[]>([]);
   const [analyticsBySite, setAnalyticsBySite] = useState<Record<string, Analytics>>({});
   const [chargersBySite, setChargersBySite] = useState<Record<string, ChargerInfo[]>>({});
+
+  const [portfolioSummary, setPortfolioSummary] = useState<PortfolioSummaryResponse | null>(null);
+  const [enrichedTransactions, setEnrichedTransactions] = useState<EnrichedTransaction[]>([]);
+  const [rebateIntervals, setRebateIntervals] = useState<RebateInterval[]>([]);
 
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('30d');
   const [roleScope, setRoleScope] = useState<AnalystRole>('owner');
@@ -46,15 +60,14 @@ export default function FleetAnalytics() {
         setSites(siteRows);
 
         const periodDays = timeFilter === '7d' ? 7 : timeFilter === '60d' ? 60 : 30;
+        const rangeParams = timeFilter === 'custom' && startDate && endDate
+          ? { startDate, endDate }
+          : { periodDays };
+
         const analyticsRows = await Promise.all(
           siteRows.map((s) =>
             api
-              .getAnalytics(
-                s.id,
-                timeFilter === 'custom' && startDate && endDate
-                  ? { startDate, endDate }
-                  : { periodDays },
-              )
+              .getAnalytics(s.id, rangeParams)
               .then((a) => [s.id, a] as const),
           ),
         );
@@ -62,6 +75,26 @@ export default function FleetAnalytics() {
 
         const details = await Promise.all(siteRows.map((s) => api.getSite(s.id).then((d) => [s.id, d.chargers] as const)));
         setChargersBySite(Object.fromEntries(details));
+
+        if (ENABLE_EVC_PLATFORM_BUSINESS_VIEWS) {
+          const readModelRange = timeFilter === 'custom' && startDate && endDate
+            ? { startDate, endDate }
+            : undefined;
+
+          const [portfolioResult, txResult, rebateResult] = await Promise.allSettled([
+            api.getPortfolioSummary(readModelRange),
+            api.getEnrichedTransactions({ ...(readModelRange ?? {}), limit: 5000, offset: 0 }),
+            api.getRebateIntervals({ ...(readModelRange ?? {}), limit: 5000, offset: 0 }),
+          ]);
+
+          setPortfolioSummary(portfolioResult.status === 'fulfilled' ? portfolioResult.value : null);
+          setEnrichedTransactions(txResult.status === 'fulfilled' ? txResult.value.transactions : []);
+          setRebateIntervals(rebateResult.status === 'fulfilled' ? rebateResult.value.intervals : []);
+        } else {
+          setPortfolioSummary(null);
+          setEnrichedTransactions([]);
+          setRebateIntervals([]);
+        }
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : 'Failed to load analytics');
       } finally {
@@ -76,17 +109,43 @@ export default function FleetAnalytics() {
   }, [siteFilter]);
 
   const filteredSites = useMemo(() => {
-    return sites.filter((s) => {
+    const source = portfolioSummary?.sites?.length
+      ? siteRowsFromPortfolio(sites, portfolioSummary)
+      : sites;
+
+    return source.filter((s) => {
       const orgOk = orgFilter === 'all' || (s.organizationName ?? '') === orgFilter;
       const portfolioOk = portfolioFilter === 'all' || (s.portfolioName ?? '') === portfolioFilter;
       const siteOk = siteFilter === 'all' || s.id === siteFilter;
       return orgOk && portfolioOk && siteOk;
     });
-  }, [sites, orgFilter, portfolioFilter, siteFilter]);
+  }, [sites, portfolioSummary, orgFilter, portfolioFilter, siteFilter]);
 
   const selectedSiteIds = useMemo(() => filteredSites.map((s) => s.id), [filteredSites]);
 
+  const filteredTransactions = useMemo(() => {
+    if (!ENABLE_EVC_PLATFORM_BUSINESS_VIEWS || enrichedTransactions.length === 0) return [] as EnrichedTransaction[];
+    return enrichedTransactions.filter((tx) => {
+      const siteOk = selectedSiteIds.length === 0 || selectedSiteIds.includes(tx.site.id);
+      const chargerOk = chargerFilter === 'all' || tx.charger.id === chargerFilter;
+      return siteOk && chargerOk;
+    });
+  }, [selectedSiteIds, chargerFilter, enrichedTransactions]);
+
   const merged = useMemo(() => {
+    if (filteredTransactions.length > 0) {
+      const byDate = new Map<string, DailyMerged>();
+      for (const tx of filteredTransactions) {
+        const date = tx.startedAt.slice(0, 10);
+        const row = byDate.get(date) ?? { date, sessions: 0, kwhDelivered: 0, revenueCents: 0 };
+        row.sessions += 1;
+        row.kwhDelivered += tx.energyKwh ?? 0;
+        row.revenueCents += Math.round((tx.revenueUsd ?? 0) * 100);
+        byDate.set(date, row);
+      }
+      return Array.from(byDate.values()).sort((a, b) => a.date.localeCompare(b.date));
+    }
+
     const map = new Map<string, DailyMerged>();
     for (const siteId of selectedSiteIds) {
       const data = analyticsBySite[siteId];
@@ -100,12 +159,23 @@ export default function FleetAnalytics() {
       }
     }
     return Array.from(map.values()).sort((a, b) => a.date.localeCompare(b.date));
-  }, [selectedSiteIds, analyticsBySite]);
+  }, [selectedSiteIds, analyticsBySite, filteredTransactions]);
 
   const summary = useMemo(() => {
     const sessionsCount = merged.reduce((sum, d) => sum + d.sessions, 0);
     const kwhDelivered = merged.reduce((sum, d) => sum + d.kwhDelivered, 0);
     const revenueUsd = merged.reduce((sum, d) => sum + d.revenueCents, 0) / 100;
+
+    const filteredRebates = rebateIntervals.filter((row) => {
+      const siteOk = selectedSiteIds.length === 0 || selectedSiteIds.includes(row.site.id);
+      const chargerOk = chargerFilter === 'all' || row.charger.id === chargerFilter;
+      return siteOk && chargerOk;
+    });
+
+    const totalIntervalMinutes = filteredRebates.reduce((sum, row) => sum + (row.intervalMinutes || 0), 0);
+    const weightedPower = totalIntervalMinutes > 0
+      ? filteredRebates.reduce((sum, row) => sum + (row.avgPowerKw * row.intervalMinutes), 0) / totalIntervalMinutes
+      : 0;
 
     const utilRows = selectedSiteIds
       .map((siteId) => analyticsBySite[siteId])
@@ -114,10 +184,13 @@ export default function FleetAnalytics() {
     const weightedUtil = totalAvailable > 0
       ? utilRows.reduce((s, r) => s + ((r.utilizationRatePct || 0) * (r.availableConnectorSeconds || 0)), 0) / totalAvailable
       : (utilRows.length ? utilRows.reduce((s, r) => s + (r.utilizationRatePct || 0), 0) / utilRows.length : 0);
-    const utilizationRatePct = weightedUtil > 0 ? weightedUtil : (sessionsCount > 0 ? 0.01 : 0);
+
+    const utilizationRatePct = weightedUtil > 0
+      ? weightedUtil
+      : (weightedPower > 0 ? Math.min(weightedPower * 5, 100) : (sessionsCount > 0 ? 0.01 : 0));
 
     return { sessionsCount, kwhDelivered, revenueUsd, utilizationRatePct };
-  }, [merged, selectedSiteIds, analyticsBySite]);
+  }, [merged, selectedSiteIds, analyticsBySite, rebateIntervals, chargerFilter]);
 
   const chartData = useMemo(
     () =>
@@ -151,6 +224,12 @@ export default function FleetAnalytics() {
         <h1 className="text-2xl font-bold text-gray-900">Fleet Analytics</h1>
         <p className="text-sm text-gray-500">Fleet-wide analytics with site and charger filters.</p>
       </div>
+
+      {ENABLE_EVC_PLATFORM_BUSINESS_VIEWS && (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+          EVC Platform business read-models enabled (dev rollout): portfolio summary, enriched transactions, rebate intervals.
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center gap-2 rounded-xl border border-gray-200 bg-white p-4">
         <label className="text-xs font-medium uppercase tracking-wide text-gray-500">Range</label>
@@ -254,6 +333,33 @@ export default function FleetAnalytics() {
       )}
     </div>
   );
+}
+
+function siteRowsFromPortfolio(source: SiteListItem[], summary: PortfolioSummaryResponse): SiteListItem[] {
+  const byId = new Map(source.map((site) => [site.id, site] as const));
+  return summary.sites.map((item) => {
+    const base = byId.get(item.siteId);
+    if (base) {
+      return {
+        ...base,
+        organizationName: item.organizationName,
+        portfolioName: item.portfolioName,
+      };
+    }
+
+    return {
+      id: item.siteId,
+      name: item.siteName,
+      address: '—',
+      lat: 0,
+      lng: 0,
+      organizationName: item.organizationName,
+      portfolioName: item.portfolioName,
+      createdAt: new Date().toISOString(),
+      chargerCount: 0,
+      statusSummary: { online: 0, offline: 0, faulted: 0 },
+    };
+  });
 }
 
 function KpiTile({ label, value }: { label: string; value: string }) {

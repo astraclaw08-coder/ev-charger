@@ -130,6 +130,99 @@ export interface CreatedCharger {
   password: string;
 }
 
+export interface PortfolioSummarySite {
+  siteId: string;
+  siteName: string;
+  organizationName: string | null;
+  portfolioName: string | null;
+  sessionsCount: number;
+  totalEnergyKwh: number;
+  totalRevenueUsd: number;
+}
+
+export interface PortfolioSummaryOrganization {
+  organizationName: string;
+  siteCount: number;
+  sessionsCount: number;
+  totalEnergyKwh: number;
+  totalRevenueUsd: number;
+  portfolios: Array<{
+    portfolioName: string;
+    siteCount: number;
+    sessionsCount: number;
+    totalEnergyKwh: number;
+    totalRevenueUsd: number;
+  }>;
+}
+
+export interface PortfolioSummaryResponse {
+  range: { startDate: string; endDate: string };
+  totals: {
+    siteCount: number;
+    sessionsCount: number;
+    totalEnergyKwh: number;
+    totalRevenueUsd: number;
+  };
+  organizations: PortfolioSummaryOrganization[];
+  sites: PortfolioSummarySite[];
+}
+
+export interface EnrichedTransaction {
+  id: string;
+  sessionId: string;
+  transactionId: number | null;
+  idTag: string;
+  status: string;
+  startedAt: string;
+  stoppedAt: string | null;
+  durationMinutes: number | null;
+  energyKwh: number;
+  revenueUsd: number;
+  payment: { status: string; amountCents: number | null } | null;
+  meterStart: number | null;
+  meterStop: number | null;
+  site: { id: string; name: string; organizationName: string | null; portfolioName: string | null };
+  charger: { id: string; ocppId: string; serialNumber: string; model: string; vendor: string };
+  sourceVersion: string;
+}
+
+export interface EnrichedTransactionsResponse {
+  total: number;
+  limit: number;
+  offset: number;
+  transactions: EnrichedTransaction[];
+}
+
+export interface RebateInterval {
+  id: string;
+  site: { id: string; name: string };
+  charger: { id: string; ocppId: string };
+  session: { id: string; transactionId: number | null } | null;
+  connectorId: number;
+  intervalStart: string;
+  intervalEnd: string;
+  intervalMinutes: number;
+  energyKwh: number;
+  avgPowerKw: number;
+  maxPowerKw: number | null;
+  portStatus: string | null;
+  vehicleConnected: boolean | null;
+  dataQualityFlag: string | null;
+  sourceVersion: string;
+}
+
+export interface RebateIntervalsResponse {
+  total: number;
+  limit: number;
+  offset: number;
+  range: { startDate: string; endDate: string };
+  summary: {
+    totalEnergyKwh: number;
+    avgPowerKw: number;
+    maxPowerKw: number;
+  };
+  intervals: RebateInterval[];
+}
 
 export interface UptimeIncident {
   event: 'ONLINE' | 'OFFLINE' | 'FAULTED' | 'DEGRADED' | 'RECOVERED';
@@ -275,6 +368,43 @@ export function createApiClient(token: string | null | undefined) {
       if (params?.endDate) query.set('endDate', params.endDate);
       const qs = query.toString();
       return request<Analytics>(`/sites/${siteId}/analytics${qs ? `?${qs}` : ''}`, token);
+    },
+
+    getPortfolioSummary: (params?: { startDate?: string; endDate?: string; siteId?: string; organizationName?: string; portfolioName?: string }) => {
+      const query = new URLSearchParams();
+      if (params?.startDate) query.set('startDate', params.startDate);
+      if (params?.endDate) query.set('endDate', params.endDate);
+      if (params?.siteId) query.set('siteId', params.siteId);
+      if (params?.organizationName) query.set('organizationName', params.organizationName);
+      if (params?.portfolioName) query.set('portfolioName', params.portfolioName);
+      const qs = query.toString();
+      return request<PortfolioSummaryResponse>(`/analytics/portfolio-summary${qs ? `?${qs}` : ''}`, token);
+    },
+
+    getEnrichedTransactions: (params?: { limit?: number; offset?: number; siteId?: string; chargerId?: string; status?: string; startDate?: string; endDate?: string }) => {
+      const query = new URLSearchParams();
+      if (params?.limit != null) query.set('limit', String(params.limit));
+      if (params?.offset != null) query.set('offset', String(params.offset));
+      if (params?.siteId) query.set('siteId', params.siteId);
+      if (params?.chargerId) query.set('chargerId', params.chargerId);
+      if (params?.status) query.set('status', params.status);
+      if (params?.startDate) query.set('startDate', params.startDate);
+      if (params?.endDate) query.set('endDate', params.endDate);
+      const qs = query.toString();
+      return request<EnrichedTransactionsResponse>(`/transactions/enriched${qs ? `?${qs}` : ''}`, token);
+    },
+
+    getRebateIntervals: (params?: { siteId?: string; chargerId?: string; sessionId?: string; startDate?: string; endDate?: string; limit?: number; offset?: number }) => {
+      const query = new URLSearchParams();
+      if (params?.siteId) query.set('siteId', params.siteId);
+      if (params?.chargerId) query.set('chargerId', params.chargerId);
+      if (params?.sessionId) query.set('sessionId', params.sessionId);
+      if (params?.startDate) query.set('startDate', params.startDate);
+      if (params?.endDate) query.set('endDate', params.endDate);
+      if (params?.limit != null) query.set('limit', String(params.limit));
+      if (params?.offset != null) query.set('offset', String(params.offset));
+      const qs = query.toString();
+      return request<RebateIntervalsResponse>(`/rebates/intervals${qs ? `?${qs}` : ''}`, token);
     },
 
     getChargerStatus: (id: string) => request<ChargerStatus>(`/chargers/${id}/status`, token),
