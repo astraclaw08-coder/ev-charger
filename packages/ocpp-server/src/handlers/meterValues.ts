@@ -1,4 +1,5 @@
 import { prisma } from '@ev-charger/shared';
+import { enqueueOcppEvent } from '../outbox';
 import type { MeterValuesRequest } from '@ev-charger/shared';
 
 function extractLatestEnergyWh(params: MeterValuesRequest): number | null {
@@ -37,19 +38,30 @@ export async function handleMeterValues(
 
   // Update ACTIVE session with live meter/kWh so mobile app can show real-time energy.
   const latestWh = extractLatestEnergyWh(params);
-  if (transactionId && latestWh != null) {
-    const session = await prisma.session.findUnique({ where: { transactionId } });
-    if (session?.status === 'ACTIVE' && session.meterStart != null) {
-      const kwhDelivered = Math.max(0, (latestWh - session.meterStart) / 1000);
-      await prisma.session.update({
-        where: { id: session.id },
-        data: {
-          meterStop: latestWh,
-          kwhDelivered,
-        },
-      });
+
+  await prisma.$transaction(async (tx) => {
+    if (transactionId && latestWh != null) {
+      const session = await tx.session.findUnique({ where: { transactionId } });
+      if (session?.status === 'ACTIVE' && session.meterStart != null) {
+        const kwhDelivered = Math.max(0, (latestWh - session.meterStart) / 1000);
+        await tx.session.update({
+          where: { id: session.id },
+          data: {
+            meterStop: latestWh,
+            kwhDelivered,
+          },
+        });
+      }
     }
-  }
+
+    const sampleTs = params.meterValue?.[0]?.timestamp ?? new Date().toISOString();
+    await enqueueOcppEvent(tx, {
+      chargerId,
+      eventType: 'MeterValues',
+      payload: params,
+      idempotencyKey: `${chargerId}:MeterValues:${transactionId ?? 'na'}:${sampleTs}`,
+    });
+  });
 
   return {};
 }

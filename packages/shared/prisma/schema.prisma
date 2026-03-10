@@ -55,6 +55,13 @@ enum UptimeEventType {
   RECOVERED
 }
 
+enum OcppOutboxStatus {
+  PENDING
+  PROCESSING
+  DONE
+  FAILED
+}
+
 // ─── Models ───────────────────────────────────────────────────────────────────
 
 model Site {
@@ -93,6 +100,7 @@ model Charger {
   connectors    Connector[]
   ocppLogs      OcppLog[]
   uptimeEvents  UptimeEvent[]
+  outboxEvents  OcppEventOutbox[]
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
@@ -189,6 +197,26 @@ model OcppLog {
   @@index([createdAt])
 }
 
+
+model OcppEventOutbox {
+  id             String           @id @default(uuid())
+  chargerId      String
+  charger        Charger          @relation(fields: [chargerId], references: [id], onDelete: Cascade)
+  eventType      String
+  direction      OcppDirection    @default(INBOUND)
+  payload        Json
+  idempotencyKey String           @unique
+  status         OcppOutboxStatus @default(PENDING)
+  attempts       Int              @default(0)
+  nextAttemptAt  DateTime         @default(now())
+  lastError      String?
+  processedAt    DateTime?
+  createdAt      DateTime         @default(now())
+
+  @@index([status, nextAttemptAt])
+  @@index([chargerId, createdAt])
+  @@index([eventType, createdAt])
+}
 
 model UptimeEvent {
   id          String          @id @default(uuid())

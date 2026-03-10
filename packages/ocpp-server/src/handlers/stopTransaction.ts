@@ -1,4 +1,5 @@
 import { prisma } from '@ev-charger/shared';
+import { enqueueOcppEvent } from '../outbox';
 import type { StopTransactionRequest, StopTransactionResponse } from '@ev-charger/shared';
 
 
@@ -77,20 +78,29 @@ export async function handleStopTransaction(
     `[StopTransaction] finalMeterStop=${finalMeterStop}Wh txBegin=${transactionBeginWh ?? 'n/a'} txEnd=${transactionEndWh ?? 'n/a'} sessionMeterStart=${session.meterStart ?? 'n/a'} sessionMeterStop=${session.meterStop ?? 'n/a'} kWh=${kwhDelivered.toFixed(6)}`,
   );
 
-  await prisma.session.update({
-    where: { id: session.id },
-    data: {
-      meterStop: finalMeterStop,
-      stoppedAt: new Date(timestamp),
-      kwhDelivered,
-      status: 'COMPLETED',
-    },
-  });
+  await prisma.$transaction(async (tx) => {
+    await tx.session.update({
+      where: { id: session.id },
+      data: {
+        meterStop: finalMeterStop,
+        stoppedAt: new Date(timestamp),
+        kwhDelivered,
+        status: 'COMPLETED',
+      },
+    });
 
-  // Return connector to Available
-  await prisma.connector.update({
-    where: { id: session.connector.id },
-    data: { status: 'AVAILABLE' },
+    // Return connector to Available
+    await tx.connector.update({
+      where: { id: session.connector.id },
+      data: { status: 'AVAILABLE' },
+    });
+
+    await enqueueOcppEvent(tx, {
+      chargerId,
+      eventType: 'StopTransaction',
+      payload: params,
+      idempotencyKey: `${chargerId}:StopTransaction:${transactionId}:${timestamp}`,
+    });
   });
 
   if (session.ratePerKwh != null) {

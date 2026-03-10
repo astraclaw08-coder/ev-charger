@@ -1,4 +1,5 @@
 import { prisma } from '@ev-charger/shared';
+import { enqueueOcppEvent } from '../outbox';
 import type { StartTransactionRequest, StartTransactionResponse } from '@ev-charger/shared';
 
 const DEFAULT_RATE_PER_KWH = 0.35; // USD fallback when site pricing is missing
@@ -81,10 +82,19 @@ export async function handleStartTransaction(
     throw new Error('Failed to allocate unique 5-digit transactionId after retries');
   }
 
-  // Mark connector as Charging
-  await prisma.connector.update({
-    where: { id: connector.id },
-    data: { status: 'CHARGING' },
+  // Mark connector as Charging and enqueue OCPP event for downstream processing.
+  await prisma.$transaction(async (tx) => {
+    await tx.connector.update({
+      where: { id: connector.id },
+      data: { status: 'CHARGING' },
+    });
+
+    await enqueueOcppEvent(tx, {
+      chargerId,
+      eventType: 'StartTransaction',
+      payload: params,
+      idempotencyKey: `${chargerId}:StartTransaction:${transactionId}:${timestamp}`,
+    });
   });
 
   console.log(`[StartTransaction] Session ${session.id} started, transactionId=${transactionId}`);
