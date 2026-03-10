@@ -224,7 +224,6 @@ export interface RebateIntervalsResponse {
   intervals: RebateInterval[];
 }
 
-
 export interface UptimeIncident {
   event: 'ONLINE' | 'OFFLINE' | 'FAULTED' | 'DEGRADED' | 'RECOVERED';
   reason: string | null;
