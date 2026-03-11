@@ -29,7 +29,8 @@ const SERVICES = {
   mobile: {
     name: 'mobile',
     port: 8082,
-    cmd: ['npm', ['run', 'dev', '--workspace=packages/mobile', '--', '--port', '8082']],
+    cmd: ['bash', ['-lc', 'pkill -f "expo start --port 8082" >/dev/null 2>&1 || true; npm run dev --workspace=packages/mobile -- --port 8082 --non-interactive']],
+    env: { CI: '1', EXPO_NO_INTERACTIVE: '1' },
     health: [{ type: 'tcp', host: '127.0.0.1', port: 8082 }],
   },
   ocpp: {
@@ -162,7 +163,7 @@ class Supervisor {
     const child = spawn(cmd, args, {
       cwd: ROOT,
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, FORCE_COLOR: '0' },
+      env: { ...process.env, FORCE_COLOR: '0', ...(svc.env || {}) },
     });
 
     this.children[name] = child;
