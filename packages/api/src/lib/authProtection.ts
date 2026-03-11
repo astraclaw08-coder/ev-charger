@@ -13,6 +13,7 @@ function readNumberEnv(name: string, fallback: number) {
 
 function settings() {
   return {
+    enabled: process.env.NODE_ENV !== 'development',
     maxAttempts: readNumberEnv('SECURITY_AUTH_FAILURE_MAX_ATTEMPTS', 8),
     windowSeconds: readNumberEnv('SECURITY_AUTH_FAILURE_WINDOW_SECONDS', 300),
     blockSeconds: readNumberEnv('SECURITY_AUTH_BLOCK_SECONDS', 900),
@@ -25,6 +26,9 @@ function normalizedKey(input: { ip?: string; routeScope: string }) {
 }
 
 export function isBlocked(input: { ip?: string; routeScope: string }) {
+  const cfg = settings();
+  if (!cfg.enabled) return { blocked: false } as const;
+
   const now = Date.now();
   const key = normalizedKey(input);
   const bucket = failuresByKey.get(key);
@@ -42,6 +46,7 @@ export function recordAuthFailure(input: { ip?: string; routeScope: string }) {
   const now = Date.now();
   const key = normalizedKey(input);
   const cfg = settings();
+  if (!cfg.enabled) return;
   const existing = failuresByKey.get(key);
 
   if (!existing || now - existing.firstFailureAt > cfg.windowSeconds * 1000) {
