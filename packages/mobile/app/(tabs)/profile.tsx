@@ -202,7 +202,10 @@ export default function ProfileScreen() {
       </TouchableOpacity>
 
       <TouchableOpacity
-        style={styles.logoutBtn}
+        style={[
+          styles.logoutBtn,
+          { backgroundColor: isDark ? '#7f1d1d' : '#b91c1c' },
+        ]}
         onPress={() => setShowLogoutConfirm(true)}
       >
         <Text style={styles.logoutText}>Log Out</Text>
