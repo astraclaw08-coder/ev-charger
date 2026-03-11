@@ -64,7 +64,16 @@ export class KeycloakAdminClient {
     }
 
     if (res.status === 204) return null as T;
-    return res.json() as Promise<T>;
+
+    const contentType = res.headers.get('content-type') ?? '';
+    const contentLength = res.headers.get('content-length');
+    if (contentLength === '0' || !contentType.includes('application/json')) {
+      return null as T;
+    }
+
+    const text = await res.text();
+    if (!text) return null as T;
+    return JSON.parse(text) as T;
   }
 
   async listUsers(query?: { search?: string; first?: number; max?: number }) {
