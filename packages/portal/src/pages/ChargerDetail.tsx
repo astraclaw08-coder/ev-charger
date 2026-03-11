@@ -11,6 +11,7 @@ export default function ChargerDetail() {
   const getToken = useToken();
 
   const [status, setStatus] = useState<ChargerStatus | null>(null);
+  const [chargerSite, setChargerSite] = useState<{ id: string; name: string } | null>(null);
   const [sessions, setSessions] = useState<SessionRecord[]>([]);
   const [uptime, setUptime] = useState<ChargerUptime | null>(null);
   const [loading, setLoading] = useState(true);
@@ -30,12 +31,15 @@ export default function ChargerDetail() {
     try {
       const token = await getToken();
       const client = createApiClient(token);
-      const [chargerStatus, recentSessions, uptimeData] = await Promise.all([
+      const [chargerStatus, recentSessions, uptimeData, chargers] = await Promise.all([
         client.getChargerStatus(id!),
         client.getChargerSessions(id!),
         client.getChargerUptime(id!).catch(() => null),
+        client.getChargers().catch(() => []),
       ]);
       setStatus(chargerStatus);
+      const found = chargers.find((c) => c.id === id);
+      setChargerSite(found ? { id: found.site.id, name: found.site.name } : null);
       setSessions(recentSessions);
       setUptime(uptimeData);
     } catch (err: unknown) {
@@ -133,6 +137,14 @@ export default function ChargerDetail() {
         <div>
           <div className="flex items-center gap-2 text-sm text-gray-500">
             <Link to="/" className="hover:text-gray-700">Dashboard</Link>
+            <span>/</span>
+            <Link to="/sites" className="hover:text-gray-700">Sites</Link>
+            <span>/</span>
+            {chargerSite ? (
+              <Link to={`/sites/${chargerSite.id}`} className="hover:text-gray-700">{chargerSite.name}</Link>
+            ) : (
+              <span>Site</span>
+            )}
             <span>/</span>
             <span className="text-gray-900 font-mono">{status.ocppId}</span>
           </div>
