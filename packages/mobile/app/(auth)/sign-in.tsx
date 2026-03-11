@@ -106,6 +106,26 @@ export function KeycloakSignInForm({ isDark }: { isDark: boolean }) {
       >
         {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Sign In</Text>}
       </TouchableOpacity>
+
+      <View style={styles.dividerWrap}>
+        <View style={styles.dividerLine} />
+        <Text style={styles.dividerText}>OR</Text>
+        <View style={styles.dividerLine} />
+      </View>
+
+      <TouchableOpacity style={styles.oauthBtn} onPress={() => router.push('/(auth)/sign-up' as any)}>
+        <Ionicons name="chatbubble-ellipses-outline" size={18} color="#111827" />
+        <Text style={styles.oauthText}>Sign in with Phone OTP</Text>
+      </TouchableOpacity>
+      <TouchableOpacity style={styles.oauthBtn} onPress={() => router.push('/(auth)/sign-up' as any)}>
+        <AntDesign name="google" size={18} color="#111827" />
+        <Text style={styles.oauthText}>Continue with Google</Text>
+      </TouchableOpacity>
+      <TouchableOpacity style={styles.oauthBtn} onPress={() => router.push('/(auth)/sign-up' as any)}>
+        <Ionicons name="logo-apple" size={18} color="#111827" />
+        <Text style={styles.oauthText}>Continue with Apple</Text>
+      </TouchableOpacity>
+
       <Link href="/(auth)/sign-up" style={styles.link}>
         Don't have an account? Create account
       </Link>
