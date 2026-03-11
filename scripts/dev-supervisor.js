@@ -29,7 +29,7 @@ const SERVICES = {
   mobile: {
     name: 'mobile',
     port: 8082,
-    cmd: ['bash', ['-lc', 'pkill -f "expo start --port 8082" >/dev/null 2>&1 || true; npm run dev --workspace=packages/mobile -- --port 8082 --non-interactive']],
+    cmd: ['bash', ['-lc', 'pkill -f "expo start --port 8082" >/dev/null 2>&1 || true; npm run dev --workspace=packages/mobile -- --port 8082']],
     env: { CI: '1', EXPO_NO_INTERACTIVE: '1' },
     health: [{ type: 'tcp', host: '127.0.0.1', port: 8082 }],
   },
@@ -58,6 +58,23 @@ function log(message) {
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+function killKnownDevProcesses() {
+  const patterns = [
+    'ts-node-dev --respawn src/index.ts',
+    'vite --host 127.0.0.1 --port 5175',
+    'expo start --port 8082',
+    'packages/ocpp-server',
+  ];
+  for (const pat of patterns) {
+    try {
+      execFileSync('pkill', ['-f', pat], { stdio: 'ignore' });
+      log(`preflight: terminated stale process pattern="${pat}"`);
+    } catch {
+      // no-op when no matching process
+    }
+  }
 }
 
 function isPidAlive(pid) {
@@ -339,6 +356,7 @@ async function cli() {
       console.log(`dev-supervisor already running pid=${pid}`);
       return;
     }
+    killKnownDevProcesses();
     const child = spawn(process.execPath, [__filename, 'daemon'], {
       cwd: ROOT,
       detached: true,
