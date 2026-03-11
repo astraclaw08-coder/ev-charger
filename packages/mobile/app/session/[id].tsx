@@ -354,7 +354,7 @@ export default function SessionScreen() {
     <>
       <Stack.Screen
         options={{
-          title: session.status === 'ACTIVE' ? 'Charging' : 'Session Details',
+          title: session.status === 'ACTIVE' ? '' : 'Session Details',
           headerShown: true,
           headerStyle: {
             backgroundColor: isDark ? '#0b1220' : '#fff',
