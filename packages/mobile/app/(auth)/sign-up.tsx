@@ -67,8 +67,8 @@ export default function SignUpScreen() {
       Alert.alert('Error', 'Clerk is not configured. Set EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY.');
       return;
     }
-    if (!primaryIdentifier || !password) {
-      Alert.alert('Error', method === 'email' ? 'Email and password are required.' : 'Phone and password are required.');
+    if (!primaryIdentifier || (method === 'email' && !password)) {
+      Alert.alert('Error', method === 'email' ? 'Email and password are required.' : 'Phone is required.');
       return;
     }
 
@@ -83,9 +83,8 @@ export default function SignUpScreen() {
         firstName,
         lastName,
         ...(method === 'email'
-          ? { emailAddress: primaryIdentifier }
+          ? { emailAddress: primaryIdentifier, password }
           : { phoneNumber: primaryIdentifier }),
-        password,
       });
 
       if (method === 'email') {
@@ -253,14 +252,16 @@ export default function SignUpScreen() {
                 />
               )}
 
-              <TextInput
-                style={styles.input}
-                placeholder="Password"
-                placeholderTextColor="#6b7280"
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry
-              />
+              {method === 'email' && (
+                <TextInput
+                  style={styles.input}
+                  placeholder="Password"
+                  placeholderTextColor="#6b7280"
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry
+                />
+              )}
 
               <TouchableOpacity
                 style={[styles.button, loading && styles.buttonDisabled]}
@@ -277,12 +278,12 @@ export default function SignUpScreen() {
               </View>
 
               <TouchableOpacity style={styles.oauthBtn} onPress={() => handleOAuth('google')} disabled={loading}>
-                <AntDesign name="google" size={18} color="#ffffff" />
+                <AntDesign name="google" size={18} color="#111827" />
                 <Text style={styles.oauthText}>Continue with Google</Text>
               </TouchableOpacity>
 
               <TouchableOpacity style={styles.oauthBtn} onPress={() => handleOAuth('apple')} disabled={loading}>
-                <Ionicons name="logo-apple" size={18} color="#ffffff" />
+                <Ionicons name="logo-apple" size={18} color="#111827" />
                 <Text style={styles.oauthText}>Continue with Apple</Text>
               </TouchableOpacity>
 
@@ -300,28 +301,28 @@ export default function SignUpScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0b1220',
+    backgroundColor: '#f0fdf4',
   },
   backdrop: {
     flex: 1,
     justifyContent: 'center',
     padding: 24,
-    backgroundColor: 'rgba(2, 6, 23, 0.8)',
+    backgroundColor: 'rgba(240, 253, 244, 0.92)',
     position: 'relative',
   },
   backdropDismissHitArea: {
     ...StyleSheet.absoluteFillObject,
   },
   card: {
-    backgroundColor: '#111827',
+    backgroundColor: '#ffffff',
     borderRadius: 16,
     padding: 28,
     shadowColor: '#000',
-    shadowOpacity: 0.28,
+    shadowOpacity: 0.08,
     shadowRadius: 12,
-    elevation: 6,
+    elevation: 4,
     borderWidth: 1,
-    borderColor: '#1f2937',
+    borderColor: '#e5e7eb',
     position: 'relative',
   },
   closeBtn: {
@@ -331,13 +332,13 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#1f2937',
+    backgroundColor: '#f3f4f6',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 5,
   },
   closeBtnText: {
-    color: '#f9fafb',
+    color: '#111827',
     fontSize: 22,
     lineHeight: 22,
     fontWeight: '500',
@@ -345,17 +346,17 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: '700',
-    color: '#f9fafb',
+    color: '#111827',
     marginBottom: 4,
   },
   subtitle: {
     fontSize: 14,
-    color: '#9ca3af',
+    color: '#6b7280',
     marginBottom: 16,
   },
   methodSwitch: {
     flexDirection: 'row',
-    backgroundColor: '#1f2937',
+    backgroundColor: '#f3f4f6',
     borderRadius: 10,
     padding: 4,
     marginBottom: 12,
@@ -370,7 +371,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#10b981',
   },
   methodText: {
-    color: '#d1d5db',
+    color: '#6b7280',
     fontWeight: '600',
   },
   methodTextActive: {
@@ -382,13 +383,13 @@ const styles = StyleSheet.create({
   },
   input: {
     borderWidth: 1,
-    borderColor: '#374151',
+    borderColor: '#e5e7eb',
     borderRadius: 10,
     padding: 14,
     fontSize: 15,
     marginBottom: 12,
-    backgroundColor: '#0f172a',
-    color: '#f9fafb',
+    backgroundColor: '#f9fafb',
+    color: '#111827',
   },
   halfInput: {
     flex: 1,
@@ -418,16 +419,16 @@ const styles = StyleSheet.create({
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: '#374151',
+    backgroundColor: '#e5e7eb',
   },
   dividerText: {
-    color: '#9ca3af',
+    color: '#6b7280',
     fontSize: 12,
     fontWeight: '700',
   },
   oauthBtn: {
     borderWidth: 1,
-    borderColor: '#374151',
+    borderColor: '#e5e7eb',
     borderRadius: 10,
     paddingVertical: 12,
     alignItems: 'center',
@@ -435,10 +436,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
     marginBottom: 8,
-    backgroundColor: '#1f2937',
+    backgroundColor: '#ffffff',
   },
   oauthText: {
-    color: '#f9fafb',
+    color: '#111827',
     fontSize: 15,
     fontWeight: '600',
   },
