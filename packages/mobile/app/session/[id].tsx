@@ -354,16 +354,15 @@ export default function SessionScreen() {
     <>
       <Stack.Screen
         options={{
-          title: session.status === 'ACTIVE' ? 'Charging' : 'Session Details',
+          title: session.status === 'ACTIVE' ? '' : 'Session Details',
           headerShown: true,
           headerStyle: {
-            backgroundColor:
-              session.status === 'ACTIVE' ? '#030712' : isDark ? '#030712' : '#f9fafb',
+            backgroundColor: isDark ? '#0b1220' : '#fff',
           },
-          headerTintColor: session.status === 'ACTIVE' ? '#f8fafc' : isDark ? '#f8fafc' : '#111827',
+          headerTintColor: isDark ? '#f9fafb' : '#111827',
           headerBackButtonDisplayMode: 'minimal',
           headerTitleStyle: {
-            color: session.status === 'ACTIVE' ? '#f8fafc' : isDark ? '#f8fafc' : '#111827',
+            color: isDark ? '#f9fafb' : '#111827',
           },
           headerShadowVisible: false,
         }}

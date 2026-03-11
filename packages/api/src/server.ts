@@ -10,6 +10,7 @@ import { adminUserRoutes } from './routes/adminUsers';
 import { adminSecurityRoutes } from './routes/adminSecurity';
 import { adminSettingsRoutes } from './routes/adminSettings';
 import { readModelRoutes } from './routes/readModels';
+import { prisma } from '@ev-charger/shared';
 
 export async function buildServer() {
   const app = Fastify({
@@ -35,7 +36,15 @@ export async function buildServer() {
     },
   );
 
-  app.get('/health', async () => ({ status: 'ok', service: 'ev-charger-api' }));
+  app.get('/health', async () => {
+    try {
+      await prisma.$queryRawUnsafe('SELECT 1');
+      return { status: 'ok', service: 'ev-charger-api', db: 'ok' };
+    } catch (error) {
+      app.log.error({ error }, 'Health DB check failed');
+      return { status: 'degraded', service: 'ev-charger-api', db: 'down' };
+    }
+  });
 
   await app.register(chargerRoutes);
   await app.register(sessionRoutes);

@@ -65,6 +65,30 @@ async function getUserFromRequest(req: FastifyRequest) {
     return user;
   } catch {
     req.log?.warn('Clerk token verification failed');
+  }
+
+  if (!keycloakPasswordAuthEnabled()) return null;
+
+  try {
+    const payload = await introspectAccessToken(token);
+    if (!payload?.sub) return null;
+
+    const authId = `kc:${payload.sub}`;
+    let user = await prisma.user.findUnique({ where: { clerkId: authId } });
+    if (!user) {
+      const email = payload.email ?? payload.preferred_username ?? `${payload.sub}@keycloak.local`;
+      const idTag = `KC${payload.sub.replace(/[^A-Z0-9]/gi, '').slice(-18)}`.toUpperCase().slice(0, 20);
+      user = await prisma.user.create({
+        data: {
+          clerkId: authId,
+          email,
+          name: payload.preferred_username ?? null,
+          idTag,
+        },
+      });
+    }
+    return user;
+  } catch {
     return null;
   }
 }

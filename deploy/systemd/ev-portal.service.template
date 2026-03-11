@@ -1,0 +1,31 @@
+[Unit]
+Description=EV Charger Portal (optional static/preview process)
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=120
+StartLimitBurst=6
+
+[Service]
+Type=simple
+User={{APP_USER}}
+Group={{APP_GROUP}}
+WorkingDirectory={{APP_ROOT}}
+EnvironmentFile={{ENV_FILE}}
+# Option A (preview server): npm run preview --workspace=packages/portal -- --host 127.0.0.1 --port 4175
+# Option B (custom static server): replace ExecStart with your preferred static file server
+ExecStart=/usr/bin/env npm run preview --workspace=packages/portal -- --host 127.0.0.1 --port 4175
+Restart=always
+RestartSec=2
+TimeoutStartSec=30
+TimeoutStopSec=15
+KillSignal=SIGTERM
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths={{APP_ROOT}} {{APP_ROOT}}/logs {{APP_ROOT}}/.runtime
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ev-portal
+
+[Install]
+WantedBy=multi-user.target

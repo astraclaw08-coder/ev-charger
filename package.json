@@ -13,7 +13,14 @@
     "build": "npm run build --workspace=packages/shared && npm run build --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "test:ocpp-sim": "npm run build --workspace=packages/shared && npm run test:ocpp-sim --workspace=packages/ocpp-server",
-    "test:e2e": "npm run test:e2e --workspace=packages/api"
+    "test:e2e": "npm run test:e2e --workspace=packages/api",
+    "watchdog:start": "node scripts/dev-supervisor.js start",
+    "watchdog:stop": "node scripts/dev-supervisor.js stop",
+    "watchdog:status": "node scripts/dev-supervisor.js status",
+    "watchdog:restart-failed": "node scripts/dev-supervisor.js restart-failed",
+    "watchdog:restart": "node scripts/dev-supervisor.js restart",
+    "watchdog:prod": "node scripts/prod-health-monitor.js",
+    "watchdog:prod:dry-run": "WATCHDOG_DRY_RUN=true node scripts/prod-health-monitor.js"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

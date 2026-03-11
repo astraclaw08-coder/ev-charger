@@ -7,8 +7,14 @@ const API_URL =
 
 const DEV_USER_ID = process.env.EXPO_PUBLIC_DEV_USER_ID || 'user-test-driver-001';
 const CLERK_KEY = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
+const AUTH_MODE = (process.env.EXPO_PUBLIC_AUTH_MODE || '').trim().toLowerCase();
 
-export const isDevMode = !CLERK_KEY;
+export const authMode = AUTH_MODE === 'keycloak' || AUTH_MODE === 'clerk' || AUTH_MODE === 'dev'
+  ? AUTH_MODE
+  : (CLERK_KEY ? 'clerk' : 'dev');
+
+export const isDevMode = authMode === 'dev';
+export const isKeycloakMode = authMode === 'keycloak';
 export const isEvcPlatformReadModelEnabled = process.env.EXPO_PUBLIC_EVC_PLATFORM_BUSINESS_VIEWS === '1';
 
 // Auth state holders — set by auth context
@@ -236,6 +242,34 @@ function normalizeCharger(charger: Charger): Charger {
 }
 
 export const api = {
+  auth: {
+    passwordLogin(username: string, password: string) {
+      return request<{
+        ok: boolean;
+        accessToken: string;
+        refreshToken?: string;
+        tokenType?: string;
+        expiresIn?: number;
+        refreshExpiresIn?: number;
+      }>('/auth/password-login', {
+        method: 'POST',
+        body: JSON.stringify({ username, password }),
+      });
+    },
+    passwordRefresh(refreshToken: string) {
+      return request<{
+        ok: boolean;
+        accessToken: string;
+        refreshToken?: string;
+        tokenType?: string;
+        expiresIn?: number;
+        refreshExpiresIn?: number;
+      }>('/auth/password-refresh', {
+        method: 'POST',
+        body: JSON.stringify({ refreshToken }),
+      });
+    },
+  },
   analytics: {
     portfolioSummary(params?: { startDate?: string; endDate?: string }) {
       const query = new URLSearchParams();

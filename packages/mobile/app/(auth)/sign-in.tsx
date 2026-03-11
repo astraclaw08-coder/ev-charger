@@ -11,12 +11,23 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Link, useRouter } from 'expo-router';
-import { isDevMode } from '@/lib/api';
+import { isDevMode, isKeycloakMode } from '@/lib/api';
 import { useAppAuth } from '@/providers/AuthProvider';
 
 export default function SignInScreen() {
   const router = useRouter();
   const { signIn } = useAppAuth();
+
+  if (isKeycloakMode) {
+    return (
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <KeycloakSignInForm />
+      </KeyboardAvoidingView>
+    );
+  }
 
   // ── Dev mode: skip auth ───────────────────────────────────────────────────
   if (isDevMode) {
@@ -49,6 +60,47 @@ export default function SignInScreen() {
     >
       <ClerkSignInForm />
     </KeyboardAvoidingView>
+  );
+}
+
+export function KeycloakSignInForm() {
+  const { loginWithPassword, loading, error } = useAppAuth();
+  const router = useRouter();
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+
+  async function handleSignIn() {
+    const ok = await loginWithPassword?.(username, password);
+    if (ok) router.replace('/' as any);
+  }
+
+  return (
+    <View style={styles.card}>
+      <Text style={styles.title}>Sign In</Text>
+      <Text style={styles.subtitle}>Keycloak username/password</Text>
+      <TextInput
+        style={styles.input}
+        placeholder="Username or Email"
+        value={username}
+        onChangeText={setUsername}
+        autoCapitalize="none"
+      />
+      <TextInput
+        style={styles.input}
+        placeholder="Password"
+        value={password}
+        onChangeText={setPassword}
+        secureTextEntry
+      />
+      {!!error && <Text style={{ color: '#dc2626', marginBottom: 8 }}>{error}</Text>}
+      <TouchableOpacity
+        style={[styles.button, loading && styles.buttonDisabled]}
+        onPress={handleSignIn}
+        disabled={loading}
+      >
+        {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Sign In</Text>}
+      </TouchableOpacity>
+    </View>
   );
 }
 
