@@ -1,0 +1,27 @@
+[Unit]
+Description=EV Charger Production Health Monitor
+After=network-online.target ev-api.service ev-ocpp.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{APP_USER}}
+Group={{APP_GROUP}}
+WorkingDirectory={{APP_ROOT}}
+EnvironmentFile={{ENV_FILE}}
+ExecStart=/usr/bin/env node scripts/prod-health-monitor.js
+Restart=always
+RestartSec=3
+TimeoutStartSec=20
+TimeoutStopSec=10
+KillSignal=SIGTERM
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths={{APP_ROOT}} {{APP_ROOT}}/logs {{APP_ROOT}}/.runtime
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ev-watchdog
+
+[Install]
+WantedBy=multi-user.target

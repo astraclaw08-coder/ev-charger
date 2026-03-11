@@ -18,7 +18,9 @@
     "watchdog:stop": "node scripts/dev-supervisor.js stop",
     "watchdog:status": "node scripts/dev-supervisor.js status",
     "watchdog:restart-failed": "node scripts/dev-supervisor.js restart-failed",
-    "watchdog:restart": "node scripts/dev-supervisor.js restart"
+    "watchdog:restart": "node scripts/dev-supervisor.js restart",
+    "watchdog:prod": "node scripts/prod-health-monitor.js",
+    "watchdog:prod:dry-run": "WATCHDOG_DRY_RUN=true node scripts/prod-health-monitor.js"
   },
   "overrides": {
     "@types/react": "^19.0.0",

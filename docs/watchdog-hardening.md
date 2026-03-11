@@ -71,6 +71,12 @@ Expose and monitor endpoint-level readiness/liveness:
 ### Alerting
 Hook health failures / restart loops into alerting (Slack/PagerDuty/etc). The important part is **detect + restart + alert**.
 
+### Production-ready artifacts (implemented)
+- Systemd templates: `deploy/systemd/ev-*.service.template`
+- Health monitor: `scripts/prod-health-monitor.js`
+- Telegram alert script: `scripts/alert-telegram.sh`
+- Rollout docs: `docs/watchdog-production-rollout.md`
+
 ### Why this layout
 - Host supervisor handles process lifecycle resiliency
 - App probes detect dependency-level failures (process alive but unhealthy)
