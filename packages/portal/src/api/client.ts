@@ -326,7 +326,8 @@ export interface ChargerModelCatalogItem {
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
 const DEV_OPERATOR_ID = import.meta.env.VITE_DEV_OPERATOR_ID ?? 'operator-001';
-const IS_DEV_MODE = !import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
+const AUTH_MODE = String(import.meta.env.VITE_AUTH_MODE ?? '').trim().toLowerCase();
+const IS_DEV_MODE = AUTH_MODE === 'dev';
 
 async function request<T>(
   path: string,
