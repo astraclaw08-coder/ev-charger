@@ -11,7 +11,7 @@ const AUTH_MODE = (process.env.EXPO_PUBLIC_AUTH_MODE || '').trim().toLowerCase()
 
 export const authMode = AUTH_MODE === 'keycloak' || AUTH_MODE === 'clerk' || AUTH_MODE === 'dev'
   ? AUTH_MODE
-  : (CLERK_KEY ? 'clerk' : 'dev');
+  : (CLERK_KEY ? 'clerk' : 'keycloak');
 
 export const isDevMode = authMode === 'dev';
 export const isKeycloakMode = authMode === 'keycloak';
