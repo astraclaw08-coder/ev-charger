@@ -12,10 +12,11 @@ export async function siteRoutes(app: FastifyInstance) {
     const operator = req.currentOperator!;
     const scopedSiteIds = operator.claims?.siteIds ?? [];
 
+    const isOwner = (operator.roles ?? []).includes('owner');
     const sites = await prisma.site.findMany({
       where: scopedSiteIds.length > 0 && !scopedSiteIds.includes('*')
         ? { id: { in: scopedSiteIds } }
-        : { operatorId: operator.id },
+        : (isOwner ? {} : { operatorId: operator.id }),
       include: { chargers: { include: { connectors: true } } },
       orderBy: { createdAt: 'desc' },
     });
