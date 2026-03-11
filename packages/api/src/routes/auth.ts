@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { requireAuth } from '../plugins/auth';
 import { normalizeRoleMetadata } from '../lib/authClaims';
 import { getKeycloakAdminClient } from '../lib/keycloakAdmin';
-import { keycloakPasswordAuthEnabled, passwordGrantLogin } from '../lib/keycloakOidc';
+import { keycloakPasswordAuthEnabled, passwordGrantLogin, refreshGrantLogin } from '../lib/keycloakOidc';
 import { isBlocked, recordAuthFailure, recordAuthSuccess } from '../lib/authProtection';
 
 type BootstrapBody = {
@@ -13,6 +13,10 @@ type BootstrapBody = {
 type PasswordLoginBody = {
   username: string;
   password: string;
+};
+
+type PasswordRefreshBody = {
+  refreshToken: string;
 };
 
 type BootstrapSuperAdminBody = {
@@ -135,6 +139,32 @@ export async function authRoutes(app: FastifyInstance) {
       recordAuthFailure({ ip: req.ip, routeScope: 'password-login' });
       req.log.warn({ event: 'portal-password-login-failed', username, ip: req.ip }, 'Password login failed');
       return reply.status(401).send({ error: 'Invalid username or password' });
+    }
+  });
+
+  app.post<{ Body: PasswordRefreshBody }>('/auth/password-refresh', async (req, reply) => {
+    if (!keycloakPasswordAuthEnabled()) {
+      return reply.status(503).send({ error: 'Password auth is not configured' });
+    }
+
+    const refreshToken = req.body?.refreshToken?.trim();
+    if (!refreshToken) {
+      return reply.status(400).send({ error: 'refreshToken is required' });
+    }
+
+    try {
+      const session = await refreshGrantLogin({ refreshToken });
+      return {
+        ok: true,
+        provider: 'keycloak-password',
+        accessToken: session.accessToken,
+        refreshToken: session.refreshToken,
+        tokenType: session.tokenType,
+        expiresIn: session.expiresIn,
+        refreshExpiresIn: session.refreshExpiresIn,
+      };
+    } catch {
+      return reply.status(401).send({ error: 'Refresh token is invalid or expired' });
     }
   });
 
