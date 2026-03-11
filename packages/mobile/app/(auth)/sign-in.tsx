@@ -90,6 +90,7 @@ export function KeycloakSignInForm({ isDark }: { isDark: boolean }) {
         value={username}
         onChangeText={setUsername}
         autoCapitalize="none"
+        testID="keycloak-username-input"
       />
       <TextInput
         style={styles.input}
@@ -97,12 +98,14 @@ export function KeycloakSignInForm({ isDark }: { isDark: boolean }) {
         value={password}
         onChangeText={setPassword}
         secureTextEntry
+        testID="keycloak-password-input"
       />
       {!!error && <Text style={{ color: '#dc2626', marginBottom: 8 }}>{error}</Text>}
       <TouchableOpacity
         style={[styles.button, loading && styles.buttonDisabled]}
         onPress={handleSignIn}
         disabled={loading}
+        testID="keycloak-sign-in-btn"
       >
         {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Sign In</Text>}
       </TouchableOpacity>

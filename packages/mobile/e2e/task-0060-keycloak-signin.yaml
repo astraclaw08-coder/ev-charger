@@ -1,0 +1,57 @@
+# TASK-0060: Keycloak sign-in QC — verifies username/password sign-in flow end-to-end
+# Uses Son's dev account credentials via TEST_EMAIL / TEST_PASSWORD env vars.
+# Pre-condition: run `xcrun simctl keychain <device-id> reset` to ensure a clean session.
+appId: dev.evcharger.app
+---
+
+# 1. Launch app — should show Keycloak sign-in screen (AUTH_MODE=keycloak, no cached session)
+- launchApp
+- waitForAnimationToEnd:
+    timeout: 8000
+- assertVisible:
+    text: "Sign In"
+- assertVisible:
+    text: "Username/password"
+- takeScreenshot: "0060-01-keycloak-signin-screen"
+
+# 2. Enter credentials
+- tapOn:
+    text: "Username or Email"
+- inputText: "${TEST_EMAIL}"
+- tapOn:
+    text: "Password"
+- inputText: "${TEST_PASSWORD}"
+- takeScreenshot: "0060-02-credentials-entered"
+
+# 3. Tap Sign In button — index:1 skips the "Sign In" title (index:0) and hits the green button
+- tapOn:
+    text: "Sign In"
+    index: 1
+- waitForAnimationToEnd:
+    timeout: 15000
+
+# 4. Dismiss iOS "Save Password?" prompt if shown
+- runFlow:
+    when:
+      visible:
+        text: "Save Password?"
+    commands:
+      - tapOn:
+          text: "Not Now"
+      - waitForAnimationToEnd:
+          timeout: 2000
+
+# 5. Verify main app loaded — "Closest chargers" is content visible on the map/home tab
+- assertVisible:
+    text: "Closest chargers"
+- takeScreenshot: "0060-03-signed-in-map"
+
+# 5. Screenshot the full map tab (tab bar visible as proof)
+- takeScreenshot: "0060-04-map-with-tabs"
+
+# 6. Navigate to Profile to confirm signed-in state (not guest)
+- tapOn:
+    text: "Profile, tab, 4 of 4"
+- waitForAnimationToEnd:
+    timeout: 3000
+- takeScreenshot: "0060-05-profile-screen"

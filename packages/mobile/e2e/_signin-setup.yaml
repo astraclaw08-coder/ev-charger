@@ -1,0 +1,28 @@
+# Reusable sign-in setup flow — include with `runFlow` at the start of any flow
+# that requires an authenticated session.
+#
+# Usage in another flow:
+#   - runFlow: _signin-setup.yaml
+#
+appId: dev.evcharger.app
+---
+- launchApp:
+    clearState: true
+- waitForAnimationToEnd:
+    timeout: 5000
+- runFlow:
+    when:
+      visible:
+        text: "Sign In"
+    commands:
+      - tapOn:
+          text: "Username or Email"
+      - inputText: "${TEST_EMAIL}"
+      - tapOn:
+          text: "Password"
+      - inputText: "${TEST_PASSWORD}"
+      - tapOn:
+          text: "Sign In"
+          index: 1
+      - waitForAnimationToEnd:
+          timeout: 8000

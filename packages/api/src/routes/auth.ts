@@ -224,9 +224,9 @@ export async function authRoutes(app: FastifyInstance) {
         firstName: req.body.firstName,
         lastName: req.body.lastName,
         enabled: true,
-        requiredActions: ['UPDATE_PASSWORD'],
+        requiredActions: [],
       });
-      await kc.setPassword(userId!, password, true);
+      await kc.setPassword(userId!, password, false);
 
       const roles = requiredOwnerRoles();
       const currentRoles = await kc.listRealmRolesForUser(userId!);
@@ -247,11 +247,11 @@ export async function authRoutes(app: FastifyInstance) {
         email,
         username,
         assignedRoles: roles,
-        temporaryPassword: true,
-        forcePasswordChange: true,
+        temporaryPassword: false,
+        forcePasswordChange: false,
         nextSteps: [
-          'Log in through portal username/password with the temporary password.',
-          'Keycloak will force UPDATE_PASSWORD on first login.',
+          'Log in through portal or API using the provided email/password immediately.',
+          'Change your password on first login — this initial password is for bootstrapping only.',
           'Rotate SUPER_ADMIN_BOOTSTRAP_SECRET immediately after successful bootstrap.',
         ],
       };

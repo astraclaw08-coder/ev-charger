@@ -14,6 +14,8 @@
     "test": "npm run test --workspaces --if-present",
     "test:ocpp-sim": "npm run build --workspace=packages/shared && npm run test:ocpp-sim --workspace=packages/ocpp-server",
     "test:e2e": "npm run test:e2e --workspace=packages/api",
+    "version:prod:stamp": "node scripts/prod-version-stamp.cjs",
+    "version:prod:check": "node scripts/check-prod-version-stamp.cjs",
     "watchdog:start": "node scripts/dev-supervisor.js start",
     "watchdog:stop": "node scripts/dev-supervisor.js stop",
     "watchdog:status": "node scripts/dev-supervisor.js status",
