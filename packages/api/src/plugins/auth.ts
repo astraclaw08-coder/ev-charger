@@ -115,6 +115,11 @@ async function getUserFromRequest(req: FastifyRequest) {
 }
 
 export const requireAuth: preHandlerHookHandler = async (req, reply) => {
+  const token = bearerToken(req);
+  if (!token) {
+    return reply.status(401).send({ error: 'Unauthorized' });
+  }
+
   const blocked = isBlocked({ ip: req.ip, routeScope: 'user' });
   if (blocked.blocked) {
     reply.header('Retry-After', String(blocked.retryAfterSeconds));
@@ -166,7 +171,6 @@ export const requireOperator: preHandlerHookHandler = async (req, reply) => {
 
   const token = bearerToken(req);
   if (!token) {
-    recordAuthFailure({ ip: req.ip, routeScope: 'operator' });
     return reply.status(401).send({ error: 'Unauthorized' });
   }
 
