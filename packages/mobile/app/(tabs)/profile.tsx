@@ -7,6 +7,8 @@ import {
   TextInput,
   TouchableOpacity,
   Alert,
+  Modal,
+  Pressable,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -41,8 +43,7 @@ const EMPTY: DriverProfile = {
   paymentProfile: '',
 };
 
-const mobileVersion = process.env.EXPO_PUBLIC_APP_VERSION
-  ?? `${new Date().getFullYear()}.${String(new Date().getMonth() + 1).padStart(2, '0')}.${String(new Date().getDate()).padStart(2, '0')}.0`;
+const mobileVersion = process.env.EXPO_PUBLIC_APP_VERSION ?? 'dev-local';
 
 export default function ProfileScreen() {
   const { isDark, setMode } = useAppTheme();
@@ -50,6 +51,7 @@ export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const tabBarHeight = useBottomTabBarHeight();
   const [profile, setProfile] = useState<DriverProfile>(EMPTY);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const queryClient = useQueryClient();
   const { isGuest, signOut } = useAppAuth();
 
@@ -201,15 +203,42 @@ export default function ProfileScreen() {
 
       <TouchableOpacity
         style={styles.logoutBtn}
-        onPress={() =>
-          Alert.alert('Log Out?', 'You can still browse chargers in guest mode.', [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Log Out', style: 'destructive', onPress: () => signOut() },
-          ])
-        }
+        onPress={() => setShowLogoutConfirm(true)}
       >
         <Text style={styles.logoutText}>Log Out</Text>
       </TouchableOpacity>
+
+      <Modal visible={showLogoutConfirm} transparent animationType="fade" onRequestClose={() => setShowLogoutConfirm(false)}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setShowLogoutConfirm(false)}>
+          <Pressable
+            style={[
+              styles.modalCard,
+              { backgroundColor: isDark ? '#111827' : '#ffffff', borderColor: isDark ? '#374151' : '#e5e7eb' },
+            ]}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <Text style={[styles.modalTitle, { color: isDark ? '#f9fafb' : '#111827' }]}>Log Out?</Text>
+            <Text style={[styles.modalBody, { color: isDark ? '#9ca3af' : '#6b7280' }]}>You can still browse chargers in guest mode.</Text>
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalBtn, { borderColor: isDark ? '#4b5563' : '#d1d5db', backgroundColor: isDark ? '#1f2937' : '#f9fafb' }]}
+                onPress={() => setShowLogoutConfirm(false)}
+              >
+                <Text style={[styles.modalBtnText, { color: isDark ? '#f3f4f6' : '#111827' }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalBtn, styles.modalDangerBtn]}
+                onPress={() => {
+                  setShowLogoutConfirm(false);
+                  signOut();
+                }}
+              >
+                <Text style={styles.modalDangerText}>Log Out</Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       <Text style={[styles.versionText, { color: isDark ? '#6b7280' : '#9ca3af' }]}>Version {mobileVersion}</Text>
     </ScrollView>
@@ -285,5 +314,29 @@ const styles = StyleSheet.create({
   createAccountText: { color: '#fff', fontWeight: '700', fontSize: 16 },
   logoutBtn: { backgroundColor: '#991b1b', borderRadius: 12, marginTop: 12, paddingVertical: 14, alignItems: 'center' },
   logoutText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  modalCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 16,
+  },
+  modalTitle: { fontSize: 18, fontWeight: '800', marginBottom: 6 },
+  modalBody: { fontSize: 14, marginBottom: 14 },
+  modalActions: { flexDirection: 'row', gap: 10 },
+  modalBtn: {
+    flex: 1,
+    borderRadius: 10,
+    borderWidth: 1,
+    paddingVertical: 11,
+    alignItems: 'center',
+  },
+  modalBtnText: { fontWeight: '700', fontSize: 14 },
+  modalDangerBtn: { backgroundColor: '#991b1b', borderColor: '#991b1b' },
+  modalDangerText: { color: '#fff', fontWeight: '700', fontSize: 14 },
   versionText: { marginTop: 16, textAlign: 'center', fontSize: 12, fontWeight: '500' },
 });

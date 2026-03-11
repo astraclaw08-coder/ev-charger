@@ -165,7 +165,6 @@ export default function TabsLayout() {
             title: 'Profile',
             tabBarLabel: 'Profile',
             tabBarIcon: ({ size }) => <TabIcon icon="👤" size={size} />,
-            tabBarBadge: isGuest ? 'Guest' : undefined,
           }}
         />
       </Tabs>
