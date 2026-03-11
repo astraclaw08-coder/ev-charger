@@ -21,14 +21,27 @@ const ALERT_COMMAND = process.env.WATCHDOG_ALERT_COMMAND || '';
 const ALERT_WEBHOOK_URL = process.env.WATCHDOG_ALERT_WEBHOOK_URL || '';
 const DRY_RUN = /^(1|true|yes)$/i.test(process.env.WATCHDOG_DRY_RUN || '');
 
+function parseExpect(envValue, fallback) {
+  if (!envValue || !envValue.trim()) return fallback;
+  return envValue.split(',').map((s) => s.trim()).filter(Boolean);
+}
+
 const SERVICES = {
   api: {
     systemdUnit: process.env.WATCHDOG_API_UNIT || 'ev-api.service',
-    probes: [{ type: 'http', url: process.env.WATCHDOG_API_HEALTH_URL || 'http://127.0.0.1:3001/health', expect: ['"status":"ok"', '"db":"ok"'] }],
+    probes: [{
+      type: 'http',
+      url: process.env.WATCHDOG_API_HEALTH_URL || 'http://127.0.0.1:3001/health',
+      expect: parseExpect(process.env.WATCHDOG_API_EXPECT, ['"status":"ok"', '"db":"ok"']),
+    }],
   },
   ocpp: {
     systemdUnit: process.env.WATCHDOG_OCPP_UNIT || 'ev-ocpp.service',
-    probes: [{ type: 'http', url: process.env.WATCHDOG_OCPP_HEALTH_URL || 'http://127.0.0.1:9000/health', expect: ['"status":"ok"'] }],
+    probes: [{
+      type: 'http',
+      url: process.env.WATCHDOG_OCPP_HEALTH_URL || 'http://127.0.0.1:9000/health',
+      expect: parseExpect(process.env.WATCHDOG_OCPP_EXPECT, ['"status":"ok"']),
+    }],
   },
 };
 
