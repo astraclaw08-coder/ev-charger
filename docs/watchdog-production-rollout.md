@@ -10,33 +10,27 @@ This guide turns TASK-0143 watchdog hardening into directly deployable productio
 - `deploy/systemd/ev-watchdog-monitor.service.template`
 - `scripts/prod-health-monitor.js`
 - `scripts/alert-telegram.sh`
+- `scripts/alert-webhook.sh`
+- `deploy/env/watchdog.env.example`
 
 ## 1) Prepare environment
 
-Create an environment file for systemd units, for example:
+Start from the provided example and then fill secrets:
 
 ```bash
 sudo install -d -m 0755 /etc/ev-charger
-sudo tee /etc/ev-charger/ev-charger.env >/dev/null <<'EOF'
-NODE_ENV=production
-WATCHDOG_INTERVAL_MS=10000
-WATCHDOG_RESTART_WINDOW_MS=600000
-WATCHDOG_RESTART_MAX=4
-WATCHDOG_RESTART_COOLDOWN_MS=30000
-WATCHDOG_ALERT_COMMAND=/opt/ev-charger/scripts/alert-telegram.sh
-# Optional generic webhook alert sink
-# WATCHDOG_ALERT_WEBHOOK_URL=https://hooks.example.com/ev-watchdog
-
-# Telegram alert integration
-TELEGRAM_BOT_TOKEN=123456:replace-me
-TELEGRAM_CHAT_ID=-1001234567890
-# Optional override
-# TELEGRAM_API_BASE=https://api.telegram.org
-
-# Optional portal monitoring
-WATCHDOG_ENABLE_PORTAL=true
-EOF
+sudo cp deploy/env/watchdog.env.example /etc/ev-charger/ev-charger.env
+sudo chown root:root /etc/ev-charger/ev-charger.env
+sudo chmod 0600 /etc/ev-charger/ev-charger.env
+sudoedit /etc/ev-charger/ev-charger.env
 ```
+
+Minimum settings to verify before rollout:
+
+- `WATCHDOG_ALERT_COMMAND` (Telegram or webhook script path)
+- `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` (if Telegram alert command is used)
+- `WATCHDOG_ALERT_WEBHOOK_URL` (if direct monitor webhook posting is used)
+- `WATCHDOG_ENABLE_PORTAL=true` only if `ev-portal.service` is actually deployed
 
 ## 2) Install systemd units
 
@@ -113,10 +107,11 @@ Live monitor logs:
 journalctl -u ev-watchdog-monitor.service -f
 ```
 
-Send explicit test alert:
+Send explicit test alerts:
 
 ```bash
 TELEGRAM_BOT_TOKEN=... TELEGRAM_CHAT_ID=... scripts/alert-telegram.sh "watchdog test alert" warn
+ALERT_WEBHOOK_URL=https://hooks.example.com/... scripts/alert-webhook.sh "watchdog webhook test" warn
 ```
 
 ## 5) Rollback

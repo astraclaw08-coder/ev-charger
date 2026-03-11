@@ -75,6 +75,8 @@ Hook health failures / restart loops into alerting (Slack/PagerDuty/etc). The im
 - Systemd templates: `deploy/systemd/ev-*.service.template`
 - Health monitor: `scripts/prod-health-monitor.js`
 - Telegram alert script: `scripts/alert-telegram.sh`
+- Generic webhook alert script: `scripts/alert-webhook.sh`
+- Env template: `deploy/env/watchdog.env.example`
 - Rollout docs: `docs/watchdog-production-rollout.md`
 
 ### Why this layout
