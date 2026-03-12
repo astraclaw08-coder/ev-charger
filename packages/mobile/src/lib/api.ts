@@ -28,6 +28,10 @@ export function setGuestMode(guest: boolean) {
   _guestMode = guest;
 }
 
+export function isGuestMode() {
+  return _guestMode;
+}
+
 async function authHeaders(): Promise<Record<string, string>> {
   if (_guestMode) {
     if (process.env.EXPO_PUBLIC_ALLOW_GUEST_TRANSACT === '1') {
@@ -164,6 +168,20 @@ export interface Payment {
   amountCents: number | null;
   stripeCustomerId: string | null;
   stripeIntentId: string | null;
+}
+
+export interface InAppNotificationItem {
+  id: string;
+  campaignId: string;
+  title: string;
+  message: string;
+  actionLabel?: string | null;
+  actionUrl?: string | null;
+  deepLink?: string | null;
+  sentAt: string;
+  createdAt: string;
+  readAt?: string | null;
+  isRead: boolean;
 }
 
 
@@ -370,6 +388,17 @@ export const api = {
       return request<UserProfile>('/me/profile', {
         method: 'PUT',
         body: JSON.stringify(input),
+      });
+    },
+  },
+
+  notifications: {
+    list(limit = 40) {
+      return request<InAppNotificationItem[]>(`/me/notifications?limit=${limit}`);
+    },
+    markRead(id: string) {
+      return request<{ ok: boolean }>(`/me/notifications/${id}/read`, {
+        method: 'POST',
       });
     },
   },

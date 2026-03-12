@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { useRouter, useSegments } from 'expo-router';
-import { api, authMode, isDevMode, isKeycloakMode, setBearerToken, setGuestMode } from '@/lib/api';
+import { api, authMode, isDevMode, isGuestMode, isKeycloakMode, setBearerToken, setGuestMode } from '@/lib/api';
 import { clearFavorites } from '@/lib/favorites';
 
 type AppAuthContextValue = {
@@ -144,7 +144,7 @@ function KeycloakAuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (loading) return;
     const inAuth = segments[0] === '(auth)';
-    if (!session?.accessToken && !inAuth) {
+    if (!session?.accessToken && !inAuth && !isGuestMode()) {
       router.replace('/(auth)/sign-in');
     } else if (session?.accessToken && inAuth) {
       router.replace('/(tabs)/index' as any);
@@ -225,7 +225,7 @@ function ClerkAuthGuard({ children }: { children: React.ReactNode }) {
     if (auth.isSignedIn === undefined) return;
     const inAuth = segments[0] === '(auth)';
 
-    if (!auth.isSignedIn && !inAuth) {
+    if (!auth.isSignedIn && !inAuth && !isGuestMode()) {
       router.replace('/(auth)/sign-in');
     } else if (auth.isSignedIn && inAuth) {
       router.replace('/(tabs)/index' as any);
