@@ -31,7 +31,9 @@ export async function sessionRoutes(app: FastifyInstance) {
       });
     }
 
-    const status = await remoteStart(charger.ocppId, connectorId, user.idTag);
+    const appEnv = (process.env.APP_ENV ?? process.env.NODE_ENV ?? '').toLowerCase();
+    const idTag = appEnv === 'development' ? 'TESTDRIVER0001' : (user.idTag || 'TESTDRIVER0001');
+    const status = await remoteStart(charger.ocppId, connectorId, idTag);
 
     if (status !== 'Accepted') {
       return reply.status(503).send({ error: 'Charger rejected the start request', status });
