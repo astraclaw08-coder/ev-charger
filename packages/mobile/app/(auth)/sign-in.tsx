@@ -70,12 +70,17 @@ function formatPhoneForDisplay(identifier: string) {
 
 export default function SignInScreen() {
   const router = useRouter();
-  const { signIn, signOut } = useAppAuth();
+  const { signIn, signOut, continueAsGuest: continueAsGuestFromAuth } = useAppAuth();
   const { isDark } = useAppTheme();
 
   const continueAsGuest = () => {
     setBearerToken(null);
     setGuestMode(true);
+
+    if (continueAsGuestFromAuth) {
+      continueAsGuestFromAuth();
+      return;
+    }
 
     if (isDevMode) {
       signOut();

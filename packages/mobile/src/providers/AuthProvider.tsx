@@ -9,6 +9,7 @@ type AppAuthContextValue = {
   loading: boolean;
   error: string | null;
   signOut: () => void;
+  continueAsGuest?: () => void;
   signIn?: () => void;
   loginWithPassword?: (username: string, password: string) => Promise<boolean>;
 };
@@ -38,6 +39,7 @@ function DevAuthProvider({ children }: { children: React.ReactNode }) {
     signOut: () => {
       clearFavorites().finally(() => setIsGuest(true));
     },
+    continueAsGuest: () => setIsGuest(true),
     signIn: () => setIsGuest(false),
   };
 
@@ -49,6 +51,7 @@ function KeycloakAuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const segments = useSegments();
   const [session, setSession] = useState<PasswordSession | null>(null);
+  const [guestAccess, setGuestAccess] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const refreshingRef = useRef(false);
@@ -99,6 +102,7 @@ function KeycloakAuthProvider({ children }: { children: React.ReactNode }) {
       await persistSession(next);
       setBearerToken(next.accessToken);
       setGuestMode(false);
+      setGuestAccess(false);
       return next;
     } catch {
       await clearSession();
@@ -129,6 +133,7 @@ function KeycloakAuthProvider({ children }: { children: React.ReactNode }) {
         setSession(parsed);
         setBearerToken(parsed.accessToken);
         setGuestMode(false);
+        setGuestAccess(false);
       }
     } catch {
       await clearSession();
@@ -144,12 +149,12 @@ function KeycloakAuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (loading) return;
     const inAuth = segments[0] === '(auth)';
-    if (!session?.accessToken && !inAuth && !isGuestMode()) {
+    if (!session?.accessToken && !inAuth && !isGuestMode() && !guestAccess) {
       router.replace('/(auth)/sign-in');
     } else if (session?.accessToken && inAuth) {
       router.replace('/(tabs)/index' as any);
     }
-  }, [loading, session?.accessToken, segments]);
+  }, [loading, session?.accessToken, segments, guestAccess]);
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
@@ -174,6 +179,7 @@ function KeycloakAuthProvider({ children }: { children: React.ReactNode }) {
         await persistSession(next);
         setBearerToken(next.accessToken);
         setGuestMode(false);
+        setGuestAccess(false);
         return true;
       } catch (err) {
         await clearSession();
@@ -183,8 +189,15 @@ function KeycloakAuthProvider({ children }: { children: React.ReactNode }) {
         setLoading(false);
       }
     },
+    continueAsGuest: () => {
+      setGuestAccess(true);
+      setBearerToken(null);
+      setGuestMode(true);
+      router.replace('/(tabs)/index' as any);
+    },
     signOut: () => {
       clearSession().finally(() => {
+        setGuestAccess(false);
         clearFavorites().finally(() => {
           router.replace('/(auth)/sign-in');
         });
@@ -220,17 +233,18 @@ function ClerkAuthGuard({ children }: { children: React.ReactNode }) {
   const auth = useAuth!();
   const router = useRouter();
   const segments = useSegments();
+  const [guestAccess, setGuestAccess] = useState(false);
 
   useEffect(() => {
     if (auth.isSignedIn === undefined) return;
     const inAuth = segments[0] === '(auth)';
 
-    if (!auth.isSignedIn && !inAuth && !isGuestMode()) {
+    if (!auth.isSignedIn && !inAuth && !isGuestMode() && !guestAccess) {
       router.replace('/(auth)/sign-in');
     } else if (auth.isSignedIn && inAuth) {
       router.replace('/(tabs)/index' as any);
     }
-  }, [auth.isSignedIn, segments]);
+  }, [auth.isSignedIn, segments, guestAccess]);
 
   useEffect(() => {
     const guest = !auth.isSignedIn;
@@ -240,6 +254,7 @@ function ClerkAuthGuard({ children }: { children: React.ReactNode }) {
       setBearerToken(null);
       return;
     }
+    setGuestAccess(false);
     auth.getToken().then((t) => {
       if (t) setBearerToken(t);
     });
@@ -249,8 +264,15 @@ function ClerkAuthGuard({ children }: { children: React.ReactNode }) {
     isGuest: !auth.isSignedIn,
     loading: auth.isSignedIn === undefined,
     error: null,
+    continueAsGuest: () => {
+      setGuestAccess(true);
+      setBearerToken(null);
+      setGuestMode(true);
+      router.replace('/(tabs)/index' as any);
+    },
     signOut: () => {
       auth.signOut().finally(() => {
+        setGuestAccess(false);
         setBearerToken(null);
         setGuestMode(true);
         clearFavorites().finally(() => {
@@ -303,6 +325,7 @@ export function useAppAuth() {
       isGuest: false,
       loading: false,
       error: null,
+      continueAsGuest: () => {},
       signOut: () => {},
     }
   );
