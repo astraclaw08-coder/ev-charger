@@ -190,6 +190,12 @@ export default function ChargerDetailScreen() {
     enabled: !isGuest,
   });
 
+  const { data: profile } = useQuery({
+    queryKey: ['me-profile'],
+    queryFn: () => api.profile.get(),
+    enabled: !isGuest,
+  });
+
   useFocusEffect(
     React.useCallback(() => {
       refetch();

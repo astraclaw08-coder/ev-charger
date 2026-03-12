@@ -131,6 +131,9 @@ export default function ProfileScreen() {
         <TouchableOpacity style={styles.saveBtn} onPress={() => router.replace('/(auth)/sign-in' as any)}>
           <Text style={styles.saveText}>Sign In</Text>
         </TouchableOpacity>
+        <TouchableOpacity style={styles.createAccountBtn} onPress={() => router.push('/(auth)/sign-up' as any)}>
+          <Text style={styles.createAccountText}>Create Account</Text>
+        </TouchableOpacity>
       </View>
     );
   }

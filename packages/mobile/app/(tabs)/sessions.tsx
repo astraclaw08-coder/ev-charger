@@ -296,7 +296,7 @@ export default function SessionsScreen() {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: isDark ? '#030712' : '#f9fafb' }]}> 
+    <View style={[styles.container, { backgroundColor: isDark ? '#030712' : '#f9fafb' }]}>
       <FlatList
         data={sessions}
         keyExtractor={(s) => s.id}
