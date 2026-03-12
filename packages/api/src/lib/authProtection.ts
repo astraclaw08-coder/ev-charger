@@ -12,8 +12,9 @@ function readNumberEnv(name: string, fallback: number) {
 }
 
 function settings() {
+  const env = (process.env.APP_ENV ?? process.env.NODE_ENV ?? 'development').toLowerCase();
   return {
-    enabled: process.env.NODE_ENV !== 'development',
+    enabled: env === 'production',
     maxAttempts: readNumberEnv('SECURITY_AUTH_FAILURE_MAX_ATTEMPTS', 8),
     windowSeconds: readNumberEnv('SECURITY_AUTH_FAILURE_WINDOW_SECONDS', 300),
     blockSeconds: readNumberEnv('SECURITY_AUTH_BLOCK_SECONDS', 900),
