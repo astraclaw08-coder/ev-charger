@@ -3,6 +3,7 @@ import { prisma } from '@ev-charger/shared';
 import { requireOperator } from '../plugins/auth';
 import { requirePolicy } from '../plugins/authorization';
 import { getChargerUptime } from '../lib/uptime';
+import { validateTouWindows } from '../lib/sitePricing';
 
 export async function siteRoutes(app: FastifyInstance) {
   // GET /sites — list operator's sites with charger counts
@@ -103,6 +104,12 @@ export async function siteRoutes(app: FastifyInstance) {
       address: string;
       lat: number;
       lng: number;
+      pricingMode?: 'flat' | 'tou';
+      pricePerKwhUsd?: number;
+      idleFeePerMinUsd?: number;
+      activationFeeUsd?: number;
+      gracePeriodMin?: number;
+      touWindows?: unknown;
       organizationName?: string;
       portfolioName?: string;
     };
@@ -110,10 +117,46 @@ export async function siteRoutes(app: FastifyInstance) {
     preHandler: [requireOperator, requirePolicy('site.create')],
   }, async (req, reply) => {
     const operator = req.currentOperator!;
-    const { name, address, lat, lng, organizationName, portfolioName } = req.body;
+    const {
+      name,
+      address,
+      lat,
+      lng,
+      pricingMode,
+      pricePerKwhUsd,
+      idleFeePerMinUsd,
+      activationFeeUsd,
+      gracePeriodMin,
+      touWindows,
+      organizationName,
+      portfolioName,
+    } = req.body;
+
+    const touValidation = touWindows !== undefined ? validateTouWindows(touWindows) : null;
+    if (touValidation && !touValidation.ok) {
+      return reply.status(400).send({ error: touValidation.error });
+    }
+
+    if (pricingMode !== undefined && pricingMode !== 'flat' && pricingMode !== 'tou') {
+      return reply.status(400).send({ error: 'pricingMode must be either flat or tou' });
+    }
 
     const site = await prisma.site.create({
-      data: { name, address, lat, lng, operatorId: operator.id, organizationName, portfolioName },
+      data: {
+        name,
+        address,
+        lat,
+        lng,
+        operatorId: operator.id,
+        ...(pricingMode ? { pricingMode } : {}),
+        ...(pricePerKwhUsd != null ? { pricePerKwhUsd } : {}),
+        ...(idleFeePerMinUsd != null ? { idleFeePerMinUsd } : {}),
+        ...(activationFeeUsd != null ? { activationFeeUsd } : {}),
+        ...(gracePeriodMin != null ? { gracePeriodMin } : {}),
+        ...(touValidation?.ok ? { touWindows: touValidation.windows } : {}),
+        organizationName,
+        portfolioName,
+      },
     });
 
     return reply.status(201).send(site);
@@ -146,6 +189,16 @@ export async function siteRoutes(app: FastifyInstance) {
     }
 
     const { name, address, lat, lng, pricingMode, pricePerKwhUsd, idleFeePerMinUsd, activationFeeUsd, gracePeriodMin, touWindows, organizationName, portfolioName } = req.body;
+
+    const touValidation = touWindows !== undefined ? validateTouWindows(touWindows) : null;
+    if (touValidation && !touValidation.ok) {
+      return reply.status(400).send({ error: touValidation.error });
+    }
+
+    if (pricingMode !== undefined && pricingMode !== 'flat' && pricingMode !== 'tou') {
+      return reply.status(400).send({ error: 'pricingMode must be either flat or tou' });
+    }
+
     const site = await prisma.site.update({
       where: { id: req.params.id },
       data: {
@@ -158,7 +211,7 @@ export async function siteRoutes(app: FastifyInstance) {
         ...(idleFeePerMinUsd != null ? { idleFeePerMinUsd } : {}),
         ...(activationFeeUsd != null ? { activationFeeUsd } : {}),
         ...(gracePeriodMin != null ? { gracePeriodMin } : {}),
-        ...(Array.isArray(touWindows) ? { touWindows } : {}),
+        ...(touValidation?.ok ? { touWindows: touValidation.windows } : {}),
         ...(organizationName !== undefined ? { organizationName } : {}),
         ...(portfolioName !== undefined ? { portfolioName } : {}),
       },
