@@ -6,7 +6,7 @@ export default function RootIndex() {
   const { isGuest } = useAppAuth();
 
   if (isGuest) {
-    return <Redirect href="/(auth)/sign-in" />;
+    return <Redirect href={'/(tabs)/index' as any} />;
   }
 
   return <Redirect href={'/(tabs)' as any} />;
