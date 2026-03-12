@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useAppTheme } from '@/theme';
 import { AntDesign, Ionicons } from '@expo/vector-icons';
 import { isDevMode, setBearerToken, setGuestMode } from '@/lib/api';
 import { useAppAuth } from '@/providers/AuthProvider';
@@ -22,6 +23,7 @@ type VerifyMethod = 'email_code' | 'phone_code';
 export default function SignUpScreen() {
   const router = useRouter();
   const { signIn } = useAppAuth();
+  const { isDark } = useAppTheme();
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [method, setMethod] = useState<SignUpMethod>('email');
@@ -168,19 +170,16 @@ export default function SignUpScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
+      style={[styles.container, { backgroundColor: isDark ? '#0b1220' : '#e5e7eb' }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <View style={styles.backdrop}>
+      <View style={[styles.backdrop, { backgroundColor: isDark ? 'rgba(11,18,32,0.96)' : 'rgba(229,231,235,0.96)' }]}>
         <Pressable style={styles.backdropDismissHitArea} onPress={goToSignIn} />
-        <View style={styles.card}>
-          <TouchableOpacity style={styles.closeBtn} onPress={goToSignIn} hitSlop={10}>
-            <Text style={styles.closeBtnText}>×</Text>
-          </TouchableOpacity>
+        <View style={[styles.card, { backgroundColor: isDark ? 'rgba(255,255,255,0.82)' : 'rgba(51,65,85,0.78)', borderColor: isDark ? '#cbd5e1' : '#94a3b8' }]}>
           {pendingVerify ? (
             <>
-              <Text style={styles.title}>Verify {verifyMethod === 'email_code' ? 'Email' : 'Phone'}</Text>
-              <Text style={styles.subtitle}>Enter the code sent to {verifyTargetLabel}</Text>
+              <Text style={[styles.title, { color: isDark ? '#111827' : '#f8fafc' }]}>Verify {verifyMethod === 'email_code' ? 'Email' : 'Phone'}</Text>
+              <Text style={[styles.subtitle, { color: isDark ? '#334155' : '#cbd5e1' }]}>Enter the code sent to {verifyTargetLabel}</Text>
               <TextInput
                 style={styles.input}
                 placeholder="Verification code"
@@ -199,8 +198,8 @@ export default function SignUpScreen() {
             </>
           ) : (
             <>
-              <Text style={styles.title}>Create Account</Text>
-              <Text style={styles.subtitle}>Sign up with phone, email, or SSO.</Text>
+              <Text style={[styles.title, { color: isDark ? '#111827' : '#f8fafc' }]}>Create Account</Text>
+              <Text style={[styles.subtitle, { color: isDark ? '#334155' : '#cbd5e1' }]}>Sign up with phone, email, or SSO.</Text>
 
               <View style={styles.methodSwitch}>
                 <TouchableOpacity
@@ -292,8 +291,13 @@ export default function SignUpScreen() {
                 <Text style={styles.oauthText}>Continue with Apple</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity onPress={goToSignIn} style={styles.signInLinkBtn}>
-                <Text style={styles.link}>Already have an account? Sign in</Text>
+              <View style={styles.dividerWrap}>
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>ALREADY HAVE AN ACCOUNT?</Text>
+                <View style={styles.dividerLine} />
+              </View>
+              <TouchableOpacity onPress={goToSignIn} style={styles.signInCtaBtn}>
+                <Text style={styles.signInCtaText}>Sign In</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.guestBtn} onPress={continueAsGuest}>
                 <Text style={styles.guestBtnText}>Continue as Guest</Text>
@@ -451,12 +455,18 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
   },
-  signInLinkBtn: {
+  signInCtaBtn: {
     marginTop: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#9ca3af',
+    paddingVertical: 11,
+    alignItems: 'center',
+    backgroundColor: '#9ca3af',
   },
-  link: {
-    textAlign: 'center',
-    color: '#34d399',
+  signInCtaText: {
+    color: '#ffffff',
+    fontWeight: '800',
     fontSize: 14,
   },
   guestBtn: {

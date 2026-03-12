@@ -43,8 +43,7 @@ export default function SignInScreen() {
   if (isDevMode) {
     return (
       <View style={[styles.container, { backgroundColor: isDark ? '#020617' : '#ecfdf5' }]}>
-        <BackgroundDecor isDark={isDark} />
-        <View style={[styles.card, styles.cardGlass, { backgroundColor: isDark ? 'rgba(15,23,42,0.78)' : 'rgba(255,255,255,0.78)', borderColor: isDark ? '#334155' : '#d1fae5' }]}>
+        <View style={[styles.card, styles.cardGlass, { backgroundColor: isDark ? 'rgba(255,255,255,0.82)' : 'rgba(51,65,85,0.78)', borderColor: isDark ? '#cbd5e1' : '#94a3b8' }]}>
           <Text style={styles.title}>EV Charger</Text>
           <Text style={styles.subtitle}>Dev Mode — No Clerk Key Set</Text>
           <Text style={styles.devNote}>
@@ -69,7 +68,6 @@ export default function SignInScreen() {
       style={[styles.container, { backgroundColor: isDark ? '#020617' : '#ecfdf5' }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <BackgroundDecor isDark={isDark} />
       <ClerkSignInForm isDark={isDark} onContinueGuest={continueAsGuest} />
     </KeyboardAvoidingView>
   );
@@ -88,8 +86,8 @@ export function KeycloakSignInForm({ isDark, onContinueGuest }: { isDark: boolea
 
   return (
     <View style={[styles.card, styles.cardGlass, { backgroundColor: isDark ? 'rgba(15,23,42,0.78)' : 'rgba(255,255,255,0.78)', borderColor: isDark ? '#334155' : '#d1fae5' }] }>
-      <Text style={[styles.title, { color: isDark ? '#f8fafc' : '#111827' }]}>Sign In</Text>
-      <Text style={[styles.subtitle, { color: isDark ? '#94a3b8' : '#6b7280' }]}>Username/password</Text>
+      <Text style={[styles.title, { color: isDark ? '#111827' : '#f8fafc' }]}>Sign In</Text>
+      <Text style={[styles.subtitle, { color: isDark ? '#334155' : '#cbd5e1' }]}>Username/password</Text>
       <TextInput
         style={styles.input}
         placeholder="Username or Email"
@@ -233,8 +231,8 @@ export function ClerkSignInForm({ isDark, onContinueGuest }: { isDark: boolean; 
 
   return (
     <View style={[styles.card, styles.cardGlass, { backgroundColor: isDark ? 'rgba(15,23,42,0.78)' : 'rgba(255,255,255,0.78)', borderColor: isDark ? '#334155' : '#d1fae5' }] }>
-      <Text style={[styles.title, { color: isDark ? '#f8fafc' : '#111827' }]}>Sign In</Text>
-      <Text style={[styles.subtitle, { color: isDark ? '#94a3b8' : '#6b7280' }]}>Use password, OTP, or SSO.</Text>
+      <Text style={[styles.title, { color: isDark ? '#111827' : '#f8fafc' }]}>Sign In</Text>
+      <Text style={[styles.subtitle, { color: isDark ? '#334155' : '#cbd5e1' }]}>Use password, OTP, or SSO.</Text>
 
       <View style={styles.methodSwitch}>
         <TouchableOpacity style={[styles.methodBtn, method === 'password' && styles.methodBtnActive]} onPress={() => { setMethod('password'); setAwaitingCode(false); }}>
@@ -455,13 +453,13 @@ const styles = StyleSheet.create({
     marginTop: 8,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#0f766e',
+    borderColor: '#9ca3af',
     paddingVertical: 12,
     alignItems: 'center',
-    backgroundColor: '#115e59',
+    backgroundColor: '#9ca3af',
   },
   createAccountBtnText: {
-    color: '#ecfeff',
+    color: '#ffffff',
     fontWeight: '800',
     fontSize: 14,
   },
