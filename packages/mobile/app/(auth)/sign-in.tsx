@@ -85,7 +85,6 @@ export default function SignInScreen() {
         style={[styles.container, { backgroundColor: isDark ? '#0b1220' : '#f3f4f6' }]}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <Pressable style={StyleSheet.absoluteFill} onPress={continueAsGuest} />
         <KeycloakSignInForm isDark={isDark} onContinueGuest={continueAsGuest} />
       </KeyboardAvoidingView>
     );
@@ -94,7 +93,6 @@ export default function SignInScreen() {
   if (isDevMode) {
     return (
       <View style={[styles.container, { backgroundColor: isDark ? '#0b1220' : '#f3f4f6' }]}> 
-        <Pressable style={StyleSheet.absoluteFill} onPress={continueAsGuest} />
         <View style={styles.card}>
           <Text style={[styles.title, { color: isDark ? '#f8fafc' : '#111827' }]}>Sign In</Text>
           <Text style={[styles.devNote, { color: isDark ? '#cbd5e1' : '#334155' }]}>Dev Mode — No Clerk Key Set</Text>
@@ -120,7 +118,6 @@ export default function SignInScreen() {
       style={[styles.container, { backgroundColor: isDark ? '#0b1220' : '#f3f4f6' }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <Pressable style={StyleSheet.absoluteFill} onPress={continueAsGuest} />
       <ClerkSignInForm isDark={isDark} onContinueGuest={continueAsGuest} />
     </KeyboardAvoidingView>
   );
