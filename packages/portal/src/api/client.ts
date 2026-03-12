@@ -417,9 +417,12 @@ async function request<T>(
   token: string | null | undefined,
   options?: RequestInit,
 ): Promise<T> {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
+  const headers: Record<string, string> = {};
+
+  const hasBody = options?.body !== undefined && options?.body !== null;
+  if (hasBody) {
+    headers['Content-Type'] = 'application/json';
+  }
 
   if (IS_DEV_MODE) {
     headers['x-dev-operator-id'] = DEV_OPERATOR_ID;
