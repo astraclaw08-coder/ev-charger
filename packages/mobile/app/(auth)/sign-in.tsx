@@ -10,7 +10,7 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { Link, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { AntDesign, Ionicons } from '@expo/vector-icons';
 import { isDevMode, isKeycloakMode, setBearerToken, setGuestMode } from '@/lib/api';
 import { useAppAuth } from '@/providers/AuthProvider';
@@ -135,9 +135,14 @@ export function KeycloakSignInForm({ isDark, onContinueGuest }: { isDark: boolea
         <Text style={styles.oauthText}>Continue with Apple</Text>
       </TouchableOpacity>
 
-      <Link href="/(auth)/sign-up" style={styles.link}>
-        Don't have an account? Create account
-      </Link>
+      <View style={styles.dividerWrap}>
+        <View style={styles.dividerLine} />
+        <Text style={styles.dividerText}>NEW HERE?</Text>
+        <View style={styles.dividerLine} />
+      </View>
+      <TouchableOpacity style={styles.createAccountBtn} onPress={() => router.replace('/(auth)/sign-up' as any)}>
+        <Text style={styles.createAccountBtnText}>Create Account</Text>
+      </TouchableOpacity>
       <TouchableOpacity style={styles.guestBtn} onPress={onContinueGuest}>
         <Text style={styles.guestBtnText}>Continue as Guest</Text>
       </TouchableOpacity>
@@ -294,9 +299,14 @@ export function ClerkSignInForm({ isDark, onContinueGuest }: { isDark: boolean; 
         <Text style={styles.oauthText}>Continue with Apple</Text>
       </TouchableOpacity>
 
-      <Link href="/(auth)/sign-up" style={styles.link}>
-        Don't have an account? Create account
-      </Link>
+      <View style={styles.dividerWrap}>
+        <View style={styles.dividerLine} />
+        <Text style={styles.dividerText}>NEW HERE?</Text>
+        <View style={styles.dividerLine} />
+      </View>
+      <TouchableOpacity style={styles.createAccountBtn} onPress={() => router.replace('/(auth)/sign-up' as any)}>
+        <Text style={styles.createAccountBtnText}>Create Account</Text>
+      </TouchableOpacity>
       <TouchableOpacity style={styles.guestBtn} onPress={onContinueGuest}>
         <Text style={styles.guestBtnText}>Continue as Guest</Text>
       </TouchableOpacity>
@@ -441,10 +451,18 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
   },
-  link: {
-    marginTop: 16,
-    textAlign: 'center',
-    color: '#10b981',
+  createAccountBtn: {
+    marginTop: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#0f766e',
+    paddingVertical: 12,
+    alignItems: 'center',
+    backgroundColor: '#115e59',
+  },
+  createAccountBtnText: {
+    color: '#ecfeff',
+    fontWeight: '800',
     fontSize: 14,
   },
   guestBtn: {
