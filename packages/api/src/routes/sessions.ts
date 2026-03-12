@@ -34,7 +34,22 @@ export async function sessionRoutes(app: FastifyInstance) {
     const status = await remoteStart(charger.ocppId, connectorId, user.idTag);
 
     if (status !== 'Accepted') {
-      return reply.status(503).send({ error: 'Charger rejected the start request', status });
+      // Some chargers can return Rejected yet still transition to PREPARING/CHARGING.
+      // Re-check connector state briefly before hard-failing so client behavior matches physical charger behavior.
+      await new Promise((resolve) => setTimeout(resolve, 900));
+      const postStartConnector = await prisma.connector.findUnique({
+        where: {
+          chargerId_connectorId: {
+            chargerId: charger.id,
+            connectorId,
+          },
+        },
+      });
+
+      const progressed = postStartConnector && ['PREPARING', 'SUSPENDED_EV', 'CHARGING'].includes(postStartConnector.status);
+      if (!progressed) {
+        return reply.status(503).send({ error: 'Charger rejected the start request', status });
+      }
     }
 
     // Session is created when the charger sends StartTransaction back to the OCPP server.
