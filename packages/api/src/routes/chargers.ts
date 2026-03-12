@@ -13,12 +13,6 @@ function hasSiteAccess(siteId: string, siteIds: string[] | undefined) {
   return siteIds.includes(siteId);
 }
 
-function hasSiteAccess(siteId: string, siteIds: string[] | undefined) {
-  if (!siteIds || siteIds.length === 0) return true;
-  if (siteIds.includes('*')) return true;
-  return siteIds.includes(siteId);
-}
-
 export async function chargerRoutes(app: FastifyInstance) {
   // GET /chargers — list chargers with optional bbox filter
   app.get<{
