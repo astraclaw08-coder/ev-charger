@@ -40,7 +40,10 @@ export async function startServer(port: number): Promise<OcppServerHandle> {
 
     console.log(`[Auth] Attempt identity=${ocppId} host=${host} path=${path} remote=${remote} ua=${ua}`);
 
-    const charger = await prisma.charger.findUnique({ where: { ocppId } });
+    const charger = await prisma.charger.findUnique({
+      where: { ocppId },
+      select: { id: true, ocppId: true, password: true },
+    });
     if (!charger) {
       console.warn(`[Auth] Reject identity=${ocppId} reason=unknown_identity remote=${remote} host=${host} path=${path}`);
       reject(401, 'Unknown charger identity');
