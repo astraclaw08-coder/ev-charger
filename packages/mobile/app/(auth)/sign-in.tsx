@@ -44,9 +44,9 @@ export default function SignInScreen() {
     return (
       <View style={[styles.container, { backgroundColor: isDark ? '#0b1220' : '#f3f4f6' }]}> 
         <Pressable style={StyleSheet.absoluteFill} onPress={continueAsGuest} />
-        <View style={[styles.card, { backgroundColor: isDark ? 'rgba(255,255,255,0.84)' : 'rgba(30,41,59,0.8)', borderColor: isDark ? '#d1d5db' : '#94a3b8' }]}>
-          <Text style={[styles.title, { color: isDark ? '#111827' : '#f8fafc' }]}>Sign In</Text>
-          <Text style={[styles.devNote, { color: isDark ? '#334155' : '#cbd5e1' }]}>Dev Mode — No Clerk Key Set</Text>
+        <View style={[styles.card, { backgroundColor: isDark ? '#0f172a' : '#ffffff', borderColor: isDark ? '#334155' : '#e5e7eb' }]}>
+          <Text style={[styles.title, { color: isDark ? '#f8fafc' : '#111827' }]}>Sign In</Text>
+          <Text style={[styles.devNote, { color: isDark ? '#cbd5e1' : '#334155' }]}>Dev Mode — No Clerk Key Set</Text>
           <TouchableOpacity
             style={styles.button}
             onPress={() => {
@@ -90,8 +90,8 @@ function KeycloakSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onCo
   }
 
   return (
-    <View style={[styles.card, { backgroundColor: isDark ? 'rgba(255,255,255,0.84)' : 'rgba(30,41,59,0.8)', borderColor: isDark ? '#d1d5db' : '#94a3b8' }]}>
-      <Text style={[styles.title, { color: isDark ? '#111827' : '#f8fafc' }]}>Sign In</Text>
+    <View style={[styles.card, { backgroundColor: isDark ? '#0f172a' : '#ffffff', borderColor: isDark ? '#334155' : '#e5e7eb' }]}>
+      <Text style={[styles.title, { color: isDark ? '#f8fafc' : '#111827' }]}>Sign In</Text>
 
       <View style={styles.row}>
         <TextInput style={[styles.input, styles.countryInput]} value={countryCode} onChangeText={setCountryCode} />
@@ -104,12 +104,19 @@ function KeycloakSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onCo
         />
       </View>
 
-      <TouchableOpacity style={styles.button} onPress={() => router.replace('/(auth)/sign-up' as any)}>
-        <Text style={styles.buttonText}>Continue with Phone OTP</Text>
+      <TouchableOpacity style={styles.button} onPress={() => Alert.alert('Next', 'Phone OTP is not enabled for this sign-in mode yet.')}>
+        <Text style={styles.buttonText}>Next</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.emailSwitchBtn} onPress={() => setShowEmail((v) => !v)}>
-        <Text style={styles.emailSwitchText}>Sign in with Email</Text>
+      <View style={styles.dividerWrap}>
+        <View style={styles.dividerLine} />
+        <Text style={styles.dividerText}>OR</Text>
+        <View style={styles.dividerLine} />
+      </View>
+
+      <TouchableOpacity style={styles.oauthBtn} onPress={() => setShowEmail((v) => !v)}>
+        <Ionicons name="mail-outline" size={18} color="#111827" />
+        <Text style={styles.oauthText}>Email</Text>
       </TouchableOpacity>
 
       {showEmail && (
@@ -137,28 +144,13 @@ function KeycloakSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onCo
         </>
       )}
 
-      <View style={styles.dividerWrap}>
-        <View style={styles.dividerLine} />
-        <Text style={styles.dividerText}>OR</Text>
-        <View style={styles.dividerLine} />
-      </View>
-
-      <TouchableOpacity style={styles.oauthBtn} onPress={() => router.replace('/(auth)/sign-up' as any)}>
+      <TouchableOpacity style={styles.oauthBtn} onPress={() => Alert.alert('Google Sign-In', 'Google sign-in is not configured for this mode yet.')}>
         <AntDesign name="google" size={18} color="#111827" />
-        <Text style={styles.oauthText}>Continue with Google</Text>
+        <Text style={styles.oauthText}>Google</Text>
       </TouchableOpacity>
-      <TouchableOpacity style={styles.oauthBtn} onPress={() => router.replace('/(auth)/sign-up' as any)}>
+      <TouchableOpacity style={styles.oauthBtn} onPress={() => Alert.alert('Apple Sign-In', 'Apple sign-in is not configured for this mode yet.')}>
         <Ionicons name="logo-apple" size={18} color="#111827" />
-        <Text style={styles.oauthText}>Continue with Apple</Text>
-      </TouchableOpacity>
-
-      <View style={styles.dividerWrap}>
-        <View style={styles.dividerLine} />
-        <Text style={styles.dividerText}>NEW HERE?</Text>
-        <View style={styles.dividerLine} />
-      </View>
-      <TouchableOpacity style={styles.createAccountBtn} onPress={() => router.replace('/(auth)/sign-up' as any)}>
-        <Text style={styles.createAccountBtnText}>Create Account</Text>
+        <Text style={styles.oauthText}>Apple</Text>
       </TouchableOpacity>
       <TouchableOpacity style={styles.guestBtn} onPress={onContinueGuest}>
         <Text style={styles.guestBtnText}>Continue as Guest</Text>
@@ -243,8 +235,8 @@ function ClerkSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onConti
   }
 
   return (
-    <View style={[styles.card, { backgroundColor: isDark ? 'rgba(255,255,255,0.84)' : 'rgba(30,41,59,0.8)', borderColor: isDark ? '#d1d5db' : '#94a3b8' }]}>
-      <Text style={[styles.title, { color: isDark ? '#111827' : '#f8fafc' }]}>Sign In</Text>
+    <View style={[styles.card, { backgroundColor: isDark ? '#0f172a' : '#ffffff', borderColor: isDark ? '#334155' : '#e5e7eb' }]}>
+      <Text style={[styles.title, { color: isDark ? '#f8fafc' : '#111827' }]}>Sign In</Text>
 
       <View style={styles.row}>
         <TextInput style={[styles.input, styles.countryInput]} value={countryCode} onChangeText={setCountryCode} />
@@ -252,12 +244,20 @@ function ClerkSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onConti
       </View>
       {awaitingCode && <TextInput style={styles.input} placeholder="Verification code" value={code} onChangeText={setCode} keyboardType="number-pad" />}
       <TouchableOpacity style={[styles.button, loading && styles.buttonDisabled]} onPress={awaitingCode ? handleVerifyOtp : handleRequestOtp} disabled={loading}>
-        {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>{awaitingCode ? 'Verify Code' : 'Continue with Phone OTP'}</Text>}
+        {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>{awaitingCode ? 'Verify Code' : 'Next'}</Text>}
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.emailSwitchBtn} onPress={() => setShowEmail((v) => !v)}>
-        <Text style={styles.emailSwitchText}>Sign in with Email</Text>
+      <View style={styles.dividerWrap}>
+        <View style={styles.dividerLine} />
+        <Text style={styles.dividerText}>OR</Text>
+        <View style={styles.dividerLine} />
+      </View>
+
+      <TouchableOpacity style={styles.oauthBtn} onPress={() => setShowEmail((v) => !v)}>
+        <Ionicons name="mail-outline" size={18} color="#111827" />
+        <Text style={styles.oauthText}>Email</Text>
       </TouchableOpacity>
+
       {showEmail && (
         <>
           <TextInput style={styles.input} placeholder="Email" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" />
@@ -268,27 +268,13 @@ function ClerkSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onConti
         </>
       )}
 
-      <View style={styles.dividerWrap}>
-        <View style={styles.dividerLine} />
-        <Text style={styles.dividerText}>OR</Text>
-        <View style={styles.dividerLine} />
-      </View>
       <TouchableOpacity style={styles.oauthBtn} onPress={() => handleOAuth('google')} disabled={loading}>
         <AntDesign name="google" size={18} color="#111827" />
-        <Text style={styles.oauthText}>Continue with Google</Text>
+        <Text style={styles.oauthText}>Google</Text>
       </TouchableOpacity>
       <TouchableOpacity style={styles.oauthBtn} onPress={() => handleOAuth('apple')} disabled={loading}>
         <Ionicons name="logo-apple" size={18} color="#111827" />
-        <Text style={styles.oauthText}>Continue with Apple</Text>
-      </TouchableOpacity>
-
-      <View style={styles.dividerWrap}>
-        <View style={styles.dividerLine} />
-        <Text style={styles.dividerText}>NEW HERE?</Text>
-        <View style={styles.dividerLine} />
-      </View>
-      <TouchableOpacity style={styles.createAccountBtn} onPress={() => router.replace('/(auth)/sign-up' as any)}>
-        <Text style={styles.createAccountBtnText}>Create Account</Text>
+        <Text style={styles.oauthText}>Apple</Text>
       </TouchableOpacity>
       <TouchableOpacity style={styles.guestBtn} onPress={onContinueGuest}>
         <Text style={styles.guestBtnText}>Continue as Guest</Text>
