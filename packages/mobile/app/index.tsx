@@ -1,6 +1,13 @@
 import React from 'react';
 import { Redirect } from 'expo-router';
+import { useAppAuth } from '@/providers/AuthProvider';
 
 export default function RootIndex() {
-  return <Redirect href={'/(tabs)/index' as any} />;
+  const { isGuest } = useAppAuth();
+
+  if (isGuest) {
+    return <Redirect href="/(auth)/sign-in" />;
+  }
+
+  return <Redirect href={'/(tabs)' as any} />;
 }
