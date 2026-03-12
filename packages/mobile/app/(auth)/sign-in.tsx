@@ -17,6 +17,36 @@ import { isDevMode, isKeycloakMode, setBearerToken, setGuestMode } from '@/lib/a
 import { useAppAuth } from '@/providers/AuthProvider';
 import { useAppTheme } from '@/theme';
 
+function normalizePhoneInput(value: string) {
+  const trimmed = value.trim();
+  const hasPlusPrefix = trimmed.startsWith('+');
+  const digits = trimmed.replace(/\D/g, '');
+
+  if (hasPlusPrefix) {
+    return `+${digits.slice(0, 15)}`;
+  }
+
+  const ten = digits.slice(0, 10);
+  if (ten.length <= 3) return ten;
+  if (ten.length <= 6) return `${ten.slice(0, 3)}-${ten.slice(3)}`;
+  return `${ten.slice(0, 3)}-${ten.slice(3, 6)}-${ten.slice(6)}`;
+}
+
+function toPhoneIdentifier(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  if (trimmed.startsWith('+')) {
+    const digits = trimmed.slice(1).replace(/\D/g, '');
+    if (digits.length < 10) return null;
+    return `+${digits}`;
+  }
+
+  const digits = trimmed.replace(/\D/g, '');
+  if (digits.length !== 10) return null;
+  return `+1${digits}`;
+}
+
 export default function SignInScreen() {
   const router = useRouter();
   const { signIn } = useAppAuth();
@@ -78,33 +108,65 @@ export default function SignInScreen() {
 function KeycloakSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onContinueGuest: () => void }) {
   const { loginWithPassword, loading, error } = useAppAuth();
   const router = useRouter();
-  const [countryCode, setCountryCode] = useState('+1');
   const [phone, setPhone] = useState('');
   const [showEmail, setShowEmail] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [awaitingCode, setAwaitingCode] = useState(false);
+  const [code, setCode] = useState('');
+  const [otpTarget, setOtpTarget] = useState('');
 
   async function handleSignIn() {
     const ok = await loginWithPassword?.(username, password);
     if (ok) router.replace('/' as any);
   }
 
+  function handleNextOtp() {
+    const identifier = toPhoneIdentifier(phone);
+    if (!identifier) {
+      Alert.alert('Invalid phone number', 'Enter a complete phone number (example: 123-456-7890).');
+      return;
+    }
+    setOtpTarget(identifier);
+    setAwaitingCode(true);
+  }
+
+  if (awaitingCode) {
+    return (
+      <View style={styles.card}>
+        <Text style={[styles.title, { color: isDark ? '#f8fafc' : '#111827' }]}>Enter your one time password (OTP)</Text>
+        <Text style={[styles.helperText, { marginBottom: 12 }]}>OTP was sent to {otpTarget}</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Verification code"
+          value={code}
+          onChangeText={setCode}
+          keyboardType="number-pad"
+        />
+        <TouchableOpacity style={styles.button} onPress={() => Alert.alert('OTP', 'OTP verification is not enabled for this sign-in mode yet.')}>
+          <Text style={styles.buttonText}>Verify Code</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.oauthBtn} onPress={() => Alert.alert('OTP', `A new OTP would be sent to ${otpTarget}`)}>
+          <Text style={styles.oauthText}>Request a new OTP</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   return (
-    <View style={[styles.card, { backgroundColor: isDark ? '#0f172a' : '#ffffff', borderColor: isDark ? '#334155' : '#e5e7eb' }]}>
+    <View style={styles.card}>
       <Text style={[styles.title, { color: isDark ? '#f8fafc' : '#111827' }]}>Sign In</Text>
 
-      <View style={styles.row}>
-        <TextInput style={[styles.input, styles.countryInput]} value={countryCode} onChangeText={setCountryCode} />
-        <TextInput
-          style={[styles.input, styles.flexInput]}
-          placeholder="Phone number"
-          value={phone}
-          onChangeText={setPhone}
-          keyboardType="phone-pad"
-        />
-      </View>
+      <TextInput
+        style={styles.input}
+        placeholder="123-456-7890"
+        value={phone}
+        onChangeText={(value) => setPhone(normalizePhoneInput(value))}
+        keyboardType="phone-pad"
+      />
+      <Text style={styles.helperText}>A one-time password will be sent to your phone for verification</Text>
 
-      <TouchableOpacity style={styles.button} onPress={() => Alert.alert('Next', 'Phone OTP is not enabled for this sign-in mode yet.')}>
+      <TouchableOpacity style={styles.button} onPress={handleNextOtp}>
         <Text style={styles.buttonText}>Next</Text>
       </TouchableOpacity>
 
@@ -164,20 +226,27 @@ function ClerkSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onConti
   const googleOAuth = require('@clerk/clerk-expo').useOAuth({ strategy: 'oauth_google' });
   const appleOAuth = require('@clerk/clerk-expo').useOAuth({ strategy: 'oauth_apple' });
   const router = useRouter();
-  const [countryCode, setCountryCode] = useState('+1');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [code, setCode] = useState('');
   const [awaitingCode, setAwaitingCode] = useState(false);
+  const [otpTarget, setOtpTarget] = useState('');
   const [showEmail, setShowEmail] = useState(false);
   const [loading, setLoading] = useState(false);
 
   async function handleRequestOtp() {
     if (!isLoaded) return;
+    const identifier = toPhoneIdentifier(phone);
+    if (!identifier) {
+      Alert.alert('Invalid phone number', 'Enter a complete phone number (example: 123-456-7890).');
+      return;
+    }
+
     setLoading(true);
     try {
-      await signIn.create({ strategy: 'phone_code', identifier: `${countryCode}${phone}` });
+      await signIn.create({ strategy: 'phone_code', identifier });
+      setOtpTarget(identifier);
       setAwaitingCode(true);
     } catch (err: unknown) {
       Alert.alert('OTP Request Failed', (err as Error).message);
@@ -234,17 +303,36 @@ function ClerkSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onConti
     }
   }
 
+  if (awaitingCode) {
+    return (
+      <View style={styles.card}>
+        <Text style={[styles.title, { color: isDark ? '#f8fafc' : '#111827' }]}>Enter your one time password (OTP)</Text>
+        <Text style={[styles.helperText, { marginBottom: 12 }]}>OTP was sent to {otpTarget}</Text>
+        <TextInput style={styles.input} placeholder="Verification code" value={code} onChangeText={setCode} keyboardType="number-pad" />
+        <TouchableOpacity style={[styles.button, loading && styles.buttonDisabled]} onPress={handleVerifyOtp} disabled={loading}>
+          {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Verify Code</Text>}
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.oauthBtn} onPress={handleRequestOtp} disabled={loading}>
+          <Text style={styles.oauthText}>Request a new OTP</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   return (
-    <View style={[styles.card, { backgroundColor: isDark ? '#0f172a' : '#ffffff', borderColor: isDark ? '#334155' : '#e5e7eb' }]}>
+    <View style={styles.card}>
       <Text style={[styles.title, { color: isDark ? '#f8fafc' : '#111827' }]}>Sign In</Text>
 
-      <View style={styles.row}>
-        <TextInput style={[styles.input, styles.countryInput]} value={countryCode} onChangeText={setCountryCode} />
-        <TextInput style={[styles.input, styles.flexInput]} placeholder="Phone number" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
-      </View>
-      {awaitingCode && <TextInput style={styles.input} placeholder="Verification code" value={code} onChangeText={setCode} keyboardType="number-pad" />}
-      <TouchableOpacity style={[styles.button, loading && styles.buttonDisabled]} onPress={awaitingCode ? handleVerifyOtp : handleRequestOtp} disabled={loading}>
-        {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>{awaitingCode ? 'Verify Code' : 'Next'}</Text>}
+      <TextInput
+        style={styles.input}
+        placeholder="123-456-7890"
+        value={phone}
+        onChangeText={(value) => setPhone(normalizePhoneInput(value))}
+        keyboardType="phone-pad"
+      />
+      <Text style={styles.helperText}>A one-time password will be sent to your phone for verification</Text>
+      <TouchableOpacity style={[styles.button, loading && styles.buttonDisabled]} onPress={handleRequestOtp} disabled={loading}>
+        {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Next</Text>}
       </TouchableOpacity>
 
       <View style={styles.dividerWrap}>
@@ -286,13 +374,10 @@ function ClerkSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onConti
 const styles = StyleSheet.create({
   container: { flex: 1, justifyContent: 'center', padding: 24 },
   card: {
-    borderRadius: 16,
-    padding: 24,
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 4,
-    borderWidth: 1,
+    width: '100%',
+    maxWidth: 420,
+    alignSelf: 'center',
+    paddingVertical: 8,
   },
   title: { fontSize: 28, fontWeight: '700', marginBottom: 12 },
   devNote: { fontSize: 13, textAlign: 'center', marginBottom: 20, lineHeight: 20 },
@@ -318,6 +403,7 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: { opacity: 0.6 },
   buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  helperText: { color: '#64748b', fontSize: 12, marginTop: -4, marginBottom: 12 },
   emailSwitchBtn: {
     marginTop: 8,
     marginBottom: 4,
