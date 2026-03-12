@@ -26,6 +26,7 @@ export default function ChargerDetail() {
   const [heartbeatMsg, setHeartbeatMsg] = useState('');
   const [configLoading, setConfigLoading] = useState(false);
   const [configMsg, setConfigMsg] = useState('');
+  const [resolvedChargerId, setResolvedChargerId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -38,7 +39,8 @@ export default function ChargerDetail() {
         client.getChargers().catch(() => []),
       ]);
       setStatus(chargerStatus);
-      const found = chargers.find((c) => c.id === id);
+      const found = chargers.find((c) => c.id === id || c.ocppId === id || c.ocppId === chargerStatus.ocppId);
+      setResolvedChargerId(found?.id ?? id ?? null);
       setChargerSite(found ? { id: found.site.id, name: found.site.name } : null);
       setSessions(recentSessions);
       setUptime(uptimeData);
@@ -59,10 +61,15 @@ export default function ChargerDetail() {
 
   async function handleRemoteStart() {
     setRemoteStartMsg('');
+    const targetId = resolvedChargerId ?? id;
+    if (!targetId) {
+      setRemoteStartMsg('Unable to resolve charger id for remote start');
+      return;
+    }
     setRemoteStartLoading(true);
     try {
       const token = await getToken();
-      const result = await createApiClient(token).remoteStartCharger(id!, { connectorId, idTag });
+      const result = await createApiClient(token).remoteStartCharger(targetId, { connectorId, idTag });
       setRemoteStartMsg(`Remote start command sent — charger responded: ${result.status}`);
       setTimeout(load, 1500);
     } catch (err: unknown) {
@@ -74,10 +81,15 @@ export default function ChargerDetail() {
 
   async function handleReset(type: 'Soft' | 'Hard') {
     setResetMsg('');
+    const targetId = resolvedChargerId ?? id;
+    if (!targetId) {
+      setResetMsg('Unable to resolve charger id for reset');
+      return;
+    }
     setResetLoading(true);
     try {
       const token = await getToken();
-      const result = await createApiClient(token).resetCharger(id!, type);
+      const result = await createApiClient(token).resetCharger(targetId, type);
       setResetMsg(`Reset command sent — charger responded: ${result.status}`);
       // Refresh status after a short delay
       setTimeout(load, 2000);
@@ -90,10 +102,15 @@ export default function ChargerDetail() {
 
   async function handleTriggerHeartbeat() {
     setHeartbeatMsg('');
+    const targetId = resolvedChargerId ?? id;
+    if (!targetId) {
+      setHeartbeatMsg('Unable to resolve charger id for heartbeat');
+      return;
+    }
     setHeartbeatLoading(true);
     try {
       const token = await getToken();
-      const result = await createApiClient(token).triggerHeartbeat(id!);
+      const result = await createApiClient(token).triggerHeartbeat(targetId);
       setHeartbeatMsg(`Heartbeat trigger sent — charger responded: ${result.status}`);
       setTimeout(load, 1200);
     } catch (err: unknown) {
@@ -105,10 +122,15 @@ export default function ChargerDetail() {
 
   async function handleGetConfiguration() {
     setConfigMsg('');
+    const targetId = resolvedChargerId ?? id;
+    if (!targetId) {
+      setConfigMsg('Unable to resolve charger id for configuration request');
+      return;
+    }
     setConfigLoading(true);
     try {
       const token = await getToken();
-      const result = await createApiClient(token).getChargerConfiguration(id!);
+      const result = await createApiClient(token).getChargerConfiguration(targetId);
       if ('error' in result && result.error) {
         setConfigMsg(`GetConfiguration failed: ${result.error}`);
       } else {
@@ -212,7 +234,7 @@ export default function ChargerDetail() {
               disabled={heartbeatLoading}
               className="rounded-md border border-brand-200 px-4 py-2 text-sm font-medium text-brand-700 hover:bg-brand-50 disabled:opacity-50"
             >
-              {heartbeatLoading ? 'Requesting…' : 'Request Heartbeat'}
+              {heartbeatLoading ? 'Triggering…' : 'Trigger Heartbeat'}
             </button>
             <button
               onClick={handleGetConfiguration}
