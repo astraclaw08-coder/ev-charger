@@ -207,7 +207,7 @@ function KeycloakSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onCo
         onChangeText={(value) => setPhone(normalizePhoneInput(value))}
         keyboardType="phone-pad"
       />
-      <Text style={styles.helperText}>A one-time password will be sent to your phone for verification</Text>
+      <Text style={[styles.helperText, styles.centerText]}>A code will be sent to your phone for verification</Text>
 
       <TouchableOpacity style={styles.button} onPress={handleNextOtp}>
         <Text style={styles.buttonText}>Next</Text>
@@ -415,7 +415,7 @@ function ClerkSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onConti
         onChangeText={(value) => setPhone(normalizePhoneInput(value))}
         keyboardType="phone-pad"
       />
-      <Text style={styles.helperText}>A one-time password will be sent to your phone for verification</Text>
+      <Text style={[styles.helperText, styles.centerText]}>A code will be sent to your phone for verification</Text>
       <TouchableOpacity style={[styles.button, loading && styles.buttonDisabled]} onPress={handleRequestOtp} disabled={loading}>
         {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Next</Text>}
       </TouchableOpacity>
@@ -464,7 +464,7 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     paddingVertical: 8,
   },
-  title: { fontSize: 28, fontWeight: '700', marginBottom: 12 },
+  title: { fontSize: 28, fontWeight: '700', marginBottom: 12, textAlign: 'center' },
   devNote: { fontSize: 13, textAlign: 'center', marginBottom: 20, lineHeight: 20 },
   input: {
     borderWidth: 1,
@@ -489,6 +489,7 @@ const styles = StyleSheet.create({
   buttonDisabled: { opacity: 0.6 },
   buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
   helperText: { color: '#64748b', fontSize: 12, marginTop: -4, marginBottom: 12 },
+  centerText: { textAlign: 'center' },
   otpTitle: { textAlign: 'center' },
   otpHelperText: { textAlign: 'center' },
   backBtn: {
