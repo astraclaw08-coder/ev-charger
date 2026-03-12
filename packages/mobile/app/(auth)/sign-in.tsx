@@ -70,7 +70,7 @@ function formatPhoneForDisplay(identifier: string) {
 
 export default function SignInScreen() {
   const router = useRouter();
-  const { signIn, signOut, continueAsGuest: continueAsGuestFromAuth } = useAppAuth();
+  const { signIn, continueAsGuest: continueAsGuestFromAuth } = useAppAuth();
   const { isDark } = useAppTheme();
 
   const continueAsGuest = () => {
@@ -80,10 +80,6 @@ export default function SignInScreen() {
     if (continueAsGuestFromAuth) {
       continueAsGuestFromAuth();
       return;
-    }
-
-    if (isDevMode) {
-      signOut();
     }
 
     router.replace('/(tabs)/index' as any);
