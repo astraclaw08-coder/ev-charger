@@ -18,6 +18,8 @@ const SERVICES = {
     name: 'api',
     port: 3001,
     cmd: ['npm', ['run', 'dev:api']],
+    startupGraceMs: 45000,
+    maxConsecutiveHealthFailures: 3,
     health: [{ type: 'http', url: 'http://127.0.0.1:3001/health', expect: ['"status":"ok"', '"db":"ok"'] }],
   },
   portal: {
@@ -155,6 +157,7 @@ class Supervisor {
     this.restartBackoffMs = {};
     this.server = null;
     this.stopping = false;
+    this.serviceMeta = {};
   }
 
   writeState() {
@@ -185,6 +188,7 @@ class Supervisor {
 
     this.children[name] = child;
     this.restartBackoffMs[name] = Math.min((this.restartBackoffMs[name] || 500) * 2, 15000);
+    this.serviceMeta[name] = { startedAt: Date.now(), consecutiveHealthFailures: 0 };
     log(`${name}: started pid=${child.pid}`);
 
     child.stdout.on('data', (d) => {
@@ -199,6 +203,7 @@ class Supervisor {
     child.on('exit', async (code, signal) => {
       if (this.children[name] !== child) return;
       delete this.children[name];
+      delete this.serviceMeta[name];
       this.healthState[name] = 'down';
       this.writeState();
       log(`${name}: exited code=${code} signal=${signal || 'none'}; scheduling restart`);
@@ -245,11 +250,31 @@ class Supervisor {
         }
 
         const prev = this.healthState[name];
-        this.healthState[name] = ok ? 'ok' : `fail:${detail}`;
-        if (!ok && prev !== this.healthState[name]) {
-          log(`${name}: health failed (${detail}), auto-restart`);
-          await this.restartService(name, `health:${detail}`);
+        const meta = this.serviceMeta[name] || { startedAt: Date.now(), consecutiveHealthFailures: 0 };
+
+        if (ok) {
+          meta.consecutiveHealthFailures = 0;
+          this.healthState[name] = 'ok';
+        } else {
+          meta.consecutiveHealthFailures += 1;
+          this.healthState[name] = `fail:${detail}`;
+
+          const startupGraceMs = svc.startupGraceMs || 15000;
+          const maxConsecutiveHealthFailures = svc.maxConsecutiveHealthFailures || 2;
+          const ageMs = Date.now() - meta.startedAt;
+          const inGrace = ageMs < startupGraceMs;
+          const shouldRestart = !inGrace && meta.consecutiveHealthFailures >= maxConsecutiveHealthFailures;
+
+          if (shouldRestart) {
+            log(`${name}: health failed (${detail}) x${meta.consecutiveHealthFailures}, auto-restart`);
+            meta.consecutiveHealthFailures = 0;
+            await this.restartService(name, `health:${detail}`);
+          } else if (prev !== this.healthState[name]) {
+            log(`${name}: health probe failed (${detail}) x${meta.consecutiveHealthFailures}${inGrace ? ' (within startup grace)' : ''}`);
+          }
         }
+
+        this.serviceMeta[name] = meta;
       }
 
       this.writeState();

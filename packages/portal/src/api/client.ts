@@ -331,6 +331,21 @@ export interface ChargerModelCatalogItem {
   updatedAt: string;
 }
 
+export interface AdminInAppNotificationCampaign {
+  id: string;
+  createdByOperatorId: string;
+  targetMode: 'all' | 'user_ids' | 'emails';
+  targetUserIds: string[];
+  targetEmails: string[];
+  title: string;
+  message: string;
+  actionLabel?: string | null;
+  actionUrl?: string | null;
+  deepLink?: string | null;
+  sentAt: string;
+  deliveryCount: number;
+}
+
 export interface SmartChargingGroup {
   id: string;
   name: string;
@@ -722,5 +737,27 @@ export function createApiClient(token: string | null | undefined) {
         method: 'POST',
         body: JSON.stringify(body),
       }),
+
+    sendInAppNotification: (body: {
+      targetMode: 'all' | 'user_ids' | 'emails';
+      userIds?: string[];
+      emails?: string[];
+      title: string;
+      message: string;
+      actionLabel?: string;
+      actionUrl?: string;
+      deepLink?: string;
+      reason?: string;
+    }) => request<{ id: string; sentAt: string; title: string; message: string; targetMode: string; deliveryCount: number }>(
+      '/admin/notifications/send',
+      token,
+      {
+        method: 'POST',
+        body: JSON.stringify(body),
+      },
+    ),
+
+    listInAppNotificationAudit: (limit = 40) =>
+      request<AdminInAppNotificationCampaign[]>(`/admin/notifications/audit?limit=${limit}`, token),
   };
 }

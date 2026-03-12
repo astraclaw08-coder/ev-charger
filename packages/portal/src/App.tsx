@@ -16,6 +16,7 @@ import CustomerSupport from './pages/CustomerSupport';
 import NetworkOps from './pages/NetworkOps';
 import UserManagement from './pages/UserManagement';
 import Settings from './pages/Settings';
+import Notifications from './pages/Notifications';
 import { ThemeProvider, usePortalTheme } from './theme/ThemeContext';
 
 const CLERK_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined;
@@ -42,6 +43,7 @@ function PortalRoutes() {
           <Route path="/network" element={<NetworkOps />} />
           <Route path="/users" element={<UserManagement />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/notifications" element={<Notifications />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Layout>

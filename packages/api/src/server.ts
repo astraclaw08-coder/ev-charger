@@ -11,6 +11,8 @@ import { adminSecurityRoutes } from './routes/adminSecurity';
 import { adminSettingsRoutes } from './routes/adminSettings';
 import { readModelRoutes } from './routes/readModels';
 import { smartChargingRoutes } from './routes/smartCharging';
+// Temporarily disabled until notification Prisma models/types are aligned.
+// import { notificationRoutes } from './routes/notifications';
 import { prisma } from '@ev-charger/shared';
 
 export async function buildServer() {
@@ -58,6 +60,7 @@ export async function buildServer() {
   await app.register(adminSettingsRoutes);
   await app.register(readModelRoutes);
   await app.register(smartChargingRoutes);
+  // await app.register(notificationRoutes);
 
   return app;
 }

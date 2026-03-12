@@ -246,6 +246,7 @@ model User {
   idTag           String    @unique // OCPP idTag for this driver (max 20 chars)
   sessions        Session[]
   payments        Payment[]
+  inAppNotificationDeliveries InAppNotificationDelivery[]
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 }
@@ -399,6 +400,39 @@ model AdminAuditEvent {
   @@index([operatorId, createdAt])
   @@index([action, createdAt])
   @@index([targetUserId])
+}
+
+model InAppNotificationCampaign {
+  id               String   @id @default(uuid())
+  createdByOperatorId String
+  targetMode       String
+  targetUserIds    String[]
+  targetEmails     String[]
+  title            String
+  message          String
+  actionLabel      String?
+  actionUrl        String?
+  deepLink         String?
+  sentAt           DateTime @default(now())
+  createdAt        DateTime @default(now())
+  deliveries       InAppNotificationDelivery[]
+
+  @@index([createdByOperatorId, sentAt])
+  @@index([sentAt])
+}
+
+model InAppNotificationDelivery {
+  id          String   @id @default(uuid())
+  campaignId  String
+  campaign    InAppNotificationCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  readAt      DateTime?
+  createdAt   DateTime @default(now())
+
+  @@unique([campaignId, userId])
+  @@index([userId, createdAt])
+  @@index([campaignId, createdAt])
 }
 
 model PortalSettings {

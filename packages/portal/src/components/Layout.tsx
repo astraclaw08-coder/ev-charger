@@ -68,6 +68,7 @@ const NAV = [
   { label: 'Analytics', href: '/analytics', Icon: AnalyticsIcon },
   { label: 'Support', href: '/support', Icon: SupportIcon },
   { label: 'Network Ops', href: '/network', Icon: ToolsIcon },
+  { label: 'Notifications', href: '/notifications', Icon: SupportIcon },
   { label: 'Settings', href: '/settings', Icon: SettingsIcon },
 ];
 
