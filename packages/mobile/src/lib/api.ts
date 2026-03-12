@@ -151,6 +151,7 @@ export interface ActiveSession {
 
 export interface UserProfile {
   id: string;
+  idTag?: string;
   name: string | null;
   email: string;
   phone: string | null;
@@ -327,10 +328,10 @@ export const api = {
   },
 
   sessions: {
-    start(chargerId: string, connectorId: number) {
+    start(chargerId: string, connectorId: number, idTag?: string) {
       return request<{ accepted: boolean; chargerId: string; connectorId: number }>('/sessions/start', {
         method: 'POST',
-        body: JSON.stringify({ chargerId, connectorId }),
+        body: JSON.stringify({ chargerId, connectorId, ...(idTag ? { idTag } : {}) }),
       });
     },
     stop(sessionId: string) {

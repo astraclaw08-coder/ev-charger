@@ -7,12 +7,12 @@ import { computeSessionAmounts } from '../lib/sessionBilling';
 export async function sessionRoutes(app: FastifyInstance) {
   // POST /sessions/start — driver initiates a remote start
   app.post<{
-    Body: { chargerId: string; connectorId: number };
+    Body: { chargerId: string; connectorId: number; idTag?: string };
   }>('/sessions/start', {
     preHandler: requireAuth,
   }, async (req, reply) => {
     const user = req.currentUser!;
-    const { chargerId, connectorId } = req.body;
+    const { chargerId, connectorId, idTag: requestedIdTag } = req.body;
 
     const charger = await prisma.charger.findUnique({
       where: { id: chargerId },
@@ -31,7 +31,14 @@ export async function sessionRoutes(app: FastifyInstance) {
       });
     }
 
-    const status = await remoteStart(charger.ocppId, connectorId, user.idTag);
+    const appEnv = (process.env.APP_ENV ?? process.env.NODE_ENV ?? '').toLowerCase();
+    const idTag = requestedIdTag?.trim() || user.idTag;
+
+    if (appEnv !== 'development' && requestedIdTag && requestedIdTag.trim() !== user.idTag) {
+      return reply.status(403).send({ error: 'idTag override is not allowed outside development' });
+    }
+
+    const status = await remoteStart(charger.ocppId, connectorId, idTag);
 
     if (status !== 'Accepted') {
       return reply.status(503).send({ error: 'Charger rejected the start request', status });

@@ -8,6 +8,7 @@ export async function profileRoutes(app: FastifyInstance) {
     const fresh = await prisma.user.findUnique({ where: { id: user.id } });
     return {
       id: fresh!.id,
+      idTag: fresh!.idTag,
       name: fresh!.name,
       email: fresh!.email,
       phone: fresh!.phone,
@@ -53,6 +54,7 @@ export async function profileRoutes(app: FastifyInstance) {
 
     return {
       id: updated.id,
+      idTag: updated.idTag,
       name: updated.name,
       email: updated.email,
       phone: updated.phone,

@@ -190,12 +190,6 @@ export default function ChargerDetailScreen() {
     enabled: !isGuest,
   });
 
-  const { data: profile } = useQuery({
-    queryKey: ['me-profile'],
-    queryFn: () => api.profile.get(),
-    enabled: !isGuest,
-  });
-
   useFocusEffect(
     React.useCallback(() => {
       refetch();
@@ -220,7 +214,7 @@ export default function ChargerDetailScreen() {
 
   const startMutation = useMutation({
     mutationFn: ({ chargerId, connectorId }: { chargerId: string; connectorId: number }) =>
-      api.sessions.start(chargerId, connectorId),
+      api.sessions.start(chargerId, connectorId, profile?.idTag),
     onMutate: ({ connectorId }) => {
       setStartingConnector(connectorId);
       setActivationMessage(null);
