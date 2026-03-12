@@ -18,6 +18,7 @@ import { useAppTheme } from '@/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useAppAuth } from '@/providers/AuthProvider';
+import { useChargingNotifications } from '@/providers/ChargingNotificationsProvider';
 
 type DriverProfile = {
   name: string;
@@ -54,6 +55,7 @@ export default function ProfileScreen() {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const queryClient = useQueryClient();
   const { isGuest, signOut } = useAppAuth();
+  const { unreadCount } = useChargingNotifications();
 
   const { data, isLoading } = useQuery({
     queryKey: ['me-profile'],
@@ -144,21 +146,42 @@ export default function ProfileScreen() {
     >
       <View style={styles.headerRow}>
         <Text style={[styles.title, { color: isDark ? '#f9fafb' : '#111827' }]}>Driver Profile</Text>
-        <TouchableOpacity
-          onPress={toggleTheme}
-          accessibilityRole="button"
-          accessibilityLabel={`Theme: ${currentThemeLabel}. Tap to switch theme`}
-          style={[
-            styles.themeIconBtn,
-            {
-              backgroundColor: isDark ? '#111827' : '#ffffff',
-              borderColor: isDark ? '#374151' : '#d1d5db',
-            },
-          ]}
-        >
-          <Ionicons name={currentThemeIcon as any} size={16} color={isDark ? '#f9fafb' : '#111827'} />
-          <Text style={[styles.themeIconText, { color: isDark ? '#f9fafb' : '#111827' }]}>{currentThemeLabel}</Text>
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity
+            onPress={() => router.push('/notifications' as any)}
+            accessibilityRole="button"
+            accessibilityLabel="Open charging notifications"
+            style={[
+              styles.bellBtn,
+              {
+                backgroundColor: isDark ? '#111827' : '#ffffff',
+                borderColor: isDark ? '#374151' : '#d1d5db',
+              },
+            ]}
+          >
+            <Ionicons name="notifications-outline" size={18} color={isDark ? '#f9fafb' : '#111827'} />
+            {unreadCount > 0 ? (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+              </View>
+            ) : null}
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={toggleTheme}
+            accessibilityRole="button"
+            accessibilityLabel={`Theme: ${currentThemeLabel}. Tap to switch theme`}
+            style={[
+              styles.themeIconBtn,
+              {
+                backgroundColor: isDark ? '#111827' : '#ffffff',
+                borderColor: isDark ? '#374151' : '#d1d5db',
+              },
+            ]}
+          >
+            <Ionicons name={currentThemeIcon as any} size={16} color={isDark ? '#f9fafb' : '#111827'} />
+            <Text style={[styles.themeIconText, { color: isDark ? '#f9fafb' : '#111827' }]}>{currentThemeLabel}</Text>
+          </TouchableOpacity>
+        </View>
       </View>
       <Text style={[styles.subtitle, { color: isDark ? '#9ca3af' : '#6b7280' }]}>Set your details once and use them across devices.</Text>
 
@@ -285,8 +308,30 @@ const styles = StyleSheet.create({
   content: { padding: 16, paddingBottom: 36 },
   guestWrap: { flex: 1, padding: 16, justifyContent: 'center' },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   title: { fontSize: 24, fontWeight: '800' },
   subtitle: { fontSize: 13, marginBottom: 10 },
+  bellBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 999,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    paddingHorizontal: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ef4444',
+  },
+  badgeText: { color: '#fff', fontSize: 10, fontWeight: '800' },
   themeIconBtn: {
     flexDirection: 'row',
     alignItems: 'center',

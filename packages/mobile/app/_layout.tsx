@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StripeProvider } from '@stripe/stripe-react-native';
 
 import { AuthProvider } from '@/providers/AuthProvider';
+import { ChargingNotificationsProvider } from '@/providers/ChargingNotificationsProvider';
 import { ThemeProvider, useAppTheme } from '@/theme';
 
 const queryClient = new QueryClient({
@@ -23,8 +24,10 @@ function AppShell() {
       <QueryClientProvider client={queryClient}>
         <StripeProvider publishableKey={STRIPE_KEY}>
           <AuthProvider>
-            <Stack screenOptions={{ headerShown: false }} />
-            <StatusBar style={isDark ? 'light' : 'dark'} />
+            <ChargingNotificationsProvider>
+              <Stack screenOptions={{ headerShown: false }} />
+              <StatusBar style={isDark ? 'light' : 'dark'} />
+            </ChargingNotificationsProvider>
           </AuthProvider>
         </StripeProvider>
       </QueryClientProvider>
