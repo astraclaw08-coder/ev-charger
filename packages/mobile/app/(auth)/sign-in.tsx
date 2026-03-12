@@ -160,11 +160,20 @@ function KeycloakSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onCo
   if (awaitingCode) {
     return (
       <View style={styles.card}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => { setAwaitingCode(false); setCode(''); }}>
-          <Ionicons name="arrow-back" size={20} color={isDark ? '#f8fafc' : '#111827'} />
+        <TouchableOpacity
+          style={[
+            styles.backBtn,
+            {
+              backgroundColor: isDark ? '#111827' : '#ffffff',
+              borderColor: isDark ? '#334155' : '#d1d5db',
+            },
+          ]}
+          onPress={() => { setAwaitingCode(false); setCode(''); }}
+        >
+          <Ionicons name="arrow-back" size={18} color={isDark ? '#f8fafc' : '#111827'} />
         </TouchableOpacity>
-        <Text style={[styles.title, { color: isDark ? '#f8fafc' : '#111827' }]}>Enter Your Code</Text>
-        <Text style={[styles.helperText, { marginBottom: 12 }]}>Code was sent to {formatPhoneForDisplay(otpTarget)}</Text>
+        <Text style={[styles.title, styles.otpTitle, { color: isDark ? '#f8fafc' : '#111827' }]}>Enter Your Code</Text>
+        <Text style={[styles.helperText, styles.otpHelperText, { marginBottom: 12 }]}>Code was sent to {formatPhoneForDisplay(otpTarget)}</Text>
         <Pressable style={styles.codeDotsWrap} onPress={() => {}}>
           {Array.from({ length: 5 }).map((_, idx) => (
             <View key={`kc-dot-${idx}`} style={styles.codeDot}>
@@ -358,11 +367,20 @@ function ClerkSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onConti
   if (awaitingCode) {
     return (
       <View style={styles.card}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => { setAwaitingCode(false); setCode(''); }}>
-          <Ionicons name="arrow-back" size={20} color={isDark ? '#f8fafc' : '#111827'} />
+        <TouchableOpacity
+          style={[
+            styles.backBtn,
+            {
+              backgroundColor: isDark ? '#111827' : '#ffffff',
+              borderColor: isDark ? '#334155' : '#d1d5db',
+            },
+          ]}
+          onPress={() => { setAwaitingCode(false); setCode(''); }}
+        >
+          <Ionicons name="arrow-back" size={18} color={isDark ? '#f8fafc' : '#111827'} />
         </TouchableOpacity>
-        <Text style={[styles.title, { color: isDark ? '#f8fafc' : '#111827' }]}>Enter Your Code</Text>
-        <Text style={[styles.helperText, { marginBottom: 12 }]}>Code was sent to {formatPhoneForDisplay(otpTarget)}</Text>
+        <Text style={[styles.title, styles.otpTitle, { color: isDark ? '#f8fafc' : '#111827' }]}>Enter Your Code</Text>
+        <Text style={[styles.helperText, styles.otpHelperText, { marginBottom: 12 }]}>Code was sent to {formatPhoneForDisplay(otpTarget)}</Text>
         <Pressable style={styles.codeDotsWrap}>
           {Array.from({ length: 5 }).map((_, idx) => (
             <View key={`otp-dot-${idx}`} style={styles.codeDot}>
@@ -471,7 +489,18 @@ const styles = StyleSheet.create({
   buttonDisabled: { opacity: 0.6 },
   buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
   helperText: { color: '#64748b', fontSize: 12, marginTop: -4, marginBottom: 12 },
-  backBtn: { marginBottom: 8, width: 28 },
+  otpTitle: { textAlign: 'center' },
+  otpHelperText: { textAlign: 'center' },
+  backBtn: {
+    marginBottom: 10,
+    width: 34,
+    height: 34,
+    borderRadius: 999,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'flex-start',
+  },
   codeDotsWrap: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 14 },
   codeDot: {
     width: 52,
