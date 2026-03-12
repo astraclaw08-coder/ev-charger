@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -45,6 +45,27 @@ function toPhoneIdentifier(value: string) {
   const digits = trimmed.replace(/\D/g, '');
   if (digits.length !== 10) return null;
   return `+1${digits}`;
+}
+
+function formatPhoneForDisplay(identifier: string) {
+  const trimmed = identifier.trim();
+  if (!trimmed) return trimmed;
+
+  if (trimmed.startsWith('+1')) {
+    const digits = trimmed.slice(2).replace(/\D/g, '').slice(0, 10);
+    if (digits.length === 10) {
+      return `+1 ${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
+    }
+  }
+
+  if (trimmed.startsWith('+')) {
+    const digits = trimmed.slice(1).replace(/\D/g, '');
+    if (digits.length > 3) {
+      return `+${digits.slice(0, digits.length - 10)} ${digits.slice(-10, -7)}-${digits.slice(-7, -4)}-${digits.slice(-4)}`;
+    }
+  }
+
+  return trimmed;
 }
 
 export default function SignInScreen() {
@@ -131,22 +152,35 @@ function KeycloakSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onCo
     setAwaitingCode(true);
   }
 
+  useEffect(() => {
+    if (!awaitingCode || code.length !== 5) return;
+    Alert.alert('OTP', 'OTP verification is not enabled for this sign-in mode yet.');
+  }, [awaitingCode, code]);
+
   if (awaitingCode) {
     return (
       <View style={styles.card}>
-        <Text style={[styles.title, { color: isDark ? '#f8fafc' : '#111827' }]}>Enter your one time password (OTP)</Text>
-        <Text style={[styles.helperText, { marginBottom: 12 }]}>OTP was sent to {otpTarget}</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Verification code"
-          value={code}
-          onChangeText={setCode}
-          keyboardType="number-pad"
-        />
-        <TouchableOpacity style={styles.button} onPress={() => Alert.alert('OTP', 'OTP verification is not enabled for this sign-in mode yet.')}>
-          <Text style={styles.buttonText}>Verify Code</Text>
+        <TouchableOpacity style={styles.backBtn} onPress={() => { setAwaitingCode(false); setCode(''); }}>
+          <Ionicons name="arrow-back" size={20} color={isDark ? '#f8fafc' : '#111827'} />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.oauthBtn} onPress={() => Alert.alert('OTP', `A new OTP would be sent to ${otpTarget}`)}>
+        <Text style={[styles.title, { color: isDark ? '#f8fafc' : '#111827' }]}>Enter Your Code</Text>
+        <Text style={[styles.helperText, { marginBottom: 12 }]}>Code was sent to {formatPhoneForDisplay(otpTarget)}</Text>
+        <Pressable style={styles.codeDotsWrap} onPress={() => {}}>
+          {Array.from({ length: 5 }).map((_, idx) => (
+            <View key={`kc-dot-${idx}`} style={styles.codeDot}>
+              <Text style={styles.codeDotText}>{code[idx] ? code[idx] : '•'}</Text>
+            </View>
+          ))}
+        </Pressable>
+        <TextInput
+          style={styles.hiddenCodeInput}
+          value={code}
+          onChangeText={(value) => setCode(value.replace(/\D/g, '').slice(0, 5))}
+          keyboardType="number-pad"
+          maxLength={5}
+          autoFocus
+        />
+        <TouchableOpacity style={styles.oauthBtn} onPress={() => Alert.alert('OTP', `A new OTP would be sent to ${formatPhoneForDisplay(otpTarget)}`)}>
           <Text style={styles.oauthText}>Request a new OTP</Text>
         </TouchableOpacity>
       </View>
@@ -276,7 +310,7 @@ function ClerkSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onConti
     setLoading(true);
     try {
       await signIn.create({ strategy: 'phone_code', identifier: otpTarget });
-      Alert.alert('OTP sent', `A new OTP was sent to ${otpTarget}`);
+      Alert.alert('OTP sent', `A new OTP was sent to ${formatPhoneForDisplay(otpTarget)}`);
     } catch (err: unknown) {
       Alert.alert('OTP Request Failed', (err as Error).message);
     } finally {
@@ -316,15 +350,35 @@ function ClerkSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onConti
     }
   }
 
+  useEffect(() => {
+    if (!awaitingCode || code.length !== 5 || loading) return;
+    handleVerifyOtp();
+  }, [awaitingCode, code]);
+
   if (awaitingCode) {
     return (
       <View style={styles.card}>
-        <Text style={[styles.title, { color: isDark ? '#f8fafc' : '#111827' }]}>Enter your one time password (OTP)</Text>
-        <Text style={[styles.helperText, { marginBottom: 12 }]}>OTP was sent to {otpTarget}</Text>
-        <TextInput style={styles.input} placeholder="Verification code" value={code} onChangeText={setCode} keyboardType="number-pad" />
-        <TouchableOpacity style={[styles.button, loading && styles.buttonDisabled]} onPress={handleVerifyOtp} disabled={loading}>
-          {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Verify Code</Text>}
+        <TouchableOpacity style={styles.backBtn} onPress={() => { setAwaitingCode(false); setCode(''); }}>
+          <Ionicons name="arrow-back" size={20} color={isDark ? '#f8fafc' : '#111827'} />
         </TouchableOpacity>
+        <Text style={[styles.title, { color: isDark ? '#f8fafc' : '#111827' }]}>Enter Your Code</Text>
+        <Text style={[styles.helperText, { marginBottom: 12 }]}>Code was sent to {formatPhoneForDisplay(otpTarget)}</Text>
+        <Pressable style={styles.codeDotsWrap}>
+          {Array.from({ length: 5 }).map((_, idx) => (
+            <View key={`otp-dot-${idx}`} style={styles.codeDot}>
+              <Text style={styles.codeDotText}>{code[idx] ? code[idx] : '•'}</Text>
+            </View>
+          ))}
+        </Pressable>
+        <TextInput
+          style={styles.hiddenCodeInput}
+          value={code}
+          onChangeText={(value) => setCode(value.replace(/\D/g, '').slice(0, 5))}
+          keyboardType="number-pad"
+          maxLength={5}
+          autoFocus
+        />
+        {loading ? <ActivityIndicator color="#10b981" style={{ marginBottom: 10 }} /> : null}
         <TouchableOpacity style={styles.oauthBtn} onPress={handleResendOtp} disabled={loading}>
           <Text style={styles.oauthText}>Request a new OTP</Text>
         </TouchableOpacity>
@@ -417,6 +471,25 @@ const styles = StyleSheet.create({
   buttonDisabled: { opacity: 0.6 },
   buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
   helperText: { color: '#64748b', fontSize: 12, marginTop: -4, marginBottom: 12 },
+  backBtn: { marginBottom: 8, width: 28 },
+  codeDotsWrap: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 14 },
+  codeDot: {
+    width: 52,
+    height: 52,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f8fafc',
+  },
+  codeDotText: { fontSize: 20, fontWeight: '700', color: '#111827' },
+  hiddenCodeInput: {
+    position: 'absolute',
+    opacity: 0,
+    width: 1,
+    height: 1,
+  },
   emailSwitchBtn: {
     marginTop: 8,
     marginBottom: 4,
