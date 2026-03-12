@@ -30,6 +30,9 @@ export function setGuestMode(guest: boolean) {
 
 async function authHeaders(): Promise<Record<string, string>> {
   if (_guestMode) {
+    if (process.env.EXPO_PUBLIC_ALLOW_GUEST_TRANSACT === '1') {
+      return { 'x-dev-user-id': DEV_USER_ID };
+    }
     return {};
   }
   if (isDevMode) {

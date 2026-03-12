@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { Link, useRouter } from 'expo-router';
 import { AntDesign, Ionicons } from '@expo/vector-icons';
-import { isDevMode, isKeycloakMode } from '@/lib/api';
+import { isDevMode, isKeycloakMode, setBearerToken, setGuestMode } from '@/lib/api';
 import { useAppAuth } from '@/providers/AuthProvider';
 import { useAppTheme } from '@/theme';
 
@@ -21,6 +21,12 @@ export default function SignInScreen() {
   const { signIn } = useAppAuth();
   const { isDark } = useAppTheme();
 
+  const continueAsGuest = () => {
+    setBearerToken(null);
+    setGuestMode(true);
+    router.replace('/(tabs)/index' as any);
+  };
+
   if (isKeycloakMode) {
     return (
       <KeyboardAvoidingView
@@ -28,7 +34,7 @@ export default function SignInScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <BackgroundDecor isDark={isDark} />
-        <KeycloakSignInForm isDark={isDark} />
+        <KeycloakSignInForm isDark={isDark} onContinueGuest={continueAsGuest} />
       </KeyboardAvoidingView>
     );
   }
@@ -64,12 +70,12 @@ export default function SignInScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <BackgroundDecor isDark={isDark} />
-      <ClerkSignInForm isDark={isDark} />
+      <ClerkSignInForm isDark={isDark} onContinueGuest={continueAsGuest} />
     </KeyboardAvoidingView>
   );
 }
 
-export function KeycloakSignInForm({ isDark }: { isDark: boolean }) {
+export function KeycloakSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onContinueGuest: () => void }) {
   const { loginWithPassword, loading, error } = useAppAuth();
   const router = useRouter();
   const [username, setUsername] = useState('');
@@ -132,12 +138,15 @@ export function KeycloakSignInForm({ isDark }: { isDark: boolean }) {
       <Link href="/(auth)/sign-up" style={styles.link}>
         Don't have an account? Create account
       </Link>
+      <TouchableOpacity style={styles.guestBtn} onPress={onContinueGuest}>
+        <Text style={styles.guestBtnText}>Continue as Guest</Text>
+      </TouchableOpacity>
     </View>
   );
 }
 
 // ── Clerk sign-in inner component (used when Clerk is configured) ─────────────
-export function ClerkSignInForm({ isDark }: { isDark: boolean }) {
+export function ClerkSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onContinueGuest: () => void }) {
   const { signIn, setActive, isLoaded } = require('@clerk/clerk-expo').useSignIn();
   const googleOAuth = require('@clerk/clerk-expo').useOAuth({ strategy: 'oauth_google' });
   const appleOAuth = require('@clerk/clerk-expo').useOAuth({ strategy: 'oauth_apple' });
@@ -288,6 +297,9 @@ export function ClerkSignInForm({ isDark }: { isDark: boolean }) {
       <Link href="/(auth)/sign-up" style={styles.link}>
         Don't have an account? Create account
       </Link>
+      <TouchableOpacity style={styles.guestBtn} onPress={onContinueGuest}>
+        <Text style={styles.guestBtnText}>Continue as Guest</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -433,6 +445,20 @@ const styles = StyleSheet.create({
     marginTop: 16,
     textAlign: 'center',
     color: '#10b981',
+    fontSize: 14,
+  },
+  guestBtn: {
+    marginTop: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    paddingVertical: 11,
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.6)',
+  },
+  guestBtnText: {
+    color: '#334155',
+    fontWeight: '700',
     fontSize: 14,
   },
 });

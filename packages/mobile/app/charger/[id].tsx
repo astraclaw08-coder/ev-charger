@@ -314,13 +314,6 @@ export default function ChargerDetailScreen() {
     connectorId: number,
     connectorStatus: Connector['status'],
   ) {
-    if (isGuest) {
-      Alert.alert('Sign in required', 'Please sign in to start a charging session.', [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Sign In', onPress: () => router.replace('/(auth)/sign-in' as any) },
-      ]);
-      return;
-    }
     if (activationPollRef.current) {
       clearTimeout(activationPollRef.current);
       activationPollRef.current = null;
@@ -362,7 +355,7 @@ export default function ChargerDetailScreen() {
   const hasBillablePricing = [pricePerKwhUsd, idleFeePerMinUsd, activationFeeUsd].some(
     (value) => Number.isFinite(value) && value > 0,
   );
-  const showPaymentSetupBanner = !isGuest && !hasDefaultPaymentMethod && hasBillablePricing;
+  const showPaymentSetupBanner = !hasDefaultPaymentMethod && hasBillablePricing;
 
   return (
     <>

@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { AntDesign, Ionicons } from '@expo/vector-icons';
-import { isDevMode } from '@/lib/api';
+import { isDevMode, setBearerToken, setGuestMode } from '@/lib/api';
 import { useAppAuth } from '@/providers/AuthProvider';
 
 type SignUpMethod = 'email' | 'phone';
@@ -160,6 +160,11 @@ export default function SignUpScreen() {
   }
 
   const goToSignIn = () => router.replace('/(auth)/sign-in' as any);
+  const continueAsGuest = () => {
+    setBearerToken(null);
+    setGuestMode(true);
+    router.replace('/(tabs)/index' as any);
+  };
 
   return (
     <KeyboardAvoidingView
@@ -289,6 +294,9 @@ export default function SignUpScreen() {
 
               <TouchableOpacity onPress={goToSignIn} style={styles.signInLinkBtn}>
                 <Text style={styles.link}>Already have an account? Sign in</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.guestBtn} onPress={continueAsGuest}>
+                <Text style={styles.guestBtnText}>Continue as Guest</Text>
               </TouchableOpacity>
             </>
           )}
@@ -449,6 +457,20 @@ const styles = StyleSheet.create({
   link: {
     textAlign: 'center',
     color: '#34d399',
+    fontSize: 14,
+  },
+  guestBtn: {
+    marginTop: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    paddingVertical: 11,
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.6)',
+  },
+  guestBtnText: {
+    color: '#334155',
+    fontWeight: '700',
     fontSize: 14,
   },
 });

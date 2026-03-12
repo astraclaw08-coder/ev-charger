@@ -34,10 +34,16 @@ function bearerToken(req: FastifyRequest) {
 async function getUserFromRequest(req: FastifyRequest) {
   const clerkSecretKey = process.env.CLERK_SECRET_KEY;
   const keycloakPrimary = process.env.AUTH_PROVIDER_PRIMARY === 'keycloak' && keycloakPasswordAuthEnabled();
+  const appEnv = (process.env.APP_ENV ?? process.env.NODE_ENV ?? '').toLowerCase();
 
-  // Dev mode: no CLERK_SECRET_KEY and no Keycloak — accept x-dev-user-id header (Prisma User.id)
+  // Dev override: allow explicit x-dev-user-id even when keycloak is primary (local QA/guest transact flows only)
+  const devUserId = req.headers['x-dev-user-id'] as string | undefined;
+  if (appEnv === 'development' && devUserId) {
+    return prisma.user.findUnique({ where: { id: devUserId } });
+  }
+
+  // Legacy dev mode: no CLERK_SECRET_KEY and no Keycloak — accept x-dev-user-id header (Prisma User.id)
   if (!clerkSecretKey && !keycloakPrimary) {
-    const devUserId = req.headers['x-dev-user-id'] as string | undefined;
     if (!devUserId) return null;
     return prisma.user.findUnique({ where: { id: devUserId } });
   }
@@ -116,7 +122,8 @@ async function getUserFromRequest(req: FastifyRequest) {
 
 export const requireAuth: preHandlerHookHandler = async (req, reply) => {
   const token = bearerToken(req);
-  if (!token) {
+  const devUserId = req.headers['x-dev-user-id'] as string | undefined;
+  if (!token && !devUserId) {
     return reply.status(401).send({ error: 'Unauthorized' });
   }
 
