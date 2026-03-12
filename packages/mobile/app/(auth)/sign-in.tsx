@@ -201,7 +201,7 @@ function KeycloakSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onCo
       <Text style={[styles.title, { color: isDark ? '#f8fafc' : '#111827' }]}>Sign In</Text>
 
       <TextInput
-        style={styles.input}
+        style={[styles.input, styles.centerText]}
         placeholder="123-456-7890"
         value={phone}
         onChangeText={(value) => setPhone(normalizePhoneInput(value))}
@@ -409,7 +409,7 @@ function ClerkSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onConti
       <Text style={[styles.title, { color: isDark ? '#f8fafc' : '#111827' }]}>Sign In</Text>
 
       <TextInput
-        style={styles.input}
+        style={[styles.input, styles.centerText]}
         placeholder="123-456-7890"
         value={phone}
         onChangeText={(value) => setPhone(normalizePhoneInput(value))}
