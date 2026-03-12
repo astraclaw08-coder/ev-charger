@@ -74,7 +74,7 @@ export default function SignInScreen() {
     return (
       <View style={[styles.container, { backgroundColor: isDark ? '#0b1220' : '#f3f4f6' }]}> 
         <Pressable style={StyleSheet.absoluteFill} onPress={continueAsGuest} />
-        <View style={[styles.card, { backgroundColor: isDark ? '#0f172a' : '#ffffff', borderColor: isDark ? '#334155' : '#e5e7eb' }]}>
+        <View style={styles.card}>
           <Text style={[styles.title, { color: isDark ? '#f8fafc' : '#111827' }]}>Sign In</Text>
           <Text style={[styles.devNote, { color: isDark ? '#cbd5e1' : '#334155' }]}>Dev Mode — No Clerk Key Set</Text>
           <TouchableOpacity
@@ -271,6 +271,19 @@ function ClerkSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onConti
     }
   }
 
+  async function handleResendOtp() {
+    if (!isLoaded || !otpTarget) return;
+    setLoading(true);
+    try {
+      await signIn.create({ strategy: 'phone_code', identifier: otpTarget });
+      Alert.alert('OTP sent', `A new OTP was sent to ${otpTarget}`);
+    } catch (err: unknown) {
+      Alert.alert('OTP Request Failed', (err as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function handlePasswordSignIn() {
     if (!isLoaded) return;
     setLoading(true);
@@ -312,7 +325,7 @@ function ClerkSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onConti
         <TouchableOpacity style={[styles.button, loading && styles.buttonDisabled]} onPress={handleVerifyOtp} disabled={loading}>
           {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Verify Code</Text>}
         </TouchableOpacity>
-        <TouchableOpacity style={styles.oauthBtn} onPress={handleRequestOtp} disabled={loading}>
+        <TouchableOpacity style={styles.oauthBtn} onPress={handleResendOtp} disabled={loading}>
           <Text style={styles.oauthText}>Request a new OTP</Text>
         </TouchableOpacity>
       </View>
