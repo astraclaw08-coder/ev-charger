@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState } from 'react-native';
-import { useRouter, useSegments } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { api, authMode, isDevMode, isKeycloakMode, setBearerToken, setGuestMode } from '@/lib/api';
 import { clearFavorites } from '@/lib/favorites';
 
@@ -49,7 +49,6 @@ function DevAuthProvider({ children }: { children: React.ReactNode }) {
 function KeycloakAuthProvider({ children }: { children: React.ReactNode }) {
   const SecureStore = require('expo-secure-store');
   const router = useRouter();
-  const segments = useSegments();
   const [session, setSession] = useState<PasswordSession | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -144,14 +143,6 @@ function KeycloakAuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (loading) return;
-    const inAuth = segments[0] === '(auth)';
-    if (session?.accessToken && inAuth) {
-      router.replace('/(tabs)/index' as any);
-    }
-  }, [loading, session?.accessToken, segments]);
-
-  useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
       if (state !== 'active' || !session) return;
       if (session.expiresAtMs <= Date.now() + 60_000) {
@@ -186,7 +177,7 @@ function KeycloakAuthProvider({ children }: { children: React.ReactNode }) {
     continueAsGuest: () => {
       setBearerToken(null);
       setGuestMode(true);
-      router.replace('/(tabs)/index' as any);
+      router.replace('/(tabs)' as any);
     },
     signOut: () => {
       clearSession().finally(() => {
@@ -224,16 +215,6 @@ try {
 function ClerkAuthGuard({ children }: { children: React.ReactNode }) {
   const auth = useAuth!();
   const router = useRouter();
-  const segments = useSegments();
-
-  useEffect(() => {
-    if (auth.isSignedIn === undefined) return;
-    const inAuth = segments[0] === '(auth)';
-
-    if (auth.isSignedIn && inAuth) {
-      router.replace('/(tabs)/index' as any);
-    }
-  }, [auth.isSignedIn, segments]);
 
   useEffect(() => {
     const guest = !auth.isSignedIn;
@@ -255,7 +236,7 @@ function ClerkAuthGuard({ children }: { children: React.ReactNode }) {
     continueAsGuest: () => {
       setBearerToken(null);
       setGuestMode(true);
-      router.replace('/(tabs)/index' as any);
+      router.replace('/(tabs)' as any);
     },
     signOut: () => {
       auth.signOut().finally(() => {

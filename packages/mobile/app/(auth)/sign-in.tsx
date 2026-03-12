@@ -82,7 +82,7 @@ export default function SignInScreen() {
       return;
     }
 
-    router.replace('/(tabs)/index' as any);
+    router.replace('/(tabs)' as any);
   };
 
   if (isKeycloakMode) {
@@ -106,7 +106,7 @@ export default function SignInScreen() {
             style={styles.button}
             onPress={() => {
               signIn?.();
-              router.replace('/' as any);
+              router.replace('/(tabs)' as any);
             }}
           >
             <Text style={styles.buttonText}>Continue to App</Text>
@@ -142,7 +142,7 @@ function KeycloakSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onCo
 
   async function handleSignIn() {
     const ok = await loginWithPassword?.(username, password);
-    if (ok) router.replace('/' as any);
+    if (ok) router.replace('/(tabs)' as any);
   }
 
   function handleNextOtp() {
@@ -308,7 +308,7 @@ function ClerkSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onConti
       const result = await signIn.attemptFirstFactor({ strategy: 'phone_code', code });
       if (result.status === 'complete') {
         await setActive({ session: result.createdSessionId });
-        router.replace('/' as any);
+        router.replace('/(tabs)' as any);
       }
     } catch (err: unknown) {
       Alert.alert('Verification Failed', (err as Error).message);
@@ -337,7 +337,7 @@ function ClerkSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onConti
       const result = await signIn.create({ identifier: email, password });
       if (result.status === 'complete') {
         await setActive({ session: result.createdSessionId });
-        router.replace('/' as any);
+        router.replace('/(tabs)' as any);
       }
     } catch (err: unknown) {
       Alert.alert('Sign In Failed', (err as Error).message);
@@ -353,7 +353,7 @@ function ClerkSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onConti
       const result = await start();
       if (result.createdSessionId) {
         await setActive({ session: result.createdSessionId });
-        router.replace('/' as any);
+        router.replace('/(tabs)' as any);
       }
     } catch (err: unknown) {
       Alert.alert('SSO Sign In Failed', (err as Error).message);
