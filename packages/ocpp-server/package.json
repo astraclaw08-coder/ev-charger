@@ -6,7 +6,8 @@
     "build": "tsc",
     "dev": "ts-node-dev --respawn src/index.ts",
     "start": "node dist/index.js",
-    "test:ocpp-sim": "ts-node src/scripts/simulator.ts"
+    "test:ocpp-sim": "ts-node src/scripts/simulator.ts",
+    "test:meter-values": "ts-node src/handlers/meterValues.selftest.ts"
   },
   "dependencies": {
     "@ev-charger/shared": "*",

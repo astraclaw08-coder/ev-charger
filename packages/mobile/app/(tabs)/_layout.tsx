@@ -78,7 +78,13 @@ export default function TabsLayout() {
   const { data, refetch } = useQuery({
     queryKey: ['sessions'],
     queryFn: () => api.sessions.list(20, 0),
-    refetchInterval: isGuest ? false : 5_000,
+    staleTime: 0,
+    refetchInterval: (query) => {
+      if (isGuest) return false;
+      const hasActive = Boolean(query.state.data?.sessions?.some((s: Session) => s.status === 'ACTIVE'));
+      return hasActive ? 2_000 : 5_000;
+    },
+    refetchIntervalInBackground: true,
     enabled: !isGuest,
   });
 

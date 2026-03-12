@@ -2,7 +2,7 @@ import { prisma } from '@ev-charger/shared';
 import { enqueueOcppEvent } from '../outbox';
 import type { MeterValuesRequest } from '@ev-charger/shared';
 
-function extractLatestEnergyWh(params: MeterValuesRequest): number | null {
+export function extractLatestEnergyWh(params: MeterValuesRequest): number | null {
   let latestTs = -1;
   let latestWh: number | null = null;
 
@@ -28,6 +28,29 @@ function extractLatestEnergyWh(params: MeterValuesRequest): number | null {
   return latestWh;
 }
 
+async function resolveActiveSession(
+  tx: any,
+  chargerId: string,
+  connectorId: number,
+  transactionId: number | undefined,
+) {
+  if (transactionId) {
+    const byTx = await tx.session.findUnique({ where: { transactionId } });
+    if (byTx) return byTx;
+  }
+
+  return tx.session.findFirst({
+    where: {
+      status: 'ACTIVE',
+      connector: {
+        chargerId,
+        connectorId,
+      },
+    },
+    orderBy: { startedAt: 'desc' },
+  });
+}
+
 export async function handleMeterValues(
   _client: any,
   chargerId: string,
@@ -36,21 +59,28 @@ export async function handleMeterValues(
   const { connectorId, transactionId, meterValue } = params;
   console.log(`[MeterValues] chargerId=${chargerId} connector=${connectorId} transactionId=${transactionId} readings=${meterValue.length}`);
 
-  // Update ACTIVE session with live meter/kWh so mobile app can show real-time energy.
   const latestWh = extractLatestEnergyWh(params);
 
   await prisma.$transaction(async (tx) => {
-    if (transactionId && latestWh != null) {
-      const session = await tx.session.findUnique({ where: { transactionId } });
+    if (latestWh != null) {
+      const session = await resolveActiveSession(tx, chargerId, connectorId, transactionId);
       if (session?.status === 'ACTIVE' && session.meterStart != null) {
-        const kwhDelivered = Math.max(0, (latestWh - session.meterStart) / 1000);
-        await tx.session.update({
-          where: { id: session.id },
-          data: {
-            meterStop: latestWh,
-            kwhDelivered,
-          },
-        });
+        const nextMeterStop = Math.max(latestWh, session.meterStop ?? latestWh);
+        const kwhDelivered = Math.max(0, (nextMeterStop - session.meterStart) / 1000);
+
+        const shouldWrite = session.meterStop == null || nextMeterStop > session.meterStop;
+        if (shouldWrite) {
+          await tx.session.update({
+            where: { id: session.id },
+            data: {
+              meterStop: nextMeterStop,
+              kwhDelivered,
+            },
+          });
+          console.log(`[MeterValues] live session updated sessionId=${session.id} meterStop=${nextMeterStop}Wh kWh=${kwhDelivered.toFixed(4)}`);
+        }
+      } else {
+        console.log(`[MeterValues] no ACTIVE session resolved for chargerId=${chargerId} connector=${connectorId} transactionId=${transactionId ?? 'n/a'}`);
       }
     }
 

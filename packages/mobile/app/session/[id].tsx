@@ -278,7 +278,7 @@ function LiveSessionView({
         )}
       </TouchableOpacity>
 
-      <Text style={styles.pollingNote}>Updating every 3 seconds</Text>
+      <Text style={styles.pollingNote}>Updating every ~1.5 seconds</Text>
     </View>
   );
 }
@@ -295,10 +295,12 @@ export default function SessionScreen() {
   const { data: session, isLoading } = useQuery({
     queryKey: ['session', id],
     queryFn: () => api.sessions.get(id),
+    staleTime: 0,
     refetchInterval: (query) => {
-      // Poll aggressively while active
-      return query.state.data?.status === 'ACTIVE' ? 3_000 : false;
+      // Poll aggressively while active for low-latency kWh updates.
+      return query.state.data?.status === 'ACTIVE' ? 1_500 : false;
     },
+    refetchIntervalInBackground: true,
   });
 
   const { data: chargerDetails } = useQuery({
@@ -316,7 +318,16 @@ export default function SessionScreen() {
     if (observed > lastObservedKwh) {
       setLastObservedKwh(observed);
     }
-  }, [session, lastObservedKwh]);
+
+    // Keep tabs/banner cache in sync with the freshest live session payload.
+    queryClient.setQueryData(['sessions'], (current: any) => {
+      if (!current?.sessions || !Array.isArray(current.sessions)) return current;
+      return {
+        ...current,
+        sessions: current.sessions.map((row: Session) => (row.id === session.id ? { ...row, ...session } : row)),
+      };
+    });
+  }, [session, lastObservedKwh, queryClient]);
 
   const stopMutation = useMutation({
     mutationFn: () => api.sessions.stop(id),
