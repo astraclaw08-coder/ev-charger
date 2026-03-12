@@ -246,7 +246,7 @@ function KeycloakSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onCo
             testID="keycloak-password-input"
           />
           {!!error && <Text style={{ color: '#dc2626', marginBottom: 8 }}>{error}</Text>}
-          <TouchableOpacity style={[styles.button, loading && styles.buttonDisabled]} onPress={handleSignIn} disabled={loading}>
+          <TouchableOpacity style={[styles.button, styles.emailSignInButton, loading && styles.buttonDisabled]} onPress={handleSignIn} disabled={loading}>
             {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Sign In</Text>}
           </TouchableOpacity>
         </>
@@ -438,7 +438,7 @@ function ClerkSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onConti
         <>
           <TextInput style={styles.input} placeholder="Email" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" />
           <TextInput style={styles.input} placeholder="Password" value={password} onChangeText={setPassword} secureTextEntry />
-          <TouchableOpacity style={[styles.button, loading && styles.buttonDisabled]} onPress={handlePasswordSignIn} disabled={loading}>
+          <TouchableOpacity style={[styles.button, styles.emailSignInButton, loading && styles.buttonDisabled]} onPress={handlePasswordSignIn} disabled={loading}>
             {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Sign In</Text>}
           </TouchableOpacity>
         </>
@@ -490,6 +490,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   buttonDisabled: { opacity: 0.6 },
+  emailSignInButton: { marginBottom: 10 },
   buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
   helperText: { color: '#64748b', fontSize: 12, marginTop: -4, marginBottom: 12 },
   centerText: { textAlign: 'center' },
