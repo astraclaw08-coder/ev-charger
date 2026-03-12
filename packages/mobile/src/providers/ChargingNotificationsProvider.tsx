@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useQuery } from '@tanstack/react-query';
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { AppState, Text, TouchableOpacity, View } from 'react-native';
+import { AppState, Linking, Text, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { api, type Session } from '@/lib/api';
 import { useAppAuth } from '@/providers/AuthProvider';
@@ -17,17 +17,22 @@ type NotificationEventType =
   | 'NEARING_COMPLETION'
   | 'SESSION_COMPLETED'
   | 'SESSION_FAILED'
-  | 'PAYMENT_ISSUE';
+  | 'PAYMENT_ISSUE'
+  | 'CUSTOM_ADMIN';
 
 export type ChargingNotification = {
   id: string;
   type: NotificationEventType;
-  sessionId: string;
+  sessionId?: string;
   title: string;
   body: string;
   siteName: string;
   createdAt: string;
   read: boolean;
+  actionLabel?: string | null;
+  actionUrl?: string | null;
+  deepLink?: string | null;
+  remoteId?: string;
 };
 
 type ChargingNotificationsContextValue = {
@@ -94,10 +99,7 @@ export function ChargingNotificationsProvider({ children }: { children: React.Re
     queryFn: () => api.sessions.list(20, 0),
     enabled: !isGuest,
     staleTime: 0,
-    refetchInterval: (query) => {
-      const hasActive = Boolean(query.state.data?.sessions?.some((s: Session) => s.status === 'ACTIVE'));
-      return hasActive ? 2_000 : 7_000;
-    },
+    refetchInterval: 7_000,
     refetchIntervalInBackground: true,
   });
 
