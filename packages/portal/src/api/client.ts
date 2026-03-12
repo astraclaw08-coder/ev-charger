@@ -322,6 +322,65 @@ export interface ChargerModelCatalogItem {
   updatedAt: string;
 }
 
+export interface SmartChargingGroup {
+  id: string;
+  name: string;
+  description?: string | null;
+  siteId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  chargers?: Array<{ id: string; ocppId: string; status: string }>;
+}
+
+export interface SmartChargingProfile {
+  id: string;
+  name: string;
+  scope: 'CHARGER' | 'GROUP' | 'SITE';
+  enabled: boolean;
+  priority: number;
+  defaultLimitKw: number | null;
+  schedule: unknown;
+  validFrom: string | null;
+  validTo: string | null;
+  siteId?: string | null;
+  chargerGroupId?: string | null;
+  chargerId?: string | null;
+  updatedAt: string;
+}
+
+export interface SmartChargingState {
+  id: string;
+  chargerId: string;
+  effectiveLimitKw: number;
+  fallbackApplied: boolean;
+  sourceScope: 'CHARGER' | 'GROUP' | 'SITE' | null;
+  sourceProfileId: string | null;
+  sourceWindowId: string | null;
+  sourceReason: string;
+  status: string;
+  lastAttemptAt: string;
+  lastAppliedAt: string | null;
+  lastError: string | null;
+  updatedAt: string;
+  charger: { id: string; ocppId: string; siteId: string; status: string };
+  sourceProfile?: { id: string; name: string; scope: 'CHARGER' | 'GROUP' | 'SITE' } | null;
+}
+
+export interface SmartChargingEffectiveResponse {
+  charger: { id: string; ocppId: string; siteId: string; groupId: string | null; status: string };
+  calculated: {
+    effectiveLimitKw: number;
+    fallbackApplied: boolean;
+    sourceScope: 'CHARGER' | 'GROUP' | 'SITE' | null;
+    sourceProfileId: string | null;
+    sourceWindowId: string | null;
+    sourceReason: string;
+    invalidProfileIds: string[];
+  };
+  persisted: SmartChargingState | null;
+  config: { safeFallbackLimitKw: number; ocppStackLevel: number; timezone: string };
+}
+
 // ─── Client ──────────────────────────────────────────────────────────────────
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
@@ -477,6 +536,104 @@ export function createApiClient(token: string | null | undefined) {
       request<{ configurationKey?: Array<{ key?: string; value?: string; readonly?: boolean }>; unknownKey?: string[]; error?: string }>(`/chargers/${id}/get-configuration`, token, {
         method: 'POST',
       }),
+
+    getSmartChargingConfig: () =>
+      request<{ safeFallbackLimitKw: number; ocppStackLevel: number; timezone: string }>('/smart-charging/config', token),
+
+    listSmartChargingGroups: (params?: { siteId?: string }) => {
+      const qs = new URLSearchParams();
+      if (params?.siteId) qs.set('siteId', params.siteId);
+      return request<SmartChargingGroup[]>(`/smart-charging/groups${qs.toString() ? `?${qs}` : ''}`, token);
+    },
+
+    createSmartChargingGroup: (body: { name: string; description?: string; siteId?: string }) =>
+      request<SmartChargingGroup>('/smart-charging/groups', token, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+
+    updateSmartChargingGroup: (id: string, body: { name?: string; description?: string; siteId?: string | null }) =>
+      request<SmartChargingGroup>(`/smart-charging/groups/${id}`, token, {
+        method: 'PUT',
+        body: JSON.stringify(body),
+      }),
+
+    deleteSmartChargingGroup: (id: string) =>
+      request<{ deleted: boolean }>(`/smart-charging/groups/${id}`, token, {
+        method: 'DELETE',
+      }),
+
+    assignChargerToSmartGroup: (groupId: string, chargerId: string) =>
+      request<{ assigned: boolean }>(`/smart-charging/groups/${groupId}/chargers/${chargerId}`, token, {
+        method: 'POST',
+      }),
+
+    unassignChargerFromSmartGroup: (groupId: string, chargerId: string) =>
+      request<{ unassigned: boolean }>(`/smart-charging/groups/${groupId}/chargers/${chargerId}`, token, {
+        method: 'DELETE',
+      }),
+
+    listSmartChargingProfiles: (params?: { scope?: 'CHARGER' | 'GROUP' | 'SITE'; siteId?: string; chargerGroupId?: string; chargerId?: string; enabled?: boolean }) => {
+      const qs = new URLSearchParams();
+      if (params?.scope) qs.set('scope', params.scope);
+      if (params?.siteId) qs.set('siteId', params.siteId);
+      if (params?.chargerGroupId) qs.set('chargerGroupId', params.chargerGroupId);
+      if (params?.chargerId) qs.set('chargerId', params.chargerId);
+      if (params?.enabled !== undefined) qs.set('enabled', String(params.enabled));
+      return request<SmartChargingProfile[]>(`/smart-charging/profiles${qs.toString() ? `?${qs}` : ''}`, token);
+    },
+
+    createSmartChargingProfile: (body: {
+      name: string;
+      scope: 'CHARGER' | 'GROUP' | 'SITE';
+      enabled?: boolean;
+      priority?: number;
+      defaultLimitKw?: number | null;
+      schedule?: unknown;
+      validFrom?: string;
+      validTo?: string;
+      siteId?: string;
+      chargerGroupId?: string;
+      chargerId?: string;
+    }) =>
+      request<{ profile: SmartChargingProfile }>(`/smart-charging/profiles`, token, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+
+    updateSmartChargingProfile: (id: string, body: {
+      name?: string;
+      enabled?: boolean;
+      priority?: number;
+      defaultLimitKw?: number | null;
+      schedule?: unknown;
+      validFrom?: string | null;
+      validTo?: string | null;
+    }) =>
+      request<{ profile: SmartChargingProfile }>(`/smart-charging/profiles/${id}`, token, {
+        method: 'PUT',
+        body: JSON.stringify(body),
+      }),
+
+    deleteSmartChargingProfile: (id: string) =>
+      request<{ deleted: boolean }>(`/smart-charging/profiles/${id}`, token, {
+        method: 'DELETE',
+      }),
+
+    getSmartChargingEffectiveLimit: (chargerId: string) =>
+      request<SmartChargingEffectiveResponse>(`/smart-charging/chargers/${chargerId}/effective`, token),
+
+    reconcileSmartChargingForCharger: (chargerId: string) =>
+      request<Record<string, unknown>>(`/smart-charging/chargers/${chargerId}/reconcile`, token, {
+        method: 'POST',
+      }),
+
+    listSmartChargingStates: (params?: { siteId?: string; status?: string }) => {
+      const qs = new URLSearchParams();
+      if (params?.siteId) qs.set('siteId', params.siteId);
+      if (params?.status) qs.set('status', params.status);
+      return request<SmartChargingState[]>(`/smart-charging/states${qs.toString() ? `?${qs}` : ''}`, token);
+    },
 
     listAdminUsers: (params?: { search?: string; max?: number }) => {
       const qs = new URLSearchParams();

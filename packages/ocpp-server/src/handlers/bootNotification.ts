@@ -1,6 +1,7 @@
 import { prisma } from '@ev-charger/shared';
 import { recordUptimeEvent } from '../uptimeEvents';
 import { enqueueOcppEvent } from '../outbox';
+import { applySmartChargingForCharger } from '../smartCharging';
 import type { BootNotificationRequest, BootNotificationResponse } from '@ev-charger/shared';
 
 export async function handleBootNotification(
@@ -29,6 +30,7 @@ export async function handleBootNotification(
   });
 
   await recordUptimeEvent(chargerId, 'ONLINE', { reason: 'BootNotification accepted' });
+  await applySmartChargingForCharger(chargerId, 'boot_notification');
 
   return {
     currentTime: new Date().toISOString(),

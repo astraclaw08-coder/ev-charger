@@ -82,3 +82,16 @@ export async function getConfiguration(
     return { error: 'GetConfiguration failed' };
   }
 }
+
+export async function setChargingProfile(
+  ocppId: string,
+  profile: Record<string, unknown>,
+): Promise<'Accepted' | 'Rejected' | 'NotSupported'> {
+  try {
+    const data = await post<{ status: string }>('/set-charging-profile', { ocppId, profile });
+    return data.status as 'Accepted' | 'Rejected' | 'NotSupported';
+  } catch (err) {
+    console.error('[OcppClient] setChargingProfile failed:', err);
+    return 'Rejected';
+  }
+}

@@ -1,6 +1,7 @@
 import { prisma } from '@ev-charger/shared';
 import { recordUptimeEvent } from '../uptimeEvents';
 import { enqueueOcppEvent } from '../outbox';
+import { applySmartChargingForCharger } from '../smartCharging';
 import type { HeartbeatResponse } from '@ev-charger/shared';
 
 export async function handleHeartbeat(
@@ -30,6 +31,7 @@ export async function handleHeartbeat(
 
   if (shouldRecover) {
     await recordUptimeEvent(chargerId, 'RECOVERED', { reason: 'Heartbeat restored' });
+    await applySmartChargingForCharger(chargerId, 'heartbeat_recovered');
   }
 
   return { currentTime: now.toISOString() };
