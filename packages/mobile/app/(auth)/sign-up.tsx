@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -17,22 +17,23 @@ import { AntDesign, Ionicons } from '@expo/vector-icons';
 import { isDevMode, setBearerToken, setGuestMode } from '@/lib/api';
 import { useAppAuth } from '@/providers/AuthProvider';
 
-type SignUpMethod = 'email' | 'phone';
 type VerifyMethod = 'email_code' | 'phone_code';
 
 export default function SignUpScreen() {
   const router = useRouter();
   const { signIn } = useAppAuth();
   const { isDark } = useAppTheme();
+
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
-  const [method, setMethod] = useState<SignUpMethod>('email');
-  const [email, setEmail] = useState('');
+  const [countryCode, setCountryCode] = useState('+1');
   const [phone, setPhone] = useState('');
+  const [showEmail, setShowEmail] = useState(false);
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [code, setCode] = useState('');
   const [pendingVerify, setPendingVerify] = useState(false);
-  const [verifyMethod, setVerifyMethod] = useState<VerifyMethod>('email_code');
+  const [verifyMethod, setVerifyMethod] = useState<VerifyMethod>('phone_code');
   const [verifyTargetLabel, setVerifyTargetLabel] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -56,48 +57,63 @@ export default function SignUpScreen() {
     // Clerk not loaded
   }
 
-  const primaryIdentifier = useMemo(() => (method === 'email' ? email.trim() : phone.trim()), [method, email, phone]);
+  const continueAsGuest = () => {
+    setBearerToken(null);
+    setGuestMode(true);
+    router.replace('/(tabs)/index' as any);
+  };
 
-  async function handleSignUp() {
+  async function handleSignUpPhoneOtp() {
     if (isDevMode) {
       signIn?.();
       router.replace('/' as any);
       return;
     }
-
     if (!isLoaded || !signUp) {
       Alert.alert('Error', 'Clerk is not configured. Set EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY.');
       return;
     }
-    if (!primaryIdentifier || (method === 'email' && !password)) {
-      Alert.alert('Error', method === 'email' ? 'Email and password are required.' : 'Phone is required.');
-      return;
-    }
-
-    if (method === 'phone' && !/^\+?[0-9]{8,15}$/.test(primaryIdentifier.replace(/[\s()-]/g, ''))) {
-      Alert.alert('Invalid phone', 'Use a valid phone number (include country code, e.g. +13105551234).');
+    const fullPhone = `${countryCode}${phone}`.trim();
+    if (!phone.trim()) {
+      Alert.alert('Error', 'Phone number is required.');
       return;
     }
 
     setLoading(true);
     try {
-      await signUp.create({
-        firstName,
-        lastName,
-        ...(method === 'email'
-          ? { emailAddress: primaryIdentifier, password }
-          : { phoneNumber: primaryIdentifier }),
-      });
+      await signUp.create({ firstName, lastName, phoneNumber: fullPhone });
+      await signUp.preparePhoneNumberVerification({ strategy: 'phone_code' });
+      setVerifyMethod('phone_code');
+      setVerifyTargetLabel(fullPhone);
+      setPendingVerify(true);
+    } catch (err: unknown) {
+      Alert.alert('Sign Up Failed', (err as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }
 
-      if (method === 'email') {
-        await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
-        setVerifyMethod('email_code');
-      } else {
-        await signUp.preparePhoneNumberVerification({ strategy: 'phone_code' });
-        setVerifyMethod('phone_code');
-      }
+  async function handleSignUpEmail() {
+    if (isDevMode) {
+      signIn?.();
+      router.replace('/' as any);
+      return;
+    }
+    if (!isLoaded || !signUp) {
+      Alert.alert('Error', 'Clerk is not configured. Set EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY.');
+      return;
+    }
+    if (!email.trim() || !password.trim()) {
+      Alert.alert('Error', 'Email and password are required.');
+      return;
+    }
 
-      setVerifyTargetLabel(primaryIdentifier);
+    setLoading(true);
+    try {
+      await signUp.create({ firstName, lastName, emailAddress: email.trim(), password });
+      await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
+      setVerifyMethod('email_code');
+      setVerifyTargetLabel(email.trim());
       setPendingVerify(true);
     } catch (err: unknown) {
       Alert.alert('Sign Up Failed', (err as Error).message);
@@ -134,11 +150,11 @@ export default function SignUpScreen() {
       router.replace('/' as any);
       return;
     }
-
     if (!isLoaded || !setActive) {
       Alert.alert('Error', 'Clerk is not configured.');
       return;
     }
+
     const startFlow = provider === 'google' ? startGoogleFlow : startAppleFlow;
     if (!startFlow) {
       Alert.alert('Unavailable', `${provider === 'google' ? 'Google' : 'Apple'} SSO is not configured.`);
@@ -151,8 +167,6 @@ export default function SignUpScreen() {
       if (result.createdSessionId) {
         await setActive({ session: result.createdSessionId });
         router.replace('/' as any);
-      } else {
-        Alert.alert('Sign up incomplete', 'Additional verification may be required in your auth provider settings.');
       }
     } catch (err: unknown) {
       Alert.alert('SSO Sign Up Failed', (err as Error).message);
@@ -161,238 +175,107 @@ export default function SignUpScreen() {
     }
   }
 
-  const goToSignIn = () => router.replace('/(auth)/sign-in' as any);
-  const continueAsGuest = () => {
-    setBearerToken(null);
-    setGuestMode(true);
-    router.replace('/(tabs)/index' as any);
-  };
-
   return (
     <KeyboardAvoidingView
-      style={[styles.container, { backgroundColor: isDark ? '#0b1220' : '#e5e7eb' }]}
+      style={[styles.container, { backgroundColor: isDark ? '#0b1220' : '#f3f4f6' }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <View style={[styles.backdrop, { backgroundColor: isDark ? 'rgba(11,18,32,0.96)' : 'rgba(229,231,235,0.96)' }]}>
-        <Pressable style={styles.backdropDismissHitArea} onPress={goToSignIn} />
-        <View style={[styles.card, { backgroundColor: isDark ? 'rgba(255,255,255,0.82)' : 'rgba(51,65,85,0.78)', borderColor: isDark ? '#cbd5e1' : '#94a3b8' }]}>
-          {pendingVerify ? (
-            <>
-              <Text style={[styles.title, { color: isDark ? '#111827' : '#f8fafc' }]}>Verify {verifyMethod === 'email_code' ? 'Email' : 'Phone'}</Text>
-              <Text style={[styles.subtitle, { color: isDark ? '#334155' : '#cbd5e1' }]}>Enter the code sent to {verifyTargetLabel}</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Verification code"
-                placeholderTextColor="#6b7280"
-                value={code}
-                onChangeText={setCode}
-                keyboardType="number-pad"
-              />
-              <TouchableOpacity
-                style={[styles.button, loading && styles.buttonDisabled]}
-                onPress={handleVerify}
-                disabled={loading}
-              >
-                {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Verify</Text>}
-              </TouchableOpacity>
-            </>
-          ) : (
-            <>
-              <Text style={[styles.title, { color: isDark ? '#111827' : '#f8fafc' }]}>Create Account</Text>
-              <Text style={[styles.subtitle, { color: isDark ? '#334155' : '#cbd5e1' }]}>Sign up with phone, email, or SSO.</Text>
+      <Pressable style={StyleSheet.absoluteFill} onPress={continueAsGuest} />
+      <View style={[styles.card, { backgroundColor: isDark ? 'rgba(255,255,255,0.84)' : 'rgba(30,41,59,0.8)', borderColor: isDark ? '#d1d5db' : '#94a3b8' }]}> 
+        {pendingVerify ? (
+          <>
+            <Text style={[styles.title, { color: isDark ? '#111827' : '#f8fafc' }]}>Verify {verifyMethod === 'email_code' ? 'Email' : 'Phone'}</Text>
+            <Text style={[styles.subtitle, { color: isDark ? '#334155' : '#cbd5e1' }]}>Enter the code sent to {verifyTargetLabel}</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Verification code"
+              value={code}
+              onChangeText={setCode}
+              keyboardType="number-pad"
+            />
+            <TouchableOpacity style={[styles.button, loading && styles.buttonDisabled]} onPress={handleVerify} disabled={loading}>
+              {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Verify</Text>}
+            </TouchableOpacity>
+          </>
+        ) : (
+          <>
+            <Text style={[styles.title, { color: isDark ? '#111827' : '#f8fafc' }]}>Create Account</Text>
 
-              <View style={styles.methodSwitch}>
-                <TouchableOpacity
-                  style={[styles.methodBtn, method === 'email' && styles.methodBtnActive]}
-                  onPress={() => setMethod('email')}
-                >
-                  <Text style={[styles.methodText, method === 'email' && styles.methodTextActive]}>Email</Text>
+            <View style={styles.row}>
+              <TextInput style={[styles.input, styles.halfInput]} placeholder="First name" value={firstName} onChangeText={setFirstName} />
+              <TextInput style={[styles.input, styles.halfInput]} placeholder="Last name" value={lastName} onChangeText={setLastName} />
+            </View>
+
+            <View style={styles.row}>
+              <TextInput style={[styles.input, styles.countryInput]} value={countryCode} onChangeText={setCountryCode} />
+              <TextInput style={[styles.input, styles.flexInput]} placeholder="Phone number" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
+            </View>
+
+            <TouchableOpacity style={[styles.button, loading && styles.buttonDisabled]} onPress={handleSignUpPhoneOtp} disabled={loading}>
+              {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Continue with Phone OTP</Text>}
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.emailSwitchBtn} onPress={() => setShowEmail((v) => !v)}>
+              <Text style={styles.emailSwitchText}>Sign up with Email</Text>
+            </TouchableOpacity>
+
+            {showEmail && (
+              <>
+                <TextInput style={styles.input} placeholder="Email" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" />
+                <TextInput style={styles.input} placeholder="Password" value={password} onChangeText={setPassword} secureTextEntry />
+                <TouchableOpacity style={[styles.button, loading && styles.buttonDisabled]} onPress={handleSignUpEmail} disabled={loading}>
+                  {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Create Account</Text>}
                 </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.methodBtn, method === 'phone' && styles.methodBtnActive]}
-                  onPress={() => setMethod('phone')}
-                >
-                  <Text style={[styles.methodText, method === 'phone' && styles.methodTextActive]}>Phone</Text>
-                </TouchableOpacity>
-              </View>
+              </>
+            )}
 
-              <View style={styles.row}>
-                <TextInput
-                  style={[styles.input, styles.halfInput]}
-                  placeholder="First name"
-                  placeholderTextColor="#6b7280"
-                  value={firstName}
-                  onChangeText={setFirstName}
-                />
-                <TextInput
-                  style={[styles.input, styles.halfInput]}
-                  placeholder="Last name"
-                  placeholderTextColor="#6b7280"
-                  value={lastName}
-                  onChangeText={setLastName}
-                />
-              </View>
+            <View style={styles.dividerWrap}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>OR</Text>
+              <View style={styles.dividerLine} />
+            </View>
 
-              {method === 'email' ? (
-                <TextInput
-                  style={styles.input}
-                  placeholder="Email"
-                  placeholderTextColor="#6b7280"
-                  value={email}
-                  onChangeText={setEmail}
-                  autoCapitalize="none"
-                  keyboardType="email-address"
-                  autoComplete="email"
-                />
-              ) : (
-                <TextInput
-                  style={styles.input}
-                  placeholder="Phone (+1...)"
-                  placeholderTextColor="#6b7280"
-                  value={phone}
-                  onChangeText={setPhone}
-                  keyboardType="phone-pad"
-                  autoComplete="tel"
-                />
-              )}
+            <TouchableOpacity style={styles.oauthBtn} onPress={() => handleOAuth('google')} disabled={loading}>
+              <AntDesign name="google" size={18} color="#111827" />
+              <Text style={styles.oauthText}>Continue with Google</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.oauthBtn} onPress={() => handleOAuth('apple')} disabled={loading}>
+              <Ionicons name="logo-apple" size={18} color="#111827" />
+              <Text style={styles.oauthText}>Continue with Apple</Text>
+            </TouchableOpacity>
 
-              {method === 'email' && (
-                <TextInput
-                  style={styles.input}
-                  placeholder="Password"
-                  placeholderTextColor="#6b7280"
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry
-                />
-              )}
-
-              <TouchableOpacity
-                style={[styles.button, loading && styles.buttonDisabled]}
-                onPress={handleSignUp}
-                disabled={loading}
-              >
-                {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Create Account</Text>}
-              </TouchableOpacity>
-
-              <View style={styles.dividerWrap}>
-                <View style={styles.dividerLine} />
-                <Text style={styles.dividerText}>OR</Text>
-                <View style={styles.dividerLine} />
-              </View>
-
-              <TouchableOpacity style={styles.oauthBtn} onPress={() => handleOAuth('google')} disabled={loading}>
-                <AntDesign name="google" size={18} color="#111827" />
-                <Text style={styles.oauthText}>Continue with Google</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.oauthBtn} onPress={() => handleOAuth('apple')} disabled={loading}>
-                <Ionicons name="logo-apple" size={18} color="#111827" />
-                <Text style={styles.oauthText}>Continue with Apple</Text>
-              </TouchableOpacity>
-
-              <View style={styles.dividerWrap}>
-                <View style={styles.dividerLine} />
-                <Text style={styles.dividerText}>ALREADY HAVE AN ACCOUNT?</Text>
-                <View style={styles.dividerLine} />
-              </View>
-              <TouchableOpacity onPress={goToSignIn} style={styles.signInCtaBtn}>
-                <Text style={styles.signInCtaText}>Sign In</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.guestBtn} onPress={continueAsGuest}>
-                <Text style={styles.guestBtnText}>Continue as Guest</Text>
-              </TouchableOpacity>
-            </>
-          )}
-        </View>
+            <View style={styles.dividerWrap}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>ALREADY HAVE AN ACCOUNT?</Text>
+              <View style={styles.dividerLine} />
+            </View>
+            <TouchableOpacity onPress={() => router.replace('/(auth)/sign-in' as any)} style={styles.signInCtaBtn}>
+              <Text style={styles.signInCtaText}>Sign In</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.guestBtn} onPress={continueAsGuest}>
+              <Text style={styles.guestBtnText}>Continue as Guest</Text>
+            </TouchableOpacity>
+          </>
+        )}
       </View>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f0fdf4',
-  },
-  backdrop: {
-    flex: 1,
-    justifyContent: 'center',
-    padding: 24,
-    backgroundColor: 'rgba(240, 253, 244, 0.92)',
-    position: 'relative',
-  },
-  backdropDismissHitArea: {
-    ...StyleSheet.absoluteFillObject,
-  },
+  container: { flex: 1, justifyContent: 'center', padding: 24 },
   card: {
-    backgroundColor: '#ffffff',
     borderRadius: 16,
-    padding: 28,
+    padding: 24,
     shadowColor: '#000',
     shadowOpacity: 0.08,
     shadowRadius: 12,
     elevation: 4,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
-    position: 'relative',
   },
-  closeBtn: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#f3f4f6',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 5,
-  },
-  closeBtnText: {
-    color: '#111827',
-    fontSize: 22,
-    lineHeight: 22,
-    fontWeight: '500',
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#111827',
-    marginBottom: 4,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: '#6b7280',
-    marginBottom: 16,
-  },
-  methodSwitch: {
-    flexDirection: 'row',
-    backgroundColor: '#f3f4f6',
-    borderRadius: 10,
-    padding: 4,
-    marginBottom: 12,
-  },
-  methodBtn: {
-    flex: 1,
-    borderRadius: 8,
-    paddingVertical: 8,
-    alignItems: 'center',
-  },
-  methodBtnActive: {
-    backgroundColor: '#10b981',
-  },
-  methodText: {
-    color: '#6b7280',
-    fontWeight: '600',
-  },
-  methodTextActive: {
-    color: '#ffffff',
-  },
-  row: {
-    flexDirection: 'row',
-    gap: 10,
-  },
+  title: { fontSize: 28, fontWeight: '700', marginBottom: 8 },
+  subtitle: { marginTop: 6, marginBottom: 18, fontSize: 14 },
+  row: { flexDirection: 'row', gap: 10 },
   input: {
     borderWidth: 1,
     borderColor: '#e5e7eb',
@@ -403,9 +286,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#f9fafb',
     color: '#111827',
   },
-  halfInput: {
-    flex: 1,
-  },
+  halfInput: { flex: 1 },
+  countryInput: { width: 78 },
+  flexInput: { flex: 1 },
   button: {
     backgroundColor: '#10b981',
     borderRadius: 10,
@@ -413,14 +296,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 4,
   },
-  buttonDisabled: {
-    opacity: 0.6,
+  buttonDisabled: { opacity: 0.6 },
+  buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  emailSwitchBtn: {
+    marginTop: 8,
+    marginBottom: 4,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#94a3b8',
+    paddingVertical: 11,
+    alignItems: 'center',
+    backgroundColor: 'rgba(148,163,184,0.25)',
   },
-  buttonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
+  emailSwitchText: { color: '#e2e8f0', fontWeight: '700', fontSize: 14 },
   dividerWrap: {
     marginTop: 14,
     marginBottom: 10,
@@ -428,16 +316,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: '#e5e7eb',
-  },
-  dividerText: {
-    color: '#6b7280',
-    fontSize: 12,
-    fontWeight: '700',
-  },
+  dividerLine: { flex: 1, height: 1, backgroundColor: '#e5e7eb' },
+  dividerText: { color: '#6b7280', fontSize: 12, fontWeight: '700' },
   oauthBtn: {
     borderWidth: 1,
     borderColor: '#e5e7eb',
@@ -450,11 +330,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     backgroundColor: '#ffffff',
   },
-  oauthText: {
-    color: '#111827',
-    fontSize: 15,
-    fontWeight: '600',
-  },
+  oauthText: { color: '#111827', fontSize: 15, fontWeight: '600' },
   signInCtaBtn: {
     marginTop: 10,
     borderRadius: 10,
@@ -464,11 +340,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#9ca3af',
   },
-  signInCtaText: {
-    color: '#ffffff',
-    fontWeight: '800',
-    fontSize: 14,
-  },
+  signInCtaText: { color: '#ffffff', fontWeight: '800', fontSize: 14 },
   guestBtn: {
     marginTop: 10,
     borderRadius: 10,
@@ -478,9 +350,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: 'rgba(255,255,255,0.6)',
   },
-  guestBtnText: {
-    color: '#334155',
-    fontWeight: '700',
-    fontSize: 14,
-  },
+  guestBtnText: { color: '#334155', fontWeight: '700', fontSize: 14 },
 });
