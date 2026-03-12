@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { prisma } from '@ev-charger/shared';
 import { requireOperator } from '../plugins/auth';
 import { requirePolicy } from '../plugins/authorization';
+import { computeSessionAmounts } from '../lib/sessionBilling';
 
 type DateRangeQuery = { startDate?: string; endDate?: string };
 
@@ -268,24 +269,42 @@ export async function readModelRoutes(app: FastifyInstance) {
       total,
       limit,
       offset,
-      transactions: rows.map((row: any) => ({
-        id: row.id,
-        sessionId: row.sessionId,
-        transactionId: row.session.transactionId,
-        idTag: row.session.idTag,
-        status: row.status,
-        startedAt: row.startedAt,
-        stoppedAt: row.stoppedAt,
-        durationMinutes: row.durationMinutes,
-        energyKwh: Number(toNumber(row.energyKwh).toFixed(6)),
-        revenueUsd: Number(toNumber(row.revenueUsd).toFixed(6)),
-        payment: row.session.payment,
-        meterStart: row.session.meterStart,
-        meterStop: row.session.meterStop,
-        site: row.site,
-        charger: row.charger,
-        sourceVersion: row.sourceVersion,
-      })),
+      transactions: rows.map((row: any) => {
+        const energyKwh = Number(toNumber(row.energyKwh).toFixed(6));
+        const revenueUsd = Number(toNumber(row.revenueUsd).toFixed(6));
+        const amounts = computeSessionAmounts({
+          meterStart: row.session.meterStart,
+          meterStop: row.session.meterStop,
+          kwhDelivered: row.session.kwhDelivered ?? energyKwh,
+          ratePerKwh: row.session.ratePerKwh,
+          payment: row.session.payment,
+          revenueUsd,
+        });
+
+        return {
+          id: row.id,
+          sessionId: row.sessionId,
+          transactionId: row.session.transactionId,
+          idTag: row.session.idTag,
+          status: row.status,
+          startedAt: row.startedAt,
+          stoppedAt: row.stoppedAt,
+          durationMinutes: row.durationMinutes,
+          energyKwh,
+          revenueUsd,
+          payment: row.session.payment,
+          meterStart: row.session.meterStart,
+          meterStop: row.session.meterStop,
+          effectiveAmountCents: amounts.effectiveAmountCents,
+          estimatedAmountCents: amounts.estimatedAmountCents,
+          amountState: amounts.amountState,
+          amountLabel: amounts.amountLabel,
+          isAmountFinal: amounts.isAmountFinal,
+          site: row.site,
+          charger: row.charger,
+          sourceVersion: row.sourceVersion,
+        };
+      }),
     };
   });
 

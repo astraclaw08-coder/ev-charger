@@ -5,6 +5,7 @@ import { requireOperator } from '../plugins/auth';
 import { requirePolicy } from '../plugins/authorization';
 import { remoteReset, remoteStart, triggerHeartbeat, getConfiguration } from '../lib/ocppClient';
 import { getChargerUptime } from '../lib/uptime';
+import { computeSessionAmounts } from '../lib/sessionBilling';
 
 function hasSiteAccess(siteId: string, siteIds: string[] | undefined) {
   if (!siteIds || siteIds.length === 0) return true;
@@ -189,20 +190,16 @@ export async function chargerRoutes(app: FastifyInstance) {
     });
 
     return sessions.map((s: any) => {
-      const meterDerivedKwh =
-        s.meterStop != null && s.meterStart != null
-          ? Math.max(0, (s.meterStop - s.meterStart) / 1000)
-          : null;
-      const computedKwh = meterDerivedKwh != null
-        ? Math.max(s.kwhDelivered ?? 0, meterDerivedKwh)
-        : s.kwhDelivered;
-      const effectiveAmountCents =
-        s.payment?.amountCents != null
-          ? s.payment.amountCents
-          : computedKwh != null && s.ratePerKwh != null
-            ? Math.round(computedKwh * s.ratePerKwh * 100)
-            : null;
-      return { ...s, kwhDelivered: computedKwh, effectiveAmountCents };
+      const amounts = computeSessionAmounts(s);
+      return {
+        ...s,
+        kwhDelivered: amounts.kwhDelivered,
+        effectiveAmountCents: amounts.effectiveAmountCents,
+        estimatedAmountCents: amounts.estimatedAmountCents,
+        amountState: amounts.amountState,
+        amountLabel: amounts.amountLabel,
+        isAmountFinal: amounts.isAmountFinal,
+      };
     });
   });
 

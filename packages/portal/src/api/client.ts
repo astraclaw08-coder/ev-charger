@@ -120,6 +120,10 @@ export interface SessionRecord {
   user: { name: string | null; email: string } | null;
   payment: { status: string; amountCents: number | null } | null;
   effectiveAmountCents?: number | null;
+  estimatedAmountCents?: number | null;
+  amountState?: 'FINAL' | 'PENDING' | 'ESTIMATED' | 'UNAVAILABLE';
+  amountLabel?: string;
+  isAmountFinal?: boolean;
 }
 
 export interface CreatedCharger {
@@ -179,6 +183,11 @@ export interface EnrichedTransaction {
   energyKwh: number;
   revenueUsd: number;
   payment: { status: string; amountCents: number | null } | null;
+  effectiveAmountCents?: number | null;
+  estimatedAmountCents?: number | null;
+  amountState?: 'FINAL' | 'PENDING' | 'ESTIMATED' | 'UNAVAILABLE';
+  amountLabel?: string;
+  isAmountFinal?: boolean;
   meterStart: number | null;
   meterStop: number | null;
   site: { id: string; name: string; organizationName: string | null; portfolioName: string | null };

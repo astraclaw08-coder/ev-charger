@@ -4,6 +4,7 @@ import { requireOperator } from '../plugins/auth';
 import { requirePolicy } from '../plugins/authorization';
 import { getChargerUptime } from '../lib/uptime';
 import { validateTouWindows } from '../lib/sitePricing';
+import { computeSessionAmounts } from '../lib/sessionBilling';
 
 export async function siteRoutes(app: FastifyInstance) {
   // GET /sites — list operator's sites with charger counts
@@ -297,15 +298,13 @@ export async function siteRoutes(app: FastifyInstance) {
       include: { payment: true },
     });
 
-    const getEffectiveAmountCents = (s: { kwhDelivered: number | null; ratePerKwh: number | null; payment: { amountCents: number | null } | null }) => {
-      if (s.payment?.amountCents != null) return s.payment.amountCents;
-      if (s.kwhDelivered != null && s.ratePerKwh != null) return Math.round(s.kwhDelivered * s.ratePerKwh * 100);
-      return 0;
-    };
+    const getEffectiveAmountCents = (s: { meterStart: number | null; meterStop: number | null; kwhDelivered: number | null; ratePerKwh: number | null; payment: { status: string; amountCents: number | null } | null }) => (
+      computeSessionAmounts(s).effectiveAmountCents ?? 0
+    );
 
     const sessionsCount = sessions.length;
     const kwhDelivered = sessions.reduce((sum: number, s: { kwhDelivered: number | null }) => sum + (s.kwhDelivered ?? 0), 0);
-    const revenueCents = sessions.reduce((sum: number, s: { kwhDelivered: number | null; ratePerKwh: number | null; payment: { amountCents: number | null } | null }) => sum + getEffectiveAmountCents(s), 0);
+    const revenueCents = sessions.reduce((sum: number, s: { meterStart: number | null; meterStop: number | null; kwhDelivered: number | null; ratePerKwh: number | null; payment: { status: string; amountCents: number | null } | null }) => sum + getEffectiveAmountCents(s), 0);
 
     // Utilization formula (period-aligned): active charging time / available connector time.
     // - active charging time: sum of completed session durations, clipped to selected date range
@@ -383,7 +382,7 @@ export async function siteRoutes(app: FastifyInstance) {
 
     // Build daily breakdown: group sessions by UTC date, fill gaps with zeros
     const dailyMap: Record<string, { date: string; sessions: number; kwhDelivered: number; revenueCents: number }> = {};
-    sessions.forEach((s: { startedAt: Date; kwhDelivered: number | null; ratePerKwh: number | null; payment: { amountCents: number | null } | null }) => {
+    sessions.forEach((s: { startedAt: Date; meterStart: number | null; meterStop: number | null; kwhDelivered: number | null; ratePerKwh: number | null; payment: { status: string; amountCents: number | null } | null }) => {
       const day = s.startedAt.toISOString().slice(0, 10);
       if (!dailyMap[day]) dailyMap[day] = { date: day, sessions: 0, kwhDelivered: 0, revenueCents: 0 };
       dailyMap[day].sessions++;

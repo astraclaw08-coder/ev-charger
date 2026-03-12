@@ -341,9 +341,13 @@ export default function ChargerDetail() {
                       />
                     </td>
                     <td className="px-5 py-3 text-gray-500 text-xs">
-                      {s.payment
-                        ? `${s.payment.status}${(s.effectiveAmountCents ?? s.payment.amountCents) != null ? ` · $${(((s.effectiveAmountCents ?? s.payment.amountCents) as number) / 100).toFixed(2)}` : ''}`
-                        : (s.effectiveAmountCents != null ? `$${(s.effectiveAmountCents / 100).toFixed(2)}` : '—')}
+                      {(() => {
+                        const amountCents = s.effectiveAmountCents ?? s.estimatedAmountCents ?? s.payment?.amountCents ?? null;
+                        const amountText = amountCents != null ? `$${(amountCents / 100).toFixed(2)}` : '—';
+                        const label = s.amountState === 'FINAL' ? 'final' : s.amountState === 'PENDING' ? 'est.' : null;
+                        const statusText = s.payment?.status ?? s.amountLabel ?? 'N/A';
+                        return `${statusText}${amountCents != null ? ` · ${amountText}` : ''}${label ? ` (${label})` : ''}`;
+                      })()}
                     </td>
                   </tr>
                 ))}

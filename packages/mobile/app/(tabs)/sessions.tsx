@@ -75,8 +75,12 @@ function mapEnrichedToSession(tx: EnrichedTransaction): Session {
     ratePerKwh: null,
     startedAt: tx.startedAt,
     endedAt: tx.stoppedAt,
-    costEstimateCents: tx.payment?.amountCents ?? Math.round((tx.revenueUsd ?? 0) * 100),
-    effectiveAmountCents: tx.payment?.amountCents ?? Math.round((tx.revenueUsd ?? 0) * 100),
+    costEstimateCents: tx.estimatedAmountCents ?? Math.round((tx.revenueUsd ?? 0) * 100),
+    estimatedAmountCents: tx.estimatedAmountCents ?? Math.round((tx.revenueUsd ?? 0) * 100),
+    effectiveAmountCents: tx.effectiveAmountCents ?? tx.estimatedAmountCents ?? Math.round((tx.revenueUsd ?? 0) * 100),
+    amountState: tx.amountState,
+    amountLabel: tx.amountLabel,
+    isAmountFinal: tx.isAmountFinal,
     connector: {
       connectorId: 1,
       charger: {
@@ -104,8 +108,9 @@ function SessionCard({ session, onPress, isDark }: { session: Session; onPress: 
   const isActive = session.status === 'ACTIVE';
   const charger = session.connector.charger;
   const kwh = session.kwhDelivered ?? 0;
-  const costCents = session.effectiveAmountCents ?? session.payment?.amountCents ?? session.costEstimateCents ?? null;
+  const costCents = session.effectiveAmountCents ?? session.estimatedAmountCents ?? session.costEstimateCents ?? session.payment?.amountCents ?? null;
   const cost = costCents != null ? `$${(costCents / 100).toFixed(2)}` : null;
+  const costLabel = session.amountState === 'FINAL' ? 'Cost' : 'Est. Cost';
 
   return (
     <TouchableOpacity style={[styles.card, { backgroundColor: isDark ? '#111827' : '#fff' }]} onPress={onPress} activeOpacity={0.7}>
@@ -126,7 +131,7 @@ function SessionCard({ session, onPress, isDark }: { session: Session; onPress: 
         <StatItem label="Date" value={formatDate(session.startedAt)} />
         <StatItem label="Duration" value={formatDuration(session.startedAt, session.endedAt)} />
         <StatItem label="kWh" value={kwh > 0 ? formatKwh(kwh) : '-'} />
-        {cost && <StatItem label="Cost" value={cost} highlight />}
+        {cost && <StatItem label={costLabel} value={cost} highlight />}
       </View>
 
       <Text
@@ -138,6 +143,9 @@ function SessionCard({ session, onPress, isDark }: { session: Session; onPress: 
       >
         {isActive ? 'Charging in progress →' : session.status === 'COMPLETED' ? 'Completed' : 'Failed'}
       </Text>
+      {session.amountState === 'PENDING' && (
+        <Text style={styles.pendingHint}>Payment pending · total shown is estimated</Text>
+      )}
     </TouchableOpacity>
   );
 }
@@ -255,8 +263,8 @@ export default function SessionsScreen() {
 
     const totalKwh = inRange.reduce((sum, s) => sum + (s.kwhDelivered ?? 0), 0);
     const totalSpend = inRange.reduce((sum, s) => {
-      if (s.payment?.amountCents != null) return sum + s.payment.amountCents / 100;
-      if (s.costEstimateCents != null) return sum + s.costEstimateCents / 100;
+      const amountCents = s.effectiveAmountCents ?? s.estimatedAmountCents ?? s.costEstimateCents ?? s.payment?.amountCents;
+      if (amountCents != null) return sum + amountCents / 100;
       return sum;
     }, 0);
 
@@ -420,6 +428,7 @@ const styles = StyleSheet.create({
   statValue: { fontSize: 14, fontWeight: '600', color: '#374151', marginTop: 2 },
   statHighlight: { color: '#10b981' },
   statusText: { fontSize: 12, color: '#9ca3af' },
+  pendingHint: { marginTop: 4, fontSize: 11, color: '#d97706', fontWeight: '600' },
   statusActive: { color: '#10b981', fontWeight: '600' },
   statusFailed: { color: '#ef4444' },
   emptyContainer: { alignItems: 'center', paddingTop: 60 },

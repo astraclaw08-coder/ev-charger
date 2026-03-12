@@ -74,11 +74,16 @@ function SessionSummary({ session, fallbackKwh }: { session: Session; fallbackKw
   const meterDerivedKwh =
     session.meterStop != null ? Math.max(0, (session.meterStop - session.meterStart) / 1000) : 0;
   const sessionDerivedKwh = getLiveKwh(session);
-  const paymentDerivedCost = session.payment?.amountCents != null ? session.payment.amountCents / 100 : null;
-  const estimateDerivedCost = session.costEstimateCents != null ? session.costEstimateCents / 100 : null;
+  const effectiveDerivedCost = session.effectiveAmountCents != null ? session.effectiveAmountCents / 100 : null;
+  const estimateDerivedCost =
+    session.estimatedAmountCents != null
+      ? session.estimatedAmountCents / 100
+      : session.costEstimateCents != null
+        ? session.costEstimateCents / 100
+        : null;
 
   const cost =
-    paymentDerivedCost ??
+    effectiveDerivedCost ??
     estimateDerivedCost ??
     (sessionDerivedKwh > 0 ? sessionDerivedKwh * ratePerKwh : meterDerivedKwh * ratePerKwh);
 
@@ -121,17 +126,17 @@ function SessionSummary({ session, fallbackKwh }: { session: Session; fallbackKw
         />
       </View>
 
-      {session.payment?.status === 'CAPTURED' && (
+      {session.amountState === 'FINAL' && (
         <View style={styles.paymentSuccess}>
           <Text style={styles.paymentSuccessText}>
-            Payment of ${cost.toFixed(2)} charged successfully
+            Final payment: ${cost.toFixed(2)}
           </Text>
         </View>
       )}
 
-      {session.payment?.status === 'PENDING' && (
+      {session.amountState === 'PENDING' && (
         <View style={styles.paymentPending}>
-          <Text style={styles.paymentPendingText}>Payment processing…</Text>
+          <Text style={styles.paymentPendingText}>Stripe settlement pending · shown total is estimated.</Text>
         </View>
       )}
 

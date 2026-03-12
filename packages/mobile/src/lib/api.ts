@@ -120,7 +120,11 @@ export interface Session {
   startedAt: string;
   endedAt: string | null;
   costEstimateCents?: number | null;
+  estimatedAmountCents?: number | null;
   effectiveAmountCents?: number | null;
+  amountState?: 'FINAL' | 'PENDING' | 'ESTIMATED' | 'UNAVAILABLE';
+  amountLabel?: string;
+  isAmountFinal?: boolean;
   connector: {
     connectorId: number;
     charger: {
@@ -193,6 +197,11 @@ export interface EnrichedTransaction {
   energyKwh: number;
   revenueUsd: number;
   payment: { status: string; amountCents: number | null } | null;
+  effectiveAmountCents?: number | null;
+  estimatedAmountCents?: number | null;
+  amountState?: 'FINAL' | 'PENDING' | 'ESTIMATED' | 'UNAVAILABLE';
+  amountLabel?: string;
+  isAmountFinal?: boolean;
   meterStart: number | null;
   meterStop: number | null;
   site: { id: string; name: string };
