@@ -18,7 +18,7 @@ import {
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, type Charger, type Connector, type ChargerUptime } from '@/lib/api';
+import { api, type Charger, type Connector } from '@/lib/api';
 import { ConnectorStatusBadge } from '@/components/ConnectorStatusBadge';
 import { useAppTheme } from '@/theme';
 import { useFavorites } from '@/hooks/useFavorites';
@@ -183,11 +183,6 @@ export default function ChargerDetailScreen() {
     return siteChargers.find((c) => c.id === selectedChargerId) ?? charger;
   }, [charger, selectedChargerId, siteChargers]);
 
-  const { data: uptime, refetch: refetchUptime } = useQuery<ChargerUptime | null>({
-    queryKey: ['charger-uptime', selectedCharger?.id ?? id],
-    queryFn: () => api.chargers.uptime(selectedCharger?.id ?? id).catch(() => null),
-    enabled: Boolean(selectedCharger?.id ?? id),
-  });
 
   const { data: profile } = useQuery({
     queryKey: ['me-profile'],
@@ -199,9 +194,8 @@ export default function ChargerDetailScreen() {
     React.useCallback(() => {
       refetch();
       refetchAllChargers();
-      refetchUptime();
       return undefined;
-    }, [refetch, refetchAllChargers, refetchUptime]),
+    }, [refetch, refetchAllChargers]),
   );
 
   useEffect(() => {
@@ -404,18 +398,7 @@ export default function ChargerDetailScreen() {
               {siteAvailableChargers} charger{siteAvailableChargers !== 1 ? 's' : ''} available
             </Text>
           </View>
-          {uptime && (
-            <View style={{ marginTop: 8, flexDirection: 'row', justifyContent: 'space-between' }}>
-              <Text style={{ color: isDark ? '#9ca3af' : '#6b7280', fontSize: 12 }}>Uptime (7d)</Text>
-              <Text style={{
-                fontSize: 12,
-                fontWeight: '700',
-                color: uptime.uptimePercent7d >= 99 ? '#16a34a' : uptime.uptimePercent7d >= 95 ? '#d97706' : '#dc2626',
-              }}>
-                {uptime.uptimePercent7d.toFixed(2)}%{uptime.uptimePercent7d < 95 ? ' · Degraded' : ''}
-              </Text>
-            </View>
-          )}
+
         </View>
 
         {/* Payment setup: show only for signed-in users without a default payment method on billable sites */}
