@@ -78,5 +78,6 @@ Code: `packages/api/src/lib/envGuard.ts`
 1. Add GitHub Environment protection rules:
    - `production`: required reviewers + wait timer
    - `development`: no reviewer gate (faster)
-2. Configure deploy steps (Railway/Vercel) to run after `build-and-validate` job.
-3. Keep prod credentials out of repository `.env*` files; store only in GitHub/Railway/Vercel secrets.
+2. Enable hardened Git branch protections for `dev` and `main` (see `docs/git-workflow-hardening.md`).
+3. Configure deploy steps (Railway/Vercel) to run after `build-and-validate` job.
+4. Keep prod credentials out of repository `.env*` files; store only in GitHub/Railway/Vercel secrets.
