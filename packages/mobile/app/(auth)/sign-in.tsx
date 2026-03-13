@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -136,6 +136,7 @@ function KeycloakSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onCo
   const [showEmail, setShowEmail] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const usernameInputRef = useRef<TextInput>(null);
   const [awaitingCode, setAwaitingCode] = useState(false);
   const [code, setCode] = useState('');
   const [otpTarget, setOtpTarget] = useState('');
@@ -143,6 +144,11 @@ function KeycloakSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onCo
   async function handleSignIn() {
     const ok = await loginWithPassword?.(username, password);
     if (ok) router.replace('/(tabs)' as any);
+  }
+
+  function openEmailLogin() {
+    setShowEmail(true);
+    setTimeout(() => usernameInputRef.current?.focus(), 50);
   }
 
   function handleNextOtp() {
@@ -222,7 +228,7 @@ function KeycloakSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onCo
         <View style={styles.dividerLine} />
       </View>
 
-      <TouchableOpacity style={styles.oauthBtn} onPress={() => setShowEmail(true)}>
+      <TouchableOpacity testID="keycloak-email-toggle" style={styles.oauthBtn} onPress={openEmailLogin}>
         <Ionicons name="mail-outline" size={18} color="#111827" />
         <Text style={styles.oauthText}>Email</Text>
       </TouchableOpacity>
@@ -230,6 +236,7 @@ function KeycloakSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onCo
       {showEmail && (
         <>
           <TextInput
+            ref={usernameInputRef}
             style={styles.input}
             placeholder="Email"
             value={username}
@@ -280,6 +287,7 @@ function ClerkSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onConti
   const [otpTarget, setOtpTarget] = useState('');
   const [showEmail, setShowEmail] = useState(false);
   const [loading, setLoading] = useState(false);
+  const emailInputRef = useRef<TextInput>(null);
 
   async function handleRequestOtp() {
     if (!isLoaded) return;
@@ -362,6 +370,11 @@ function ClerkSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onConti
     }
   }
 
+  function openEmailLogin() {
+    setShowEmail(true);
+    setTimeout(() => emailInputRef.current?.focus(), 50);
+  }
+
   useEffect(() => {
     if (!awaitingCode || code.length !== 5 || loading) return;
     handleVerifyOtp();
@@ -429,14 +442,14 @@ function ClerkSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onConti
         <View style={styles.dividerLine} />
       </View>
 
-      <TouchableOpacity style={styles.oauthBtn} onPress={() => setShowEmail(true)}>
+      <TouchableOpacity testID="clerk-email-toggle" style={styles.oauthBtn} onPress={openEmailLogin}>
         <Ionicons name="mail-outline" size={18} color="#111827" />
         <Text style={styles.oauthText}>Email</Text>
       </TouchableOpacity>
 
       {showEmail && (
         <>
-          <TextInput style={styles.input} placeholder="Email" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" />
+          <TextInput ref={emailInputRef} style={styles.input} placeholder="Email" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" />
           <TextInput style={styles.input} placeholder="Password" value={password} onChangeText={setPassword} secureTextEntry />
           <TouchableOpacity style={[styles.button, styles.emailSignInButton, loading && styles.buttonDisabled]} onPress={handlePasswordSignIn} disabled={loading}>
             {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Sign In</Text>}
