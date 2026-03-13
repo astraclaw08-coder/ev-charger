@@ -59,6 +59,7 @@ function titleFor(type: NotificationEventType): string {
     case 'SESSION_COMPLETED': return 'Charging complete';
     case 'SESSION_FAILED': return 'Charging session failed';
     case 'PAYMENT_ISSUE': return 'Payment issue';
+    default: return '';
   }
 }
 
@@ -72,6 +73,7 @@ function bodyFor(type: NotificationEventType, session: Session): string {
     case 'SESSION_COMPLETED': return `Session completed at ${site}. Tap to review summary.`;
     case 'SESSION_FAILED': return `Session ended unexpectedly at ${site}.`;
     case 'PAYMENT_ISSUE': return `We couldn't finalize payment for ${site}. Update payment details.`;
+    default: return '';
   }
 }
 
