@@ -365,6 +365,7 @@
 					"FB_SONARKIT_ENABLED=1",
 				);
 				INFOPLIST_FILE = EVCharger/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "EVCharger Dev";
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -396,6 +397,7 @@
 				CODE_SIGN_ENTITLEMENTS = EVCharger/EVCharger.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
 				INFOPLIST_FILE = EVCharger/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "EVCharger RC";
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
