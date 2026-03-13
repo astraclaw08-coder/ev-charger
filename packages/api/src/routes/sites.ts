@@ -19,7 +19,14 @@ export async function siteRoutes(app: FastifyInstance) {
       where: scopedSiteIds.length > 0 && !scopedSiteIds.includes('*')
         ? { id: { in: scopedSiteIds } }
         : (isOwner ? {} : { operatorId: operator.id }),
-      include: { chargers: { include: { connectors: true } } },
+      include: {
+        chargers: {
+          select: {
+            status: true,
+            _count: { select: { connectors: true } },
+          },
+        },
+      },
       orderBy: { createdAt: 'desc' },
     });
 
@@ -38,7 +45,7 @@ export async function siteRoutes(app: FastifyInstance) {
       organizationName: string | null;
       portfolioName: string | null;
       createdAt: Date;
-      chargers: Array<{ status: string }>;
+      chargers: Array<{ status: string; _count: { connectors: number } }>;
     }) => ({
       id: site.id,
       name: site.name,
@@ -55,6 +62,7 @@ export async function siteRoutes(app: FastifyInstance) {
       portfolioName: site.portfolioName,
       createdAt: site.createdAt,
       chargerCount: site.chargers.length,
+      connectorCount: site.chargers.reduce((sum, c) => sum + (c._count?.connectors ?? 0), 0),
       statusSummary: {
         online: site.chargers.filter((c) => c.status === 'ONLINE').length,
         offline: site.chargers.filter((c) => c.status === 'OFFLINE').length,

@@ -16,6 +16,7 @@ export interface SiteListItem {
   portfolioName?: string | null;
   createdAt: string;
   chargerCount: number;
+  connectorCount?: number;
   statusSummary: { online: number; offline: number; faulted: number };
 }
 

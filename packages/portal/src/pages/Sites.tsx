@@ -34,17 +34,8 @@ export default function Sites() {
       const client = createApiClient(token);
       const data = await client.getSites();
       setSites(data);
-
-      try {
-        const details = await Promise.all(data.map((site) => client.getSite(site.id)));
-        const connectors = details.reduce(
-          (sum, site) => sum + site.chargers.reduce((inner, charger) => inner + charger.connectors.length, 0),
-          0,
-        );
-        setTotalConnectors(connectors);
-      } catch {
-        setTotalConnectors(0);
-      }
+      const connectors = data.reduce((sum, site) => sum + (site.connectorCount ?? 0), 0);
+      setTotalConnectors(connectors);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to load sites');
     } finally {
