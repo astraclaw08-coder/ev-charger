@@ -4,9 +4,12 @@
   "private": true,
   "main": "expo-router/entry",
   "scripts": {
-    "dev": "expo start",
-    "ios": "expo run:ios",
-    "android": "expo run:android",
+    "dev": "APP_ENV=dev expo start",
+    "dev:prod": "APP_ENV=prod expo start",
+    "ios": "APP_ENV=dev expo run:ios",
+    "ios:prod": "APP_ENV=prod expo run:ios",
+    "android": "APP_ENV=dev expo run:android",
+    "android:prod": "APP_ENV=prod expo run:android",
     "build:dev": "eas build --profile development",
     "build:prod": "eas build --profile production",
     "build:production": "eas build --profile production"

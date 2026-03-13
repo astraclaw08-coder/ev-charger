@@ -25,8 +25,13 @@ In `eas.json`:
 Commands:
 
 ```bash
-pnpm --filter @ev-charger/mobile build:dev
-pnpm --filter @ev-charger/mobile build:prod
+# local simulator
+npm run ios        # APP_ENV=dev
+npm run ios:prod   # APP_ENV=prod
+
+# EAS builds
+npm run build:dev
+npm run build:prod
 ```
 
 ## Required mobile env vars

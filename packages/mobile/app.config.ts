@@ -60,7 +60,7 @@ const config: ExpoConfig = {
   extra: {
     appEnv,
     apiUrl: process.env.EXPO_PUBLIC_API_URL,
-    envLabel: process.env.EXPO_PUBLIC_ENV_LABEL || (isProd ? 'PROD' : 'DEV'),
+    envLabel: isProd ? 'PROD' : 'DEV',
     eas: {
       projectId: '39b3fbf7-b459-4a59-99ad-1c224595c1a6',
     },
