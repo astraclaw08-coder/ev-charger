@@ -132,7 +132,16 @@ export default function Sites() {
           <div className="hidden grid-cols-[1.8fr_1fr_1fr_1fr] gap-3 border-b border-gray-200 bg-gray-50 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500 md:grid">
             <span>Site</span>
             <span>Chargers</span>
-            <span>Status</span>
+            <span className="inline-flex items-center gap-1">
+              Status
+              <span
+                className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-gray-300 text-[10px] font-bold text-gray-500"
+                title="Online means the charger is currently sending fresh heartbeat signals to the server. If heartbeat signals stop for about 17 minutes or more, it is treated as offline."
+                aria-label="Status definition: online means fresh heartbeat signals are being received"
+              >
+                ?
+              </span>
+            </span>
             <span className="text-right">Action</span>
           </div>
           <div className="divide-y divide-gray-100">

@@ -476,7 +476,19 @@ export default function SiteDetail() {
         ) : site.chargers.length > 4 ? (
           <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
             <div className="hidden grid-cols-[1.6fr_1fr_1.8fr_0.8fr] gap-3 border-b border-gray-200 bg-gray-50 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500 md:grid">
-              <span>Charger</span><span>Status</span><span>Connectors</span><span className="text-right">Action</span>
+              <span>Charger</span>
+              <span className="inline-flex items-center gap-1">
+                Status
+                <span
+                  className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-gray-300 text-[10px] font-bold text-gray-500"
+                  title="Online means the charger is currently sending fresh heartbeat signals to the server. If heartbeat signals stop for about 17 minutes or more, it is treated as offline."
+                  aria-label="Status definition: online means fresh heartbeat signals are being received"
+                >
+                  ?
+                </span>
+              </span>
+              <span>Connectors</span>
+              <span className="text-right">Action</span>
             </div>
             <div className="divide-y divide-gray-100">
               {site.chargers.map((charger) => <ChargerListRow key={charger.id} charger={charger} uptime={chargerUptime[charger.id]} />)}
