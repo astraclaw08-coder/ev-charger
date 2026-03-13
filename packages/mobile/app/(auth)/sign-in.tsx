@@ -133,7 +133,7 @@ function KeycloakSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onCo
   const { loginWithPassword, loading, error } = useAppAuth();
   const router = useRouter();
   const [phone, setPhone] = useState('');
-  const [showEmail, setShowEmail] = useState(true);
+  const [showEmail, setShowEmail] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [awaitingCode, setAwaitingCode] = useState(false);
@@ -222,7 +222,7 @@ function KeycloakSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onCo
         <View style={styles.dividerLine} />
       </View>
 
-      <TouchableOpacity style={styles.oauthBtn} onPress={() => setShowEmail((v) => !v)}>
+      <TouchableOpacity style={styles.oauthBtn} onPress={() => setShowEmail(true)}>
         <Ionicons name="mail-outline" size={18} color="#111827" />
         <Text style={styles.oauthText}>Email</Text>
       </TouchableOpacity>
@@ -278,7 +278,7 @@ function ClerkSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onConti
   const [code, setCode] = useState('');
   const [awaitingCode, setAwaitingCode] = useState(false);
   const [otpTarget, setOtpTarget] = useState('');
-  const [showEmail, setShowEmail] = useState(true);
+  const [showEmail, setShowEmail] = useState(false);
   const [loading, setLoading] = useState(false);
 
   async function handleRequestOtp() {
@@ -429,7 +429,7 @@ function ClerkSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onConti
         <View style={styles.dividerLine} />
       </View>
 
-      <TouchableOpacity style={styles.oauthBtn} onPress={() => setShowEmail((v) => !v)}>
+      <TouchableOpacity style={styles.oauthBtn} onPress={() => setShowEmail(true)}>
         <Ionicons name="mail-outline" size={18} color="#111827" />
         <Text style={styles.oauthText}>Email</Text>
       </TouchableOpacity>
