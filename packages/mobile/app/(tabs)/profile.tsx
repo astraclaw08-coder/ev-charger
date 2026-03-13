@@ -11,6 +11,7 @@ import {
   Pressable,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import Constants from 'expo-constants';
 import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, apiBaseUrl, envLabel } from '@/lib/api';
@@ -44,7 +45,8 @@ const EMPTY: DriverProfile = {
   paymentProfile: '',
 };
 
-const mobileVersion = process.env.EXPO_PUBLIC_APP_VERSION ?? 'dev-local';
+const expoVersion = Constants.expoConfig?.version || '1.0.0';
+const mobileVersion = `${expoVersion} (${envLabel.toLowerCase()})`;
 
 export default function ProfileScreen() {
   const { isDark, setMode } = useAppTheme();
