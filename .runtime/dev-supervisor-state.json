@@ -1,10 +1,10 @@
 {
-  "ts": "2026-03-12T20:18:58.624Z",
+  "ts": "2026-03-13T00:25:05.698Z",
   "services": {
     "api": {
-      "pid": 46075,
+      "pid": 46433,
       "running": true,
-      "health": "fail:connect ECONNREFUSED 127.0.0.1:3001",
+      "health": "ok",
       "port": 3001
     },
     "portal": {
