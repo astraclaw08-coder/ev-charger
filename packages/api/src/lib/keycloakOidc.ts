@@ -15,17 +15,18 @@ function readEnv(name: string): string {
 }
 
 function getOidcConfig() {
-  const baseUrl = readEnv('KEYCLOAK_BASE_URL').replace(/\/$/, '');
+  const baseUrl = (process.env.KEYCLOAK_BASE_URL ?? process.env.KEYCLOAK_URL);
+  if (!baseUrl) throw new Error('Missing required env var: KEYCLOAK_BASE_URL (or KEYCLOAK_URL)');
   const realm = readEnv('KEYCLOAK_REALM');
-  const clientId = process.env.KEYCLOAK_PORTAL_CLIENT_ID ?? process.env.KEYCLOAK_ADMIN_CLIENT_ID;
-  const clientSecret = process.env.KEYCLOAK_PORTAL_CLIENT_SECRET ?? process.env.KEYCLOAK_ADMIN_CLIENT_SECRET;
+  const clientId = process.env.KEYCLOAK_PORTAL_CLIENT_ID ?? process.env.KEYCLOAK_ADMIN_CLIENT_ID ?? process.env.KEYCLOAK_CLIENT_ID;
+  const clientSecret = process.env.KEYCLOAK_PORTAL_CLIENT_SECRET ?? process.env.KEYCLOAK_ADMIN_CLIENT_SECRET ?? process.env.KEYCLOAK_CLIENT_SECRET;
 
   if (!clientId || !clientSecret) {
     throw new Error('Missing Keycloak portal client credentials');
   }
 
   return {
-    baseUrl,
+    baseUrl: baseUrl.replace(/\/$/, ''),
     realm,
     clientId,
     clientSecret,
@@ -36,10 +37,10 @@ function getOidcConfig() {
 
 export function keycloakPasswordAuthEnabled() {
   return Boolean(
-    process.env.KEYCLOAK_BASE_URL &&
+    (process.env.KEYCLOAK_BASE_URL || process.env.KEYCLOAK_URL) &&
     process.env.KEYCLOAK_REALM &&
-    (process.env.KEYCLOAK_PORTAL_CLIENT_ID || process.env.KEYCLOAK_ADMIN_CLIENT_ID) &&
-    (process.env.KEYCLOAK_PORTAL_CLIENT_SECRET || process.env.KEYCLOAK_ADMIN_CLIENT_SECRET),
+    (process.env.KEYCLOAK_PORTAL_CLIENT_ID || process.env.KEYCLOAK_ADMIN_CLIENT_ID || process.env.KEYCLOAK_CLIENT_ID) &&
+    (process.env.KEYCLOAK_PORTAL_CLIENT_SECRET || process.env.KEYCLOAK_ADMIN_CLIENT_SECRET || process.env.KEYCLOAK_CLIENT_SECRET),
   );
 }
 
