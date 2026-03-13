@@ -148,7 +148,7 @@ export default function ChargerDetailScreen() {
   const startContextRef = useRef<{ alreadyPlugged: boolean } | null>(null);
   const { isDark } = useAppTheme();
   const { toggle, isFav } = useFavorites();
-  const { isGuest } = useAppAuth();
+  const { isGuest, loading: authLoading } = useAppAuth();
 
   const { data: charger, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['charger', id],
@@ -299,6 +299,14 @@ export default function ChargerDetailScreen() {
         Alert.alert('Activation timeout', 'The charger did not confirm start in time. Please try again.');
         return;
       }
+      if (lower.includes('unauthorized') || lower.includes('forbidden')) {
+        Alert.alert(
+          'Sign in required',
+          'Your session is not authenticated. Please sign in again, then retry.',
+          [{ text: 'Go to Sign In', onPress: () => router.push('/(auth)/sign-in') }, { text: 'Cancel', style: 'cancel' }],
+        );
+        return;
+      }
       Alert.alert('Failed to Start', err.message);
     },
   });
@@ -314,6 +322,20 @@ export default function ChargerDetailScreen() {
     connectorId: number,
     connectorStatus: Connector['status'],
   ) {
+    if (authLoading) {
+      Alert.alert('Authenticating', 'Please wait a moment and try again.');
+      return;
+    }
+
+    if (isGuest) {
+      Alert.alert(
+        'Sign in required',
+        'Please sign in before starting a charging session.',
+        [{ text: 'Go to Sign In', onPress: () => router.push('/(auth)/sign-in') }, { text: 'Cancel', style: 'cancel' }],
+      );
+      return;
+    }
+
     if (activationPollRef.current) {
       clearTimeout(activationPollRef.current);
       activationPollRef.current = null;
