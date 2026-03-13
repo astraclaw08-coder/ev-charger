@@ -413,6 +413,16 @@ const DEV_OPERATOR_ID = import.meta.env.VITE_DEV_OPERATOR_ID ?? 'operator-001';
 const AUTH_MODE = String(import.meta.env.VITE_AUTH_MODE ?? '').trim().toLowerCase();
 const IS_DEV_MODE = AUTH_MODE === 'dev';
 
+const GET_CACHE_TTL_MS = 30_000;
+type CacheEntry = { expiresAt: number; value: unknown };
+const responseCache = new Map<string, CacheEntry>();
+const inFlightGets = new Map<string, Promise<unknown>>();
+
+function cacheKey(path: string, token: string | null | undefined) {
+  const tokenKey = token ? token.slice(0, 24) : 'anon';
+  return `${tokenKey}::${path}`;
+}
+
 async function request<T>(
   path: string,
   token: string | null | undefined,
@@ -431,17 +441,49 @@ async function request<T>(
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const res = await fetch(`${API_URL}${path}`, {
-    ...options,
-    headers: { ...headers, ...(options?.headers as Record<string, string> ?? {}) },
-  });
+  const method = (options?.method ?? 'GET').toUpperCase();
+  const isGet = method === 'GET';
+  const key = cacheKey(path, token);
 
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error((err as { error?: string }).error ?? `HTTP ${res.status}`);
+  if (isGet) {
+    const cached = responseCache.get(key);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.value as T;
+    }
+
+    const pending = inFlightGets.get(key);
+    if (pending) return pending as Promise<T>;
+  } else {
+    // Conservative invalidation on mutations to avoid stale UI state.
+    responseCache.clear();
   }
 
-  return res.json() as Promise<T>;
+  const run = (async () => {
+    const res = await fetch(`${API_URL}${path}`, {
+      ...options,
+      headers: { ...headers, ...(options?.headers as Record<string, string> ?? {}) },
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error((err as { error?: string }).error ?? `HTTP ${res.status}`);
+    }
+
+    const data = await res.json() as T;
+    if (isGet) {
+      responseCache.set(key, { value: data, expiresAt: Date.now() + GET_CACHE_TTL_MS });
+    }
+    return data;
+  })();
+
+  if (!isGet) return run;
+
+  inFlightGets.set(key, run as Promise<unknown>);
+  try {
+    return await run;
+  } finally {
+    inFlightGets.delete(key);
+  }
 }
 
 export function createApiClient(token: string | null | undefined) {
