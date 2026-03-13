@@ -23,6 +23,7 @@ export default function Sites() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [totalConnectors, setTotalConnectors] = useState(0);
+  const [totalChargers, setTotalChargers] = useState(0);
   const [showAddSiteModal, setShowAddSiteModal] = useState(false);
   const [createLoading, setCreateLoading] = useState(false);
   const [createMsg, setCreateMsg] = useState('');
@@ -35,7 +36,9 @@ export default function Sites() {
       const data = await client.getSites();
       setSites(data);
       const connectors = data.reduce((sum, site) => sum + (site.connectorCount ?? 0), 0);
+      const chargers = data.reduce((sum, site) => sum + (site.chargerCount ?? 0), 0);
       setTotalConnectors(connectors);
+      setTotalChargers(chargers);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to load sites');
     } finally {
@@ -100,10 +103,14 @@ export default function Sites() {
         </button>
       </div>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+      <div className="mt-4 grid gap-3 sm:grid-cols-3">
         <div className="rounded-lg border border-gray-200 bg-white px-4 py-3">
           <p className="text-xs uppercase tracking-wide text-gray-500">Total Sites</p>
           <p className="mt-1 text-2xl font-semibold text-gray-900">{sites.length}</p>
+        </div>
+        <div className="rounded-lg border border-gray-200 bg-white px-4 py-3">
+          <p className="text-xs uppercase tracking-wide text-gray-500">Total Chargers</p>
+          <p className="mt-1 text-2xl font-semibold text-gray-900">{totalChargers}</p>
         </div>
         <div className="rounded-lg border border-gray-200 bg-white px-4 py-3">
           <p className="text-xs uppercase tracking-wide text-gray-500">Total Connectors</p>
@@ -204,17 +211,19 @@ export default function Sites() {
 
 function SiteListRow({ site }: { site: SiteListItem }) {
   const total = site.chargerCount;
-  const { online, offline, faulted } = site.statusSummary;
+  const online = site.statusSummary.online;
+  const offline = site.statusSummary.offline + site.statusSummary.faulted;
   return (
     <div className="grid gap-3 px-4 py-3 md:grid-cols-[1.8fr_1fr_1fr_1fr] md:items-center">
       <div>
-        <p className="font-semibold text-gray-900">{site.name}</p>
+        <Link to={`/sites/${site.id}`} className="font-semibold text-gray-900 hover:text-brand-700 hover:underline">
+          {site.name}
+        </Link>
         <p className="text-xs text-gray-500">{site.address}</p>
       </div>
       <div className="text-sm text-gray-700">{total}</div>
       <div className="flex flex-wrap gap-2 text-xs">
         <span className="rounded-full border border-green-200 bg-green-50 px-2 py-0.5 text-green-700">Online {online}</span>
-        {faulted > 0 && <span className="rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-red-700">Faulted {faulted}</span>}
         {offline > 0 && <span className="rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-gray-600">Offline {offline}</span>}
       </div>
       <div className="md:text-right">
@@ -228,13 +237,16 @@ function SiteListRow({ site }: { site: SiteListItem }) {
 
 function SiteCard({ site }: { site: SiteListItem }) {
   const total = site.chargerCount;
-  const { online, offline, faulted } = site.statusSummary;
+  const online = site.statusSummary.online;
+  const offline = site.statusSummary.offline + site.statusSummary.faulted;
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm transition hover:shadow-md">
       <div className="flex items-start justify-between">
         <div className="min-w-0">
-          <h3 className="truncate font-semibold text-gray-900">{site.name}</h3>
+          <Link to={`/sites/${site.id}`} className="block truncate font-semibold text-gray-900 hover:text-brand-700 hover:underline">
+            {site.name}
+          </Link>
           <p className="mt-0.5 truncate text-xs text-gray-500">{site.address}</p>
         </div>
         <span className="ml-2 shrink-0 text-2xl">🔌</span>
@@ -243,7 +255,6 @@ function SiteCard({ site }: { site: SiteListItem }) {
       <div className="mt-4 flex gap-3">
         <Stat label="Total" value={total} color="text-gray-700" />
         <Stat label="Online" value={online} color="text-green-700" />
-        {faulted > 0 && <Stat label="Faulted" value={faulted} color="text-red-700" />}
         {offline > 0 && <Stat label="Offline" value={offline} color="text-gray-500" />}
       </div>
 

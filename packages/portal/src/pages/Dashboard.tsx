@@ -11,8 +11,8 @@ export default function Dashboard() {
   const [sites, setSites] = useState<SiteListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [fleetUptime, setFleetUptime] = useState<{ uptime24h: number; uptime7d: number; uptime30d: number; degraded: number } | null>(null);
-  const [fleetKpis, setFleetKpis] = useState<{ totalSites: number; totalKwh: number; totalRevenue: number; activeSessions: number; utilizationRatePct: number } | null>(null);
+  const [fleetUptime, setFleetUptime] = useState<{ uptime24h: number; uptime7d: number; uptime30d: number } | null>(null);
+  const [fleetKpis, setFleetKpis] = useState<{ totalSites: number; totalConnectors: number; totalKwh: number; totalRevenue: number; activeSessions: number; utilizationRatePct: number } | null>(null);
   const [fleetStatus, setFleetStatus] = useState<{
     totalChargers: number;
     totalConnectors: number;
@@ -150,6 +150,7 @@ export default function Dashboard() {
 
       setFleetKpis({
         totalSites: data.length,
+        totalConnectors,
         totalKwh: Math.round(totalKwh * 1000) / 1000,
         totalRevenue: Math.round(totalRevenue * 100) / 100,
         activeSessions,
@@ -195,7 +196,6 @@ export default function Dashboard() {
           uptime24h: avg(rows.map((r) => r!.uptimePercent24h)),
           uptime7d: avg(rows.map((r) => r!.uptimePercent7d)),
           uptime30d: avg(rows.map((r) => r!.uptimePercent30d)),
-          degraded: rows.reduce((sum, r) => sum + (r?.degradedChargers ?? 0), 0),
         });
       } else {
         setFleetUptime(null);
@@ -248,11 +248,12 @@ export default function Dashboard() {
       </div>
 
       {fleetKpis && (
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
           <KpiTile label={`Total kWh (${rangePreset})`} value={`${fleetKpis.totalKwh.toFixed(3)} kWh`} />
           <KpiTile label={`Total Revenue (${rangePreset})`} value={`$${fleetKpis.totalRevenue.toFixed(2)}`} />
           <KpiTile label="Total Sites" value={`${fleetKpis.totalSites}`} />
-          <KpiTile label="Active Sessions" value={`${fleetKpis.activeSessions}`} />
+          <KpiTile label="Total Connectors" value={`${fleetKpis.totalConnectors}`} live />
+          <KpiTile label="Active Sessions" value={`${fleetKpis.activeSessions}`} live />
           <KpiTile label={`Utilization Rate (${rangePreset})`} value={`${fleetKpis.utilizationRatePct.toFixed(2)}%`} />
         </div>
       )}
@@ -326,11 +327,10 @@ export default function Dashboard() {
       {fleetUptime && (
         <div className="mt-4 rounded-xl border border-gray-200 bg-white p-4">
           <p className="text-sm font-semibold text-gray-700">Fleet uptime summary (OCA v1.1)</p>
-          <div className="mt-2 grid gap-3 sm:grid-cols-4">
+          <div className="mt-2 grid gap-3 sm:grid-cols-3">
             <div><p className="text-xs text-gray-500">24h</p><p className="text-lg font-semibold text-gray-900">{fleetUptime.uptime24h.toFixed(2)}%</p></div>
             <div><p className="text-xs text-gray-500">7d</p><p className="text-lg font-semibold text-gray-900">{fleetUptime.uptime7d.toFixed(2)}%</p></div>
             <div><p className="text-xs text-gray-500">30d</p><p className="text-lg font-semibold text-gray-900">{fleetUptime.uptime30d.toFixed(2)}%</p></div>
-            <div><p className="text-xs text-gray-500">Degraded chargers</p><p className="text-lg font-semibold text-amber-700">{fleetUptime.degraded}</p></div>
           </div>
         </div>
       )}
@@ -339,10 +339,13 @@ export default function Dashboard() {
   );
 }
 
-function KpiTile({ label, value }: { label: string; value: string }) {
+function KpiTile({ label, value, live }: { label: string; value: string; live?: boolean }) {
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-4">
-      <p className="text-xs text-gray-500">{label}</p>
+      <div className="flex items-center gap-1.5">
+        <p className="text-xs text-gray-500">{label}</p>
+        {live && <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-500" title="Live" />}
+      </div>
       <p className="mt-1 text-xl font-semibold text-gray-900">{value}</p>
     </div>
   );

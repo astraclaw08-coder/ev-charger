@@ -239,6 +239,7 @@ export default function SiteDetail() {
   const totalRevenue = (siteAnalytics?.revenueCents ?? 0) / 100;
   const utilizationPct = siteUtilizationPct;
   const totalConnectors = site.chargers.reduce((s, c) => s + c.connectors.length, 0);
+  const totalChargers = site.chargers.length;
 
   return (
     <div className="space-y-6">
@@ -319,9 +320,10 @@ export default function SiteDetail() {
       )}
 
       {/* ── KPI tiles (dashboard style) ── */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
         <SiteKpiTile label={`Total kWh (${rangePreset})`} value={`${totalKwh.toFixed(2)} kWh`} />
         <SiteKpiTile label={`Total Revenue (${rangePreset})`} value={`$${totalRevenue.toFixed(2)}`} />
+        <SiteKpiTile label="Total Chargers" value={`${totalChargers}`} live />
         <SiteKpiTile label="Active Sessions" value={`${activeSessions}`} live />
         <SiteKpiTile label="Total Connectors" value={`${totalConnectors}`} live />
         <SiteKpiTile label={`Utilization (${rangePreset})`} value={utilizationPct != null ? `${utilizationPct.toFixed(2)}%` : '—'} />
@@ -451,11 +453,10 @@ export default function SiteDetail() {
 
       {/* ── Uptime summary ── */}
       {siteUptime && (
-        <div className="grid gap-3 sm:grid-cols-5">
+        <div className="grid gap-3 sm:grid-cols-4">
           <div className="rounded-lg border border-gray-200 bg-white p-3 text-center"><p className="text-xs text-gray-500">Uptime 24h</p><p className="mt-1 text-lg font-semibold text-gray-900">{siteUptime.uptimePercent24h.toFixed(1)}%</p></div>
           <div className="rounded-lg border border-gray-200 bg-white p-3 text-center"><p className="text-xs text-gray-500">Uptime 7d</p><p className="mt-1 text-lg font-semibold text-gray-900">{siteUptime.uptimePercent7d.toFixed(1)}%</p></div>
           <div className="rounded-lg border border-gray-200 bg-white p-3 text-center"><p className="text-xs text-gray-500">Uptime 30d</p><p className="mt-1 text-lg font-semibold text-gray-900">{siteUptime.uptimePercent30d.toFixed(1)}%</p></div>
-          <div className="rounded-lg border border-gray-200 bg-white p-3 text-center"><p className="text-xs text-gray-500">Degraded</p><p className="mt-1 text-lg font-semibold text-amber-700">{siteUptime.degradedChargers}</p></div>
           <div className="rounded-lg border border-gray-200 bg-white p-3 text-center"><p className="text-xs text-gray-500">Total chargers</p><p className="mt-1 text-lg font-semibold text-gray-900">{site.chargers.length}</p></div>
         </div>
       )}
@@ -535,7 +536,9 @@ function ChargerListRow({ charger, uptime }: { charger: SiteDetailType['chargers
   return (
     <div className="grid gap-3 px-4 py-3 md:grid-cols-[1.6fr_1fr_1.8fr_0.8fr] md:items-center">
       <div>
-        <p className="font-mono text-sm font-semibold text-gray-900">{charger.ocppId}</p>
+        <Link to={`/chargers/${charger.id}`} className="font-mono text-sm font-semibold text-gray-900 hover:text-brand-700 hover:underline">
+          {charger.ocppId}
+        </Link>
         <p className="text-xs text-gray-500">{charger.vendor} {charger.model} · S/N {charger.serialNumber}</p>
         {charger.lastHeartbeat && (
           <p className="text-xs text-gray-400">Heartbeat: {formatDate(charger.lastHeartbeat)}</p>
@@ -572,7 +575,9 @@ function ChargerCard({ charger, uptime }: { charger: SiteDetailType['chargers'][
     <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
       <div className="flex items-start justify-between">
         <div>
-          <p className="font-semibold text-gray-900 font-mono">{charger.ocppId}</p>
+          <Link to={`/chargers/${charger.id}`} className="font-semibold text-gray-900 font-mono hover:text-brand-700 hover:underline">
+            {charger.ocppId}
+          </Link>
           <p className="text-xs text-gray-500">{charger.vendor} {charger.model}</p>
         </div>
         <StatusBadge status={charger.status} type="charger" />
