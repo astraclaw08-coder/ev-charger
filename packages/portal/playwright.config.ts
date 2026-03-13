@@ -23,5 +23,9 @@ export default defineConfig({
     url: 'http://127.0.0.1:4173',
     reuseExistingServer: !process.env.CI,
     timeout: 120 * 1000,
+    env: {
+      VITE_AUTH_MODE: 'dev',
+      VITE_DEV_OPERATOR_ID: 'operator-001',
+    },
   },
 });

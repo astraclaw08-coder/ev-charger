@@ -129,7 +129,7 @@ export async function notificationRoutes(app: FastifyInstance) {
       },
     });
 
-    return rows.map((row) => ({
+    return rows.map((row: (typeof rows)[number]) => ({
       id: row.id,
       createdByOperatorId: row.createdByOperatorId,
       targetMode: row.targetMode,
@@ -158,7 +158,7 @@ export async function notificationRoutes(app: FastifyInstance) {
       include: { campaign: true },
     });
 
-    return rows.map((row) => ({
+    return rows.map((row: (typeof rows)[number]) => ({
       id: row.id,
       campaignId: row.campaignId,
       title: row.campaign.title,
