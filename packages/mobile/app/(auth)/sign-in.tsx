@@ -133,7 +133,7 @@ function KeycloakSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onCo
   const { loginWithPassword, loading, error } = useAppAuth();
   const router = useRouter();
   const [phone, setPhone] = useState('');
-  const [showEmail, setShowEmail] = useState(false);
+  const [showEmail, setShowEmail] = useState(true);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [awaitingCode, setAwaitingCode] = useState(false);
@@ -278,7 +278,7 @@ function ClerkSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onConti
   const [code, setCode] = useState('');
   const [awaitingCode, setAwaitingCode] = useState(false);
   const [otpTarget, setOtpTarget] = useState('');
-  const [showEmail, setShowEmail] = useState(false);
+  const [showEmail, setShowEmail] = useState(true);
   const [loading, setLoading] = useState(false);
 
   async function handleRequestOtp() {
