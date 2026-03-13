@@ -6,8 +6,8 @@
   "scripts": {
     "dev": "APP_ENV=dev expo start",
     "dev:prod": "APP_ENV=prod expo start",
-    "ios": "APP_ENV=dev expo run:ios",
-    "ios:prod": "APP_ENV=prod expo run:ios",
+    "ios": "LANG=en_US.UTF-8 APP_ENV=dev expo run:ios --configuration Debug",
+    "ios:prod": "LANG=en_US.UTF-8 APP_ENV=prod expo run:ios --configuration Release",
     "android": "APP_ENV=dev expo run:android",
     "android:prod": "APP_ENV=prod expo run:android",
     "build:dev": "eas build --profile development",

@@ -26,8 +26,8 @@ Commands:
 
 ```bash
 # local simulator
-npm run ios        # APP_ENV=dev
-npm run ios:prod   # APP_ENV=prod
+npm run ios        # APP_ENV=dev (Debug)
+npm run ios:prod   # APP_ENV=prod (Release -> RC/prod app identity)
 
 # EAS builds
 npm run build:dev
