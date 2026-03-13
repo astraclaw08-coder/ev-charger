@@ -479,12 +479,16 @@ export default function SiteDetail() {
               <span>Charger</span>
               <span className="inline-flex items-center gap-1">
                 Status
-                <span
-                  className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-gray-300 text-[10px] font-bold text-gray-500"
-                  title="Online means the charger is currently sending fresh heartbeat signals to the server. If heartbeat signals stop for about 17 minutes or more, it is treated as offline."
-                  aria-label="Status definition: online means fresh heartbeat signals are being received"
-                >
-                  ?
+                <span className="group relative inline-flex">
+                  <span
+                    className="inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full border border-gray-300 text-[10px] font-bold text-gray-500"
+                    aria-label="Status definition: online means fresh heartbeat signals are being received"
+                  >
+                    ?
+                  </span>
+                  <span className="pointer-events-none absolute left-1/2 top-full z-20 mt-1 hidden w-64 -translate-x-1/2 rounded-md bg-gray-900 px-2 py-1.5 text-[11px] normal-case font-medium leading-snug text-white shadow-lg group-hover:block group-focus-within:block">
+                    Online means the charger is actively sending fresh heartbeat signals to the server. If heartbeats stop for about 17+ minutes, it is marked offline.
+                  </span>
                 </span>
               </span>
               <span>Connectors</span>
