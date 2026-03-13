@@ -13,7 +13,7 @@ export const apiBaseUrl = API_URL;
 
 const DEV_USER_ID = process.env.EXPO_PUBLIC_DEV_USER_ID || 'user-test-driver-001';
 const CLERK_KEY = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
-const AUTH_MODE = (process.env.EXPO_PUBLIC_AUTH_MODE || '').trim().toLowerCase();
+const AUTH_MODE = ((Constants.expoConfig?.extra?.authMode as string | undefined) || process.env.EXPO_PUBLIC_AUTH_MODE || '').trim().toLowerCase();
 
 export const authMode = AUTH_MODE === 'keycloak' || AUTH_MODE === 'clerk' || AUTH_MODE === 'dev'
   ? AUTH_MODE
@@ -63,6 +63,8 @@ async function request<T>(
     ...(await authHeaders()),
     ...(opts.headers as Record<string, string> | undefined),
   });
+
+  headers.set('x-app-env', appEnv);
 
   const res = await fetch(`${API_URL}${path}`, {
     ...opts,

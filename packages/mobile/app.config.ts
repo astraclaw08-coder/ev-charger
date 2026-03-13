@@ -14,6 +14,10 @@ const scheme = isProd ? 'evcharger' : 'evcharger-dev';
 const bundleIdentifier = isProd ? 'app.evcharger.app' : 'dev.evcharger.app';
 const androidPackage = isProd ? 'app.evcharger.app' : 'dev.evcharger.app';
 
+const devApiUrl = process.env.EXPO_PUBLIC_API_URL_DEV || process.env.EXPO_PUBLIC_API_URL || 'http://127.0.0.1:3001';
+const prodApiUrl = process.env.EXPO_PUBLIC_API_URL_PROD || 'https://api-production-26cf.up.railway.app';
+const authMode = isProd ? 'keycloak' : 'dev';
+
 const config: ExpoConfig = {
   name,
   slug,
@@ -59,7 +63,8 @@ const config: ExpoConfig = {
   },
   extra: {
     appEnv,
-    apiUrl: process.env.EXPO_PUBLIC_API_URL,
+    apiUrl: isProd ? prodApiUrl : devApiUrl,
+    authMode,
     envLabel: isProd ? 'PROD' : 'DEV',
     eas: {
       projectId: '39b3fbf7-b459-4a59-99ad-1c224595c1a6',

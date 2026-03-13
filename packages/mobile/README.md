@@ -38,14 +38,14 @@ npm run build:prod
 
 Set these for each environment (locally or in EAS env):
 
-- `EXPO_PUBLIC_API_URL`
-- `EXPO_PUBLIC_AUTH_MODE`
+- `EXPO_PUBLIC_API_URL_DEV` (dev only)
+- `EXPO_PUBLIC_API_URL_PROD` (optional override; defaults to prod Railway API)
 - `EXPO_PUBLIC_MAPBOX_TOKEN`
-- `EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY` (recommended; required for live payment flow)
+- `EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY` (prod/live payment flow)
 
-Optional:
-
-- `EXPO_PUBLIC_ENV_LABEL` (defaults to `DEV`/`PROD`)
+Notes:
+- Auth mode is now hard-separated by app env: `dev -> dev auth`, `prod -> keycloak`.
+- `EXPO_PUBLIC_AUTH_MODE` is no longer used for normal env selection.
 
 ## Verification in app
 
