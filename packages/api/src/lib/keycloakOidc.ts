@@ -8,6 +8,15 @@ type KeycloakIntrospectionResponse = {
   [key: string]: unknown;
 };
 
+type IntrospectionCacheEntry = {
+  payload: KeycloakIntrospectionResponse | null;
+  expiresAt: number;
+};
+
+const INTROSPECTION_CACHE_TTL_MS = 60_000;
+const introspectionCache = new Map<string, IntrospectionCacheEntry>();
+const introspectionInFlight = new Map<string, Promise<KeycloakIntrospectionResponse | null>>();
+
 function readEnv(name: string): string {
   const value = process.env[name];
   if (!value) throw new Error(`Missing required env var: ${name}`);
@@ -123,19 +132,41 @@ export async function refreshGrantLogin(input: { refreshToken: string }) {
 
 export async function introspectAccessToken(accessToken: string): Promise<KeycloakIntrospectionResponse | null> {
   if (!accessToken) return null;
-  const cfg = getOidcConfig();
-  const body = new URLSearchParams({
-    token: accessToken,
-    client_id: cfg.clientId,
-    client_secret: cfg.clientSecret,
-  });
 
-  const res = await fetch(cfg.introspectionEndpoint, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body,
-  });
-  if (!res.ok) return null;
-  const payload = await res.json() as KeycloakIntrospectionResponse;
-  return payload.active ? payload : null;
+  const now = Date.now();
+  const cached = introspectionCache.get(accessToken);
+  if (cached && cached.expiresAt > now) return cached.payload;
+
+  const existingInFlight = introspectionInFlight.get(accessToken);
+  if (existingInFlight) return existingInFlight;
+
+  const run = (async () => {
+    const cfg = getOidcConfig();
+    const body = new URLSearchParams({
+      token: accessToken,
+      client_id: cfg.clientId,
+      client_secret: cfg.clientSecret,
+    });
+
+    const res = await fetch(cfg.introspectionEndpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body,
+    });
+    if (!res.ok) {
+      introspectionCache.set(accessToken, { payload: null, expiresAt: now + 10_000 });
+      return null;
+    }
+    const payload = await res.json() as KeycloakIntrospectionResponse;
+    const normalized = payload.active ? payload : null;
+    introspectionCache.set(accessToken, { payload: normalized, expiresAt: now + INTROSPECTION_CACHE_TTL_MS });
+    return normalized;
+  })();
+
+  introspectionInFlight.set(accessToken, run);
+  try {
+    return await run;
+  } finally {
+    introspectionInFlight.delete(accessToken);
+  }
 }
