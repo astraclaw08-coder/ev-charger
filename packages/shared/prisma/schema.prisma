@@ -118,6 +118,7 @@ model Charger {
   smartChargingState SmartChargingState?
   sessionFacts    SessionFact[]
   rebateIntervals RebateInterval15m[]
+  favoritedBy     UserFavoriteCharger[]
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
 
@@ -246,9 +247,22 @@ model User {
   idTag           String    @unique // OCPP idTag for this driver (max 20 chars)
   sessions        Session[]
   payments        Payment[]
+  favoriteChargers UserFavoriteCharger[]
   inAppNotificationDeliveries InAppNotificationDelivery[]
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
+}
+
+model UserFavoriteCharger {
+  userId    String
+  chargerId String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  charger   Charger  @relation(fields: [chargerId], references: [id], onDelete: Cascade)
+
+  @@id([userId, chargerId])
+  @@index([userId, createdAt])
+  @@index([chargerId, createdAt])
 }
 
 model Payment {

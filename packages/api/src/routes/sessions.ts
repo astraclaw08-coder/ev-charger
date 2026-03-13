@@ -4,6 +4,23 @@ import { requireAuth } from '../plugins/auth';
 import { remoteStart, remoteStop } from '../lib/ocppClient';
 import { computeSessionAmounts } from '../lib/sessionBilling';
 
+function parseHistoryRange(query: { startDate?: string; endDate?: string }, fallbackDays = 30) {
+  const hasCustomRange = Boolean(query.startDate || query.endDate);
+  if (hasCustomRange && (!query.startDate || !query.endDate)) {
+    return { error: 'startDate and endDate are required together' } as const;
+  }
+
+  const end = query.endDate ? new Date(`${query.endDate}T23:59:59.999Z`) : new Date();
+  const start = query.startDate
+    ? new Date(`${query.startDate}T00:00:00.000Z`)
+    : new Date(end.getTime() - (Math.max(1, fallbackDays) - 1) * 24 * 60 * 60 * 1000);
+
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start > end) {
+    return { error: 'Invalid date range' } as const;
+  }
+  return { start, end } as const;
+}
+
 export async function sessionRoutes(app: FastifyInstance) {
   // POST /sessions/start — driver initiates a remote start
   app.post<{
@@ -158,6 +175,97 @@ export async function sessionRoutes(app: FastifyInstance) {
       amountState: amounts.amountState,
       amountLabel: amounts.amountLabel,
       isAmountFinal: amounts.isAmountFinal,
+    };
+  });
+
+  // GET /me/transactions/enriched — user-scoped transaction history projection
+  app.get<{
+    Querystring: {
+      limit?: string;
+      offset?: string;
+      status?: string;
+      startDate?: string;
+      endDate?: string;
+    };
+  }>('/me/transactions/enriched', {
+    preHandler: requireAuth,
+  }, async (req, reply) => {
+    const user = req.currentUser!;
+    const range = parseHistoryRange(req.query, 30);
+    if ('error' in range) return reply.status(400).send({ error: range.error });
+
+    const limit = Math.min(Math.max(Number.parseInt(req.query.limit ?? '50', 10), 1), 200);
+    const offset = Math.max(Number.parseInt(req.query.offset ?? '0', 10), 0);
+    const status = req.query.status;
+
+    if (status && !['ACTIVE', 'COMPLETED', 'FAILED'].includes(status)) {
+      return reply.status(400).send({ error: 'status must be ACTIVE, COMPLETED, or FAILED' });
+    }
+
+    const where = {
+      userId: user.id,
+      startedAt: { gte: range.start, lte: range.end },
+      ...(status ? { status: status as 'ACTIVE' | 'COMPLETED' | 'FAILED' } : {}),
+    };
+
+    const [rows, total] = await Promise.all([
+      prisma.session.findMany({
+        where,
+        orderBy: { startedAt: 'desc' },
+        take: limit,
+        skip: offset,
+        include: {
+          payment: { select: { status: true, amountCents: true } },
+          connector: {
+            include: {
+              charger: {
+                select: {
+                  id: true,
+                  ocppId: true,
+                  model: true,
+                  vendor: true,
+                  site: { select: { id: true, name: true } },
+                },
+              },
+            },
+          },
+        },
+      }),
+      prisma.session.count({ where }),
+    ]);
+
+    return {
+      total,
+      limit,
+      offset,
+      transactions: rows.map((row: any) => {
+        const amounts = computeSessionAmounts(row);
+        return {
+          id: row.id,
+          sessionId: row.id,
+          transactionId: row.transactionId,
+          status: row.status,
+          startedAt: row.startedAt,
+          stoppedAt: row.stoppedAt,
+          energyKwh: amounts.kwhDelivered,
+          revenueUsd: ((amounts.effectiveAmountCents ?? amounts.estimatedAmountCents ?? row.payment?.amountCents ?? 0) / 100),
+          payment: row.payment,
+          effectiveAmountCents: amounts.effectiveAmountCents,
+          estimatedAmountCents: amounts.estimatedAmountCents,
+          amountState: amounts.amountState,
+          amountLabel: amounts.amountLabel,
+          isAmountFinal: amounts.isAmountFinal,
+          meterStart: row.meterStart,
+          meterStop: row.meterStop,
+          site: row.connector.charger.site,
+          charger: {
+            id: row.connector.charger.id,
+            ocppId: row.connector.charger.ocppId,
+            model: row.connector.charger.model,
+            vendor: row.connector.charger.vendor,
+          },
+        };
+      }),
     };
   });
 }

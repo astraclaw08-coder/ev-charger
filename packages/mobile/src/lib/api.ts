@@ -1,4 +1,5 @@
 import Constants from 'expo-constants';
+import { Buffer } from 'buffer';
 
 const API_URL =
   (Constants.expoConfig?.extra?.apiUrl as string | undefined) ||
@@ -33,6 +34,27 @@ export function setGuestMode(guest: boolean) {
 
 export function isGuestMode() {
   return _guestMode;
+}
+
+function decodeJwtSubject(token: string): string | null {
+  const parts = token.split('.');
+  if (parts.length < 2) return null;
+  try {
+    const normalized = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), '=');
+    const json = Buffer.from(padded, 'base64').toString('utf8');
+    if (!json) return null;
+    const payload = JSON.parse(json) as { sub?: unknown };
+    return typeof payload.sub === 'string' && payload.sub.trim() ? payload.sub.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+export function getAuthIdentityKey(): string | null {
+  if (_guestMode) return null;
+  if (!_bearerToken) return null;
+  return decodeJwtSubject(_bearerToken);
 }
 
 async function authHeaders(): Promise<Record<string, string>> {
@@ -187,6 +209,10 @@ export interface InAppNotificationItem {
   createdAt: string;
   readAt?: string | null;
   isRead: boolean;
+}
+
+export interface FavoriteListResponse {
+  chargerIds: string[];
 }
 
 
@@ -361,7 +387,7 @@ export const api = {
       if (params?.limit != null) query.set('limit', String(params.limit));
       if (params?.offset != null) query.set('offset', String(params.offset));
       const qs = query.toString();
-      return request<EnrichedTransactionsResponse>(`/transactions/enriched${qs ? `?${qs}` : ''}`);
+      return request<EnrichedTransactionsResponse>(`/me/transactions/enriched${qs ? `?${qs}` : ''}`);
     },
   },
 
@@ -393,6 +419,29 @@ export const api = {
       return request<UserProfile>('/me/profile', {
         method: 'PUT',
         body: JSON.stringify(input),
+      });
+    },
+  },
+
+  favorites: {
+    list() {
+      return request<FavoriteListResponse>('/me/favorites');
+    },
+    add(chargerId: string) {
+      return request<{ ok: boolean }>('/me/favorites', {
+        method: 'POST',
+        body: JSON.stringify({ chargerId }),
+      });
+    },
+    remove(chargerId: string) {
+      return request<{ ok: boolean }>(`/me/favorites/${chargerId}`, {
+        method: 'DELETE',
+      });
+    },
+    replace(chargerIds: string[]) {
+      return request<FavoriteListResponse>('/me/favorites', {
+        method: 'PUT',
+        body: JSON.stringify({ chargerIds }),
       });
     },
   },
