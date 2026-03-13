@@ -3,8 +3,9 @@ import crypto from 'crypto';
 import { prisma } from '@ev-charger/shared';
 import { requireOperator } from '../plugins/auth';
 import { requirePolicy } from '../plugins/authorization';
-import { remoteReset } from '../lib/ocppClient';
+import { remoteReset, remoteStart, triggerHeartbeat, getConfiguration } from '../lib/ocppClient';
 import { getChargerUptime } from '../lib/uptime';
+import { computeSessionAmounts } from '../lib/sessionBilling';
 
 function hasSiteAccess(siteId: string, siteIds: string[] | undefined) {
   if (!siteIds || siteIds.length === 0) return true;
@@ -189,20 +190,16 @@ export async function chargerRoutes(app: FastifyInstance) {
     });
 
     return sessions.map((s: any) => {
-      const meterDerivedKwh =
-        s.meterStop != null && s.meterStart != null
-          ? Math.max(0, (s.meterStop - s.meterStart) / 1000)
-          : null;
-      const computedKwh = meterDerivedKwh != null
-        ? Math.max(s.kwhDelivered ?? 0, meterDerivedKwh)
-        : s.kwhDelivered;
-      const effectiveAmountCents =
-        s.payment?.amountCents != null
-          ? s.payment.amountCents
-          : computedKwh != null && s.ratePerKwh != null
-            ? Math.round(computedKwh * s.ratePerKwh * 100)
-            : null;
-      return { ...s, kwhDelivered: computedKwh, effectiveAmountCents };
+      const amounts = computeSessionAmounts(s);
+      return {
+        ...s,
+        kwhDelivered: amounts.kwhDelivered,
+        effectiveAmountCents: amounts.effectiveAmountCents,
+        estimatedAmountCents: amounts.estimatedAmountCents,
+        amountState: amounts.amountState,
+        amountLabel: amounts.amountLabel,
+        isAmountFinal: amounts.isAmountFinal,
+      };
     });
   });
 
@@ -245,5 +242,74 @@ export async function chargerRoutes(app: FastifyInstance) {
     const type = req.body?.type ?? 'Soft';
     const status = await remoteReset(charger.ocppId, type);
     return { status };
+  });
+
+  // POST /chargers/:id/remote-start — operator initiates remote start
+  app.post<{
+    Params: { id: string };
+    Body: { connectorId: number; idTag?: string };
+  }>('/chargers/:id/remote-start', {
+    preHandler: [requireOperator],
+  }, async (req, reply) => {
+    const charger = await prisma.charger.findUnique({
+      where: { id: req.params.id },
+      include: { connectors: { where: { connectorId: req.body.connectorId } } },
+    });
+    if (!charger) return reply.status(404).send({ error: 'Charger not found' });
+    if (!hasSiteAccess(charger.siteId, req.currentOperator?.claims?.siteIds)) {
+      return reply.status(403).send({
+        error: 'Forbidden',
+        denyReason: { code: 'SITE_OUT_OF_SCOPE', reason: `Site ${charger.siteId} is not in granted siteIds`, policy: 'charger.remote_start' },
+      });
+    }
+
+    const connector = charger.connectors[0];
+    if (!connector) return reply.status(404).send({ error: 'Connector not found' });
+
+    const idTag = req.body.idTag ?? 'TESTDRIVER0001';
+    const status = await remoteStart(charger.ocppId, req.body.connectorId, idTag);
+
+    if (status !== 'Accepted') {
+      return reply.status(503).send({ error: 'Charger rejected the start request', status });
+    }
+
+    return { status };
+  });
+
+  // POST /chargers/:id/trigger-heartbeat — operator requests immediate heartbeat
+  app.post<{ Params: { id: string } }>('/chargers/:id/trigger-heartbeat', {
+    preHandler: [requireOperator],
+  }, async (req, reply) => {
+    const charger = await prisma.charger.findUnique({ where: { id: req.params.id } });
+    if (!charger) return reply.status(404).send({ error: 'Charger not found' });
+    if (!hasSiteAccess(charger.siteId, req.currentOperator?.claims?.siteIds)) {
+      return reply.status(403).send({
+        error: 'Forbidden',
+        denyReason: { code: 'SITE_OUT_OF_SCOPE', reason: `Site ${charger.siteId} is not in granted siteIds`, policy: 'charger.trigger_heartbeat' },
+      });
+    }
+
+    const status = await triggerHeartbeat(charger.ocppId);
+    if (status !== 'Accepted') {
+      return reply.status(503).send({ error: 'Charger rejected heartbeat trigger', status });
+    }
+    return { status };
+  });
+
+  // POST /chargers/:id/get-configuration — operator requests current config keys
+  app.post<{ Params: { id: string } }>('/chargers/:id/get-configuration', {
+    preHandler: [requireOperator],
+  }, async (req, reply) => {
+    const charger = await prisma.charger.findUnique({ where: { id: req.params.id } });
+    if (!charger) return reply.status(404).send({ error: 'Charger not found' });
+    if (!hasSiteAccess(charger.siteId, req.currentOperator?.claims?.siteIds)) {
+      return reply.status(403).send({
+        error: 'Forbidden',
+        denyReason: { code: 'SITE_OUT_OF_SCOPE', reason: `Site ${charger.siteId} is not in granted siteIds`, policy: 'charger.get_configuration' },
+      });
+    }
+
+    const response = await getConfiguration(charger.ocppId);
+    return response;
   });
 }

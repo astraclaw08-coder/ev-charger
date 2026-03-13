@@ -55,56 +55,147 @@ enum UptimeEventType {
   RECOVERED
 }
 
+enum OcppOutboxStatus {
+  PENDING
+  PROCESSING
+  DONE
+  FAILED
+}
+
+enum SmartChargingScope {
+  CHARGER
+  GROUP
+  SITE
+}
+
 // ─── Models ───────────────────────────────────────────────────────────────────
 
 model Site {
-  id               String    @id @default(uuid())
+  id               String              @id @default(uuid())
   name             String
   address          String
   lat              Float
   lng              Float
   operatorId       String
-  pricingMode      String    @default("flat") // flat | tou
-  pricePerKwhUsd   Float     @default(0.35)
-  idleFeePerMinUsd Float     @default(0.08)
-  activationFeeUsd Float     @default(0)
-  gracePeriodMin   Int       @default(10)
+  pricingMode      String              @default("flat") // flat | tou
+  pricePerKwhUsd   Float               @default(0.35)
+  idleFeePerMinUsd Float               @default(0.08)
+  activationFeeUsd Float               @default(0)
+  gracePeriodMin   Int                 @default(10)
   touWindows       Json?
   organizationName String?
   portfolioName    String?
   chargers         Charger[]
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  chargerGroups    ChargerGroup[]
+  chargingProfiles SmartChargingProfile[]
+  sessionFacts     SessionFact[]
+  rebateIntervals  RebateInterval15m[]
+  siteDailyFacts   SiteDailyFact[]
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
 
   @@index([operatorId])
 }
 
 model Charger {
-  id            String        @id @default(uuid())
-  siteId        String
-  site          Site          @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  ocppId        String        @unique  // used in OCPP WebSocket path: /ocpp/{ocppId}
-  serialNumber  String        @unique
-  model         String
-  vendor        String
-  password      String        // OCPP basic auth password (hashed)
-  status        ChargerStatus @default(OFFLINE)
-  lastHeartbeat DateTime?
-  connectors    Connector[]
-  ocppLogs      OcppLog[]
-  uptimeEvents  UptimeEvent[]
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  id              String              @id @default(uuid())
+  siteId          String
+  site            Site                @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  groupId         String?
+  group           ChargerGroup?       @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  ocppId          String              @unique // used in OCPP WebSocket path: /ocpp/{ocppId}
+  serialNumber    String              @unique
+  model           String
+  vendor          String
+  password        String // OCPP basic auth password (hashed)
+  status          ChargerStatus       @default(OFFLINE)
+  lastHeartbeat   DateTime?
+  connectors      Connector[]
+  ocppLogs        OcppLog[]
+  uptimeEvents    UptimeEvent[]
+  outboxEvents    OcppEventOutbox[]
+  chargingProfiles SmartChargingProfile[]
+  smartChargingState SmartChargingState?
+  sessionFacts    SessionFact[]
+  rebateIntervals RebateInterval15m[]
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
 
   @@index([siteId])
+  @@index([groupId])
   @@index([status])
+}
+
+model ChargerGroup {
+  id          String                @id @default(uuid())
+  name        String
+  description String?
+  siteId      String?
+  site        Site?                 @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  chargers    Charger[]
+  profiles    SmartChargingProfile[]
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+
+  @@index([siteId])
+  @@index([name])
+}
+
+model SmartChargingProfile {
+  id                  String             @id @default(uuid())
+  name                String
+  scope               SmartChargingScope
+  enabled             Boolean            @default(true)
+  priority            Int                @default(0)
+  defaultLimitKw      Float?
+  schedule            Json?
+  validFrom           DateTime?
+  validTo             DateTime?
+  siteId              String?
+  site                Site?              @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  chargerGroupId      String?
+  chargerGroup        ChargerGroup?      @relation(fields: [chargerGroupId], references: [id], onDelete: Cascade)
+  chargerId           String?
+  charger             Charger?           @relation(fields: [chargerId], references: [id], onDelete: Cascade)
+  createdByOperatorId String?
+  updatedByOperatorId String?
+  states              SmartChargingState[]
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  @@index([scope, enabled, priority])
+  @@index([siteId, scope, enabled])
+  @@index([chargerGroupId, scope, enabled])
+  @@index([chargerId, scope, enabled])
+}
+
+model SmartChargingState {
+  id              String              @id @default(uuid())
+  chargerId       String              @unique
+  charger         Charger             @relation(fields: [chargerId], references: [id], onDelete: Cascade)
+  effectiveLimitKw Float
+  fallbackApplied Boolean             @default(false)
+  sourceScope     SmartChargingScope?
+  sourceProfileId String?
+  sourceProfile   SmartChargingProfile? @relation(fields: [sourceProfileId], references: [id], onDelete: SetNull)
+  sourceWindowId  String?
+  sourceReason    String
+  status          String
+  lastAttemptAt   DateTime
+  lastAppliedAt   DateTime?
+  lastError       String?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  @@index([status, updatedAt])
+  @@index([sourceProfileId])
 }
 
 model Connector {
   id          String          @id @default(uuid())
   chargerId   String
   charger     Charger         @relation(fields: [chargerId], references: [id], onDelete: Cascade)
-  connectorId Int             // OCPP connector number (1-indexed per charger)
+  connectorId Int // OCPP connector number (1-indexed per charger)
   status      ConnectorStatus @default(UNAVAILABLE)
   sessions    Session[]
   createdAt   DateTime        @default(now())
@@ -115,23 +206,25 @@ model Connector {
 }
 
 model Session {
-  id            String        @id @default(uuid())
-  connectorId   String
-  connector     Connector     @relation(fields: [connectorId], references: [id])
-  userId        String
-  user          User          @relation(fields: [userId], references: [id])
-  transactionId Int?          @unique  // OCPP transactionId assigned by server
-  idTag         String        // OCPP idTag used to start session
-  startedAt     DateTime      @default(now())
-  stoppedAt     DateTime?
-  meterStart    Float?        // Wh at session start
-  meterStop     Float?        // Wh at session end
-  kwhDelivered  Float?        // computed: (meterStop - meterStart) / 1000
-  ratePerKwh    Float?        // price locked at session start (USD)
-  status        SessionStatus @default(ACTIVE)
-  payment       Payment?
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  id              String              @id @default(uuid())
+  connectorId     String
+  connector       Connector           @relation(fields: [connectorId], references: [id])
+  userId          String
+  user            User                @relation(fields: [userId], references: [id])
+  transactionId   Int?                @unique // OCPP transactionId assigned by server
+  idTag           String // OCPP idTag used to start session
+  startedAt       DateTime            @default(now())
+  stoppedAt       DateTime?
+  meterStart      Float? // Wh at session start
+  meterStop       Float? // Wh at session end
+  kwhDelivered    Float? // computed: (meterStop - meterStart) / 1000
+  ratePerKwh      Float? // price locked at session start (USD)
+  status          SessionStatus       @default(ACTIVE)
+  payment         Payment?
+  sessionFact     SessionFact?
+  rebateIntervals RebateInterval15m[]
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
 
   @@index([userId])
   @@index([connectorId])
@@ -139,22 +232,23 @@ model Session {
 }
 
 model User {
-  id        String    @id @default(uuid())
-  clerkId   String    @unique
-  email     String    @unique
-  name           String?
-  phone          String?
-  homeAddress    String?
+  id              String    @id @default(uuid())
+  clerkId         String    @unique
+  email           String    @unique
+  name            String?
+  phone           String?
+  homeAddress     String?
   homeSiteAddress String?
   homeCity        String?
   homeState       String?
   homeZipCode     String?
-  paymentProfile String?
-  idTag          String    @unique  // OCPP idTag for this driver (max 20 chars)
-  sessions  Session[]
-  payments  Payment[]
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  paymentProfile  String?
+  idTag           String    @unique // OCPP idTag for this driver (max 20 chars)
+  sessions        Session[]
+  payments        Payment[]
+  inAppNotificationDeliveries InAppNotificationDelivery[]
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 }
 
 model Payment {
@@ -165,7 +259,7 @@ model Payment {
   user             User          @relation(fields: [userId], references: [id])
   stripeIntentId   String?
   stripeCustomerId String?
-  amountCents      Int?          // in USD cents
+  amountCents      Int? // in USD cents
   status           PaymentStatus @default(PENDING)
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
@@ -174,14 +268,84 @@ model Payment {
   @@index([status])
 }
 
+model SessionFact {
+  id               String        @id @default(uuid())
+  sessionId        String        @unique
+  session          Session       @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  chargerId        String
+  charger          Charger       @relation(fields: [chargerId], references: [id], onDelete: Cascade)
+  siteId           String
+  site             Site          @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  organizationName String?
+  portfolioName    String?
+  startedAt        DateTime
+  stoppedAt        DateTime?
+  durationMinutes  Int?
+  energyKwh        Decimal?      @db.Decimal(18, 6)
+  revenueUsd       Decimal?      @db.Decimal(18, 6)
+  status           SessionStatus
+  sourceVersion    String        @default("v1")
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  @@index([siteId, startedAt])
+  @@index([chargerId, startedAt])
+  @@index([organizationName, startedAt])
+  @@index([portfolioName, startedAt])
+}
+
+model RebateInterval15m {
+  id               String   @id @default(uuid())
+  siteId           String
+  site             Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  chargerId        String
+  charger          Charger  @relation(fields: [chargerId], references: [id], onDelete: Cascade)
+  sessionId        String?
+  session          Session? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  connectorId      Int
+  intervalStart    DateTime
+  intervalEnd      DateTime
+  intervalMinutes  Int      @default(15)
+  energyKwh        Decimal  @db.Decimal(18, 6)
+  avgPowerKw       Decimal  @db.Decimal(18, 6)
+  maxPowerKw       Decimal? @db.Decimal(18, 6)
+  portStatus       String?
+  vehicleConnected Boolean?
+  dataQualityFlag  String?
+  sourceVersion    String   @default("v1")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([chargerId, connectorId, intervalStart, intervalEnd, sourceVersion])
+  @@index([siteId, intervalStart])
+  @@index([sessionId, intervalStart])
+}
+
+model SiteDailyFact {
+  id              String   @id @default(uuid())
+  siteId          String
+  site            Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  day             DateTime
+  sessionsCount   Int      @default(0)
+  totalEnergyKwh  Decimal  @db.Decimal(18, 6)
+  totalRevenueUsd Decimal? @db.Decimal(18, 6)
+  avgPowerKw      Decimal? @db.Decimal(18, 6)
+  sourceVersion   String   @default("v1")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([siteId, day, sourceVersion])
+  @@index([day])
+}
+
 model OcppLog {
   id          String        @id @default(uuid())
   chargerId   String
   charger     Charger       @relation(fields: [chargerId], references: [id], onDelete: Cascade)
   direction   OcppDirection
-  messageType Int           // 2=CALL, 3=CALLRESULT, 4=CALLERROR
+  messageType Int // 2=CALL, 3=CALLRESULT, 4=CALLERROR
   messageId   String
-  action      String?       // e.g., "BootNotification" (null for CALLRESULT/CALLERROR)
+  action      String? // e.g., "BootNotification" (null for CALLRESULT/CALLERROR)
   payload     Json
   createdAt   DateTime      @default(now())
 
@@ -189,6 +353,25 @@ model OcppLog {
   @@index([createdAt])
 }
 
+model OcppEventOutbox {
+  id             String           @id @default(uuid())
+  chargerId      String
+  charger        Charger          @relation(fields: [chargerId], references: [id], onDelete: Cascade)
+  eventType      String
+  direction      OcppDirection    @default(INBOUND)
+  payload        Json
+  idempotencyKey String           @unique
+  status         OcppOutboxStatus @default(PENDING)
+  attempts       Int              @default(0)
+  nextAttemptAt  DateTime         @default(now())
+  lastError      String?
+  processedAt    DateTime?
+  createdAt      DateTime         @default(now())
+
+  @@index([status, nextAttemptAt])
+  @@index([chargerId, createdAt])
+  @@index([eventType, createdAt])
+}
 
 model UptimeEvent {
   id          String          @id @default(uuid())
@@ -219,25 +402,58 @@ model AdminAuditEvent {
   @@index([targetUserId])
 }
 
+model InAppNotificationCampaign {
+  id               String   @id @default(uuid())
+  createdByOperatorId String
+  targetMode       String
+  targetUserIds    String[]
+  targetEmails     String[]
+  title            String
+  message          String
+  actionLabel      String?
+  actionUrl        String?
+  deepLink         String?
+  sentAt           DateTime @default(now())
+  createdAt        DateTime @default(now())
+  deliveries       InAppNotificationDelivery[]
+
+  @@index([createdByOperatorId, sentAt])
+  @@index([sentAt])
+}
+
+model InAppNotificationDelivery {
+  id          String   @id @default(uuid())
+  campaignId  String
+  campaign    InAppNotificationCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  readAt      DateTime?
+  createdAt   DateTime @default(now())
+
+  @@unique([campaignId, userId])
+  @@index([userId, createdAt])
+  @@index([campaignId, createdAt])
+}
+
 model PortalSettings {
-  id                       String   @id @default(uuid())
-  scopeKey                 String   @unique
-  organizationName         String?
-  organizationDefaultSite  String?
-  organizationPortfolio    String?
+  id                         String   @id @default(uuid())
+  scopeKey                   String   @unique
+  organizationName           String?
+  organizationDefaultSite    String?
+  organizationPortfolio      String?
   organizationBillingAddress String?
-  supportContactEmail      String?
-  supportContactPhone      String?
-  profileDisplayName       String?
-  profileTimezone          String?
-  remittanceBankName       String?
-  remittanceAccountType    String?
-  remittanceEmail          String?
-  routingNumber            String?
-  accountNumber            String?
-  updatedByOperatorId      String
-  createdAt                DateTime @default(now())
-  updatedAt                DateTime @updatedAt
+  supportContactEmail        String?
+  supportContactPhone        String?
+  profileDisplayName         String?
+  profileTimezone            String?
+  remittanceBankName         String?
+  remittanceAccountType      String?
+  remittanceEmail            String?
+  routingNumber              String?
+  accountNumber              String?
+  updatedByOperatorId        String
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
 
   @@index([scopeKey])
 }

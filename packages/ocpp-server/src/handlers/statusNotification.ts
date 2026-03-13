@@ -1,5 +1,6 @@
 import { prisma } from '@ev-charger/shared';
 import { recordUptimeEvent, toUptimeEvent } from '../uptimeEvents';
+import { enqueueOcppEvent } from '../outbox';
 import type { StatusNotificationRequest, ChargerStatus, ConnectorStatus } from '@ev-charger/shared';
 
 // Map OCPP ChargePointStatus to Prisma ConnectorStatus
@@ -33,36 +34,45 @@ export async function handleStatusNotification(
   const { connectorId, status, errorCode } = params;
   console.log(`[StatusNotification] chargerId=${chargerId} connector=${connectorId} status=${status} error=${errorCode}`);
 
-  if (connectorId === 0) {
-    // ConnectorId 0 = the charger itself
-    const mapped = toChargerStatus(status);
-    await prisma.charger.update({
-      where: { id: chargerId },
-      data: { status: mapped },
-    });
-    await recordUptimeEvent(chargerId, toUptimeEvent(status), { reason: `StatusNotification connector=0 status=${status}`, errorCode });
-  } else {
-    // Upsert connector status (create if missing, update if exists)
-    await prisma.connector.upsert({
-      where: {
-        chargerId_connectorId: { chargerId, connectorId },
-      },
-      update: { status: toConnectorStatus(status) },
-      create: {
-        chargerId,
-        connectorId,
-        status: toConnectorStatus(status),
-      },
-    });
-
-    // connector-level fault/offline visibility for incidents
-    if (status === 'Faulted' || status === 'Unavailable') {
-      await recordUptimeEvent(chargerId, status === 'Faulted' ? 'FAULTED' : 'OFFLINE', {
-        connectorId,
-        reason: `StatusNotification connector=${connectorId} status=${status}`,
-        errorCode,
+  await prisma.$transaction(async (tx) => {
+    if (connectorId === 0) {
+      // ConnectorId 0 = the charger itself
+      const mapped = toChargerStatus(status);
+      await tx.charger.update({
+        where: { id: chargerId },
+        data: { status: mapped },
+      });
+    } else {
+      // Upsert connector status (create if missing, update if exists)
+      await tx.connector.upsert({
+        where: {
+          chargerId_connectorId: { chargerId, connectorId },
+        },
+        update: { status: toConnectorStatus(status) },
+        create: {
+          chargerId,
+          connectorId,
+          status: toConnectorStatus(status),
+        },
       });
     }
+
+    await enqueueOcppEvent(tx, {
+      chargerId,
+      eventType: 'StatusNotification',
+      payload: params,
+      idempotencyKey: `${chargerId}:StatusNotification:${connectorId}:${status}:${params.timestamp ?? 'na'}`,
+    });
+  });
+
+  if (connectorId === 0) {
+    await recordUptimeEvent(chargerId, toUptimeEvent(status), { reason: `StatusNotification connector=0 status=${status}`, errorCode });
+  } else if (status === 'Faulted' || status === 'Unavailable') {
+    await recordUptimeEvent(chargerId, status === 'Faulted' ? 'FAULTED' : 'OFFLINE', {
+      connectorId,
+      reason: `StatusNotification connector=${connectorId} status=${status}`,
+      errorCode,
+    });
   }
 
   return {};

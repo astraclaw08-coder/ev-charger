@@ -257,6 +257,48 @@ export interface ResetResponse {
   status: ResetStatus;
 }
 
+// ─── SetChargingProfile (Server → Charger) ───────────────────────────────────
+
+export type ChargingProfilePurposeType = 'ChargePointMaxProfile' | 'TxDefaultProfile' | 'TxProfile';
+export type ChargingProfileKindType = 'Absolute' | 'Recurring' | 'Relative';
+export type ChargingRateUnitType = 'A' | 'W';
+export type ChargingProfileStatus = 'Accepted' | 'Rejected' | 'NotSupported';
+
+export interface ChargingSchedulePeriod {
+  startPeriod: number;
+  limit: number;
+  numberPhases?: number;
+}
+
+export interface ChargingSchedule {
+  duration?: number;
+  startSchedule?: string;
+  chargingRateUnit: ChargingRateUnitType;
+  chargingSchedulePeriod: ChargingSchedulePeriod[];
+  minChargingRate?: number;
+}
+
+export interface ChargingProfile {
+  chargingProfileId: number;
+  transactionId?: number;
+  stackLevel: number;
+  chargingProfilePurpose: ChargingProfilePurposeType;
+  chargingProfileKind: ChargingProfileKindType;
+  recurrencyKind?: 'Daily' | 'Weekly';
+  validFrom?: string;
+  validTo?: string;
+  chargingSchedule: ChargingSchedule;
+}
+
+export interface SetChargingProfileRequest {
+  connectorId: number;
+  csChargingProfiles: ChargingProfile;
+}
+
+export interface SetChargingProfileResponse {
+  status: ChargingProfileStatus;
+}
+
 // ─── OCPP RPC message frame types ─────────────────────────────────────────────
 
 export type OcppMessageType = 2 | 3 | 4;  // CALL | CALLRESULT | CALLERROR

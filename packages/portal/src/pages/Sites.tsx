@@ -22,6 +22,7 @@ export default function Sites() {
   const [sites, setSites] = useState<SiteListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [totalConnectors, setTotalConnectors] = useState(0);
   const [showAddSiteModal, setShowAddSiteModal] = useState(false);
   const [createLoading, setCreateLoading] = useState(false);
   const [createMsg, setCreateMsg] = useState('');
@@ -30,8 +31,20 @@ export default function Sites() {
   async function loadSites() {
     try {
       const token = await getToken();
-      const data = await createApiClient(token).getSites();
+      const client = createApiClient(token);
+      const data = await client.getSites();
       setSites(data);
+
+      try {
+        const details = await Promise.all(data.map((site) => client.getSite(site.id)));
+        const connectors = details.reduce(
+          (sum, site) => sum + site.chargers.reduce((inner, charger) => inner + charger.connectors.length, 0),
+          0,
+        );
+        setTotalConnectors(connectors);
+      } catch {
+        setTotalConnectors(0);
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to load sites');
     } finally {
@@ -94,6 +107,17 @@ export default function Sites() {
         >
           + Add Site
         </button>
+      </div>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <div className="rounded-lg border border-gray-200 bg-white px-4 py-3">
+          <p className="text-xs uppercase tracking-wide text-gray-500">Total Sites</p>
+          <p className="mt-1 text-2xl font-semibold text-gray-900">{sites.length}</p>
+        </div>
+        <div className="rounded-lg border border-gray-200 bg-white px-4 py-3">
+          <p className="text-xs uppercase tracking-wide text-gray-500">Total Connectors</p>
+          <p className="mt-1 text-2xl font-semibold text-gray-900">{totalConnectors}</p>
+        </div>
       </div>
 
       {createMsg && !showAddSiteModal && (

@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { prisma } from '@ev-charger/shared';
 import { requireAuth } from '../plugins/auth';
 import { remoteStart, remoteStop } from '../lib/ocppClient';
+import { computeSessionAmounts } from '../lib/sessionBilling';
 
 export async function sessionRoutes(app: FastifyInstance) {
   // POST /sessions/start — driver initiates a remote start
@@ -100,26 +101,18 @@ export async function sessionRoutes(app: FastifyInstance) {
     ]);
 
     const sessionsForClient = sessions.map((s: any) => {
-      const meterDerivedKwh =
-        s.meterStop != null && s.meterStart != null
-          ? Math.max(0, (s.meterStop - s.meterStart) / 1000)
-          : null;
-      const computedKwh = meterDerivedKwh != null
-        ? Math.max(s.kwhDelivered ?? 0, meterDerivedKwh)
-        : s.kwhDelivered;
-      const effectiveAmountCents =
-        s.payment?.amountCents != null
-          ? s.payment.amountCents
-          : computedKwh != null && s.ratePerKwh != null
-            ? Math.round(computedKwh * s.ratePerKwh * 100)
-            : null;
+      const amounts = computeSessionAmounts(s);
       return {
         ...s,
         ocppTransactionId: s.transactionId,
-        kwhDelivered: computedKwh,
+        kwhDelivered: amounts.kwhDelivered,
         endedAt: s.stoppedAt,
-        effectiveAmountCents,
-        costEstimateCents: effectiveAmountCents,
+        effectiveAmountCents: amounts.effectiveAmountCents,
+        costEstimateCents: amounts.costEstimateCents,
+        estimatedAmountCents: amounts.estimatedAmountCents,
+        amountState: amounts.amountState,
+        amountLabel: amounts.amountLabel,
+        isAmountFinal: amounts.isAmountFinal,
       };
     });
 
@@ -152,26 +145,19 @@ export async function sessionRoutes(app: FastifyInstance) {
     if (!session) return reply.status(404).send({ error: 'Session not found' });
     if (session.userId !== user.id) return reply.status(403).send({ error: 'Not your session' });
 
-    const meterDerivedKwh =
-      session.meterStop != null && session.meterStart != null
-        ? Math.max(0, (session.meterStop - session.meterStart) / 1000)
-        : null;
-
-    const computedKwh = meterDerivedKwh != null
-      ? Math.max(session.kwhDelivered ?? 0, meterDerivedKwh)
-      : session.kwhDelivered;
-
-    const costEstimateCents =
-      computedKwh != null && session.ratePerKwh != null
-        ? Math.round(computedKwh * session.ratePerKwh * 100)
-        : null;
+    const amounts = computeSessionAmounts(session);
 
     return {
       ...session,
       ocppTransactionId: session.transactionId,
-      kwhDelivered: computedKwh,
+      kwhDelivered: amounts.kwhDelivered,
       endedAt: session.stoppedAt,
-      costEstimateCents,
+      costEstimateCents: amounts.costEstimateCents,
+      estimatedAmountCents: amounts.estimatedAmountCents,
+      effectiveAmountCents: amounts.effectiveAmountCents,
+      amountState: amounts.amountState,
+      amountLabel: amounts.amountLabel,
+      isAmountFinal: amounts.isAmountFinal,
     };
   });
 }

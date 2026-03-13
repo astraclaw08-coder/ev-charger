@@ -122,3 +122,23 @@ export async function remoteGetConfiguration(
     return { error: 'GetConfiguration failed' };
   }
 }
+
+export async function remoteSetChargingProfile(
+  ocppId: string,
+  profile: Record<string, unknown>,
+): Promise<'Accepted' | 'Rejected' | 'NotSupported'> {
+  const client = clientRegistry.get(ocppId);
+  if (!client) {
+    console.warn(`[RemoteSetChargingProfile] Charger ${ocppId} is not connected`);
+    return 'Rejected';
+  }
+
+  try {
+    const result = await client.call('SetChargingProfile', profile);
+    console.log(`[RemoteSetChargingProfile] Charger ${ocppId} responded: ${result.status}`);
+    return result.status as 'Accepted' | 'Rejected' | 'NotSupported';
+  } catch (err) {
+    console.error(`[RemoteSetChargingProfile] Error calling charger ${ocppId}:`, err);
+    return 'Rejected';
+  }
+}

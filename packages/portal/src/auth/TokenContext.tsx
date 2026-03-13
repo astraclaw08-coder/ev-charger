@@ -33,6 +33,23 @@ export function HybridTokenProvider({ children }: { children: React.ReactNode })
   );
 }
 
+// Wrapper used in keycloak-only mode — returns password-login JWT if available.
+export function PasswordTokenProvider({ children }: { children: React.ReactNode }) {
+  const { session } = usePasswordAuth();
+
+  return (
+    <TokenContext.Provider
+      value={async () => {
+        if (!session) return null;
+        if (session.expiresAtMs <= Date.now()) return null;
+        return session.accessToken;
+      }}
+    >
+      {children}
+    </TokenContext.Provider>
+  );
+}
+
 // Wrapper used in dev mode — always returns null
 export function DevTokenProvider({ children }: { children: React.ReactNode }) {
   return (

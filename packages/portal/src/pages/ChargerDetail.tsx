@@ -11,6 +11,7 @@ export default function ChargerDetail() {
   const getToken = useToken();
 
   const [status, setStatus] = useState<ChargerStatus | null>(null);
+  const [chargerSite, setChargerSite] = useState<{ id: string; name: string } | null>(null);
   const [sessions, setSessions] = useState<SessionRecord[]>([]);
   const [uptime, setUptime] = useState<ChargerUptime | null>(null);
   const [loading, setLoading] = useState(true);
@@ -21,17 +22,26 @@ export default function ChargerDetail() {
   const [remoteStartMsg, setRemoteStartMsg] = useState('');
   const [idTag, setIdTag] = useState('TESTDRIVER0001');
   const [connectorId, setConnectorId] = useState<number>(1);
+  const [heartbeatLoading, setHeartbeatLoading] = useState(false);
+  const [heartbeatMsg, setHeartbeatMsg] = useState('');
+  const [configLoading, setConfigLoading] = useState(false);
+  const [configMsg, setConfigMsg] = useState('');
+  const [resolvedChargerId, setResolvedChargerId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
       const token = await getToken();
       const client = createApiClient(token);
-      const [chargerStatus, recentSessions, uptimeData] = await Promise.all([
+      const [chargerStatus, recentSessions, uptimeData, chargers] = await Promise.all([
         client.getChargerStatus(id!),
         client.getChargerSessions(id!),
         client.getChargerUptime(id!).catch(() => null),
+        client.getChargers().catch(() => []),
       ]);
       setStatus(chargerStatus);
+      const found = chargers.find((c) => c.id === id || c.ocppId === id || c.ocppId === chargerStatus.ocppId);
+      setResolvedChargerId(found?.id ?? id ?? null);
+      setChargerSite(found ? { id: found.site.id, name: found.site.name } : null);
       setSessions(recentSessions);
       setUptime(uptimeData);
     } catch (err: unknown) {
@@ -51,10 +61,15 @@ export default function ChargerDetail() {
 
   async function handleRemoteStart() {
     setRemoteStartMsg('');
+    const targetId = resolvedChargerId ?? id;
+    if (!targetId) {
+      setRemoteStartMsg('Unable to resolve charger id for remote start');
+      return;
+    }
     setRemoteStartLoading(true);
     try {
       const token = await getToken();
-      const result = await createApiClient(token).remoteStartCharger(id!, { connectorId, idTag });
+      const result = await createApiClient(token).remoteStartCharger(targetId, { connectorId, idTag });
       setRemoteStartMsg(`Remote start command sent — charger responded: ${result.status}`);
       setTimeout(load, 1500);
     } catch (err: unknown) {
@@ -66,10 +81,15 @@ export default function ChargerDetail() {
 
   async function handleReset(type: 'Soft' | 'Hard') {
     setResetMsg('');
+    const targetId = resolvedChargerId ?? id;
+    if (!targetId) {
+      setResetMsg('Unable to resolve charger id for reset');
+      return;
+    }
     setResetLoading(true);
     try {
       const token = await getToken();
-      const result = await createApiClient(token).resetCharger(id!, type);
+      const result = await createApiClient(token).resetCharger(targetId, type);
       setResetMsg(`Reset command sent — charger responded: ${result.status}`);
       // Refresh status after a short delay
       setTimeout(load, 2000);
@@ -77,6 +97,51 @@ export default function ChargerDetail() {
       setResetMsg(err instanceof Error ? err.message : 'Reset failed');
     } finally {
       setResetLoading(false);
+    }
+  }
+
+  async function handleTriggerHeartbeat() {
+    setHeartbeatMsg('');
+    const targetId = resolvedChargerId ?? id;
+    if (!targetId) {
+      setHeartbeatMsg('Unable to resolve charger id for heartbeat');
+      return;
+    }
+    setHeartbeatLoading(true);
+    try {
+      const token = await getToken();
+      const result = await createApiClient(token).triggerHeartbeat(targetId);
+      setHeartbeatMsg(`Heartbeat trigger sent — charger responded: ${result.status}`);
+      setTimeout(load, 1200);
+    } catch (err: unknown) {
+      setHeartbeatMsg(err instanceof Error ? err.message : 'Heartbeat trigger failed');
+    } finally {
+      setHeartbeatLoading(false);
+    }
+  }
+
+  async function handleGetConfiguration() {
+    setConfigMsg('');
+    const targetId = resolvedChargerId ?? id;
+    if (!targetId) {
+      setConfigMsg('Unable to resolve charger id for configuration request');
+      return;
+    }
+    setConfigLoading(true);
+    try {
+      const token = await getToken();
+      const result = await createApiClient(token).getChargerConfiguration(targetId);
+      if ('error' in result && result.error) {
+        setConfigMsg(`GetConfiguration failed: ${result.error}`);
+      } else {
+        const keyCount = result.configurationKey?.length ?? 0;
+        const unknownCount = result.unknownKey?.length ?? 0;
+        setConfigMsg(`GetConfiguration returned ${keyCount} key(s)${unknownCount ? `, unknown: ${unknownCount}` : ''}`);
+      }
+    } catch (err: unknown) {
+      setConfigMsg(err instanceof Error ? err.message : 'GetConfiguration failed');
+    } finally {
+      setConfigLoading(false);
     }
   }
 
@@ -94,6 +159,14 @@ export default function ChargerDetail() {
         <div>
           <div className="flex items-center gap-2 text-sm text-gray-500">
             <Link to="/" className="hover:text-gray-700">Dashboard</Link>
+            <span>/</span>
+            <Link to="/sites" className="hover:text-gray-700">Sites</Link>
+            <span>/</span>
+            {chargerSite ? (
+              <Link to={`/sites/${chargerSite.id}`} className="hover:text-gray-700">{chargerSite.name}</Link>
+            ) : (
+              <span>Site</span>
+            )}
             <span>/</span>
             <span className="text-gray-900 font-mono">{status.ocppId}</span>
           </div>
@@ -155,8 +228,30 @@ export default function ChargerDetail() {
               Hard Reset
             </button>
           </div>
+          <div className="flex gap-2">
+            <button
+              onClick={handleTriggerHeartbeat}
+              disabled={heartbeatLoading}
+              className="rounded-md border border-brand-200 px-4 py-2 text-sm font-medium text-brand-700 hover:bg-brand-50 disabled:opacity-50"
+            >
+              {heartbeatLoading ? 'Triggering…' : 'Trigger Heartbeat'}
+            </button>
+            <button
+              onClick={handleGetConfiguration}
+              disabled={configLoading}
+              className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            >
+              {configLoading ? 'Fetching…' : 'Get Configuration'}
+            </button>
+          </div>
           {resetMsg && (
             <p className="text-xs text-gray-500">{resetMsg}</p>
+          )}
+          {heartbeatMsg && (
+            <p className="text-xs text-gray-500">{heartbeatMsg}</p>
+          )}
+          {configMsg && (
+            <p className="text-xs text-gray-500">{configMsg}</p>
           )}
         </div>
       </div>
@@ -268,9 +363,13 @@ export default function ChargerDetail() {
                       />
                     </td>
                     <td className="px-5 py-3 text-gray-500 text-xs">
-                      {s.payment
-                        ? `${s.payment.status}${(s.effectiveAmountCents ?? s.payment.amountCents) != null ? ` · $${(((s.effectiveAmountCents ?? s.payment.amountCents) as number) / 100).toFixed(2)}` : ''}`
-                        : (s.effectiveAmountCents != null ? `$${(s.effectiveAmountCents / 100).toFixed(2)}` : '—')}
+                      {(() => {
+                        const amountCents = s.effectiveAmountCents ?? s.estimatedAmountCents ?? s.payment?.amountCents ?? null;
+                        const amountText = amountCents != null ? `$${(amountCents / 100).toFixed(2)}` : '—';
+                        const label = s.amountState === 'FINAL' ? 'final' : s.amountState === 'PENDING' ? 'est.' : null;
+                        const statusText = s.payment?.status ?? s.amountLabel ?? 'N/A';
+                        return `${statusText}${amountCents != null ? ` · ${amountText}` : ''}${label ? ` (${label})` : ''}`;
+                      })()}
                     </td>
                   </tr>
                 ))}

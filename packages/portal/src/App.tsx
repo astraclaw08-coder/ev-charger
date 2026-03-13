@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { ClerkProvider, useAuth } from '@clerk/clerk-react';
-import { HybridTokenProvider, DevTokenProvider } from './auth/TokenContext';
+import { HybridTokenProvider, PasswordTokenProvider, DevTokenProvider } from './auth/TokenContext';
 import { ClerkAuthUxProvider, DevAuthUxProvider } from './auth/AuthUxContext';
 import { PasswordAuthProvider, usePasswordAuth } from './auth/PasswordAuthContext';
 import Layout from './components/Layout';
@@ -16,10 +16,17 @@ import CustomerSupport from './pages/CustomerSupport';
 import NetworkOps from './pages/NetworkOps';
 import UserManagement from './pages/UserManagement';
 import Settings from './pages/Settings';
+import Notifications from './pages/Notifications';
 import { ThemeProvider, usePortalTheme } from './theme/ThemeContext';
 
 const CLERK_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined;
+const AUTH_MODE = String(import.meta.env.VITE_AUTH_MODE ?? '').trim().toLowerCase();
 const DEV_LOGIN_FLAG_KEY = 'portal.dev.signedIn';
+
+function resolveAuthMode(): 'dev' | 'keycloak' | 'clerk' {
+  if (AUTH_MODE === 'dev' || AUTH_MODE === 'keycloak' || AUTH_MODE === 'clerk') return AUTH_MODE;
+  return CLERK_KEY ? 'clerk' : 'keycloak';
+}
 
 function PortalRoutes() {
   return (
@@ -36,6 +43,7 @@ function PortalRoutes() {
           <Route path="/network" element={<NetworkOps />} />
           <Route path="/users" element={<UserManagement />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/notifications" element={<Notifications />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Layout>
@@ -74,6 +82,25 @@ function ClerkOrPasswordApp() {
     <ClerkAuthUxProvider>
       <SignedOutRoutes />
     </ClerkAuthUxProvider>
+  );
+}
+
+function KeycloakOnlyApp() {
+  const { session } = usePasswordAuth();
+  const isPasswordSignedIn = !!session && session.expiresAtMs > Date.now();
+
+  if (isPasswordSignedIn) {
+    return (
+      <PasswordTokenProvider>
+        <PortalRoutes />
+      </PasswordTokenProvider>
+    );
+  }
+
+  return (
+    <DevAuthUxProvider>
+      <SignedOutRoutes />
+    </DevAuthUxProvider>
   );
 }
 
@@ -118,6 +145,7 @@ function DevApp() {
 
 function ThemedShell() {
   const { themeClass } = usePortalTheme();
+  const authMode = resolveAuthMode();
 
   if (import.meta.env.VITE_FORCE_LOGIN_SCREEN === '1') {
     return (
@@ -131,13 +159,23 @@ function ThemedShell() {
     );
   }
 
-  if (CLERK_KEY) {
+  if (authMode === 'clerk' && CLERK_KEY) {
     return (
       <div className={themeClass}>
         <PasswordAuthProvider>
           <ClerkProvider publishableKey={CLERK_KEY}>
             <ClerkOrPasswordApp />
           </ClerkProvider>
+        </PasswordAuthProvider>
+      </div>
+    );
+  }
+
+  if (authMode === 'keycloak') {
+    return (
+      <div className={themeClass}>
+        <PasswordAuthProvider>
+          <KeycloakOnlyApp />
         </PasswordAuthProvider>
       </div>
     );

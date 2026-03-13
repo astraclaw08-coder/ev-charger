@@ -7,8 +7,15 @@ const API_URL =
 
 const DEV_USER_ID = process.env.EXPO_PUBLIC_DEV_USER_ID || 'user-test-driver-001';
 const CLERK_KEY = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
+const AUTH_MODE = (process.env.EXPO_PUBLIC_AUTH_MODE || '').trim().toLowerCase();
 
-export const isDevMode = !CLERK_KEY;
+export const authMode = AUTH_MODE === 'keycloak' || AUTH_MODE === 'clerk' || AUTH_MODE === 'dev'
+  ? AUTH_MODE
+  : (CLERK_KEY ? 'clerk' : 'keycloak');
+
+export const isDevMode = authMode === 'dev';
+export const isKeycloakMode = authMode === 'keycloak';
+export const isEvcPlatformReadModelEnabled = process.env.EXPO_PUBLIC_EVC_PLATFORM_BUSINESS_VIEWS === '1';
 
 // Auth state holders — set by auth context
 let _bearerToken: string | null = null;
@@ -21,8 +28,15 @@ export function setGuestMode(guest: boolean) {
   _guestMode = guest;
 }
 
+export function isGuestMode() {
+  return _guestMode;
+}
+
 async function authHeaders(): Promise<Record<string, string>> {
   if (_guestMode) {
+    if (process.env.EXPO_PUBLIC_ALLOW_GUEST_TRANSACT === '1') {
+      return { 'x-dev-user-id': DEV_USER_ID };
+    }
     return {};
   }
   if (isDevMode) {
@@ -110,7 +124,11 @@ export interface Session {
   startedAt: string;
   endedAt: string | null;
   costEstimateCents?: number | null;
+  estimatedAmountCents?: number | null;
   effectiveAmountCents?: number | null;
+  amountState?: 'FINAL' | 'PENDING' | 'ESTIMATED' | 'UNAVAILABLE';
+  amountLabel?: string;
+  isAmountFinal?: boolean;
   connector: {
     connectorId: number;
     charger: {
@@ -152,6 +170,20 @@ export interface Payment {
   stripeIntentId: string | null;
 }
 
+export interface InAppNotificationItem {
+  id: string;
+  campaignId: string;
+  title: string;
+  message: string;
+  actionLabel?: string | null;
+  actionUrl?: string | null;
+  deepLink?: string | null;
+  sentAt: string;
+  createdAt: string;
+  readAt?: string | null;
+  isRead: boolean;
+}
+
 
 export interface ChargerUptime {
   chargerId: string;
@@ -160,6 +192,70 @@ export interface ChargerUptime {
   uptimePercent24h: number;
   uptimePercent7d: number;
   uptimePercent30d: number;
+}
+
+
+export interface PortfolioSummaryResponse {
+  range: { startDate: string; endDate: string };
+  totals: {
+    siteCount: number;
+    sessionsCount: number;
+    totalEnergyKwh: number;
+    totalRevenueUsd: number;
+  };
+}
+
+export interface EnrichedTransaction {
+  id: string;
+  sessionId: string;
+  transactionId: number | null;
+  status: string;
+  startedAt: string;
+  stoppedAt: string | null;
+  energyKwh: number;
+  revenueUsd: number;
+  payment: { status: string; amountCents: number | null } | null;
+  effectiveAmountCents?: number | null;
+  estimatedAmountCents?: number | null;
+  amountState?: 'FINAL' | 'PENDING' | 'ESTIMATED' | 'UNAVAILABLE';
+  amountLabel?: string;
+  isAmountFinal?: boolean;
+  meterStart: number | null;
+  meterStop: number | null;
+  site: { id: string; name: string };
+  charger: { id: string; ocppId: string; model: string; vendor: string };
+}
+
+export interface EnrichedTransactionsResponse {
+  total: number;
+  limit: number;
+  offset: number;
+  transactions: EnrichedTransaction[];
+}
+
+export interface RebateInterval {
+  id: string;
+  site: { id: string; name: string };
+  charger: { id: string; ocppId: string };
+  session: { id: string; transactionId: number | null } | null;
+  intervalStart: string;
+  intervalEnd: string;
+  intervalMinutes: number;
+  energyKwh: number;
+  avgPowerKw: number;
+}
+
+export interface RebateIntervalsResponse {
+  total: number;
+  limit: number;
+  offset: number;
+  range: { startDate: string; endDate: string };
+  summary: {
+    totalEnergyKwh: number;
+    avgPowerKw: number;
+    maxPowerKw: number;
+  };
+  intervals: RebateInterval[];
 }
 
 // ── API calls ────────────────────────────────────────────────────────────────
@@ -176,6 +272,43 @@ function normalizeCharger(charger: Charger): Charger {
 }
 
 export const api = {
+  auth: {
+    passwordLogin(username: string, password: string) {
+      return request<{
+        ok: boolean;
+        accessToken: string;
+        refreshToken?: string;
+        tokenType?: string;
+        expiresIn?: number;
+        refreshExpiresIn?: number;
+      }>('/auth/password-login', {
+        method: 'POST',
+        body: JSON.stringify({ username, password }),
+      });
+    },
+    passwordRefresh(refreshToken: string) {
+      return request<{
+        ok: boolean;
+        accessToken: string;
+        refreshToken?: string;
+        tokenType?: string;
+        expiresIn?: number;
+        refreshExpiresIn?: number;
+      }>('/auth/password-refresh', {
+        method: 'POST',
+        body: JSON.stringify({ refreshToken }),
+      });
+    },
+  },
+  analytics: {
+    portfolioSummary(params?: { startDate?: string; endDate?: string }) {
+      const query = new URLSearchParams();
+      if (params?.startDate) query.set('startDate', params.startDate);
+      if (params?.endDate) query.set('endDate', params.endDate);
+      const qs = query.toString();
+      return request<PortfolioSummaryResponse>(`/analytics/portfolio-summary${qs ? `?${qs}` : ''}`);
+    },
+  },
   chargers: {
     async list(bbox?: { minLat: number; maxLat: number; minLng: number; maxLng: number }) {
       const params = bbox
@@ -215,6 +348,30 @@ export const api = {
     },
   },
 
+  transactions: {
+    enriched(params?: { startDate?: string; endDate?: string; limit?: number; offset?: number }) {
+      const query = new URLSearchParams();
+      if (params?.startDate) query.set('startDate', params.startDate);
+      if (params?.endDate) query.set('endDate', params.endDate);
+      if (params?.limit != null) query.set('limit', String(params.limit));
+      if (params?.offset != null) query.set('offset', String(params.offset));
+      const qs = query.toString();
+      return request<EnrichedTransactionsResponse>(`/transactions/enriched${qs ? `?${qs}` : ''}`);
+    },
+  },
+
+  rebates: {
+    intervals(params?: { startDate?: string; endDate?: string; limit?: number; offset?: number }) {
+      const query = new URLSearchParams();
+      if (params?.startDate) query.set('startDate', params.startDate);
+      if (params?.endDate) query.set('endDate', params.endDate);
+      if (params?.limit != null) query.set('limit', String(params.limit));
+      if (params?.offset != null) query.set('offset', String(params.offset));
+      const qs = query.toString();
+      return request<RebateIntervalsResponse>(`/rebates/intervals${qs ? `?${qs}` : ''}`);
+    },
+  },
+
   payments: {
     setupIntent() {
       return request<{ clientSecret: string; stripeCustomerId: string }>('/payments/setup-intent', {
@@ -231,6 +388,17 @@ export const api = {
       return request<UserProfile>('/me/profile', {
         method: 'PUT',
         body: JSON.stringify(input),
+      });
+    },
+  },
+
+  notifications: {
+    list(limit = 40) {
+      return request<InAppNotificationItem[]>(`/me/notifications?limit=${limit}`);
+    },
+    markRead(id: string) {
+      return request<{ ok: boolean }>(`/me/notifications/${id}/read`, {
+        method: 'POST',
       });
     },
   },

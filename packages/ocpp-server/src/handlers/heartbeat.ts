@@ -1,5 +1,7 @@
 import { prisma } from '@ev-charger/shared';
 import { recordUptimeEvent } from '../uptimeEvents';
+import { enqueueOcppEvent } from '../outbox';
+import { applySmartChargingForCharger } from '../smartCharging';
 import type { HeartbeatResponse } from '@ev-charger/shared';
 
 export async function handleHeartbeat(
@@ -13,13 +15,23 @@ export async function handleHeartbeat(
   const current = await prisma.charger.findUnique({ where: { id: chargerId }, select: { status: true } });
   const shouldRecover = current?.status === 'DEGRADED' || current?.status === 'OFFLINE';
 
-  await prisma.charger.update({
-    where: { id: chargerId },
-    data: { lastHeartbeat: now, status: shouldRecover ? 'ONLINE' : undefined },
+  await prisma.$transaction(async (tx) => {
+    await tx.charger.update({
+      where: { id: chargerId },
+      data: { lastHeartbeat: now, status: shouldRecover ? 'ONLINE' : undefined },
+    });
+
+    await enqueueOcppEvent(tx, {
+      chargerId,
+      eventType: 'Heartbeat',
+      payload: { currentTime: now.toISOString() },
+      idempotencyKey: `${chargerId}:Heartbeat:${now.toISOString()}`,
+    });
   });
 
   if (shouldRecover) {
     await recordUptimeEvent(chargerId, 'RECOVERED', { reason: 'Heartbeat restored' });
+    await applySmartChargingForCharger(chargerId, 'heartbeat_recovered');
   }
 
   return { currentTime: now.toISOString() };

@@ -74,11 +74,16 @@ function SessionSummary({ session, fallbackKwh }: { session: Session; fallbackKw
   const meterDerivedKwh =
     session.meterStop != null ? Math.max(0, (session.meterStop - session.meterStart) / 1000) : 0;
   const sessionDerivedKwh = getLiveKwh(session);
-  const paymentDerivedCost = session.payment?.amountCents != null ? session.payment.amountCents / 100 : null;
-  const estimateDerivedCost = session.costEstimateCents != null ? session.costEstimateCents / 100 : null;
+  const effectiveDerivedCost = session.effectiveAmountCents != null ? session.effectiveAmountCents / 100 : null;
+  const estimateDerivedCost =
+    session.estimatedAmountCents != null
+      ? session.estimatedAmountCents / 100
+      : session.costEstimateCents != null
+        ? session.costEstimateCents / 100
+        : null;
 
   const cost =
-    paymentDerivedCost ??
+    effectiveDerivedCost ??
     estimateDerivedCost ??
     (sessionDerivedKwh > 0 ? sessionDerivedKwh * ratePerKwh : meterDerivedKwh * ratePerKwh);
 
@@ -121,17 +126,17 @@ function SessionSummary({ session, fallbackKwh }: { session: Session; fallbackKw
         />
       </View>
 
-      {session.payment?.status === 'CAPTURED' && (
+      {session.amountState === 'FINAL' && (
         <View style={styles.paymentSuccess}>
           <Text style={styles.paymentSuccessText}>
-            Payment of ${cost.toFixed(2)} charged successfully
+            Final payment: ${cost.toFixed(2)}
           </Text>
         </View>
       )}
 
-      {session.payment?.status === 'PENDING' && (
+      {session.amountState === 'PENDING' && (
         <View style={styles.paymentPending}>
-          <Text style={styles.paymentPendingText}>Payment processing…</Text>
+          <Text style={styles.paymentPendingText}>Stripe settlement pending · shown total is estimated.</Text>
         </View>
       )}
 
@@ -278,7 +283,7 @@ function LiveSessionView({
         )}
       </TouchableOpacity>
 
-      <Text style={styles.pollingNote}>Updating every 3 seconds</Text>
+      <Text style={styles.pollingNote}>Updating every ~1.5 seconds</Text>
     </View>
   );
 }
@@ -295,10 +300,12 @@ export default function SessionScreen() {
   const { data: session, isLoading } = useQuery({
     queryKey: ['session', id],
     queryFn: () => api.sessions.get(id),
+    staleTime: 0,
     refetchInterval: (query) => {
-      // Poll aggressively while active
-      return query.state.data?.status === 'ACTIVE' ? 3_000 : false;
+      // Poll aggressively while active for low-latency kWh updates.
+      return query.state.data?.status === 'ACTIVE' ? 1_500 : false;
     },
+    refetchIntervalInBackground: true,
   });
 
   const { data: chargerDetails } = useQuery({
@@ -316,7 +323,16 @@ export default function SessionScreen() {
     if (observed > lastObservedKwh) {
       setLastObservedKwh(observed);
     }
-  }, [session, lastObservedKwh]);
+
+    // Keep tabs/banner cache in sync with the freshest live session payload.
+    queryClient.setQueryData(['sessions'], (current: any) => {
+      if (!current?.sessions || !Array.isArray(current.sessions)) return current;
+      return {
+        ...current,
+        sessions: current.sessions.map((row: Session) => (row.id === session.id ? { ...row, ...session } : row)),
+      };
+    });
+  }, [session, lastObservedKwh, queryClient]);
 
   const stopMutation = useMutation({
     mutationFn: () => api.sessions.stop(id),
@@ -354,16 +370,15 @@ export default function SessionScreen() {
     <>
       <Stack.Screen
         options={{
-          title: session.status === 'ACTIVE' ? 'Charging' : 'Session Details',
+          title: session.status === 'ACTIVE' ? '' : 'Session Details',
           headerShown: true,
           headerStyle: {
-            backgroundColor:
-              session.status === 'ACTIVE' ? '#030712' : isDark ? '#030712' : '#f9fafb',
+            backgroundColor: isDark ? '#0b1220' : '#fff',
           },
-          headerTintColor: session.status === 'ACTIVE' ? '#f8fafc' : isDark ? '#f8fafc' : '#111827',
+          headerTintColor: isDark ? '#f9fafb' : '#111827',
           headerBackButtonDisplayMode: 'minimal',
           headerTitleStyle: {
-            color: session.status === 'ACTIVE' ? '#f8fafc' : isDark ? '#f8fafc' : '#111827',
+            color: isDark ? '#f9fafb' : '#111827',
           },
           headerShadowVisible: false,
         }}

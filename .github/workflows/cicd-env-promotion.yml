@@ -16,6 +16,8 @@ jobs:
   build-and-validate:
     name: Build + validate with env-scoped DATABASE_URL
     runs-on: ubuntu-latest
+    outputs:
+      prod_version_stamp: ${{ steps.prod-version.outputs.stamp }}
     environment: ${{ github.ref_name == 'main' && 'production' || 'development' }}
     env:
       APP_ENV: ${{ github.ref_name == 'main' && 'production' || 'development' }}
@@ -28,6 +30,16 @@ jobs:
       VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY }}
       EXPO_PUBLIC_API_URL: ${{ secrets.EXPO_PUBLIC_API_URL }}
       EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+      # Keycloak — primary auth provider (Clerk no longer primary)
+      KEYCLOAK_BASE_URL: ${{ secrets.KEYCLOAK_BASE_URL }}
+      KEYCLOAK_REALM: ${{ secrets.KEYCLOAK_REALM }}
+      KEYCLOAK_PORTAL_CLIENT_ID: ${{ secrets.KEYCLOAK_PORTAL_CLIENT_ID }}
+      KEYCLOAK_PORTAL_CLIENT_SECRET: ${{ secrets.KEYCLOAK_PORTAL_CLIENT_SECRET }}
+      KEYCLOAK_ADMIN_CLIENT_ID: ${{ secrets.KEYCLOAK_ADMIN_CLIENT_ID }}
+      KEYCLOAK_ADMIN_CLIENT_SECRET: ${{ secrets.KEYCLOAK_ADMIN_CLIENT_SECRET }}
+      SUPER_ADMIN_BOOTSTRAP_SECRET: ${{ secrets.SUPER_ADMIN_BOOTSTRAP_SECRET }}
+      AUTH_PROVIDER_PRIMARY: keycloak
+      AUTH_PROVIDER_DUAL_ACCEPT: "false"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -40,17 +52,56 @@ jobs:
 
       - name: Install
         run: npm ci
+        env:
+          NODE_ENV: development  # devDependencies required for build tools (vite, tsc, etc.)
 
       - name: Validate required env wiring
         run: |
           test -n "$DATABASE_URL" || (echo "Missing DATABASE_URL in GitHub environment secrets" && exit 1)
           echo "APP_ENV=$APP_ENV"
           echo "DATABASE_URL is set (value hidden)."
+          echo "AUTH_PROVIDER_PRIMARY=${AUTH_PROVIDER_PRIMARY}"
+          if [ "$APP_ENV" = "production" ]; then
+            test -n "$KEYCLOAK_BASE_URL" || (echo "Missing KEYCLOAK_BASE_URL in production environment secrets" && exit 1)
+            test -n "$KEYCLOAK_REALM" || (echo "Missing KEYCLOAK_REALM in production environment secrets" && exit 1)
+            test -n "$KEYCLOAK_PORTAL_CLIENT_ID" || (echo "Missing KEYCLOAK_PORTAL_CLIENT_ID in production environment secrets" && exit 1)
+            test -n "$KEYCLOAK_PORTAL_CLIENT_SECRET" || (echo "Missing KEYCLOAK_PORTAL_CLIENT_SECRET in production environment secrets" && exit 1)
+            test -n "$KEYCLOAK_ADMIN_CLIENT_ID" || (echo "Missing KEYCLOAK_ADMIN_CLIENT_ID in production environment secrets" && exit 1)
+            test -n "$KEYCLOAK_ADMIN_CLIENT_SECRET" || (echo "Missing KEYCLOAK_ADMIN_CLIENT_SECRET in production environment secrets" && exit 1)
+            test -n "$SUPER_ADMIN_BOOTSTRAP_SECRET" || (echo "Missing SUPER_ADMIN_BOOTSTRAP_SECRET in production environment secrets" && exit 1)
+            echo "All required Keycloak production secrets are set."
+          fi
+
+      - name: Compute production app version stamp
+        if: ${{ github.ref_name == 'main' }}
+        id: prod-version
+        run: |
+          STAMP="$(node scripts/prod-version-stamp.cjs --sha "$GITHUB_SHA" --branch main)"
+          echo "stamp=$STAMP" >> "$GITHUB_OUTPUT"
+          echo "PROD_VERSION_STAMP=$STAMP" >> "$GITHUB_ENV"
+          echo "VITE_APP_VERSION=$STAMP" >> "$GITHUB_ENV"
+          echo "EXPO_PUBLIC_APP_VERSION=$STAMP" >> "$GITHUB_ENV"
+          echo "Production version stamp: $STAMP"
+
+      - name: Validate production app version stamp
+        if: ${{ github.ref_name == 'main' }}
+        run: |
+          node scripts/check-prod-version-stamp.cjs \
+            --sha "$GITHUB_SHA" \
+            --branch main \
+            --portal-version "$VITE_APP_VERSION" \
+            --mobile-version "$EXPO_PUBLIC_APP_VERSION"
 
       - name: Build shared + api
         run: |
           npm run build --workspace=packages/shared
           npm run build --workspace=packages/api
+
+      - name: Build portal
+        run: npm run build --workspace=packages/portal
+
+      - name: Mobile typecheck
+        run: npx tsc -p packages/mobile/tsconfig.json --noEmit
 
 
   deploy-note:
@@ -63,6 +114,7 @@ jobs:
         run: |
           if [ "${{ github.ref_name }}" = "main" ]; then
             echo "Validated production env secret selection (APP_ENV=production)."
+            echo "Production portal/mobile version stamp: ${{ needs.build-and-validate.outputs.prod_version_stamp }}"
             echo "Next: trigger production deploy (Railway/Vercel) using production environment secrets."
           else
             echo "Validated development env secret selection (APP_ENV=development)."

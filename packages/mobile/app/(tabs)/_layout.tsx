@@ -1,12 +1,10 @@
-import React, { useEffect, useMemo } from 'react';
-import { AppState } from 'react-native';
-import { Tabs, useRouter, useSegments } from 'expo-router';
+import React from 'react';
+import { Tabs, useRouter } from 'expo-router';
 import { TouchableOpacity, Text, View } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
-import { useQuery } from '@tanstack/react-query';
-import { api, type Session } from '@/lib/api';
 import { useAppTheme } from '@/theme';
 import { useAppAuth } from '@/providers/AuthProvider';
+import { useChargingNotifications } from '@/providers/ChargingNotificationsProvider';
+import type { Session } from '@/lib/api';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 function formatElapsed(startedAt: string): string {
@@ -72,32 +70,12 @@ function ActiveSessionBanner({ active }: { active: Session }) {
 export default function TabsLayout() {
   const { isDark } = useAppTheme();
   const { isGuest } = useAppAuth();
-  const segments = useSegments();
+  const { activeSession: active, refetchSessions } = useChargingNotifications();
   const insets = useSafeAreaInsets();
 
-  const { data, refetch } = useQuery({
-    queryKey: ['sessions'],
-    queryFn: () => api.sessions.list(20, 0),
-    refetchInterval: isGuest ? false : 5_000,
-    enabled: !isGuest,
-  });
-
-  useFocusEffect(
-    React.useCallback(() => {
-      if (!isGuest) refetch();
-      return undefined;
-    }, [isGuest, refetch]),
-  );
-
-  useEffect(() => {
-    const sub = AppState.addEventListener('change', (state) => {
-      if (!isGuest && state === 'active') refetch();
-    });
-    return () => sub.remove();
-  }, [isGuest, refetch]);
-
-  const active = useMemo(() => data?.sessions.find((s) => s.status === 'ACTIVE') ?? null, [data]);
-  const currentTab = segments[segments.length - 1];
+  React.useEffect(() => {
+    if (!isGuest) refetchSessions();
+  }, [isGuest, refetchSessions]);
   const bannerVisible = Boolean(active);
   const tabIconGap = 6;
   const tabBottomGap = bannerVisible ? tabIconGap : Math.max(insets.bottom, 8);
@@ -165,7 +143,6 @@ export default function TabsLayout() {
             title: 'Profile',
             tabBarLabel: 'Profile',
             tabBarIcon: ({ size }) => <TabIcon icon="👤" size={size} />,
-            tabBarBadge: isGuest ? 'Guest' : undefined,
           }}
         />
       </Tabs>

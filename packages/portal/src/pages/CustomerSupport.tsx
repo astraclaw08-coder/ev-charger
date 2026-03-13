@@ -205,8 +205,9 @@ export default function CustomerSupport() {
                   {new Date(s.startedAt).toLocaleString()} → {s.stoppedAt ? new Date(s.stoppedAt).toLocaleString() : 'Active'}
                 </p>
                 <p className="mt-1 text-xs text-gray-600">
-                  Energy: {s.kwhDelivered ?? 0} kWh · Payment: {s.payment?.status ?? 'N/A'}
-                  {(s.effectiveAmountCents ?? s.payment?.amountCents) != null ? ` · $${(((s.effectiveAmountCents ?? s.payment?.amountCents) as number) / 100).toFixed(2)}` : ''}
+                  Energy: {s.kwhDelivered ?? 0} kWh · Payment: {s.payment?.status ?? s.amountLabel ?? 'N/A'}
+                  {(s.effectiveAmountCents ?? s.estimatedAmountCents ?? s.payment?.amountCents) != null ? ` · $${(((s.effectiveAmountCents ?? s.estimatedAmountCents ?? s.payment?.amountCents) as number) / 100).toFixed(2)}` : ''}
+                  {s.amountState === 'PENDING' ? ' · Estimated while settlement is pending' : ''}
                   {s.payment && ['CAPTURED', 'AUTHORIZED'].includes(String(s.payment.status)) ? ' · Refund eligible' : ''}
                 </p>
                 <p className="mt-1 text-xs text-brand-700">Case notes: {noteCountBySession.get(s.id) ?? 0}</p>

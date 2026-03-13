@@ -1,0 +1,15 @@
+{
+  "name": "@ev-charger/evc-platform",
+  "version": "0.0.1",
+  "private": true,
+  "main": "dist/worker.js",
+  "types": "dist/worker.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/worker.js",
+    "validate:intervals": "node scripts/validate-meter-intervals.js"
+  },
+  "dependencies": {
+    "@ev-charger/shared": "0.0.1"
+  }
+}

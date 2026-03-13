@@ -7,6 +7,7 @@ export type PasswordAuthSession = {
   accessToken: string;
   refreshToken?: string;
   expiresAtMs: number;
+  refreshExpiresAtMs?: number;
   provider: 'keycloak-password';
 };
 
@@ -62,10 +63,69 @@ export function PasswordAuthProvider({ children }: { children: React.ReactNode }
     window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next));
   }, []);
 
+  const refreshSession = React.useCallback(async (current: PasswordAuthSession): Promise<PasswordAuthSession | null> => {
+    const canRefresh = !!current.refreshToken && (!current.refreshExpiresAtMs || current.refreshExpiresAtMs > Date.now());
+    if (!canRefresh) return null;
+
+    try {
+      const res = await fetch(`${API_URL}/auth/password-refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken: current.refreshToken }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !(json as { accessToken?: string }).accessToken) return null;
+
+      const expiresInSeconds = Number((json as { expiresIn?: number }).expiresIn ?? 900);
+      const refreshExpiresInSeconds = Number((json as { refreshExpiresIn?: number }).refreshExpiresIn ?? 1800);
+
+      return {
+        accessToken: (json as { accessToken: string }).accessToken,
+        refreshToken: (json as { refreshToken?: string }).refreshToken ?? current.refreshToken,
+        expiresAtMs: Date.now() + Math.max(60, expiresInSeconds) * 1000,
+        refreshExpiresAtMs: Date.now() + Math.max(60, refreshExpiresInSeconds) * 1000,
+        provider: 'keycloak-password',
+      };
+    } catch {
+      return null;
+    }
+  }, []);
+
   const logoutPassword = React.useCallback(() => {
     persistSession(null);
     setError(null);
   }, [persistSession]);
+
+  React.useEffect(() => {
+    if (!session) return;
+
+    let cancelled = false;
+    const tick = async () => {
+      if (!session) return;
+      const timeLeft = session.expiresAtMs - Date.now();
+
+      if (timeLeft <= 60_000) {
+        const next = await refreshSession(session);
+        if (cancelled) return;
+        if (next) {
+          persistSession(next);
+          return;
+        }
+        // hard-expired or refresh failed -> logout so UI returns to sign-in instead of spamming unauthorized APIs
+        logoutPassword();
+      }
+    };
+
+    void tick();
+    const id = window.setInterval(() => {
+      void tick();
+    }, 30_000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [session, refreshSession, persistSession, logoutPassword]);
 
   const loginWithPassword = React.useCallback(async (username: string, password: string) => {
     setLoading(true);
@@ -85,11 +145,13 @@ export function PasswordAuthProvider({ children }: { children: React.ReactNode }
       }
 
       const expiresInSeconds = Number((json as { expiresIn?: number }).expiresIn ?? 900);
+      const refreshExpiresInSeconds = Number((json as { refreshExpiresIn?: number }).refreshExpiresIn ?? 1800);
       const expiresAtMs = Date.now() + Math.max(60, expiresInSeconds) * 1000;
       const nextSession: PasswordAuthSession = {
         accessToken: (json as { accessToken: string }).accessToken,
         refreshToken: (json as { refreshToken?: string }).refreshToken,
         expiresAtMs,
+        refreshExpiresAtMs: Date.now() + Math.max(60, refreshExpiresInSeconds) * 1000,
         provider: 'keycloak-password',
       };
 

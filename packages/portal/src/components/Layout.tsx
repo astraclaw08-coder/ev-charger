@@ -68,10 +68,11 @@ const NAV = [
   { label: 'Analytics', href: '/analytics', Icon: AnalyticsIcon },
   { label: 'Support', href: '/support', Icon: SupportIcon },
   { label: 'Network Ops', href: '/network', Icon: ToolsIcon },
+  { label: 'Notifications', href: '/notifications', Icon: SupportIcon },
   { label: 'Settings', href: '/settings', Icon: SettingsIcon },
 ];
 
-const portalVersion = import.meta.env.VITE_APP_VERSION ?? `${new Date().getFullYear()}.${String(new Date().getMonth() + 1).padStart(2, '0')}.${String(new Date().getDate()).padStart(2, '0')}.0`;
+const portalVersion = import.meta.env.VITE_APP_VERSION ?? 'dev-local';
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const location = useLocation();

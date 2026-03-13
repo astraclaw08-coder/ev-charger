@@ -54,3 +54,44 @@ export async function remoteReset(
     return 'Rejected';
   }
 }
+
+export async function triggerHeartbeat(
+  ocppId: string,
+): Promise<'Accepted' | 'Rejected'> {
+  try {
+    const data = await post<{ status: string }>('/trigger-message', {
+      ocppId,
+      requestedMessage: 'Heartbeat',
+    });
+    return data.status as 'Accepted' | 'Rejected';
+  } catch (err) {
+    console.error('[OcppClient] triggerHeartbeat failed:', err);
+    return 'Rejected';
+  }
+}
+
+export async function getConfiguration(
+  ocppId: string,
+): Promise<{ configurationKey?: unknown[]; unknownKey?: string[] } | { error: string }> {
+  try {
+    return await post<{ configurationKey?: unknown[]; unknownKey?: string[] }>('/get-configuration', {
+      ocppId,
+    });
+  } catch (err) {
+    console.error('[OcppClient] getConfiguration failed:', err);
+    return { error: 'GetConfiguration failed' };
+  }
+}
+
+export async function setChargingProfile(
+  ocppId: string,
+  profile: Record<string, unknown>,
+): Promise<'Accepted' | 'Rejected' | 'NotSupported'> {
+  try {
+    const data = await post<{ status: string }>('/set-charging-profile', { ocppId, profile });
+    return data.status as 'Accepted' | 'Rejected' | 'NotSupported';
+  } catch (err) {
+    console.error('[OcppClient] setChargingProfile failed:', err);
+    return 'Rejected';
+  }
+}

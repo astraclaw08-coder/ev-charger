@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { requireAuth } from '../plugins/auth';
 import { normalizeRoleMetadata } from '../lib/authClaims';
 import { getKeycloakAdminClient } from '../lib/keycloakAdmin';
-import { keycloakPasswordAuthEnabled, passwordGrantLogin } from '../lib/keycloakOidc';
+import { keycloakPasswordAuthEnabled, passwordGrantLogin, refreshGrantLogin } from '../lib/keycloakOidc';
 import { isBlocked, recordAuthFailure, recordAuthSuccess } from '../lib/authProtection';
 
 type BootstrapBody = {
@@ -13,6 +13,10 @@ type BootstrapBody = {
 type PasswordLoginBody = {
   username: string;
   password: string;
+};
+
+type PasswordRefreshBody = {
+  refreshToken: string;
 };
 
 type BootstrapSuperAdminBody = {
@@ -138,6 +142,32 @@ export async function authRoutes(app: FastifyInstance) {
     }
   });
 
+  app.post<{ Body: PasswordRefreshBody }>('/auth/password-refresh', async (req, reply) => {
+    if (!keycloakPasswordAuthEnabled()) {
+      return reply.status(503).send({ error: 'Password auth is not configured' });
+    }
+
+    const refreshToken = req.body?.refreshToken?.trim();
+    if (!refreshToken) {
+      return reply.status(400).send({ error: 'refreshToken is required' });
+    }
+
+    try {
+      const session = await refreshGrantLogin({ refreshToken });
+      return {
+        ok: true,
+        provider: 'keycloak-password',
+        accessToken: session.accessToken,
+        refreshToken: session.refreshToken,
+        tokenType: session.tokenType,
+        expiresIn: session.expiresIn,
+        refreshExpiresIn: session.refreshExpiresIn,
+      };
+    } catch {
+      return reply.status(401).send({ error: 'Refresh token is invalid or expired' });
+    }
+  });
+
   app.post<{ Body: BootstrapSuperAdminBody }>('/auth/bootstrap-super-admin', async (req, reply) => {
     const blocked = isBlocked({ ip: req.ip, routeScope: 'bootstrap-super-admin' });
     if (blocked.blocked) {
@@ -194,9 +224,9 @@ export async function authRoutes(app: FastifyInstance) {
         firstName: req.body.firstName,
         lastName: req.body.lastName,
         enabled: true,
-        requiredActions: ['UPDATE_PASSWORD'],
+        requiredActions: [],
       });
-      await kc.setPassword(userId!, password, true);
+      await kc.setPassword(userId!, password, false);
 
       const roles = requiredOwnerRoles();
       const currentRoles = await kc.listRealmRolesForUser(userId!);
@@ -217,11 +247,11 @@ export async function authRoutes(app: FastifyInstance) {
         email,
         username,
         assignedRoles: roles,
-        temporaryPassword: true,
-        forcePasswordChange: true,
+        temporaryPassword: false,
+        forcePasswordChange: false,
         nextSteps: [
-          'Log in through portal username/password with the temporary password.',
-          'Keycloak will force UPDATE_PASSWORD on first login.',
+          'Log in through portal or API using the provided email/password immediately.',
+          'Change your password on first login — this initial password is for bootstrapping only.',
           'Rotate SUPER_ADMIN_BOOTSTRAP_SECRET immediately after successful bootstrap.',
         ],
       };

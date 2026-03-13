@@ -120,6 +120,10 @@ export interface SessionRecord {
   user: { name: string | null; email: string } | null;
   payment: { status: string; amountCents: number | null } | null;
   effectiveAmountCents?: number | null;
+  estimatedAmountCents?: number | null;
+  amountState?: 'FINAL' | 'PENDING' | 'ESTIMATED' | 'UNAVAILABLE';
+  amountLabel?: string;
+  isAmountFinal?: boolean;
 }
 
 export interface CreatedCharger {
@@ -130,6 +134,104 @@ export interface CreatedCharger {
   password: string;
 }
 
+export interface PortfolioSummarySite {
+  siteId: string;
+  siteName: string;
+  organizationName: string | null;
+  portfolioName: string | null;
+  sessionsCount: number;
+  totalEnergyKwh: number;
+  totalRevenueUsd: number;
+}
+
+export interface PortfolioSummaryOrganization {
+  organizationName: string;
+  siteCount: number;
+  sessionsCount: number;
+  totalEnergyKwh: number;
+  totalRevenueUsd: number;
+  portfolios: Array<{
+    portfolioName: string;
+    siteCount: number;
+    sessionsCount: number;
+    totalEnergyKwh: number;
+    totalRevenueUsd: number;
+  }>;
+}
+
+export interface PortfolioSummaryResponse {
+  range: { startDate: string; endDate: string };
+  totals: {
+    siteCount: number;
+    sessionsCount: number;
+    totalEnergyKwh: number;
+    totalRevenueUsd: number;
+  };
+  organizations: PortfolioSummaryOrganization[];
+  sites: PortfolioSummarySite[];
+}
+
+export interface EnrichedTransaction {
+  id: string;
+  sessionId: string;
+  transactionId: number | null;
+  idTag: string;
+  status: string;
+  startedAt: string;
+  stoppedAt: string | null;
+  durationMinutes: number | null;
+  energyKwh: number;
+  revenueUsd: number;
+  payment: { status: string; amountCents: number | null } | null;
+  effectiveAmountCents?: number | null;
+  estimatedAmountCents?: number | null;
+  amountState?: 'FINAL' | 'PENDING' | 'ESTIMATED' | 'UNAVAILABLE';
+  amountLabel?: string;
+  isAmountFinal?: boolean;
+  meterStart: number | null;
+  meterStop: number | null;
+  site: { id: string; name: string; organizationName: string | null; portfolioName: string | null };
+  charger: { id: string; ocppId: string; serialNumber: string; model: string; vendor: string };
+  sourceVersion: string;
+}
+
+export interface EnrichedTransactionsResponse {
+  total: number;
+  limit: number;
+  offset: number;
+  transactions: EnrichedTransaction[];
+}
+
+export interface RebateInterval {
+  id: string;
+  site: { id: string; name: string };
+  charger: { id: string; ocppId: string };
+  session: { id: string; transactionId: number | null } | null;
+  connectorId: number;
+  intervalStart: string;
+  intervalEnd: string;
+  intervalMinutes: number;
+  energyKwh: number;
+  avgPowerKw: number;
+  maxPowerKw: number | null;
+  portStatus: string | null;
+  vehicleConnected: boolean | null;
+  dataQualityFlag: string | null;
+  sourceVersion: string;
+}
+
+export interface RebateIntervalsResponse {
+  total: number;
+  limit: number;
+  offset: number;
+  range: { startDate: string; endDate: string };
+  summary: {
+    totalEnergyKwh: number;
+    avgPowerKw: number;
+    maxPowerKw: number;
+  };
+  intervals: RebateInterval[];
+}
 
 export interface UptimeIncident {
   event: 'ONLINE' | 'OFFLINE' | 'FAULTED' | 'DEGRADED' | 'RECOVERED';
@@ -229,20 +331,98 @@ export interface ChargerModelCatalogItem {
   updatedAt: string;
 }
 
+export interface AdminInAppNotificationCampaign {
+  id: string;
+  createdByOperatorId: string;
+  targetMode: 'all' | 'user_ids' | 'emails';
+  targetUserIds: string[];
+  targetEmails: string[];
+  title: string;
+  message: string;
+  actionLabel?: string | null;
+  actionUrl?: string | null;
+  deepLink?: string | null;
+  sentAt: string;
+  deliveryCount: number;
+}
+
+export interface SmartChargingGroup {
+  id: string;
+  name: string;
+  description?: string | null;
+  siteId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  chargers?: Array<{ id: string; ocppId: string; status: string }>;
+}
+
+export interface SmartChargingProfile {
+  id: string;
+  name: string;
+  scope: 'CHARGER' | 'GROUP' | 'SITE';
+  enabled: boolean;
+  priority: number;
+  defaultLimitKw: number | null;
+  schedule: unknown;
+  validFrom: string | null;
+  validTo: string | null;
+  siteId?: string | null;
+  chargerGroupId?: string | null;
+  chargerId?: string | null;
+  updatedAt: string;
+}
+
+export interface SmartChargingState {
+  id: string;
+  chargerId: string;
+  effectiveLimitKw: number;
+  fallbackApplied: boolean;
+  sourceScope: 'CHARGER' | 'GROUP' | 'SITE' | null;
+  sourceProfileId: string | null;
+  sourceWindowId: string | null;
+  sourceReason: string;
+  status: string;
+  lastAttemptAt: string;
+  lastAppliedAt: string | null;
+  lastError: string | null;
+  updatedAt: string;
+  charger: { id: string; ocppId: string; siteId: string; status: string };
+  sourceProfile?: { id: string; name: string; scope: 'CHARGER' | 'GROUP' | 'SITE' } | null;
+}
+
+export interface SmartChargingEffectiveResponse {
+  charger: { id: string; ocppId: string; siteId: string; groupId: string | null; status: string };
+  calculated: {
+    effectiveLimitKw: number;
+    fallbackApplied: boolean;
+    sourceScope: 'CHARGER' | 'GROUP' | 'SITE' | null;
+    sourceProfileId: string | null;
+    sourceWindowId: string | null;
+    sourceReason: string;
+    invalidProfileIds: string[];
+  };
+  persisted: SmartChargingState | null;
+  config: { safeFallbackLimitKw: number; ocppStackLevel: number; timezone: string };
+}
+
 // ─── Client ──────────────────────────────────────────────────────────────────
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
 const DEV_OPERATOR_ID = import.meta.env.VITE_DEV_OPERATOR_ID ?? 'operator-001';
-const IS_DEV_MODE = !import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
+const AUTH_MODE = String(import.meta.env.VITE_AUTH_MODE ?? '').trim().toLowerCase();
+const IS_DEV_MODE = AUTH_MODE === 'dev';
 
 async function request<T>(
   path: string,
   token: string | null | undefined,
   options?: RequestInit,
 ): Promise<T> {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
+  const headers: Record<string, string> = {};
+
+  const hasBody = options?.body !== undefined && options?.body !== null;
+  if (hasBody) {
+    headers['Content-Type'] = 'application/json';
+  }
 
   if (IS_DEV_MODE) {
     headers['x-dev-operator-id'] = DEV_OPERATOR_ID;
@@ -275,6 +455,43 @@ export function createApiClient(token: string | null | undefined) {
       if (params?.endDate) query.set('endDate', params.endDate);
       const qs = query.toString();
       return request<Analytics>(`/sites/${siteId}/analytics${qs ? `?${qs}` : ''}`, token);
+    },
+
+    getPortfolioSummary: (params?: { startDate?: string; endDate?: string; siteId?: string; organizationName?: string; portfolioName?: string }) => {
+      const query = new URLSearchParams();
+      if (params?.startDate) query.set('startDate', params.startDate);
+      if (params?.endDate) query.set('endDate', params.endDate);
+      if (params?.siteId) query.set('siteId', params.siteId);
+      if (params?.organizationName) query.set('organizationName', params.organizationName);
+      if (params?.portfolioName) query.set('portfolioName', params.portfolioName);
+      const qs = query.toString();
+      return request<PortfolioSummaryResponse>(`/analytics/portfolio-summary${qs ? `?${qs}` : ''}`, token);
+    },
+
+    getEnrichedTransactions: (params?: { limit?: number; offset?: number; siteId?: string; chargerId?: string; status?: string; startDate?: string; endDate?: string }) => {
+      const query = new URLSearchParams();
+      if (params?.limit != null) query.set('limit', String(params.limit));
+      if (params?.offset != null) query.set('offset', String(params.offset));
+      if (params?.siteId) query.set('siteId', params.siteId);
+      if (params?.chargerId) query.set('chargerId', params.chargerId);
+      if (params?.status) query.set('status', params.status);
+      if (params?.startDate) query.set('startDate', params.startDate);
+      if (params?.endDate) query.set('endDate', params.endDate);
+      const qs = query.toString();
+      return request<EnrichedTransactionsResponse>(`/transactions/enriched${qs ? `?${qs}` : ''}`, token);
+    },
+
+    getRebateIntervals: (params?: { siteId?: string; chargerId?: string; sessionId?: string; startDate?: string; endDate?: string; limit?: number; offset?: number }) => {
+      const query = new URLSearchParams();
+      if (params?.siteId) query.set('siteId', params.siteId);
+      if (params?.chargerId) query.set('chargerId', params.chargerId);
+      if (params?.sessionId) query.set('sessionId', params.sessionId);
+      if (params?.startDate) query.set('startDate', params.startDate);
+      if (params?.endDate) query.set('endDate', params.endDate);
+      if (params?.limit != null) query.set('limit', String(params.limit));
+      if (params?.offset != null) query.set('offset', String(params.offset));
+      const qs = query.toString();
+      return request<RebateIntervalsResponse>(`/rebates/intervals${qs ? `?${qs}` : ''}`, token);
     },
 
     getChargerStatus: (id: string) => request<ChargerStatus>(`/chargers/${id}/status`, token),
@@ -336,6 +553,114 @@ export function createApiClient(token: string | null | undefined) {
         method: 'POST',
         body: JSON.stringify(body),
       }),
+
+    triggerHeartbeat: (id: string) =>
+      request<{ status: string }>(`/chargers/${id}/trigger-heartbeat`, token, {
+        method: 'POST',
+      }),
+
+    getChargerConfiguration: (id: string) =>
+      request<{ configurationKey?: Array<{ key?: string; value?: string; readonly?: boolean }>; unknownKey?: string[]; error?: string }>(`/chargers/${id}/get-configuration`, token, {
+        method: 'POST',
+      }),
+
+    getSmartChargingConfig: () =>
+      request<{ safeFallbackLimitKw: number; ocppStackLevel: number; timezone: string }>('/smart-charging/config', token),
+
+    listSmartChargingGroups: (params?: { siteId?: string }) => {
+      const qs = new URLSearchParams();
+      if (params?.siteId) qs.set('siteId', params.siteId);
+      return request<SmartChargingGroup[]>(`/smart-charging/groups${qs.toString() ? `?${qs}` : ''}`, token);
+    },
+
+    createSmartChargingGroup: (body: { name: string; description?: string; siteId?: string }) =>
+      request<SmartChargingGroup>('/smart-charging/groups', token, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+
+    updateSmartChargingGroup: (id: string, body: { name?: string; description?: string; siteId?: string | null }) =>
+      request<SmartChargingGroup>(`/smart-charging/groups/${id}`, token, {
+        method: 'PUT',
+        body: JSON.stringify(body),
+      }),
+
+    deleteSmartChargingGroup: (id: string) =>
+      request<{ deleted: boolean }>(`/smart-charging/groups/${id}`, token, {
+        method: 'DELETE',
+      }),
+
+    assignChargerToSmartGroup: (groupId: string, chargerId: string) =>
+      request<{ assigned: boolean }>(`/smart-charging/groups/${groupId}/chargers/${chargerId}`, token, {
+        method: 'POST',
+      }),
+
+    unassignChargerFromSmartGroup: (groupId: string, chargerId: string) =>
+      request<{ unassigned: boolean }>(`/smart-charging/groups/${groupId}/chargers/${chargerId}`, token, {
+        method: 'DELETE',
+      }),
+
+    listSmartChargingProfiles: (params?: { scope?: 'CHARGER' | 'GROUP' | 'SITE'; siteId?: string; chargerGroupId?: string; chargerId?: string; enabled?: boolean }) => {
+      const qs = new URLSearchParams();
+      if (params?.scope) qs.set('scope', params.scope);
+      if (params?.siteId) qs.set('siteId', params.siteId);
+      if (params?.chargerGroupId) qs.set('chargerGroupId', params.chargerGroupId);
+      if (params?.chargerId) qs.set('chargerId', params.chargerId);
+      if (params?.enabled !== undefined) qs.set('enabled', String(params.enabled));
+      return request<SmartChargingProfile[]>(`/smart-charging/profiles${qs.toString() ? `?${qs}` : ''}`, token);
+    },
+
+    createSmartChargingProfile: (body: {
+      name: string;
+      scope: 'CHARGER' | 'GROUP' | 'SITE';
+      enabled?: boolean;
+      priority?: number;
+      defaultLimitKw?: number | null;
+      schedule?: unknown;
+      validFrom?: string;
+      validTo?: string;
+      siteId?: string;
+      chargerGroupId?: string;
+      chargerId?: string;
+    }) =>
+      request<{ profile: SmartChargingProfile }>(`/smart-charging/profiles`, token, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+
+    updateSmartChargingProfile: (id: string, body: {
+      name?: string;
+      enabled?: boolean;
+      priority?: number;
+      defaultLimitKw?: number | null;
+      schedule?: unknown;
+      validFrom?: string | null;
+      validTo?: string | null;
+    }) =>
+      request<{ profile: SmartChargingProfile }>(`/smart-charging/profiles/${id}`, token, {
+        method: 'PUT',
+        body: JSON.stringify(body),
+      }),
+
+    deleteSmartChargingProfile: (id: string) =>
+      request<{ deleted: boolean }>(`/smart-charging/profiles/${id}`, token, {
+        method: 'DELETE',
+      }),
+
+    getSmartChargingEffectiveLimit: (chargerId: string) =>
+      request<SmartChargingEffectiveResponse>(`/smart-charging/chargers/${chargerId}/effective`, token),
+
+    reconcileSmartChargingForCharger: (chargerId: string) =>
+      request<Record<string, unknown>>(`/smart-charging/chargers/${chargerId}/reconcile`, token, {
+        method: 'POST',
+      }),
+
+    listSmartChargingStates: (params?: { siteId?: string; status?: string }) => {
+      const qs = new URLSearchParams();
+      if (params?.siteId) qs.set('siteId', params.siteId);
+      if (params?.status) qs.set('status', params.status);
+      return request<SmartChargingState[]>(`/smart-charging/states${qs.toString() ? `?${qs}` : ''}`, token);
+    },
 
     listAdminUsers: (params?: { search?: string; max?: number }) => {
       const qs = new URLSearchParams();
@@ -415,5 +740,27 @@ export function createApiClient(token: string | null | undefined) {
         method: 'POST',
         body: JSON.stringify(body),
       }),
+
+    sendInAppNotification: (body: {
+      targetMode: 'all' | 'user_ids' | 'emails';
+      userIds?: string[];
+      emails?: string[];
+      title: string;
+      message: string;
+      actionLabel?: string;
+      actionUrl?: string;
+      deepLink?: string;
+      reason?: string;
+    }) => request<{ id: string; sentAt: string; title: string; message: string; targetMode: string; deliveryCount: number }>(
+      '/admin/notifications/send',
+      token,
+      {
+        method: 'POST',
+        body: JSON.stringify(body),
+      },
+    ),
+
+    listInAppNotificationAudit: (limit = 40) =>
+      request<AdminInAppNotificationCampaign[]>(`/admin/notifications/audit?limit=${limit}`, token),
   };
 }

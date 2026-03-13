@@ -1,0 +1,24 @@
+name: Branch Policy Guard
+
+on:
+  pull_request:
+    branches: [main, dev]
+
+permissions:
+  contents: read
+
+jobs:
+  branch-policy:
+    name: branch-policy-guard
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Enforce dev/main PR branch policy
+        run: node scripts/verify-branch-policy.cjs

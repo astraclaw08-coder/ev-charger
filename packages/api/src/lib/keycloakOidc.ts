@@ -43,6 +43,26 @@ export function keycloakPasswordAuthEnabled() {
   );
 }
 
+type KeycloakTokenExchange = {
+  access_token: string;
+  refresh_token?: string;
+  expires_in?: number;
+  refresh_expires_in?: number;
+  token_type?: string;
+  scope?: string;
+};
+
+function normalizeTokenExchange(json: KeycloakTokenExchange) {
+  return {
+    accessToken: json.access_token,
+    refreshToken: json.refresh_token,
+    tokenType: json.token_type ?? 'Bearer',
+    expiresIn: json.expires_in ?? 0,
+    refreshExpiresIn: json.refresh_expires_in ?? 0,
+    scope: json.scope ?? 'openid profile email',
+  };
+}
+
 export async function passwordGrantLogin(input: { username: string; password: string }) {
   const cfg = getOidcConfig();
   const body = new URLSearchParams({
@@ -68,23 +88,36 @@ export async function passwordGrantLogin(input: { username: string; password: st
     throw err;
   }
 
-  const json = await res.json() as {
-    access_token: string;
-    refresh_token?: string;
-    expires_in?: number;
-    refresh_expires_in?: number;
-    token_type?: string;
-    scope?: string;
-  };
+  const json = await res.json() as KeycloakTokenExchange;
+  return normalizeTokenExchange(json);
+}
 
-  return {
-    accessToken: json.access_token,
-    refreshToken: json.refresh_token,
-    tokenType: json.token_type ?? 'Bearer',
-    expiresIn: json.expires_in ?? 0,
-    refreshExpiresIn: json.refresh_expires_in ?? 0,
-    scope: json.scope ?? 'openid profile email',
-  };
+export async function refreshGrantLogin(input: { refreshToken: string }) {
+  const cfg = getOidcConfig();
+  const body = new URLSearchParams({
+    grant_type: 'refresh_token',
+    client_id: cfg.clientId,
+    client_secret: cfg.clientSecret,
+    refresh_token: input.refreshToken,
+    scope: 'openid profile email',
+  });
+
+  const res = await fetch(cfg.tokenEndpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body,
+  });
+
+  if (!res.ok) {
+    const payload = await res.text().catch(() => '');
+    const err = new Error(`Keycloak refresh grant failed (${res.status})`);
+    (err as Error & { detail?: string; statusCode?: number }).detail = payload;
+    (err as Error & { statusCode?: number }).statusCode = res.status;
+    throw err;
+  }
+
+  const json = await res.json() as KeycloakTokenExchange;
+  return normalizeTokenExchange(json);
 }
 
 export async function introspectAccessToken(accessToken: string): Promise<KeycloakIntrospectionResponse | null> {

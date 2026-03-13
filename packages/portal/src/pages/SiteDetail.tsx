@@ -66,6 +66,29 @@ function validateTouWindows(windows: TouWindow[]): string | null {
   return null;
 }
 
+function buildPricingSummary(config: TariffConfig): string {
+  const base = `Base $${config.pricePerKwhUsd.toFixed(2)}/kWh · Idle $${config.idleFeePerMinUsd.toFixed(2)}/min · Activation $${config.activationFeeUsd.toFixed(2)} · Grace ${config.gracePeriodMin}m`;
+  if (config.mode !== 'tou') return `Flat pricing active. ${base}`;
+
+  if (config.windows.length === 0) {
+    return `TOU mode active with no windows configured. Falls back to base rates. ${base}`;
+  }
+
+  const now = new Date();
+  const nowDay = now.getDay();
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  const activeWindow = config.windows
+    .slice()
+    .sort((a, b) => a.day - b.day || timeToMinutes(a.start) - timeToMinutes(b.start))
+    .find((w) => w.day === nowDay && nowMinutes >= timeToMinutes(w.start) && nowMinutes < timeToMinutes(w.end));
+
+  if (!activeWindow) {
+    return `TOU mode active (${config.windows.length} windows). No active window right now; base rates apply. ${base}`;
+  }
+
+  return `TOU mode active (${config.windows.length} windows). Current window (${DAY_NAMES[activeWindow.day]} ${activeWindow.start}-${activeWindow.end}): $${activeWindow.pricePerKwhUsd.toFixed(2)}/kWh · Idle $${activeWindow.idleFeePerMinUsd.toFixed(2)}/min.`;
+}
+
 export default function SiteDetail() {
   const { id } = useParams<{ id: string }>();
   const getToken = useToken();
@@ -111,7 +134,16 @@ export default function SiteDetail() {
         activationFeeUsd: Number(data.activationFeeUsd ?? 0),
         gracePeriodMin: Number(data.gracePeriodMin ?? 10),
         mode: data.pricingMode === 'tou' ? 'tou' : 'flat',
-        windows: Array.isArray(data.touWindows) ? (data.touWindows as TouWindow[]) : [],
+        windows: Array.isArray(data.touWindows)
+          ? (data.touWindows as Array<Partial<TouWindow>>).map((w) => ({
+              id: typeof w.id === 'string' && w.id.length > 0 ? w.id : crypto.randomUUID(),
+              day: Number(w.day ?? 0),
+              start: String(w.start ?? '09:00'),
+              end: String(w.end ?? '17:00'),
+              pricePerKwhUsd: Number(w.pricePerKwhUsd ?? data.pricePerKwhUsd ?? 0.35),
+              idleFeePerMinUsd: Number(w.idleFeePerMinUsd ?? data.idleFeePerMinUsd ?? 0.08),
+            }))
+          : [],
       });
       setAuditEvents(loadAudit(data.id));
 
@@ -351,6 +383,11 @@ export default function SiteDetail() {
             )}
           </div>
         )}
+
+        <div className="mt-4 rounded-md border border-blue-100 bg-blue-50 px-3 py-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Effective pricing summary</p>
+          <p className="mt-1 text-xs text-blue-900">{buildPricingSummary(tariff)}</p>
+        </div>
 
         <div className="mt-3">
           <button type="button" className="rounded-md bg-brand-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-700"

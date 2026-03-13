@@ -1,0 +1,29 @@
+[Unit]
+Description=EV Charger OCPP Server
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=120
+StartLimitBurst=6
+
+[Service]
+Type=simple
+User={{APP_USER}}
+Group={{APP_GROUP}}
+WorkingDirectory={{APP_ROOT}}
+EnvironmentFile={{ENV_FILE}}
+ExecStart=/usr/bin/env npm run start --workspace=packages/ocpp-server
+Restart=always
+RestartSec=2
+TimeoutStartSec=30
+TimeoutStopSec=15
+KillSignal=SIGTERM
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths={{APP_ROOT}} {{APP_ROOT}}/logs {{APP_ROOT}}/.runtime
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ev-ocpp
+
+[Install]
+WantedBy=multi-user.target

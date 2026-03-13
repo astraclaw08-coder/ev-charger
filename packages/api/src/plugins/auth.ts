@@ -33,12 +33,39 @@ function bearerToken(req: FastifyRequest) {
 
 async function getUserFromRequest(req: FastifyRequest) {
   const clerkSecretKey = process.env.CLERK_SECRET_KEY;
+  const keycloakPrimary = process.env.AUTH_PROVIDER_PRIMARY === 'keycloak' && keycloakPasswordAuthEnabled();
+  const appEnv = (process.env.APP_ENV ?? process.env.NODE_ENV ?? '').toLowerCase();
 
-  // Dev mode: no CLERK_SECRET_KEY — accept x-dev-user-id header (Prisma User.id)
-  if (!clerkSecretKey) {
-    const devUserId = req.headers['x-dev-user-id'] as string | undefined;
+  // Dev override: allow explicit x-dev-user-id even when keycloak is primary (local QA/guest transact flows only)
+  const devUserId = req.headers['x-dev-user-id'] as string | undefined;
+  if (appEnv === 'development' && devUserId) {
+    return prisma.user.findUnique({ where: { id: devUserId } });
+  }
+
+  // Legacy dev mode: no CLERK_SECRET_KEY and no Keycloak — accept x-dev-user-id header (Prisma User.id)
+  if (!clerkSecretKey && !keycloakPrimary) {
     if (!devUserId) return null;
     return prisma.user.findUnique({ where: { id: devUserId } });
+  }
+
+  if (!clerkSecretKey && keycloakPrimary) {
+    // Keycloak-only mode: skip Clerk, fall through to Keycloak introspection below
+    const token = bearerToken(req);
+    if (!token) return null;
+    try {
+      const payload = await introspectAccessToken(token);
+      if (!payload?.sub) return null;
+      const authId = `kc:${payload.sub}`;
+      let user = await prisma.user.findUnique({ where: { clerkId: authId } });
+      if (!user) {
+        const email = payload.email ?? payload.preferred_username ?? `${payload.sub}@keycloak.local`;
+        const idTag = `KC${payload.sub.replace(/[^A-Z0-9]/gi, '').slice(-18)}`.toUpperCase().slice(0, 20);
+        user = await prisma.user.create({ data: { clerkId: authId, email, name: payload.preferred_username ?? null, idTag } });
+      }
+      return user;
+    } catch {
+      return null;
+    }
   }
 
   // Production: verify Clerk JWT
@@ -65,11 +92,41 @@ async function getUserFromRequest(req: FastifyRequest) {
     return user;
   } catch {
     req.log?.warn('Clerk token verification failed');
+  }
+
+  if (!keycloakPasswordAuthEnabled()) return null;
+
+  try {
+    const payload = await introspectAccessToken(token);
+    if (!payload?.sub) return null;
+
+    const authId = `kc:${payload.sub}`;
+    let user = await prisma.user.findUnique({ where: { clerkId: authId } });
+    if (!user) {
+      const email = payload.email ?? payload.preferred_username ?? `${payload.sub}@keycloak.local`;
+      const idTag = `KC${payload.sub.replace(/[^A-Z0-9]/gi, '').slice(-18)}`.toUpperCase().slice(0, 20);
+      user = await prisma.user.create({
+        data: {
+          clerkId: authId,
+          email,
+          name: payload.preferred_username ?? null,
+          idTag,
+        },
+      });
+    }
+    return user;
+  } catch {
     return null;
   }
 }
 
 export const requireAuth: preHandlerHookHandler = async (req, reply) => {
+  const token = bearerToken(req);
+  const devUserId = req.headers['x-dev-user-id'] as string | undefined;
+  if (!token && !devUserId) {
+    return reply.status(401).send({ error: 'Unauthorized' });
+  }
+
   const blocked = isBlocked({ ip: req.ip, routeScope: 'user' });
   if (blocked.blocked) {
     reply.header('Retry-After', String(blocked.retryAfterSeconds));
@@ -94,9 +151,10 @@ export const requireOperator: preHandlerHookHandler = async (req, reply) => {
   }
 
   const clerkSecretKey = process.env.CLERK_SECRET_KEY;
+  const keycloakPrimary = process.env.AUTH_PROVIDER_PRIMARY === 'keycloak' && keycloakPasswordAuthEnabled();
 
-  // Dev mode: accept x-dev-operator-id header
-  if (!clerkSecretKey) {
+  // Dev mode: accept x-dev-operator-id header only when neither Clerk nor Keycloak is configured
+  if (!clerkSecretKey && !keycloakPrimary) {
     const devOperatorId = req.headers['x-dev-operator-id'] as string | undefined;
     if (!devOperatorId) {
       recordAuthFailure({ ip: req.ip, routeScope: 'operator' });
@@ -120,11 +178,11 @@ export const requireOperator: preHandlerHookHandler = async (req, reply) => {
 
   const token = bearerToken(req);
   if (!token) {
-    recordAuthFailure({ ip: req.ip, routeScope: 'operator' });
     return reply.status(401).send({ error: 'Unauthorized' });
   }
 
   try {
+    if (!clerkSecretKey) throw new Error('Clerk not configured — skip to Keycloak');
     const { verifyToken, createClerkClient } = await import('@clerk/backend');
     const payload = await verifyToken(token, { secretKey: clerkSecretKey });
     const clerk = createClerkClient({ secretKey: clerkSecretKey });

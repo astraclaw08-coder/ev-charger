@@ -88,9 +88,9 @@ export async function getChargerUptime(chargerId: string) {
   });
 
   const incidents: UptimeIncident[] = allEvents
-    .filter((e) => e.event === 'OFFLINE' || e.event === 'FAULTED' || e.event === 'DEGRADED')
+    .filter((e: any) => e.event === 'OFFLINE' || e.event === 'FAULTED' || e.event === 'DEGRADED')
     .slice(-20)
-    .map((e) => ({
+    .map((e: any) => ({
       event: e.event,
       reason: e.reason,
       errorCode: e.errorCode,
@@ -104,7 +104,7 @@ export async function getChargerUptime(chargerId: string) {
 
     // Find latest status before window starts, then fold transitions
     let state: ChargerStatus = charger.status;
-    const before = allEvents.filter((e) => e.createdAt < from).at(-1);
+    const before = allEvents.filter((e: any) => e.createdAt < from).at(-1);
     if (before) {
       state = before.event === 'ONLINE' || before.event === 'RECOVERED'
         ? 'ONLINE'
