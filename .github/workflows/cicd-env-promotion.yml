@@ -52,6 +52,8 @@ jobs:
 
       - name: Install
         run: npm ci
+        env:
+          NODE_ENV: development  # devDependencies required for build tools (vite, tsc, etc.)
 
       - name: Validate required env wiring
         run: |
