@@ -150,13 +150,38 @@ export async function startServer(port: number): Promise<OcppServerHandle> {
     });
 
     client.on('disconnect', (...args: any[]) => {
-      const [code, reason] = args;
-      const reasonText = typeof reason === 'string'
-        ? reason
-        : Buffer.isBuffer(reason)
-          ? reason.toString('utf8')
-          : (reason ? String(reason) : '');
-      console.warn(`[Server] Disconnected: ${ocppId} code=${code ?? 'n/a'} reason=${reasonText || 'n/a'}`);
+      const [rawCode, rawReason] = args;
+
+      const parsedCode = typeof rawCode === 'number'
+        ? rawCode
+        : (rawCode && typeof rawCode === 'object' && typeof rawCode.code === 'number')
+          ? rawCode.code
+          : undefined;
+
+      const parsedReason = typeof rawReason === 'string'
+        ? rawReason
+        : Buffer.isBuffer(rawReason)
+          ? rawReason.toString('utf8')
+          : (rawReason && typeof rawReason === 'object' && typeof rawReason.reason === 'string')
+            ? rawReason.reason
+            : undefined;
+
+      const fallbackReasonFromCodeObject = rawCode && typeof rawCode === 'object' && typeof rawCode.reason === 'string'
+        ? rawCode.reason
+        : undefined;
+
+      const reasonText = (parsedReason || fallbackReasonFromCodeObject || '').trim();
+      const codeText = parsedCode != null ? String(parsedCode) : 'n/a';
+
+      const safeRaw = (() => {
+        try {
+          return JSON.stringify(args, (_k, v) => Buffer.isBuffer(v) ? v.toString('utf8') : v);
+        } catch {
+          return '[unserializable disconnect args]';
+        }
+      })();
+
+      console.warn(`[Server] Disconnected: ${ocppId} code=${codeText} reason=${reasonText || 'n/a'} raw=${safeRaw}`);
       clientRegistry.unregister(ocppId);
 
       prisma.charger.update({
