@@ -25,9 +25,9 @@ In `eas.json`:
 Commands:
 
 ```bash
-# local simulator
-npm run ios        # APP_ENV=dev (Debug)
-npm run ios:prod   # APP_ENV=prod (Release -> RC/prod app identity)
+# local simulator (isolated ports + schemes)
+npm run ios        # APP_ENV=dev, port 8081, scheme evcharger-dev (Debug)
+npm run ios:prod   # APP_ENV=prod, port 8083, scheme evcharger (Release -> RC/prod app identity)
 
 # EAS builds
 npm run build:dev
