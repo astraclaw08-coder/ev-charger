@@ -12,15 +12,12 @@ export const envLabel =
 export const apiBaseUrl = API_URL;
 
 const DEV_USER_ID = process.env.EXPO_PUBLIC_DEV_USER_ID || 'user-test-driver-001';
-const CLERK_KEY = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
-const AUTH_MODE = ((Constants.expoConfig?.extra?.authMode as string | undefined) || process.env.EXPO_PUBLIC_AUTH_MODE || '').trim().toLowerCase();
+const AUTH_MODE = ((Constants.expoConfig?.extra?.authMode as string | undefined) || 'keycloak').trim().toLowerCase();
 
-export const authMode = AUTH_MODE === 'keycloak' || AUTH_MODE === 'clerk' || AUTH_MODE === 'dev'
-  ? AUTH_MODE
-  : (CLERK_KEY ? 'clerk' : 'keycloak');
+export const authMode = AUTH_MODE === 'keycloak' ? 'keycloak' : 'keycloak';
 
-export const isDevMode = authMode === 'dev';
-export const isKeycloakMode = authMode === 'keycloak';
+export const isDevMode = false;
+export const isKeycloakMode = true;
 export const isEvcPlatformReadModelEnabled = process.env.EXPO_PUBLIC_EVC_PLATFORM_BUSINESS_VIEWS === '1';
 
 // Auth state holders — set by auth context

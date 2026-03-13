@@ -253,36 +253,7 @@ function ClerkAuthGuard({ children }: { children: React.ReactNode }) {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  if (isDevMode || authMode === 'dev') {
-    return <DevAuthProvider>{children}</DevAuthProvider>;
-  }
-
-  if (isKeycloakMode) {
-    return <KeycloakAuthProvider>{children}</KeycloakAuthProvider>;
-  }
-
-  if (!ClerkProvider) {
-    return <DevAuthProvider>{children}</DevAuthProvider>;
-  }
-
-  const SecureStore = require('expo-secure-store');
-  const tokenCache = {
-    async getToken(key: string) {
-      return SecureStore.getItemAsync(key);
-    },
-    async saveToken(key: string, value: string) {
-      return SecureStore.setItemAsync(key, value);
-    },
-  };
-
-  return (
-    <ClerkProvider
-      publishableKey={process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY!}
-      tokenCache={tokenCache}
-    >
-      <ClerkAuthGuard>{children}</ClerkAuthGuard>
-    </ClerkProvider>
-  );
+  return <KeycloakAuthProvider>{children}</KeycloakAuthProvider>;
 }
 
 export function useAppAuth() {

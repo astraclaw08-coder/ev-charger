@@ -16,7 +16,7 @@ const androidPackage = isProd ? 'app.evcharger.app' : 'dev.evcharger.app';
 
 const devApiUrl = process.env.EXPO_PUBLIC_API_URL_DEV || process.env.EXPO_PUBLIC_API_URL || 'http://127.0.0.1:3001';
 const prodApiUrl = process.env.EXPO_PUBLIC_API_URL_PROD || 'https://api-production-26cf.up.railway.app';
-const authMode = isProd ? 'keycloak' : 'dev';
+const authMode = 'keycloak';
 
 const config: ExpoConfig = {
   name,

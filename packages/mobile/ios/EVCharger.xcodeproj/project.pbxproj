@@ -366,6 +366,7 @@
 				);
 				INFOPLIST_FILE = EVCharger/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "EVCharger Dev";
+				APP_URL_SCHEME = evcharger-dev;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -398,6 +399,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				INFOPLIST_FILE = EVCharger/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "EVCharger RC";
+				APP_URL_SCHEME = evcharger;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
