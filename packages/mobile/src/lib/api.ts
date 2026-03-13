@@ -5,6 +5,12 @@ const API_URL =
   process.env.EXPO_PUBLIC_API_URL ||
   'http://localhost:3001';
 
+export const appEnv =
+  ((Constants.expoConfig?.extra?.appEnv as string | undefined) || process.env.APP_ENV || 'dev').toLowerCase();
+export const envLabel =
+  (Constants.expoConfig?.extra?.envLabel as string | undefined) || process.env.EXPO_PUBLIC_ENV_LABEL || 'DEV';
+export const apiBaseUrl = API_URL;
+
 const DEV_USER_ID = process.env.EXPO_PUBLIC_DEV_USER_ID || 'user-test-driver-001';
 const CLERK_KEY = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
 const AUTH_MODE = (process.env.EXPO_PUBLIC_AUTH_MODE || '').trim().toLowerCase();

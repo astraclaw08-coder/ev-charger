@@ -13,7 +13,7 @@ import {
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api';
+import { api, apiBaseUrl, envLabel } from '@/lib/api';
 import { useAppTheme } from '@/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
@@ -267,6 +267,8 @@ export default function ProfileScreen() {
       </Modal>
 
       <Text style={[styles.versionText, { color: isDark ? '#6b7280' : '#9ca3af' }]}>Version {mobileVersion}</Text>
+      <Text style={[styles.versionText, { color: isDark ? '#6b7280' : '#9ca3af' }]}>Environment {envLabel}</Text>
+      <Text style={[styles.versionText, { color: isDark ? '#6b7280' : '#9ca3af' }]} numberOfLines={1}>API {apiBaseUrl}</Text>
     </ScrollView>
   );
 }

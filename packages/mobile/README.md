@@ -1,29 +1,53 @@
-# Mobile app auth modes
+# Mobile app env modes
 
-The app supports three auth modes via `EXPO_PUBLIC_AUTH_MODE`:
+The app now supports two testing environments:
 
-- `dev` (default when no auth env is set): guest/dev headers flow
-- `clerk` (legacy): Clerk session + JWT
-- `keycloak` (TASK-0083): native username/password + refresh via API
+- `dev` → local/dev services
+- `prod` → production services (RC treated as prod)
 
-## Keycloak mode env
+## Runtime env selection
 
-Set these in mobile runtime (`.env`, EAS, or Expo config):
+The app config resolves environment from:
 
-- `EXPO_PUBLIC_AUTH_MODE=keycloak`
-- `EXPO_PUBLIC_API_URL=https://<api-host>`
+1. `APP_ENV` (`dev` or `prod`)
+2. fallback: `EAS_BUILD_PROFILE`
+3. fallback: `dev`
 
-And in API runtime (already required for portal password login):
+Dynamic values by env include app name, scheme, iOS bundle id, and Android package id.
 
-- `KEYCLOAK_BASE_URL`
-- `KEYCLOAK_REALM`
-- `KEYCLOAK_PORTAL_CLIENT_ID` (or `KEYCLOAK_ADMIN_CLIENT_ID`)
-- `KEYCLOAK_PORTAL_CLIENT_SECRET` (or `KEYCLOAK_ADMIN_CLIENT_SECRET`)
+## Build profiles
 
-## Session lifecycle (keycloak mode)
+In `eas.json`:
 
-- Login: `POST /auth/password-login`
-- Refresh: `POST /auth/password-refresh`
-- Storage: session persisted in `expo-secure-store`
-- Startup restore: restored on app boot; expired tokens are refreshed when possible
-- Logout: clears secure store session, bearer token, and local favorites cache
+- `development` profile sets `APP_ENV=dev`
+- `production` profile sets `APP_ENV=prod`
+
+Commands:
+
+```bash
+pnpm --filter @ev-charger/mobile build:dev
+pnpm --filter @ev-charger/mobile build:prod
+```
+
+## Required mobile env vars
+
+Set these for each environment (locally or in EAS env):
+
+- `EXPO_PUBLIC_API_URL`
+- `EXPO_PUBLIC_AUTH_MODE`
+- `EXPO_PUBLIC_MAPBOX_TOKEN`
+- `EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY` (recommended; required for live payment flow)
+
+Optional:
+
+- `EXPO_PUBLIC_ENV_LABEL` (defaults to `DEV`/`PROD`)
+
+## Verification in app
+
+Profile tab now shows:
+
+- `Version`
+- `Environment`
+- `API <base-url>`
+
+Use this to confirm dev build is pointed at local services and prod build is pointed at production services.
