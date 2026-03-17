@@ -354,7 +354,7 @@ export async function siteRoutes(app: FastifyInstance) {
         softwareVendorFeeValue: site.softwareVendorFeeValue,
         activationFeeUsd: site.activationFeeUsd,
         softwareFeeIncludesActivation: (site as any).softwareFeeIncludesActivation ?? false,
-      }).effectiveAmountCents ?? 0
+      } as any).effectiveAmountCents ?? 0
     );
 
     const sessionsCount = sessions.length;
