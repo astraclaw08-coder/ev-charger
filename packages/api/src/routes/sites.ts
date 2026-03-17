@@ -61,11 +61,11 @@ export async function siteRoutes(app: FastifyInstance) {
       portfolioName: site.portfolioName,
       createdAt: site.createdAt,
       chargerCount: site.chargers.length,
-      connectorCount: site.chargers.reduce((sum, c) => sum + (c._count?.connectors ?? 0), 0),
+      connectorCount: site.chargers.reduce((sum: number, c: { status: string; _count: { connectors: number } }) => sum + (c._count?.connectors ?? 0), 0),
       statusSummary: {
-        online: site.chargers.filter((c) => c.status === 'ONLINE').length,
-        offline: site.chargers.filter((c) => c.status === 'OFFLINE').length,
-        faulted: site.chargers.filter((c) => c.status === 'FAULTED').length,
+        online: site.chargers.filter((c: { status: string }) => c.status === 'ONLINE').length,
+        offline: site.chargers.filter((c: { status: string }) => c.status === 'OFFLINE').length,
+        faulted: site.chargers.filter((c: { status: string }) => c.status === 'FAULTED').length,
       },
     }));
   });

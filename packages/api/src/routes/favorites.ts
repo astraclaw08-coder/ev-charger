@@ -25,7 +25,7 @@ export async function favoriteRoutes(app: FastifyInstance) {
       ORDER BY "createdAt" DESC
     `;
 
-    return { chargerIds: rows.map((row) => row.chargerId) };
+    return { chargerIds: rows.map((row: { chargerId: string }) => row.chargerId) };
   });
 
   app.put<{ Body: { chargerIds?: unknown } }>('/me/favorites', { preHandler: requireAuth }, async (req, reply) => {
@@ -37,10 +37,10 @@ export async function favoriteRoutes(app: FastifyInstance) {
     const existingChargers = chargerIds.length
       ? await prisma.charger.findMany({ where: { id: { in: chargerIds } }, select: { id: true } })
       : [];
-    const validSet = new Set(existingChargers.map((row) => row.id));
+    const validSet = new Set(existingChargers.map((row: { id: string }) => row.id));
     const validIds = chargerIds.filter((id) => validSet.has(id));
 
-    await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx: any) => {
       await tx.$executeRaw`
         DELETE FROM "UserFavoriteCharger"
         WHERE "userId" = ${req.currentUser!.id}
