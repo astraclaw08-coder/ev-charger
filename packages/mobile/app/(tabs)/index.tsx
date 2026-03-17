@@ -3,23 +3,25 @@ import {
   View,
   Text,
   StyleSheet,
-  ActivityIndicator,
   TouchableOpacity,
-  RefreshControl,
-  ScrollView,
   TextInput,
   Keyboard,
   AppState,
+  Modal,
+  ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useQuery } from '@tanstack/react-query';
 import * as Location from 'expo-location';
-import MapView, { Marker, Region } from 'react-native-maps';
+import { CameraView, type BarcodeScanningResult, useCameraPermissions } from 'expo-camera';
+import MapView, { Marker, PROVIDER_GOOGLE, Region } from 'react-native-maps';
 import { api, type Charger } from '@/lib/api';
+import { parseChargerQrPayload } from '@/lib/chargerQr';
 import { useAppTheme } from '@/theme';
-import { useFavorites } from '@/hooks/useFavorites';
-import { HeartButton } from '@/components/HeartButton';
+import { useChargingNotifications } from '@/providers/ChargingNotificationsProvider';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type Coord = { latitude: number; longitude: number };
 
@@ -34,7 +36,14 @@ type SiteAggregate = {
   totalPorts: number;
   availablePorts: number;
   distanceKm?: number;
+  chargerTypes: string[];
 };
+
+function deriveChargerType(model: string, vendor: string): string {
+  const s = `${model} ${vendor}`.toLowerCase();
+  if (s.includes('dc') || s.includes('ccs') || s.includes('chademo') || s.includes('fast') || s.includes('dcfc') || s.includes('supercharger')) return 'DCFC';
+  return 'Level 2';
+}
 
 function statusColorFromStatuses(statuses: string[], chargerStatuses: string[]): string {
   const hasAvailable = statuses.some((s) => s === 'AVAILABLE');
@@ -63,40 +72,38 @@ function statusLabelFromStatuses(statuses: string[], chargerStatuses: string[]):
   return 'Unknown';
 }
 
-function distanceKm(a: Coord, b: Coord): number {
-  const toRad = (d: number) => (d * Math.PI) / 180;
-  const R = 6371;
-  const dLat = toRad(b.latitude - a.latitude);
-  const dLng = toRad(b.longitude - a.longitude);
-  const lat1 = toRad(a.latitude);
-  const lat2 = toRad(b.latitude);
-
-  const sinDlat = Math.sin(dLat / 2);
-  const sinDlng = Math.sin(dLng / 2);
-  const h = sinDlat * sinDlat + Math.cos(lat1) * Math.cos(lat2) * sinDlng * sinDlng;
-  return 2 * R * Math.asin(Math.sqrt(h));
-}
-
 export default function MapScreen() {
   const router = useRouter();
   const mapRef = useRef<MapView | null>(null);
   const searchInputRef = useRef<TextInput | null>(null);
   const regionRef = useRef<Region | null>(null);
   const { isDark } = useAppTheme();
-  const { toggle, isFav } = useFavorites();
+  const tabBarHeight = useBottomTabBarHeight();
+  const insets = useSafeAreaInsets();
+  const { activeSession } = useChargingNotifications();
 
   const [hasLocation, setHasLocation] = useState(false);
   const [userLocation, setUserLocation] = useState<Coord | null>(null);
   const [search, setSearch] = useState('');
   const [committedSearch, setCommittedSearch] = useState('');
-  const [manualRefreshing, setManualRefreshing] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
+  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
+  const [scanLocked, setScanLocked] = useState(false);
+  const [scannerError, setScannerError] = useState<string | null>(null);
+  const [resolvingScan, setResolvingScan] = useState(false);
+  const [torchEnabled, setTorchEnabled] = useState(false);
+  const [manualStationNumber, setManualStationNumber] = useState('');
+  const [selectedSite, setSelectedSite] = useState<SiteAggregate | null>(null);
 
-  const { data: chargers = [], isLoading, refetch } = useQuery({
+  const { data: chargers = [], refetch } = useQuery({
     queryKey: ['chargers'],
     queryFn: () => api.chargers.list(),
     staleTime: 60_000,
     placeholderData: (prev) => prev,
   });
+
+  const activeBannerOffset = activeSession ? 72 + Math.max(insets.bottom, 8) : 0;
+  const controlsBottom = tabBarHeight + activeBannerOffset + 8;
 
   useEffect(() => {
     (async () => {
@@ -124,7 +131,6 @@ export default function MapScreen() {
     return () => sub.remove();
   }, [refetch]);
 
-
   const sites = useMemo(() => {
     const bySite = new Map<string, SiteAggregate>();
 
@@ -136,6 +142,7 @@ export default function MapScreen() {
 
       const key = site.id || `${site.name}|${site.address}`;
       const existing = bySite.get(key);
+      const cType = deriveChargerType(charger.model ?? '', charger.vendor ?? '');
       if (!existing) {
         bySite.set(key, {
           siteId: key,
@@ -147,16 +154,27 @@ export default function MapScreen() {
           primaryChargerId: charger.id,
           totalPorts: connectors.length,
           availablePorts: connectors.filter((c) => c.status === 'AVAILABLE').length,
+          chargerTypes: [cType],
         });
       } else {
         existing.chargers.push(charger);
         existing.totalPorts += connectors.length;
         existing.availablePorts += connectors.filter((c) => c.status === 'AVAILABLE').length;
+        if (!existing.chargerTypes.includes(cType)) existing.chargerTypes.push(cType);
       }
     }
 
-    return Array.from(bySite.values());
-  }, [chargers]);
+    const result = Array.from(bySite.values());
+    if (userLocation) {
+      for (const s of result) {
+        const dLat = (s.lat - userLocation.latitude) * (Math.PI / 180);
+        const dLng = (s.lng - userLocation.longitude) * (Math.PI / 180);
+        const a = Math.sin(dLat / 2) ** 2 + Math.cos(s.lat * Math.PI / 180) * Math.cos(userLocation.latitude * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+        s.distanceKm = 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      }
+    }
+    return result;
+  }, [chargers, userLocation]);
 
   const filteredSites = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -180,22 +198,6 @@ export default function MapScreen() {
     return { latitude: 33.9164, longitude: -118.3526 };
   }, [filteredSites, userLocation]);
 
-
-  const nearest = useMemo(() => {
-    if (filteredSites.length === 0) return [] as SiteAggregate[];
-
-    const withDistance = filteredSites.map((s) => {
-      const d = userLocation
-        ? distanceKm(userLocation, { latitude: s.lat, longitude: s.lng })
-        : undefined;
-      return { ...s, distanceKm: d };
-    });
-
-    return withDistance
-      .sort((a, b) => (a.distanceKm ?? 9999) - (b.distanceKm ?? 9999))
-      .slice(0, 3);
-  }, [filteredSites, userLocation]);
-
   async function recenterToUser() {
     try {
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
@@ -212,16 +214,6 @@ export default function MapScreen() {
       // no-op
     }
   }
-
-  async function onManualRefresh() {
-    setManualRefreshing(true);
-    try {
-      await refetch();
-    } finally {
-      setManualRefreshing(false);
-    }
-  }
-
 
   useEffect(() => {
     const q = committedSearch.trim();
@@ -249,7 +241,6 @@ export default function MapScreen() {
     });
   }, [committedSearch, filteredSites]);
 
-
   function zoomBy(delta: number) {
     if (!mapRef.current) return;
     const base = regionRef.current ?? {
@@ -266,7 +257,6 @@ export default function MapScreen() {
     };
     regionRef.current = nextRegion;
     mapRef.current.animateToRegion(nextRegion, 250);
-
   }
 
   function applySearch(site: SiteAggregate) {
@@ -275,12 +265,119 @@ export default function MapScreen() {
     router.push(`/charger/${site.primaryChargerId}`);
   }
 
+  async function openScanner() {
+    setScannerError(null);
+    setScanLocked(false);
+
+    if (!cameraPermission?.granted) {
+      const req = await requestCameraPermission();
+      if (!req.granted) {
+        setScannerError('Camera access is required to scan charger QR codes. Enable camera permission in Settings and retry.');
+        setShowScanner(true);
+        return;
+      }
+    }
+
+    setShowScanner(true);
+  }
+
+  function closeScanner() {
+    setShowScanner(false);
+    setScannerError(null);
+    setScanLocked(false);
+    setResolvingScan(false);
+    setTorchEnabled(false);
+    setManualStationNumber('');
+  }
+
+  async function resolveAndRouteCharger(raw: string, source: 'qr' | 'manual') {
+    const normalized = raw.trim();
+    if (!normalized) {
+      setScannerError('Please enter a valid charger station number.');
+      return;
+    }
+
+    const localMatch = chargers.find((c) =>
+      c.id === normalized ||
+      c.ocppId === normalized ||
+      c.ocppId?.toLowerCase() === normalized.toLowerCase(),
+    );
+
+    if (localMatch) {
+      closeScanner();
+      router.push(`/charger/${localMatch.id}`);
+      return;
+    }
+
+    try {
+      const remote = await api.chargers.get(normalized);
+      if (!remote?.id) {
+        setScannerError(source === 'manual'
+          ? 'This station number was not found. Check the number and try again.'
+          : 'This charger QR code is not recognized in your account.');
+        return;
+      }
+      closeScanner();
+      router.push(`/charger/${remote.id}`);
+    } catch {
+      setScannerError(source === 'manual'
+        ? 'Could not find that station right now. Please check the number or try scanning QR.'
+        : 'We could not open this charger from the scanned code. Please retry or search manually.');
+    }
+  }
+
+  async function handleManualStationSubmit() {
+    if (resolvingScan) return;
+    const value = manualStationNumber.trim();
+    if (!/^[A-Za-z0-9-]{3,40}$/.test(value)) {
+      setScannerError('Station number format looks invalid. Use letters/numbers (and dashes) only.');
+      return;
+    }
+
+    setScannerError(null);
+    setResolvingScan(true);
+    try {
+      await resolveAndRouteCharger(value, 'manual');
+    } finally {
+      setResolvingScan(false);
+    }
+  }
+
+  async function handleQrScanned(result: BarcodeScanningResult) {
+    if (scanLocked || resolvingScan) return;
+
+    setScanLocked(true);
+    setResolvingScan(true);
+    const parsed = parseChargerQrPayload(result.data);
+
+    if (!parsed?.chargerId) {
+      setScannerError('Invalid or unsupported QR code. Please scan a charger QR code and try again.');
+      setResolvingScan(false);
+      return;
+    }
+
+    const normalizedId = parsed.chargerId.trim();
+    if (!normalizedId) {
+      setScannerError('Invalid or unsupported QR code. Please try again.');
+      setResolvingScan(false);
+      return;
+    }
+
+    try {
+      await resolveAndRouteCharger(normalizedId, 'qr');
+    } finally {
+      setResolvingScan(false);
+    }
+  }
+
+  const permissionDenied = Boolean(showScanner && cameraPermission && !cameraPermission.granted);
+
   return (
     <View style={[styles.container, { backgroundColor: isDark ? '#030712' : '#f9fafb' }]}>
-      {/* 3/4 screen map */}
       <View style={styles.mapSection}>
         <MapView
           ref={mapRef}
+          provider={PROVIDER_GOOGLE}
           style={styles.map}
           initialRegion={{
             latitude: initialCenter.latitude,
@@ -303,16 +400,18 @@ export default function MapScreen() {
             const allStatuses = site.chargers.flatMap((c) => c.connectors.map((x) => x.status));
             const chargerStatuses = site.chargers.map((c) => String(c.status || '').toUpperCase());
             const pinColor = statusColorFromStatuses(allStatuses, chargerStatuses);
-            const label = statusLabelFromStatuses(allStatuses, chargerStatuses);
             return (
               <Marker
                 key={site.siteId}
                 coordinate={{ latitude: site.lat, longitude: site.lng }}
-                title={site.siteName}
-                description={`${label} · ${site.availablePorts}/${site.totalPorts} ports available`}
-                pinColor={pinColor}
-                onCalloutPress={() => router.push(`/charger/${site.primaryChargerId}`)}
-              />
+                tracksViewChanges={false}
+                onPress={() => setSelectedSite(site)}
+              >
+                <View style={[mapStyles.pin, { backgroundColor: pinColor }]}>
+                  <Text style={mapStyles.pinCount}>{site.availablePorts}</Text>
+                  <Text style={mapStyles.pinTotal}>/{site.totalPorts}</Text>
+                </View>
+              </Marker>
             );
           })}
         </MapView>
@@ -325,7 +424,33 @@ export default function MapScreen() {
           <TouchableOpacity style={styles.zoomBtn} onPress={() => zoomBy(-1)}><Text style={styles.zoomText}>－</Text></TouchableOpacity>
         </View>
 
-        <View style={[styles.searchWrap, { backgroundColor: isDark ? '#111827cc' : '#ffffffe6' }]}>
+        <TouchableOpacity
+          testID="map-qr-scan-tile"
+          accessibilityRole="button"
+          accessibilityLabel="Scan charger QR"
+          style={[
+            styles.qrTile,
+            {
+              bottom: controlsBottom + 64,
+              backgroundColor: isDark ? '#111827e8' : '#fffffff2',
+              borderColor: isDark ? '#374151' : '#d1d5db',
+            },
+          ]}
+          onPress={openScanner}
+        >
+          <Text style={[styles.qrTileIcon, { color: isDark ? '#34d399' : '#065f46' }]}>▦</Text>
+          <Text style={[styles.qrTileLabel, { color: isDark ? '#f9fafb' : '#111827' }]}>Scan QR</Text>
+        </TouchableOpacity>
+
+        <View
+          style={[
+            styles.searchWrap,
+            {
+              bottom: controlsBottom,
+              backgroundColor: isDark ? '#111827cc' : '#ffffffe6',
+            },
+          ]}
+        >
           <TextInput
             ref={searchInputRef}
             testID="map-search-input"
@@ -360,7 +485,15 @@ export default function MapScreen() {
         </View>
 
         {suggestions.length > 0 && (
-          <View style={[styles.suggestWrap, { backgroundColor: isDark ? '#111827ee' : '#fffffff0' }]}>
+          <View
+            style={[
+              styles.suggestWrap,
+              {
+                bottom: controlsBottom + 52,
+                backgroundColor: isDark ? '#111827ee' : '#fffffff0',
+              },
+            ]}
+          >
             {suggestions.map((sug) => (
               <TouchableOpacity key={sug.siteId} style={styles.suggestRow} onPress={() => applySearch(sug)}>
                 <Text style={[styles.suggestName, { color: isDark ? '#f9fafb' : '#111827' }]} numberOfLines={1}>{sug.siteName}</Text>
@@ -371,62 +504,189 @@ export default function MapScreen() {
         )}
       </View>
 
-      {/* 1/4 screen nearest list */}
-      <ScrollView
-        style={[styles.bottomSheet, { backgroundColor: isDark ? '#0b1220' : '#ffffff' }]}
-        refreshControl={<RefreshControl refreshing={manualRefreshing} onRefresh={onManualRefresh} />}
-      >
-        <Text style={[styles.sectionTitle, { color: isDark ? '#f9fafb' : '#111827' }]}>Closest chargers</Text>
-        <Text style={[styles.sectionSubtitle, { color: isDark ? '#9ca3af' : '#6b7280' }]}>Top 2-3 stations nearest your current location</Text>
+      <Modal visible={showScanner} animationType="slide" onRequestClose={closeScanner}>
+        <View style={[styles.scannerModalContainer, { backgroundColor: isDark ? '#020617' : '#030712' }]}> 
+          <View style={styles.scannerHeader}>
+            <Text style={styles.scannerTitle}>Scan Charger QR</Text>
+            <TouchableOpacity onPress={closeScanner} style={styles.scannerCloseBtn}>
+              <Text style={styles.scannerCloseText}>Done</Text>
+            </TouchableOpacity>
+          </View>
 
-        <View style={styles.nearestListWrap}>
-          {isLoading && nearest.length === 0 && (
-            <View style={[styles.card, { backgroundColor: isDark ? '#111827' : '#f3f4f6', justifyContent: 'center' }]}>
-              <ActivityIndicator color="#10b981" />
-              <Text style={[styles.meta, { color: isDark ? '#9ca3af' : '#6b7280', marginLeft: 8 }]}>Loading nearby sites…</Text>
+          {permissionDenied ? (
+            <View style={styles.scannerStateCard}>
+              <Text style={styles.scannerErrorTitle}>Camera access needed</Text>
+              <Text style={styles.scannerErrorText}>
+                Camera permission is denied or restricted. Please allow camera access in Settings, then retry.
+              </Text>
+              <TouchableOpacity style={styles.scannerRetryBtn} onPress={openScanner}>
+                <Text style={styles.scannerRetryText}>Retry Permission</Text>
+              </TouchableOpacity>
             </View>
+          ) : (
+            <>
+              <CameraView
+                style={styles.cameraView}
+                facing="back"
+                enableTorch={torchEnabled}
+                barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
+                onBarcodeScanned={scanLocked ? undefined : handleQrScanned}
+              />
+
+              <View style={styles.scannerControlsRow}>
+                <TouchableOpacity
+                  style={[styles.flashBtn, { backgroundColor: torchEnabled ? '#0f766e' : '#1f2937' }]}
+                  onPress={() => setTorchEnabled((v) => !v)}
+                >
+                  <Text style={styles.flashBtnText}>{torchEnabled ? 'Flashlight On' : 'Flashlight Off'}</Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.scannerHintWrap}>
+                <Text style={styles.scannerHintText}>Align the charger QR code inside the camera frame.</Text>
+              </View>
+
+              <View style={[styles.manualEntryCard, { backgroundColor: isDark ? '#111827' : '#ffffff' }]}>
+                <Text style={[styles.manualEntryTitle, { color: isDark ? '#f9fafb' : '#111827' }]}>No QR code?</Text>
+                <Text style={[styles.manualEntrySub, { color: isDark ? '#9ca3af' : '#64748b' }]}>Enter charger station number manually.</Text>
+                <View style={styles.manualEntryRow}>
+                  <TextInput
+                    value={manualStationNumber}
+                    onChangeText={setManualStationNumber}
+                    placeholder="e.g. CP-00008"
+                    autoCapitalize="characters"
+                    autoCorrect={false}
+                    placeholderTextColor={isDark ? '#6b7280' : '#9ca3af'}
+                    style={[styles.manualEntryInput, { color: isDark ? '#f9fafb' : '#111827', borderColor: isDark ? '#374151' : '#d1d5db' }]}
+                  />
+                  <TouchableOpacity style={styles.manualEntryBtn} onPress={handleManualStationSubmit} disabled={resolvingScan}>
+                    <Text style={styles.manualEntryBtnText}>Open</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </>
           )}
 
-          {nearest.map((item) => {
-            const statuses = item.chargers.flatMap((c) => c.connectors.map((x) => x.status));
-            const chargerStatuses = item.chargers.map((c) => String(c.status || '').toUpperCase());
-            const color = statusColorFromStatuses(statuses, chargerStatuses);
-            const label = statusLabelFromStatuses(statuses, chargerStatuses);
-            return (
-              <TouchableOpacity
-                key={item.siteId}
-                style={[styles.card, { backgroundColor: isDark ? '#111827' : '#f9fafb' }]}
-                onPress={() => router.push(`/charger/${item.primaryChargerId}`)}
-              >
-                <View style={[styles.dot, { backgroundColor: color }]} />
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.name, { color: isDark ? '#f9fafb' : '#111827' }]}>{item.siteName}</Text>
-                  <Text style={[styles.meta, { color: isDark ? '#9ca3af' : '#6b7280' }]}> 
-                    {item.distanceKm != null ? `${item.distanceKm.toFixed(2)} km • ` : ''}
-                    {item.availablePorts}/{item.totalPorts} ports available
+          {(scannerError || resolvingScan) && (
+            <View style={[styles.scanResultCard, { backgroundColor: isDark ? '#111827' : '#ffffff' }]}>
+              {resolvingScan ? (
+                <View style={styles.scanPendingRow}>
+                  <ActivityIndicator color="#10b981" />
+                  <Text style={[styles.scanPendingText, { color: isDark ? '#d1fae5' : '#065f46' }]}>Opening charger…</Text>
+                </View>
+              ) : (
+                <>
+                  <Text style={[styles.scanErrorTitle, { color: isDark ? '#fca5a5' : '#b91c1c' }]}>Unsupported code</Text>
+                  <Text style={[styles.scanErrorBody, { color: isDark ? '#cbd5e1' : '#374151' }]}>{scannerError}</Text>
+                  <TouchableOpacity
+                    style={[styles.scannerRetryBtn, { alignSelf: 'flex-start' }]}
+                    onPress={() => {
+                      setScannerError(null);
+                      setScanLocked(false);
+                      setResolvingScan(false);
+                    }}
+                  >
+                    <Text style={styles.scannerRetryText}>Try Again</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
+          )}
+        </View>
+      </Modal>
+
+      {/* Site preview bottom sheet */}
+      {selectedSite && (
+        <TouchableOpacity
+          activeOpacity={1}
+          style={[mapStyles.sheetBackdrop]}
+          onPress={() => setSelectedSite(null)}
+        >
+          <TouchableOpacity
+            activeOpacity={0.92}
+            style={[mapStyles.sheet, {
+              backgroundColor: isDark ? '#111827' : '#ffffff',
+              borderColor: isDark ? '#374151' : '#e5e7eb',
+              paddingBottom: Math.max(tabBarHeight + 8, 28),
+            }]}
+            onPress={() => {
+              setSelectedSite(null);
+              router.push(`/charger/${selectedSite.primaryChargerId}`);
+            }}
+          >
+            {/* Handle */}
+            <View style={mapStyles.sheetHandle} />
+
+            {/* Header row */}
+            <View style={mapStyles.sheetHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={[mapStyles.sheetTitle, { color: isDark ? '#f9fafb' : '#111827' }]} numberOfLines={1}>{selectedSite.siteName}</Text>
+                <Text style={[mapStyles.sheetAddress, { color: isDark ? '#9ca3af' : '#6b7280' }]} numberOfLines={2}>{selectedSite.siteAddress}</Text>
+              </View>
+              {selectedSite.distanceKm != null && (
+                <View style={[mapStyles.distancePill, { backgroundColor: isDark ? '#1f2937' : '#f3f4f6' }]}>
+                  <Text style={[mapStyles.distanceText, { color: isDark ? '#d1d5db' : '#374151' }]}>
+                    {selectedSite.distanceKm < 1
+                      ? `${Math.round(selectedSite.distanceKm * 1000)} m`
+                      : `${(selectedSite.distanceKm * 0.621371).toFixed(1)} mi`}
                   </Text>
                 </View>
-                <Text style={{ color, fontWeight: '700', fontSize: 12 }}>{label}</Text>
-                <HeartButton isFavorited={isFav(item.primaryChargerId)} onToggle={() => toggle(item.primaryChargerId)} />
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      </ScrollView>
+              )}
+            </View>
+
+            {/* Stats row */}
+            <View style={mapStyles.sheetStats}>
+              {/* Availability */}
+              <View style={[mapStyles.statChip, { backgroundColor: isDark ? '#064e3b22' : '#d1fae5' }]}>
+                <View style={[mapStyles.statDot, { backgroundColor: (() => {
+                  const all = selectedSite.chargers.flatMap((c) => c.connectors.map((x) => x.status));
+                  const cs = selectedSite.chargers.map((c) => String(c.status || '').toUpperCase());
+                  return statusColorFromStatuses(all, cs);
+                })() }]} />
+                <Text style={[mapStyles.statText, { color: isDark ? '#6ee7b7' : '#065f46' }]}>
+                  {selectedSite.availablePorts}/{selectedSite.totalPorts} available
+                </Text>
+              </View>
+
+              {/* Charger types */}
+              {selectedSite.chargerTypes.map((t) => (
+                <View key={t} style={[mapStyles.statChip, { backgroundColor: isDark ? '#1e3a5f33' : '#dbeafe' }]}>
+                  <Text style={[mapStyles.statText, { color: isDark ? '#93c5fd' : '#1d4ed8' }]}>{t}</Text>
+                </View>
+              ))}
+            </View>
+
+            <Text style={[mapStyles.sheetCta, { color: isDark ? '#34d399' : '#059669' }]}>Tap to view site →</Text>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  mapSection: { flex: 3, position: 'relative' },
+  mapSection: { flex: 1, position: 'relative' },
   map: { flex: 1 },
   mapControls: { position: 'absolute', right: 12, top: 12, gap: 8 },
   locateBtn: { width: 40, height: 40, backgroundColor: '#111827cc', borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
   locateText: { color: '#fff', fontWeight: '800', fontSize: 18 },
   zoomBtn: { width: 40, height: 40, backgroundColor: '#111827cc', borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   zoomText: { color: '#fff', fontSize: 22, fontWeight: '700', lineHeight: 22 },
+  qrTile: {
+    position: 'absolute',
+    right: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    minWidth: 96,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+  },
+  qrTileIcon: { fontSize: 20, fontWeight: '900', lineHeight: 20 },
+  qrTileLabel: { fontSize: 12, fontWeight: '800' },
   searchWrap: {
     position: 'absolute',
     left: 12,
@@ -434,7 +694,7 @@ const styles = StyleSheet.create({
     bottom: 12,
     borderRadius: 12,
     paddingHorizontal: 10,
-    paddingVertical: 8,
+    paddingVertical: 11,
     borderWidth: 1,
     borderColor: '#ffffff33',
   },
@@ -442,7 +702,7 @@ const styles = StyleSheet.create({
   clearBtn: {
     position: 'absolute',
     right: 10,
-    top: 7,
+    top: 10,
     width: 26,
     height: 26,
     borderRadius: 13,
@@ -456,19 +716,156 @@ const styles = StyleSheet.create({
   suggestRow: { paddingHorizontal: 10, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#ffffff1f' },
   suggestName: { fontSize: 13, fontWeight: '700' },
   suggestAddr: { fontSize: 11, marginTop: 2 },
-  bottomSheet: { flex: 1, paddingHorizontal: 12, paddingTop: 10 },
-  sectionTitle: { fontSize: 17, fontWeight: '800' },
-  sectionSubtitle: { fontSize: 12, marginTop: 2, marginBottom: 8 },
-  nearestListWrap: { minHeight: 120 },
-  card: {
+
+  scannerModalContainer: { flex: 1, paddingTop: 56, paddingHorizontal: 12 },
+  scannerHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+  scannerTitle: { color: '#f9fafb', fontSize: 20, fontWeight: '800' },
+  scannerCloseBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, backgroundColor: '#1f2937' },
+  scannerCloseText: { color: '#d1d5db', fontSize: 13, fontWeight: '700' },
+  cameraView: { flex: 1, borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: '#1f2937' },
+  scannerControlsRow: { paddingTop: 10, alignItems: 'flex-end' },
+  flashBtn: { borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8 },
+  flashBtnText: { color: '#ecfeff', fontSize: 12, fontWeight: '800' },
+  scannerHintWrap: { paddingVertical: 10, alignItems: 'center' },
+  scannerHintText: { color: '#9ca3af', fontSize: 13, textAlign: 'center' },
+  manualEntryCard: { borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#374151', gap: 8 },
+  manualEntryTitle: { fontSize: 14, fontWeight: '800' },
+  manualEntrySub: { fontSize: 12 },
+  manualEntryRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
+  manualEntryInput: { flex: 1, borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 9, fontSize: 13, fontWeight: '700' },
+  manualEntryBtn: { backgroundColor: '#065f46', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 9 },
+  manualEntryBtnText: { color: '#ecfdf5', fontSize: 13, fontWeight: '800' },
+  scannerStateCard: { borderRadius: 14, borderWidth: 1, borderColor: '#374151', backgroundColor: '#111827', padding: 16, gap: 10, marginTop: 8 },
+  scannerErrorTitle: { color: '#fca5a5', fontSize: 16, fontWeight: '800' },
+  scannerErrorText: { color: '#cbd5e1', fontSize: 13, lineHeight: 20 },
+  scannerRetryBtn: { backgroundColor: '#065f46', paddingHorizontal: 12, paddingVertical: 9, borderRadius: 8 },
+  scannerRetryText: { color: '#ecfdf5', fontWeight: '700', fontSize: 13 },
+  scanResultCard: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    bottom: 26,
     borderRadius: 12,
     padding: 12,
-    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#374151',
+    gap: 8,
+  },
+  scanErrorTitle: { fontSize: 14, fontWeight: '800' },
+  scanErrorBody: { fontSize: 13, lineHeight: 19 },
+  scanPendingRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  scanPendingText: { fontSize: 13, fontWeight: '700' },
+});
+
+const mapStyles = StyleSheet.create({
+  pin: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.6)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  pinCount: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '800',
+    lineHeight: 18,
+  },
+  pinTotal: {
+    color: '#ffffffcc',
+    fontSize: 11,
+    fontWeight: '600',
+    lineHeight: 18,
+  },
+  // Bottom sheet styles
+  sheetBackdrop: {
+    position: 'absolute',
+    inset: 0,
+    justifyContent: 'flex-end',
+  } as any,
+  sheet: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    borderTopWidth: 1,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    paddingHorizontal: 18,
+    paddingTop: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 10,
+  },
+  sheetHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#d1d5db',
+    alignSelf: 'center',
+    marginBottom: 14,
+  },
+  sheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    marginBottom: 12,
+  },
+  sheetTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    letterSpacing: -0.3,
+    marginBottom: 3,
+  },
+  sheetAddress: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  distancePill: {
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    alignSelf: 'flex-start',
+    marginTop: 2,
+  },
+  distanceText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  sheetStats: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 14,
+  },
+  statChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
   },
-  dot: { width: 10, height: 10, borderRadius: 5 },
-  name: { fontSize: 14, fontWeight: '700' },
-  meta: { fontSize: 12, marginTop: 2 },
+  statDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+  },
+  statText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  sheetCta: {
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
 });
+

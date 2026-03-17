@@ -12,12 +12,19 @@ import Analytics from './pages/Analytics';
 import FleetAnalytics from './pages/FleetAnalytics';
 import ChargerDetail from './pages/ChargerDetail';
 import Login from './pages/Login';
+import ResetPassword from './pages/ResetPassword';
 import CustomerSupport from './pages/CustomerSupport';
 import NetworkOps from './pages/NetworkOps';
+import LoadManagement from './pages/LoadManagement';
 import UserManagement from './pages/UserManagement';
 import Settings from './pages/Settings';
 import Notifications from './pages/Notifications';
+import Operations from './pages/Operations';
+import Chargers from './pages/Chargers';
+import Sessions from './pages/Sessions';
 import { ThemeProvider, usePortalTheme } from './theme/ThemeContext';
+import { PortalScopeProvider } from './context/PortalScopeContext';
+import { getDefaultHomePath, getRolePreference } from './lib/portalPreferences';
 
 const CLERK_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined;
 const AUTH_MODE = String(import.meta.env.VITE_AUTH_MODE ?? '').trim().toLowerCase();
@@ -29,24 +36,33 @@ function resolveAuthMode(): 'dev' | 'keycloak' | 'clerk' {
 }
 
 function PortalRoutes() {
+  const homePath = getDefaultHomePath(getRolePreference());
+
   return (
     <BrowserRouter>
-      <Layout>
-        <Routes>
-          <Route path="/" element={<Dashboard />} />
+      <PortalScopeProvider>
+        <Layout>
+          <Routes>
+          <Route path="/" element={<Navigate to={homePath} replace />} />
+          <Route path="/overview" element={<Dashboard />} />
           <Route path="/sites" element={<Sites />} />
           <Route path="/sites/:id" element={<SiteDetail />} />
           <Route path="/analytics" element={<FleetAnalytics />} />
           <Route path="/sites/:id/analytics" element={<Analytics />} />
+          <Route path="/chargers" element={<Chargers />} />
           <Route path="/chargers/:id" element={<ChargerDetail />} />
+          <Route path="/sessions" element={<Sessions />} />
+          <Route path="/operations" element={<Operations />} />
           <Route path="/support" element={<CustomerSupport />} />
           <Route path="/network" element={<NetworkOps />} />
+          <Route path="/load-management" element={<LoadManagement />} />
           <Route path="/users" element={<UserManagement />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/notifications" element={<Notifications />} />
           <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </Layout>
+          </Routes>
+        </Layout>
+      </PortalScopeProvider>
     </BrowserRouter>
   );
 }
@@ -56,6 +72,7 @@ function SignedOutRoutes() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/sso-callback" element={<Login error="Completing sign-in..." />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
@@ -111,6 +128,7 @@ function DevSignedOutRoutes({ onSignIn }: { onSignIn: () => void }) {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<Login devMode devOperatorId={devOperatorId} onDevSignIn={onSignIn} />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/sso-callback" element={<Navigate to="/login" replace />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>

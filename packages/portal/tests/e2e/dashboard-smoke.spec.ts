@@ -17,7 +17,7 @@ test('dashboard renders with mocked empty site list', async ({ page }) => {
     await devSignIn.click();
   }
 
-  await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Dashboard|Overview/i })).toBeVisible();
   await expect(page.getByText('Total Sites')).toBeVisible();
   await expect(page.getByText('No trend data for selected range.')).toBeVisible();
 });

@@ -100,9 +100,7 @@ export function ChargingNotificationsProvider({ children }: { children: React.Re
     queryKey: ['sessions'],
     queryFn: () => api.sessions.list(20, 0),
     enabled: !isGuest,
-    staleTime: 0,
-    refetchInterval: 7_000,
-    refetchIntervalInBackground: true,
+    staleTime: 15_000,
   });
 
   const activeSession = useMemo(() => data?.sessions.find((s) => s.status === 'ACTIVE') ?? null, [data]);
@@ -111,9 +109,7 @@ export function ChargingNotificationsProvider({ children }: { children: React.Re
     queryKey: ['charger-live-state', activeSession?.connector.charger.id],
     queryFn: () => api.chargers.get(activeSession!.connector.charger.id),
     enabled: Boolean(activeSession?.connector.charger.id),
-    staleTime: 0,
-    refetchInterval: activeSession ? 2_000 : false,
-    refetchIntervalInBackground: true,
+    staleTime: 15_000,
   });
 
   const activeConnectorState = useMemo(() => {

@@ -136,7 +136,7 @@ export default function Analytics() {
   }, [summary, roleScope]);
 
   if (loading) {
-    return <div className="flex h-64 items-center justify-center text-gray-400">Loading analytics…</div>;
+    return <div className="flex h-64 items-center justify-center text-gray-400 dark:text-slate-500">Loading analytics…</div>;
   }
   if (error || !data) {
     return <div className="rounded-lg bg-red-50 p-4 text-sm text-red-700">{error || 'Failed to load'}</div>;
@@ -145,34 +145,34 @@ export default function Analytics() {
   return (
     <div className="space-y-6">
       <div>
-        <div className="flex items-center gap-2 text-sm text-gray-500">
-          <Link to="/" className="hover:text-gray-700">Dashboard</Link>
+        <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-slate-400">
+          <Link to="/overview" className="hover:text-gray-700 dark:hover:text-slate-200 dark:text-slate-300">Overview</Link>
           <span>/</span>
-          <Link to={`/sites/${id}`} className="hover:text-gray-700">{data.siteName}</Link>
+          <Link to={`/sites/${id}`} className="hover:text-gray-700 dark:hover:text-slate-200 dark:text-slate-300">{data.siteName}</Link>
           <span>/</span>
-          <span className="text-gray-900">Analytics</span>
+          <span className="text-gray-900 dark:text-slate-100">Analytics</span>
         </div>
-        <h1 className="mt-1 text-2xl font-bold text-gray-900">Analytics — {data.siteName}</h1>
-        <p className="text-sm text-gray-500">Trend filters + saved views + export queue controls</p>
+        <h1 className="mt-1 text-2xl font-bold text-gray-900 dark:text-slate-100">Analytics — {data.siteName}</h1>
+        <p className="text-sm text-gray-500 dark:text-slate-400">Trend filters + saved views + export queue controls</p>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-gray-200 bg-white p-4">
-        <label className="text-xs font-medium uppercase tracking-wide text-gray-500">Range</label>
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+        <label className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Range</label>
         <select
           value={timeFilter}
           onChange={(e) => setTimeFilter(e.target.value as TimeFilter)}
-          className="rounded-md border border-gray-300 px-2 py-1 text-sm"
+          className="rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1 text-sm"
         >
           <option value="7d">Last 7 days</option>
           <option value="14d">Last 14 days</option>
           <option value="30d">Last 30 days</option>
         </select>
 
-        <label className="ml-2 text-xs font-medium uppercase tracking-wide text-gray-500">Role scope</label>
+        <label className="ml-2 text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Role scope</label>
         <select
           value={roleScope}
           onChange={(e) => setRoleScope(e.target.value as AnalystRole)}
-          className="rounded-md border border-gray-300 px-2 py-1 text-sm"
+          className="rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1 text-sm"
         >
           <option value="analyst">Analyst (no revenue access)</option>
           <option value="operator">Operator</option>
@@ -184,7 +184,7 @@ export default function Analytics() {
             value={viewName}
             onChange={(e) => setViewName(e.target.value)}
             placeholder="Save current view"
-            className="rounded-md border border-gray-300 px-2 py-1 text-sm"
+            className="rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1 text-sm"
           />
           <button
             type="button"
@@ -221,7 +221,7 @@ export default function Analytics() {
                 });
               }, 800);
             }}
-            className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+            className="rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60"
           >
             Queue export
           </button>
@@ -234,7 +234,7 @@ export default function Analytics() {
                 key={view.name}
                 type="button"
                 onClick={() => setTimeFilter(view.filter)}
-                className="rounded-full border border-gray-300 px-3 py-1 text-xs text-gray-700 hover:bg-gray-50"
+                className="rounded-full border border-gray-300 dark:border-slate-600 px-3 py-1 text-xs text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60"
                 title={`Apply ${view.filter} filter`}
               >
                 {view.name}
@@ -255,15 +255,15 @@ export default function Analytics() {
         <SummaryCard label="Utilization" value={`${Math.max(data.utilizationRatePct, data.sessionsCount > 0 ? 0.01 : 0).toFixed(2)}%`} icon="📶" />
       </div>
 
-      <div className="rounded-xl border border-gray-200 bg-white p-4">
-        <h3 className="mb-2 text-sm font-semibold text-gray-700">Export/report queue</h3>
+      <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+        <h3 className="mb-2 text-sm font-semibold text-gray-700 dark:text-slate-300">Export/report queue</h3>
         {exportQueue.length === 0 ? (
-          <p className="text-sm text-gray-500">No exports queued yet.</p>
+          <p className="text-sm text-gray-500 dark:text-slate-400">No exports queued yet.</p>
         ) : (
           <div className="space-y-2">
             {exportQueue.slice(0, 8).map((job) => (
-              <div key={job.id} className="flex items-center justify-between rounded-md border border-gray-200 px-3 py-2">
-                <p className="text-xs text-gray-600">
+              <div key={job.id} className="flex items-center justify-between rounded-md border border-gray-200 dark:border-slate-700 px-3 py-2">
+                <p className="text-xs text-gray-600 dark:text-slate-400">
                   {new Date(job.createdAt).toLocaleString()} · {job.filter} · {job.role}
                 </p>
                 <span className={`rounded-full px-2 py-0.5 text-xs ${job.status === 'complete' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
@@ -319,12 +319,12 @@ export default function Analytics() {
 
 function SummaryCard({ label, value, icon }: { label: string; value: string; icon: string }) {
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+    <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 shadow-sm">
       <div className="flex items-center gap-3">
         <span className="text-2xl">{icon}</span>
         <div>
-          <p className="text-2xl font-bold text-gray-900">{value}</p>
-          <p className="text-xs text-gray-500">{label}</p>
+          <p className="text-2xl font-bold text-gray-900 dark:text-slate-100">{value}</p>
+          <p className="text-xs text-gray-500 dark:text-slate-400">{label}</p>
         </div>
       </div>
     </div>
@@ -333,8 +333,8 @@ function SummaryCard({ label, value, icon }: { label: string; value: string; ico
 
 function ChartCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-      <h3 className="mb-4 text-sm font-semibold text-gray-700">{title}</h3>
+    <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-5 shadow-sm">
+      <h3 className="mb-4 text-sm font-semibold text-gray-700 dark:text-slate-300">{title}</h3>
       {children}
     </div>
   );

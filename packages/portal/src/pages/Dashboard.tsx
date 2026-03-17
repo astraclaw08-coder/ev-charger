@@ -3,16 +3,15 @@ import { Bar, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } 
 import { createApiClient, type DailyEntry, type SiteListItem } from '../api/client';
 import DashboardSitesMap, { type DashboardSiteMapItem } from '../components/DashboardSitesMap';
 import { useToken } from '../auth/TokenContext';
-
-type RangePreset = '7d' | '30d' | '60d';
+import { usePortalScope } from '../context/PortalScopeContext';
 
 export default function Dashboard() {
   const getToken = useToken();
   const [sites, setSites] = useState<SiteListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [fleetUptime, setFleetUptime] = useState<{ uptime24h: number; uptime7d: number; uptime30d: number; degraded: number } | null>(null);
-  const [fleetKpis, setFleetKpis] = useState<{ totalSites: number; totalKwh: number; totalRevenue: number; activeSessions: number; utilizationRatePct: number } | null>(null);
+  const [fleetUptime, setFleetUptime] = useState<{ uptime24h: number; uptime7d: number; uptime30d: number } | null>(null);
+  const [fleetKpis, setFleetKpis] = useState<{ totalSites: number; totalConnectors: number; totalKwh: number; totalRevenue: number; activeSessions: number; utilizationRatePct: number } | null>(null);
   const [fleetStatus, setFleetStatus] = useState<{
     totalChargers: number;
     totalConnectors: number;
@@ -22,17 +21,19 @@ export default function Dashboard() {
     offline: number;
     byStatus: Array<{ status: string; count: number }>;
   } | null>(null);
-  const [rangePreset, setRangePreset] = useState<RangePreset>('30d');
+  const { siteId, setSiteId, rangePreset, setRangePreset } = usePortalScope();
   const [fleetTrend, setFleetTrend] = useState<Array<{ date: string; label: string; sessions: number; kwhDelivered: number; revenueUsd: number }>>([]);
   const [siteMapItems, setSiteMapItems] = useState<DashboardSiteMapItem[]>([]);
 
 
   async function load() {
     try {
+      setError('');
       const token = await getToken();
       const client = createApiClient(token);
-      const data = await client.getSites();
-      setSites(data);
+      const allSites = await client.getSites();
+      setSites(allSites);
+      const data = siteId ? allSites.filter((site) => site.id === siteId) : allSites;
 
       const periodDays = rangePreset === '7d' ? 7 : rangePreset === '30d' ? 30 : 60;
 
@@ -77,6 +78,11 @@ export default function Dashboard() {
             return count + (chargerStatus !== 'OFFLINE' && hasAvailableConnector ? 1 : 0);
           }, 0);
 
+          const chargerTypes = Array.from(new Set(site!.chargers.map((ch) => {
+            const s = `${ch.model ?? ''} ${ch.vendor ?? ''}`.toLowerCase();
+            return (s.includes('dc') || s.includes('ccs') || s.includes('chademo') || s.includes('fast') || s.includes('dcfc') || s.includes('supercharger')) ? 'DCFC' : 'Level 2';
+          })));
+
           return {
             id: site!.id,
             name: site!.name,
@@ -85,6 +91,7 @@ export default function Dashboard() {
             lng: site!.lng,
             availableChargers,
             totalChargers,
+            chargerTypes,
           };
         });
       setSiteMapItems(mapRows);
@@ -150,6 +157,7 @@ export default function Dashboard() {
 
       setFleetKpis({
         totalSites: data.length,
+        totalConnectors,
         totalKwh: Math.round(totalKwh * 1000) / 1000,
         totalRevenue: Math.round(totalRevenue * 100) / 100,
         activeSessions,
@@ -195,7 +203,6 @@ export default function Dashboard() {
           uptime24h: avg(rows.map((r) => r!.uptimePercent24h)),
           uptime7d: avg(rows.map((r) => r!.uptimePercent7d)),
           uptime30d: avg(rows.map((r) => r!.uptimePercent30d)),
-          degraded: rows.reduce((sum, r) => sum + (r?.degradedChargers ?? 0), 0),
         });
       } else {
         setFleetUptime(null);
@@ -211,12 +218,12 @@ export default function Dashboard() {
     setLoading(true);
     load();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [getToken, rangePreset]);
+  }, [getToken, rangePreset, siteId]);
 
 
   if (loading) {
     return (
-      <div className="flex h-64 items-center justify-center text-gray-400">Loading sites…</div>
+      <div className="flex h-64 items-center justify-center text-gray-400 dark:text-slate-500">Loading sites…</div>
     );
   }
 
@@ -230,59 +237,75 @@ export default function Dashboard() {
     <div>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-          <p className="mt-1 text-sm text-gray-500">Fleet overview and operations snapshot</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-slate-100">Overview</h1>
+          <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">Executive + operational snapshot for daily CPO decision-making across your portfolio.</p>
         </div>
-        <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-gray-500">KPI time period</p>
-          <select
-            value={rangePreset}
-            onChange={(e) => setRangePreset(e.target.value as RangePreset)}
-            className="mt-1 rounded-md border border-gray-300 px-2 py-1.5 text-sm"
-          >
-            <option value="7d">Last 7 days</option>
-            <option value="30d">Last 30 days</option>
-            <option value="60d">Last 60 days</option>
-          </select>
+        <div className="flex flex-wrap gap-2">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Portfolio scope</p>
+            <select
+              value={siteId}
+              onChange={(e) => setSiteId(e.target.value)}
+              className="mt-1 rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5 text-sm"
+            >
+              <option value="">All sites</option>
+              {sites.map((site) => (
+                <option key={site.id} value={site.id}>{site.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">KPI time period</p>
+            <select
+              value={rangePreset}
+              onChange={(e) => setRangePreset(e.target.value as '7d' | '30d' | '60d')}
+              className="mt-1 rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5 text-sm"
+            >
+              <option value="7d">Last 7 days</option>
+              <option value="30d">Last 30 days</option>
+              <option value="60d">Last 60 days</option>
+            </select>
+          </div>
         </div>
       </div>
 
       {fleetKpis && (
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          <KpiTile label={`Total kWh (${rangePreset})`} value={`${fleetKpis.totalKwh.toFixed(3)} kWh`} />
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+          <KpiTile label={`Total kWh (${rangePreset})`} value={`${fleetKpis.totalKwh.toFixed(1)}`} />
           <KpiTile label={`Total Revenue (${rangePreset})`} value={`$${fleetKpis.totalRevenue.toFixed(2)}`} />
           <KpiTile label="Total Sites" value={`${fleetKpis.totalSites}`} />
-          <KpiTile label="Active Sessions" value={`${fleetKpis.activeSessions}`} />
+          <KpiTile label="Total Connectors" value={`${fleetKpis.totalConnectors}`} live />
+          <KpiTile label="Active Sessions" value={`${fleetKpis.activeSessions}`} live />
           <KpiTile label={`Utilization Rate (${rangePreset})`} value={`${fleetKpis.utilizationRatePct.toFixed(2)}%`} />
         </div>
       )}
 
       {fleetStatus && (
-        <div className="mt-3 rounded-xl border border-gray-200 bg-white p-4">
+        <div className="mt-3 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm font-semibold text-gray-700">Connector Statuses</p>
-            <p className="text-xs text-gray-500">
-              Chargers: <span className="font-semibold text-gray-900">{fleetStatus.totalChargers}</span>
+            <p className="text-sm font-semibold text-gray-700 dark:text-slate-300">Connector Statuses</p>
+            <p className="text-xs text-gray-500 dark:text-slate-400">
+              Chargers: <span className="font-semibold text-gray-900 dark:text-slate-100">{fleetStatus.totalChargers}</span>
               {' · '}
-              Connectors: <span className="font-semibold text-gray-900">{fleetStatus.totalConnectors}</span>
+              Connectors: <span className="font-semibold text-gray-900 dark:text-slate-100">{fleetStatus.totalConnectors}</span>
             </p>
           </div>
 
-          <div className="mt-2 text-sm text-gray-700">
+          <div className="mt-2 text-sm text-gray-700 dark:text-slate-300">
             <span className="font-medium text-green-700">🟢 Available {fleetStatus.available}</span>
             <span className="mx-2 text-gray-300">·</span>
             <span className="font-medium text-amber-700">🟡 Charging {fleetStatus.charging}</span>
             <span className="mx-2 text-gray-300">·</span>
             <span className="font-medium text-red-700">🔴 Faulted {fleetStatus.faulted}</span>
             <span className="mx-2 text-gray-300">·</span>
-            <span className="font-medium text-gray-600">⚫ Offline {fleetStatus.offline}</span>
+            <span className="font-medium text-gray-600 dark:text-slate-400">⚫ Offline {fleetStatus.offline}</span>
           </div>
 
           <div className="mt-3 flex flex-wrap gap-2">
             {fleetStatus.byStatus
               .filter((entry) => !['AVAILABLE', 'PREPARING', 'CHARGING', 'FINISHING', 'SUSPENDED_EV', 'SUSPENDED_EVSE', 'FAULTED', 'UNAVAILABLE', 'OFFLINE'].includes(entry.status))
               .map((entry) => (
-                <span key={entry.status} className="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs text-gray-700">
+                <span key={entry.status} className="rounded-full border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/60 px-2.5 py-1 text-xs text-gray-700 dark:text-slate-300">
                   {entry.status}: {entry.count}
                 </span>
               ))}
@@ -290,23 +313,37 @@ export default function Dashboard() {
         </div>
       )}
 
+      {fleetStatus && (
+        <div className="mt-3 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-semibold text-gray-700 dark:text-slate-300">Needs action now</p>
+            <a href="/operations" className="text-xs font-medium text-brand-700 hover:underline">Open Operations</a>
+          </div>
+          <div className="mt-3 grid gap-3 sm:grid-cols-3">
+            <ActionTile label="Faulted connectors" value={fleetStatus.faulted} tone="red" />
+            <ActionTile label="Offline connectors" value={fleetStatus.offline} tone="slate" />
+            <ActionTile label="Active sessions" value={fleetKpis?.activeSessions ?? 0} tone="blue" />
+          </div>
+        </div>
+      )}
+
       <DashboardSitesMap sites={siteMapItems} />
 
-      <div className="mt-4 rounded-xl border border-gray-200 bg-white p-4">
+      <div className="mt-4 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
         <p className="text-sm font-semibold">
           <span className="text-blue-600">Energy (kWh)</span>
-          <span className="text-gray-400"> | </span>
+          <span className="text-gray-400 dark:text-slate-500"> | </span>
           <span className="text-emerald-600">Revenue ($)</span>
-          <span className="text-gray-400"> | </span>
+          <span className="text-gray-400 dark:text-slate-500"> | </span>
           <span className="text-amber-500">Transactions</span>
-          <span className="ml-1 text-xs font-normal text-gray-400">({rangePreset})</span>
+          <span className="ml-1 text-xs font-normal text-gray-400 dark:text-slate-500">({rangePreset})</span>
         </p>
 
         <div className="mt-3 h-64">
           {loading ? (
-            <div className="h-full animate-pulse rounded-lg bg-gray-100" />
+            <div className="h-full animate-pulse rounded-lg bg-gray-100 dark:bg-slate-800" />
           ) : fleetTrend.length === 0 ? (
-            <div className="flex h-full items-center justify-center text-sm text-gray-400">No trend data for selected range.</div>
+            <div className="flex h-full items-center justify-center text-sm text-gray-400 dark:text-slate-500">No trend data for selected range.</div>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={fleetTrend} margin={{ top: 8, right: 16, left: 4, bottom: 0 }}>
@@ -324,13 +361,12 @@ export default function Dashboard() {
       </div>
 
       {fleetUptime && (
-        <div className="mt-4 rounded-xl border border-gray-200 bg-white p-4">
-          <p className="text-sm font-semibold text-gray-700">Fleet uptime summary (OCA v1.1)</p>
-          <div className="mt-2 grid gap-3 sm:grid-cols-4">
-            <div><p className="text-xs text-gray-500">24h</p><p className="text-lg font-semibold text-gray-900">{fleetUptime.uptime24h.toFixed(2)}%</p></div>
-            <div><p className="text-xs text-gray-500">7d</p><p className="text-lg font-semibold text-gray-900">{fleetUptime.uptime7d.toFixed(2)}%</p></div>
-            <div><p className="text-xs text-gray-500">30d</p><p className="text-lg font-semibold text-gray-900">{fleetUptime.uptime30d.toFixed(2)}%</p></div>
-            <div><p className="text-xs text-gray-500">Degraded chargers</p><p className="text-lg font-semibold text-amber-700">{fleetUptime.degraded}</p></div>
+        <div className="mt-4 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+          <p className="text-sm font-semibold text-gray-700 dark:text-slate-300">Fleet uptime summary (OCA v1.1)</p>
+          <div className="mt-2 grid gap-3 sm:grid-cols-3">
+            <div><p className="text-xs text-gray-500 dark:text-slate-400">24h</p><p className="text-lg font-semibold text-gray-900 dark:text-slate-100">{fleetUptime.uptime24h.toFixed(2)}%</p></div>
+            <div><p className="text-xs text-gray-500 dark:text-slate-400">7d</p><p className="text-lg font-semibold text-gray-900 dark:text-slate-100">{fleetUptime.uptime7d.toFixed(2)}%</p></div>
+            <div><p className="text-xs text-gray-500 dark:text-slate-400">30d</p><p className="text-lg font-semibold text-gray-900 dark:text-slate-100">{fleetUptime.uptime30d.toFixed(2)}%</p></div>
           </div>
         </div>
       )}
@@ -339,11 +375,29 @@ export default function Dashboard() {
   );
 }
 
-function KpiTile({ label, value }: { label: string; value: string }) {
+function KpiTile({ label, value, live }: { label: string; value: string; live?: boolean }) {
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4">
-      <p className="text-xs text-gray-500">{label}</p>
-      <p className="mt-1 text-xl font-semibold text-gray-900">{value}</p>
+    <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+      <div className="flex items-center gap-1.5">
+        <p className="truncate text-[11px] leading-tight text-gray-500 dark:text-slate-400">{label}</p>
+        {live && <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-500" title="Live" />}
+      </div>
+      <p className="mt-1 truncate text-[clamp(1rem,1.6vw,1.25rem)] font-semibold leading-tight text-gray-900 dark:text-slate-100">{value}</p>
+    </div>
+  );
+}
+
+function ActionTile({ label, value, tone }: { label: string; value: number; tone: 'red' | 'slate' | 'blue' }) {
+  const toneClass = tone === 'red'
+    ? 'text-red-700 bg-red-50 border-red-200'
+    : tone === 'slate'
+      ? 'text-slate-700 bg-slate-100 border-slate-300'
+      : 'text-brand-700 bg-brand-50 border-brand-200';
+
+  return (
+    <div className={`rounded-lg border p-3 ${toneClass}`}>
+      <p className="text-xs font-medium">{label}</p>
+      <p className="mt-1 text-2xl font-semibold">{value}</p>
     </div>
   );
 }

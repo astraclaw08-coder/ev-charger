@@ -36,9 +36,14 @@ interface Props {
   type?: 'charger' | 'connector';
 }
 
+function normalizeChargerStatus(status: string): ChargerStatus {
+  return status === 'ONLINE' ? 'ONLINE' : 'OFFLINE';
+}
+
 export default function StatusBadge({ status, type = 'charger' }: Props) {
+  const normalizedStatus = type === 'charger' ? normalizeChargerStatus(status) : status;
   const colorMap = type === 'charger' ? CHARGER_COLORS : CONNECTOR_COLORS;
-  const color = (colorMap as Record<string, string>)[status] ?? 'bg-gray-100 text-gray-600';
+  const color = (colorMap as Record<string, string>)[normalizedStatus] ?? 'bg-gray-100 text-gray-600';
 
   return (
     <span
@@ -47,7 +52,7 @@ export default function StatusBadge({ status, type = 'charger' }: Props) {
         color,
       )}
     >
-      {status}
+      {normalizedStatus}
     </span>
   );
 }

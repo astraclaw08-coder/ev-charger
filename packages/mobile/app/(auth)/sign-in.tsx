@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   Alert,
   ActivityIndicator,
   Pressable,
+  Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { AntDesign, Ionicons } from '@expo/vector-icons';
@@ -68,6 +69,19 @@ function formatPhoneForDisplay(identifier: string) {
   return trimmed;
 }
 
+function BrandHeader({ isDark }: { isDark: boolean }) {
+  return (
+    <View style={styles.brandWrap}>
+      <Image
+        source={isDark ? require('../../assets/branding/lumeo_logo_darktheme.png') : require('../../assets/branding/lumeo_logo_transparent.png')}
+        style={styles.brandLogo}
+        resizeMode="contain"
+      />
+
+    </View>
+  );
+}
+
 export default function SignInScreen() {
   const router = useRouter();
   const { signIn, continueAsGuest: continueAsGuestFromAuth } = useAppAuth();
@@ -100,7 +114,7 @@ export default function SignInScreen() {
     return (
       <View style={[styles.container, { backgroundColor: isDark ? '#0b1220' : '#f3f4f6' }]}> 
         <View style={styles.card}>
-          <Text style={[styles.title, { color: isDark ? '#f8fafc' : '#111827' }]}>Sign In</Text>
+          <BrandHeader isDark={isDark} />
           <Text style={[styles.devNote, { color: isDark ? '#cbd5e1' : '#334155' }]}>Dev Mode — No Clerk Key Set</Text>
           <TouchableOpacity
             style={styles.button}
@@ -136,6 +150,7 @@ function KeycloakSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onCo
   const [showEmail, setShowEmail] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const usernameInputRef = useRef<TextInput>(null);
   const [awaitingCode, setAwaitingCode] = useState(false);
   const [code, setCode] = useState('');
   const [otpTarget, setOtpTarget] = useState('');
@@ -143,6 +158,11 @@ function KeycloakSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onCo
   async function handleSignIn() {
     const ok = await loginWithPassword?.(username, password);
     if (ok) router.replace('/(tabs)' as any);
+  }
+
+  function openEmailLogin() {
+    setShowEmail(true);
+    setTimeout(() => usernameInputRef.current?.focus(), 50);
   }
 
   function handleNextOtp() {
@@ -175,7 +195,7 @@ function KeycloakSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onCo
         >
           <Ionicons name="arrow-back" size={18} color={isDark ? '#f8fafc' : '#111827'} />
         </TouchableOpacity>
-        <Text style={[styles.title, styles.otpTitle, { color: isDark ? '#f8fafc' : '#111827' }]}>Enter Your Code</Text>
+        <BrandHeader isDark={isDark} />
         <Text style={[styles.helperText, styles.otpHelperText, { marginBottom: 12 }]}>Code was sent to {formatPhoneForDisplay(otpTarget)}</Text>
         <Pressable style={styles.codeDotsWrap} onPress={() => {}}>
           {Array.from({ length: 5 }).map((_, idx) => (
@@ -201,7 +221,7 @@ function KeycloakSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onCo
 
   return (
     <View style={styles.card}>
-      <Text style={[styles.title, { color: isDark ? '#f8fafc' : '#111827' }]}>Sign In</Text>
+      <BrandHeader isDark={isDark} />
 
       <TextInput
         style={[styles.input, styles.centerText]}
@@ -222,7 +242,7 @@ function KeycloakSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onCo
         <View style={styles.dividerLine} />
       </View>
 
-      <TouchableOpacity style={styles.oauthBtn} onPress={() => setShowEmail((v) => !v)}>
+      <TouchableOpacity testID="keycloak-email-toggle" style={styles.oauthBtn} onPress={openEmailLogin}>
         <Ionicons name="mail-outline" size={18} color="#111827" />
         <Text style={styles.oauthText}>Email</Text>
       </TouchableOpacity>
@@ -230,6 +250,7 @@ function KeycloakSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onCo
       {showEmail && (
         <>
           <TextInput
+            ref={usernameInputRef}
             style={styles.input}
             placeholder="Email"
             value={username}
@@ -280,6 +301,7 @@ function ClerkSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onConti
   const [otpTarget, setOtpTarget] = useState('');
   const [showEmail, setShowEmail] = useState(false);
   const [loading, setLoading] = useState(false);
+  const emailInputRef = useRef<TextInput>(null);
 
   async function handleRequestOtp() {
     if (!isLoaded) return;
@@ -362,6 +384,11 @@ function ClerkSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onConti
     }
   }
 
+  function openEmailLogin() {
+    setShowEmail(true);
+    setTimeout(() => emailInputRef.current?.focus(), 50);
+  }
+
   useEffect(() => {
     if (!awaitingCode || code.length !== 5 || loading) return;
     handleVerifyOtp();
@@ -382,7 +409,7 @@ function ClerkSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onConti
         >
           <Ionicons name="arrow-back" size={18} color={isDark ? '#f8fafc' : '#111827'} />
         </TouchableOpacity>
-        <Text style={[styles.title, styles.otpTitle, { color: isDark ? '#f8fafc' : '#111827' }]}>Enter Your Code</Text>
+        <BrandHeader isDark={isDark} />
         <Text style={[styles.helperText, styles.otpHelperText, { marginBottom: 12 }]}>Code was sent to {formatPhoneForDisplay(otpTarget)}</Text>
         <Pressable style={styles.codeDotsWrap}>
           {Array.from({ length: 5 }).map((_, idx) => (
@@ -409,7 +436,7 @@ function ClerkSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onConti
 
   return (
     <View style={styles.card}>
-      <Text style={[styles.title, { color: isDark ? '#f8fafc' : '#111827' }]}>Sign In</Text>
+      <BrandHeader isDark={isDark} />
 
       <TextInput
         style={[styles.input, styles.centerText]}
@@ -429,14 +456,14 @@ function ClerkSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onConti
         <View style={styles.dividerLine} />
       </View>
 
-      <TouchableOpacity style={styles.oauthBtn} onPress={() => setShowEmail((v) => !v)}>
+      <TouchableOpacity testID="clerk-email-toggle" style={styles.oauthBtn} onPress={openEmailLogin}>
         <Ionicons name="mail-outline" size={18} color="#111827" />
         <Text style={styles.oauthText}>Email</Text>
       </TouchableOpacity>
 
       {showEmail && (
         <>
-          <TextInput style={styles.input} placeholder="Email" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" />
+          <TextInput ref={emailInputRef} style={styles.input} placeholder="Email" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" />
           <TextInput style={styles.input} placeholder="Password" value={password} onChangeText={setPassword} secureTextEntry />
           <TouchableOpacity style={[styles.button, styles.emailSignInButton, loading && styles.buttonDisabled]} onPress={handlePasswordSignIn} disabled={loading}>
             {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Sign In</Text>}
@@ -467,7 +494,10 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     paddingVertical: 8,
   },
+  brandWrap: { alignItems: 'center', marginBottom: 8 },
+  brandLogo: { width: 220, height: 80, marginBottom: 4 },
   title: { fontSize: 28, fontWeight: '700', marginBottom: 12, textAlign: 'center' },
+  brandTitle: { fontSize: 32, fontWeight: '800', letterSpacing: 0.4, marginBottom: 14 },
   devNote: { fontSize: 13, textAlign: 'center', marginBottom: 20, lineHeight: 20 },
   input: {
     borderWidth: 1,

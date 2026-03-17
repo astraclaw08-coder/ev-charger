@@ -246,7 +246,7 @@ export async function readModelRoutes(app: FastifyInstance) {
         take: limit,
         skip: offset,
         include: {
-          site: { select: { id: true, name: true, organizationName: true, portfolioName: true } },
+          site: { select: { id: true, name: true, organizationName: true, portfolioName: true, softwareVendorFeeMode: true, softwareVendorFeeValue: true } },
           charger: { select: { id: true, ocppId: true, serialNumber: true, model: true, vendor: true } },
           session: {
             select: {
@@ -279,6 +279,11 @@ export async function readModelRoutes(app: FastifyInstance) {
           ratePerKwh: row.session.ratePerKwh,
           payment: row.session.payment,
           revenueUsd,
+          durationMinutes: row.durationMinutes,
+          startedAt: row.startedAt,
+          stoppedAt: row.stoppedAt,
+          softwareVendorFeeMode: row.site.softwareVendorFeeMode,
+          softwareVendorFeeValue: row.site.softwareVendorFeeValue,
         });
 
         return {
@@ -351,7 +356,7 @@ export async function readModelRoutes(app: FastifyInstance) {
         take: limit,
         skip: offset,
         include: {
-          site: { select: { id: true, name: true } },
+          site: { select: { id: true, name: true, softwareVendorFeeMode: true, softwareVendorFeeValue: true } },
           charger: { select: { id: true, ocppId: true } },
           session: { select: { id: true, transactionId: true } },
         },

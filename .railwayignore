@@ -1,0 +1,16 @@
+# Local/dev artifacts to exclude from Railway deploy archive
+**/.expo/**
+**/ios/build-derived/**
+**/android/.gradle/**
+**/android/build/**
+**/.runtime/**
+**/.deploy/**
+**/node_modules/**
+**/.next/**
+**/dist/**
+**/*.png
+**/*.jpg
+**/*.jpeg
+**/*.webp
+**/*.mp4
+**/*.mov

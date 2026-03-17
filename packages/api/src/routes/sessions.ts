@@ -4,6 +4,40 @@ import { requireAuth } from '../plugins/auth';
 import { remoteStart, remoteStop } from '../lib/ocppClient';
 import { computeSessionAmounts } from '../lib/sessionBilling';
 
+function extractPowerActiveImportW(payload: unknown, transactionId?: number | null, connectorId?: number | null): number | null {
+  if (!payload || typeof payload !== 'object') return null;
+  const p = payload as { transactionId?: number; connectorId?: number; meterValue?: Array<{ sampledValue?: Array<{ measurand?: string; value?: string | number }> }> };
+  if (transactionId != null && p.transactionId != null && p.transactionId !== transactionId) return null;
+  if (connectorId != null && p.connectorId != null && p.connectorId !== connectorId) return null;
+  if (!Array.isArray(p.meterValue)) return null;
+
+  for (const mv of p.meterValue) {
+    for (const sv of mv.sampledValue ?? []) {
+      if (sv.measurand !== 'Power.Active.Import') continue;
+      const n = Number(sv.value);
+      if (Number.isFinite(n)) return n;
+    }
+  }
+  return null;
+}
+
+function parseHistoryRange(query: { startDate?: string; endDate?: string }, fallbackDays = 30) {
+  const hasCustomRange = Boolean(query.startDate || query.endDate);
+  if (hasCustomRange && (!query.startDate || !query.endDate)) {
+    return { error: 'startDate and endDate are required together' } as const;
+  }
+
+  const end = query.endDate ? new Date(`${query.endDate}T23:59:59.999Z`) : new Date();
+  const start = query.startDate
+    ? new Date(`${query.startDate}T00:00:00.000Z`)
+    : new Date(end.getTime() - (Math.max(1, fallbackDays) - 1) * 24 * 60 * 60 * 1000);
+
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start > end) {
+    return { error: 'Invalid date range' } as const;
+  }
+  return { start, end } as const;
+}
+
 export async function sessionRoutes(app: FastifyInstance) {
   // POST /sessions/start — driver initiates a remote start
   app.post<{
@@ -52,18 +86,46 @@ export async function sessionRoutes(app: FastifyInstance) {
     preHandler: requireAuth,
   }, async (req, reply) => {
     const user = req.currentUser!;
+    const sessionId = req.params.id;
+
+    req.log.info({ sessionId }, '[Stop] received stop request');
 
     const session = await prisma.session.findUnique({
-      where: { id: req.params.id },
+      where: { id: sessionId },
       include: { connector: { include: { charger: true } } },
     });
 
-    if (!session) return reply.status(404).send({ error: 'Session not found' });
-    if (session.userId !== user.id) return reply.status(403).send({ error: 'Not your session' });
-    if (session.status !== 'ACTIVE') return reply.status(409).send({ error: 'Session is not active' });
-    if (!session.transactionId) return reply.status(409).send({ error: 'Session has no transactionId yet' });
+    if (!session) {
+      req.log.warn({ sessionId }, '[Stop] session not found');
+      return reply.status(404).send({ error: 'Session not found' });
+    }
+    if (session.userId !== user.id) {
+      req.log.warn({ sessionId, userId: user.id }, '[Stop] forbidden — not owner');
+      return reply.status(403).send({ error: 'Not your session' });
+    }
+    if (session.status !== 'ACTIVE') {
+      req.log.warn({ sessionId, status: session.status }, '[Stop] session is not ACTIVE');
+      return reply.status(409).send({ error: 'Session is not active' });
+    }
+    if (!session.transactionId) {
+      req.log.warn({ sessionId }, '[Stop] session has no transactionId yet');
+      return reply.status(409).send({ error: 'Session has no transactionId yet' });
+    }
 
-    const status = await remoteStop(session.connector.charger.ocppId, session.transactionId);
+    // Ensure transactionId is a proper integer (DB stores as Int but TypeScript type is Int|null)
+    const transactionId = Number(session.transactionId);
+    const ocppId = session.connector.charger.ocppId;
+
+    req.log.info({ sessionId, transactionId, ocppId }, '[Stop] calling remoteStop');
+
+    if (!Number.isInteger(transactionId)) {
+      req.log.error({ sessionId, transactionId }, '[Stop] transactionId is not a valid integer');
+      return reply.status(422).send({ error: 'Invalid transactionId — cannot send stop to charger' });
+    }
+
+    const status = await remoteStop(ocppId, transactionId);
+
+    req.log.info({ sessionId, transactionId, ocppId, status }, '[Stop] remoteStop response');
     return { status };
   });
 
@@ -89,7 +151,7 @@ export async function sessionRoutes(app: FastifyInstance) {
               charger: {
                 select: {
                   id: true, ocppId: true, model: true, vendor: true, status: true,
-                  site: { select: { name: true, address: true } },
+                  site: { select: { name: true, address: true, softwareVendorFeeMode: true, softwareVendorFeeValue: true } },
                 },
               },
             },
@@ -100,8 +162,41 @@ export async function sessionRoutes(app: FastifyInstance) {
       prisma.session.count({ where: { userId: user.id } }),
     ]);
 
+    const activeChargerIds = Array.from(new Set(
+      sessions
+        .filter((s: any) => s.status === 'ACTIVE')
+        .map((s: any) => s.connector?.charger?.id)
+        .filter(Boolean),
+    ));
+
+    const recentLogs = activeChargerIds.length > 0
+      ? await prisma.ocppLog.findMany({
+          where: { chargerId: { in: activeChargerIds }, action: 'MeterValues' },
+          orderBy: { createdAt: 'desc' },
+          take: 300,
+        })
+      : [];
+
+    const logsByCharger = new Map<string, any[]>();
+    for (const row of recentLogs) {
+      const arr = logsByCharger.get(row.chargerId) ?? [];
+      arr.push(row);
+      logsByCharger.set(row.chargerId, arr);
+    }
+
     const sessionsForClient = sessions.map((s: any) => {
-      const amounts = computeSessionAmounts(s);
+      const amounts = computeSessionAmounts({ ...s, softwareVendorFeeMode: s.connector?.charger?.site?.softwareVendorFeeMode, softwareVendorFeeValue: s.connector?.charger?.site?.softwareVendorFeeValue });
+      let powerActiveImportW: number | null = null;
+      if (s.status === 'ACTIVE') {
+        const logs = logsByCharger.get(s.connector?.charger?.id) ?? [];
+        for (const log of logs) {
+          const w = extractPowerActiveImportW(log.payload, s.transactionId, s.connector?.connectorId);
+          if (w != null) {
+            powerActiveImportW = w;
+            break;
+          }
+        }
+      }
       return {
         ...s,
         ocppTransactionId: s.transactionId,
@@ -113,6 +208,7 @@ export async function sessionRoutes(app: FastifyInstance) {
         amountState: amounts.amountState,
         amountLabel: amounts.amountLabel,
         isAmountFinal: amounts.isAmountFinal,
+        powerActiveImportW,
       };
     });
 
@@ -133,7 +229,7 @@ export async function sessionRoutes(app: FastifyInstance) {
             charger: {
               select: {
                 id: true, ocppId: true, model: true, vendor: true, status: true,
-                site: { select: { name: true, address: true } },
+                site: { select: { name: true, address: true, softwareVendorFeeMode: true, softwareVendorFeeValue: true } },
               },
             },
           },
@@ -145,7 +241,23 @@ export async function sessionRoutes(app: FastifyInstance) {
     if (!session) return reply.status(404).send({ error: 'Session not found' });
     if (session.userId !== user.id) return reply.status(403).send({ error: 'Not your session' });
 
-    const amounts = computeSessionAmounts(session);
+    const amounts = computeSessionAmounts({ ...session, softwareVendorFeeMode: session.connector?.charger?.site?.softwareVendorFeeMode, softwareVendorFeeValue: session.connector?.charger?.site?.softwareVendorFeeValue });
+
+    let powerActiveImportW: number | null = null;
+    if (session.status === 'ACTIVE') {
+      const logs = await prisma.ocppLog.findMany({
+        where: { chargerId: session.connector.charger.id, action: 'MeterValues' },
+        orderBy: { createdAt: 'desc' },
+        take: 30,
+      });
+      for (const log of logs) {
+        const w = extractPowerActiveImportW(log.payload, session.transactionId, session.connector.connectorId);
+        if (w != null) {
+          powerActiveImportW = w;
+          break;
+        }
+      }
+    }
 
     return {
       ...session,
@@ -158,6 +270,98 @@ export async function sessionRoutes(app: FastifyInstance) {
       amountState: amounts.amountState,
       amountLabel: amounts.amountLabel,
       isAmountFinal: amounts.isAmountFinal,
+      powerActiveImportW,
+    };
+  });
+
+  // GET /me/transactions/enriched — user-scoped transaction history projection
+  app.get<{
+    Querystring: {
+      limit?: string;
+      offset?: string;
+      status?: string;
+      startDate?: string;
+      endDate?: string;
+    };
+  }>('/me/transactions/enriched', {
+    preHandler: requireAuth,
+  }, async (req, reply) => {
+    const user = req.currentUser!;
+    const range = parseHistoryRange(req.query, 30);
+    if ('error' in range) return reply.status(400).send({ error: range.error });
+
+    const limit = Math.min(Math.max(Number.parseInt(req.query.limit ?? '50', 10), 1), 200);
+    const offset = Math.max(Number.parseInt(req.query.offset ?? '0', 10), 0);
+    const status = req.query.status;
+
+    if (status && !['ACTIVE', 'COMPLETED', 'FAILED'].includes(status)) {
+      return reply.status(400).send({ error: 'status must be ACTIVE, COMPLETED, or FAILED' });
+    }
+
+    const where = {
+      userId: user.id,
+      startedAt: { gte: range.start, lte: range.end },
+      ...(status ? { status: status as 'ACTIVE' | 'COMPLETED' | 'FAILED' } : {}),
+    };
+
+    const [rows, total] = await Promise.all([
+      prisma.session.findMany({
+        where,
+        orderBy: { startedAt: 'desc' },
+        take: limit,
+        skip: offset,
+        include: {
+          payment: { select: { status: true, amountCents: true } },
+          connector: {
+            include: {
+              charger: {
+                select: {
+                  id: true,
+                  ocppId: true,
+                  model: true,
+                  vendor: true,
+                  site: { select: { id: true, name: true, softwareVendorFeeMode: true, softwareVendorFeeValue: true } },
+                },
+              },
+            },
+          },
+        },
+      }),
+      prisma.session.count({ where }),
+    ]);
+
+    return {
+      total,
+      limit,
+      offset,
+      transactions: rows.map((row: any) => {
+        const amounts = computeSessionAmounts({ ...row, softwareVendorFeeMode: row.connector?.charger?.site?.softwareVendorFeeMode, softwareVendorFeeValue: row.connector?.charger?.site?.softwareVendorFeeValue });
+        return {
+          id: row.id,
+          sessionId: row.id,
+          transactionId: row.transactionId,
+          status: row.status,
+          startedAt: row.startedAt,
+          stoppedAt: row.stoppedAt,
+          energyKwh: amounts.kwhDelivered,
+          revenueUsd: ((amounts.effectiveAmountCents ?? amounts.estimatedAmountCents ?? row.payment?.amountCents ?? 0) / 100),
+          payment: row.payment,
+          effectiveAmountCents: amounts.effectiveAmountCents,
+          estimatedAmountCents: amounts.estimatedAmountCents,
+          amountState: amounts.amountState,
+          amountLabel: amounts.amountLabel,
+          isAmountFinal: amounts.isAmountFinal,
+          meterStart: row.meterStart,
+          meterStop: row.meterStop,
+          site: row.connector.charger.site,
+          charger: {
+            id: row.connector.charger.id,
+            ocppId: row.connector.charger.ocppId,
+            model: row.connector.charger.model,
+            vendor: row.connector.charger.vendor,
+          },
+        };
+      }),
     };
   });
 }

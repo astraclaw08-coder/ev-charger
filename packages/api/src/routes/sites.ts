@@ -6,6 +6,18 @@ import { getChargerUptime } from '../lib/uptime';
 import { validateTouWindows } from '../lib/sitePricing';
 import { computeSessionAmounts } from '../lib/sessionBilling';
 
+/** Resolve a site by exact id OR by short prefix (first 8 chars of UUID). */
+async function resolveSiteId(param: string): Promise<string | null> {
+  if (param.length === 36 || param.includes('-') && param.length > 12) {
+    // Looks like a full id — use directly
+    const s = await prisma.site.findUnique({ where: { id: param }, select: { id: true } });
+    return s?.id ?? null;
+  }
+  // Short prefix — find first match
+  const s = await prisma.site.findFirst({ where: { id: { startsWith: param } }, select: { id: true } });
+  return s?.id ?? null;
+}
+
 export async function siteRoutes(app: FastifyInstance) {
   // GET /sites — list operator's sites with charger counts
   app.get('/sites', {
@@ -19,27 +31,18 @@ export async function siteRoutes(app: FastifyInstance) {
       where: scopedSiteIds.length > 0 && !scopedSiteIds.includes('*')
         ? { id: { in: scopedSiteIds } }
         : (isOwner ? {} : { operatorId: operator.id }),
-      include: { chargers: { include: { connectors: true } } },
+      include: {
+        chargers: {
+          select: {
+            status: true,
+            _count: { select: { connectors: true } },
+          },
+        },
+      },
       orderBy: { createdAt: 'desc' },
     });
 
-    return sites.map((site: {
-      id: string;
-      name: string;
-      address: string;
-      lat: number;
-      lng: number;
-      pricingMode: string;
-      pricePerKwhUsd: number;
-      idleFeePerMinUsd: number;
-      activationFeeUsd: number;
-      gracePeriodMin: number;
-      touWindows: unknown;
-      organizationName: string | null;
-      portfolioName: string | null;
-      createdAt: Date;
-      chargers: Array<{ status: string }>;
-    }) => ({
+    return (sites as any[]).map((site: any) => ({
       id: site.id,
       name: site.name,
       address: site.address,
@@ -50,15 +53,19 @@ export async function siteRoutes(app: FastifyInstance) {
       idleFeePerMinUsd: site.idleFeePerMinUsd,
       activationFeeUsd: site.activationFeeUsd,
       gracePeriodMin: site.gracePeriodMin,
+      softwareVendorFeeMode: site.softwareVendorFeeMode,
+      softwareVendorFeeValue: site.softwareVendorFeeValue,
+      softwareFeeIncludesActivation: (site as any).softwareFeeIncludesActivation ?? false,
       touWindows: site.touWindows,
       organizationName: site.organizationName,
       portfolioName: site.portfolioName,
       createdAt: site.createdAt,
       chargerCount: site.chargers.length,
+      connectorCount: site.chargers.reduce((sum: number, c: { status: string; _count: { connectors: number } }) => sum + (c._count?.connectors ?? 0), 0),
       statusSummary: {
-        online: site.chargers.filter((c) => c.status === 'ONLINE').length,
-        offline: site.chargers.filter((c) => c.status === 'OFFLINE').length,
-        faulted: site.chargers.filter((c) => c.status === 'FAULTED').length,
+        online: site.chargers.filter((c: { status: string }) => c.status === 'ONLINE').length,
+        offline: site.chargers.filter((c: { status: string }) => c.status === 'OFFLINE').length,
+        faulted: site.chargers.filter((c: { status: string }) => c.status === 'FAULTED').length,
       },
     }));
   });
@@ -67,8 +74,11 @@ export async function siteRoutes(app: FastifyInstance) {
   app.get<{ Params: { id: string } }>('/sites/:id', {
     preHandler: [requireOperator, requirePolicy('site.read', { getResourceSiteId: (req) => req.params.id })],
   }, async (req, reply) => {
+    const resolvedId = await resolveSiteId(req.params.id);
+    if (!resolvedId) return reply.status(404).send({ error: 'Site not found' });
+
     const site = await prisma.site.findUnique({
-      where: { id: req.params.id },
+      where: { id: resolvedId },
       include: {
         chargers: {
           orderBy: { createdAt: 'asc' },
@@ -90,6 +100,9 @@ export async function siteRoutes(app: FastifyInstance) {
       idleFeePerMinUsd: site.idleFeePerMinUsd,
       activationFeeUsd: site.activationFeeUsd,
       gracePeriodMin: site.gracePeriodMin,
+      softwareVendorFeeMode: site.softwareVendorFeeMode,
+      softwareVendorFeeValue: site.softwareVendorFeeValue,
+      softwareFeeIncludesActivation: (site as any).softwareFeeIncludesActivation ?? false,
       touWindows: site.touWindows,
       organizationName: site.organizationName,
       portfolioName: site.portfolioName,
@@ -110,6 +123,9 @@ export async function siteRoutes(app: FastifyInstance) {
       idleFeePerMinUsd?: number;
       activationFeeUsd?: number;
       gracePeriodMin?: number;
+      softwareVendorFeeMode?: 'none' | 'percentage_total' | 'fixed_per_kwh' | 'fixed_per_minute';
+      softwareVendorFeeValue?: number;
+      softwareFeeIncludesActivation?: boolean;
       touWindows?: unknown;
       organizationName?: string;
       portfolioName?: string;
@@ -128,6 +144,9 @@ export async function siteRoutes(app: FastifyInstance) {
       idleFeePerMinUsd,
       activationFeeUsd,
       gracePeriodMin,
+      softwareVendorFeeMode,
+      softwareVendorFeeValue,
+      softwareFeeIncludesActivation,
       touWindows,
       organizationName,
       portfolioName,
@@ -142,6 +161,17 @@ export async function siteRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: 'pricingMode must be either flat or tou' });
     }
 
+    if (softwareVendorFeeMode !== undefined && !['none', 'percentage_total', 'fixed_per_kwh', 'fixed_per_minute'].includes(softwareVendorFeeMode)) {
+      return reply.status(400).send({ error: 'softwareVendorFeeMode must be none, percentage_total, fixed_per_kwh, or fixed_per_minute' });
+    }
+
+    if (softwareVendorFeeValue != null && (!Number.isFinite(softwareVendorFeeValue) || softwareVendorFeeValue < 0)) {
+      return reply.status(400).send({ error: 'softwareVendorFeeValue must be >= 0' });
+    }
+    if (softwareFeeIncludesActivation !== undefined && typeof softwareFeeIncludesActivation !== 'boolean') {
+      return reply.status(400).send({ error: 'softwareFeeIncludesActivation must be boolean' });
+    }
+
     const site = await prisma.site.create({
       data: {
         name,
@@ -154,6 +184,9 @@ export async function siteRoutes(app: FastifyInstance) {
         ...(idleFeePerMinUsd != null ? { idleFeePerMinUsd } : {}),
         ...(activationFeeUsd != null ? { activationFeeUsd } : {}),
         ...(gracePeriodMin != null ? { gracePeriodMin } : {}),
+        ...(softwareVendorFeeMode != null ? { softwareVendorFeeMode } : {}),
+        ...(softwareVendorFeeValue != null ? { softwareVendorFeeValue } : {}),
+        ...(softwareFeeIncludesActivation != null ? { softwareFeeIncludesActivation } : {}),
         ...(touValidation?.ok ? { touWindows: touValidation.windows } : {}),
         organizationName,
         portfolioName,
@@ -176,6 +209,9 @@ export async function siteRoutes(app: FastifyInstance) {
       idleFeePerMinUsd?: number;
       activationFeeUsd?: number;
       gracePeriodMin?: number;
+      softwareVendorFeeMode?: 'none' | 'percentage_total' | 'fixed_per_kwh' | 'fixed_per_minute';
+      softwareVendorFeeValue?: number;
+      softwareFeeIncludesActivation?: boolean;
       touWindows?: unknown;
       organizationName?: string;
       portfolioName?: string;
@@ -183,13 +219,12 @@ export async function siteRoutes(app: FastifyInstance) {
   }>('/sites/:id', {
     preHandler: [requireOperator, requirePolicy('site.update', { getResourceSiteId: (req) => req.params.id })],
   }, async (req, reply) => {
-    const operator = req.currentOperator!;
-    const existing = await prisma.site.findUnique({ where: { id: req.params.id } });
-    if (!existing || existing.operatorId !== operator.id) {
+    const resolvedId = await resolveSiteId(req.params.id);
+    if (!resolvedId) {
       return reply.status(404).send({ error: 'Site not found' });
     }
 
-    const { name, address, lat, lng, pricingMode, pricePerKwhUsd, idleFeePerMinUsd, activationFeeUsd, gracePeriodMin, touWindows, organizationName, portfolioName } = req.body;
+    const { name, address, lat, lng, pricingMode, pricePerKwhUsd, idleFeePerMinUsd, activationFeeUsd, gracePeriodMin, softwareVendorFeeMode, softwareVendorFeeValue, softwareFeeIncludesActivation, touWindows, organizationName, portfolioName } = req.body;
 
     const touValidation = touWindows !== undefined ? validateTouWindows(touWindows) : null;
     if (touValidation && !touValidation.ok) {
@@ -200,8 +235,19 @@ export async function siteRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: 'pricingMode must be either flat or tou' });
     }
 
+    if (softwareVendorFeeMode !== undefined && !['none', 'percentage_total', 'fixed_per_kwh', 'fixed_per_minute'].includes(softwareVendorFeeMode)) {
+      return reply.status(400).send({ error: 'softwareVendorFeeMode must be none, percentage_total, fixed_per_kwh, or fixed_per_minute' });
+    }
+
+    if (softwareVendorFeeValue != null && (!Number.isFinite(softwareVendorFeeValue) || softwareVendorFeeValue < 0)) {
+      return reply.status(400).send({ error: 'softwareVendorFeeValue must be >= 0' });
+    }
+    if (softwareFeeIncludesActivation !== undefined && typeof softwareFeeIncludesActivation !== 'boolean') {
+      return reply.status(400).send({ error: 'softwareFeeIncludesActivation must be boolean' });
+    }
+
     const site = await prisma.site.update({
-      where: { id: req.params.id },
+      where: { id: resolvedId },
       data: {
         name,
         address,
@@ -212,6 +258,9 @@ export async function siteRoutes(app: FastifyInstance) {
         ...(idleFeePerMinUsd != null ? { idleFeePerMinUsd } : {}),
         ...(activationFeeUsd != null ? { activationFeeUsd } : {}),
         ...(gracePeriodMin != null ? { gracePeriodMin } : {}),
+        ...(softwareVendorFeeMode != null ? { softwareVendorFeeMode } : {}),
+        ...(softwareVendorFeeValue != null ? { softwareVendorFeeValue } : {}),
+        ...(softwareFeeIncludesActivation != null ? { softwareFeeIncludesActivation } : {}),
         ...(touValidation?.ok ? { touWindows: touValidation.windows } : {}),
         ...(organizationName !== undefined ? { organizationName } : {}),
         ...(portfolioName !== undefined ? { portfolioName } : {}),
@@ -298,13 +347,19 @@ export async function siteRoutes(app: FastifyInstance) {
       include: { payment: true },
     });
 
-    const getEffectiveAmountCents = (s: { meterStart: number | null; meterStop: number | null; kwhDelivered: number | null; ratePerKwh: number | null; payment: { status: string; amountCents: number | null } | null }) => (
-      computeSessionAmounts(s).effectiveAmountCents ?? 0
+    const getEffectiveAmountCents = (s: { meterStart: number | null; meterStop: number | null; kwhDelivered: number | null; ratePerKwh: number | null; payment: { status: string; amountCents: number | null } | null; startedAt: Date; stoppedAt: Date | null }) => (
+      computeSessionAmounts({
+        ...s,
+        softwareVendorFeeMode: site.softwareVendorFeeMode,
+        softwareVendorFeeValue: site.softwareVendorFeeValue,
+        activationFeeUsd: site.activationFeeUsd,
+        softwareFeeIncludesActivation: (site as any).softwareFeeIncludesActivation ?? false,
+      } as any).effectiveAmountCents ?? 0
     );
 
     const sessionsCount = sessions.length;
     const kwhDelivered = sessions.reduce((sum: number, s: { kwhDelivered: number | null }) => sum + (s.kwhDelivered ?? 0), 0);
-    const revenueCents = sessions.reduce((sum: number, s: { meterStart: number | null; meterStop: number | null; kwhDelivered: number | null; ratePerKwh: number | null; payment: { status: string; amountCents: number | null } | null }) => sum + getEffectiveAmountCents(s), 0);
+    const revenueCents = sessions.reduce((sum: number, s: any) => sum + getEffectiveAmountCents(s), 0);
 
     // Utilization formula (period-aligned): active charging time / available connector time.
     // - active charging time: sum of completed session durations, clipped to selected date range
@@ -382,7 +437,7 @@ export async function siteRoutes(app: FastifyInstance) {
 
     // Build daily breakdown: group sessions by UTC date, fill gaps with zeros
     const dailyMap: Record<string, { date: string; sessions: number; kwhDelivered: number; revenueCents: number }> = {};
-    sessions.forEach((s: { startedAt: Date; meterStart: number | null; meterStop: number | null; kwhDelivered: number | null; ratePerKwh: number | null; payment: { status: string; amountCents: number | null } | null }) => {
+    sessions.forEach((s: any) => {
       const day = s.startedAt.toISOString().slice(0, 10);
       if (!dailyMap[day]) dailyMap[day] = { date: day, sessions: 0, kwhDelivered: 0, revenueCents: 0 };
       dailyMap[day].sessions++;

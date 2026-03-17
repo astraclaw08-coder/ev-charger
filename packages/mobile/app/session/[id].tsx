@@ -2,7 +2,7 @@
  * Live session screen - polls for kWh + cost, shows Stop button.
  * After stop: shows session summary (kWh, duration, cost).
  */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,11 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  Modal,
   ScrollView,
+  Animated,
+  PanResponder,
+  Image,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -53,6 +57,51 @@ function getLiveKwh(session: Session): number {
   return 0;
 }
 
+function hasLiveEnergySample(session: Session): boolean {
+  return session.kwhDelivered != null || (session.meterStop != null && session.meterStart != null);
+}
+
+function formatPowerKw(value: number | null): string {
+  if (value == null || !Number.isFinite(value)) return '—';
+  return `${value.toFixed(1)} kW`;
+}
+
+function useLivePowerKw(session: Session): number | null {
+  const [powerKw, setPowerKw] = useState<number | null>(null);
+  const sampleRef = useRef<{ atMs: number; kwh: number } | null>(null);
+
+  useEffect(() => {
+    if (!hasLiveEnergySample(session)) {
+      sampleRef.current = null;
+      setPowerKw(null);
+      return;
+    }
+
+    const nowMs = Date.now();
+    const kwh = getLiveKwh(session);
+    const prev = sampleRef.current;
+    sampleRef.current = { atMs: nowMs, kwh };
+
+    if (!prev) return;
+
+    const dtSeconds = (nowMs - prev.atMs) / 1000;
+    if (!Number.isFinite(dtSeconds) || dtSeconds < 0.5) return;
+
+    const deltaKwh = Math.max(0, kwh - prev.kwh);
+    const instantKw = deltaKwh * (3600 / dtSeconds);
+    if (!Number.isFinite(instantKw)) return;
+
+    const boundedKw = Math.min(500, Math.max(0, instantKw));
+    setPowerKw((current) => {
+      if (current == null) return boundedKw;
+      const smoothing = 0.35;
+      return current * (1 - smoothing) + boundedKw * smoothing;
+    });
+  }, [session]);
+
+  return powerKw;
+}
+
 // ── Live ticker (updates every second for duration display) ───────────────────
 
 function useLiveDuration(startedAt: string, active: boolean): string {
@@ -67,7 +116,19 @@ function useLiveDuration(startedAt: string, active: boolean): string {
 
 // ── Session Summary (completed) ───────────────────────────────────────────────
 
-function SessionSummary({ session, fallbackKwh }: { session: Session; fallbackKwh?: number }) {
+function SessionSummary({
+  session,
+  fallbackKwh,
+  onStart,
+  startPending,
+  startError,
+}: {
+  session: Session;
+  fallbackKwh?: number;
+  onStart: () => void;
+  startPending: boolean;
+  startError: string | null;
+}) {
   const router = useRouter();
   const { isDark } = useAppTheme();
   const ratePerKwh = session.ratePerKwh ?? RATE_PER_KWH;
@@ -151,6 +212,18 @@ function SessionSummary({ session, fallbackKwh }: { session: Session; fallbackKw
         <Text style={[styles.metaText, { color: isDark ? '#cbd5e1' : '#6b7280' }]}>Payment Method: {paymentMethod}</Text>
       </View>
 
+      <View style={styles.restartWrap}>
+        <Text style={[styles.restartLabel, { color: isDark ? '#cbd5e1' : '#475569' }]}>Start another charge on this connector</Text>
+        <SlideAction
+          isDark={isDark}
+          disabled={startPending}
+          direction="right"
+          label={startPending ? 'Starting…' : 'Slide right to start'}
+          onComplete={onStart}
+        />
+        {startError ? <Text style={styles.startErrorText}>{startError}</Text> : null}
+      </View>
+
       <TouchableOpacity
         style={styles.doneButton}
         onPress={() => router.replace('/(tabs)/sessions')}
@@ -195,6 +268,135 @@ function SummaryStatCard({
   );
 }
 
+function SlideAction({
+  isDark,
+  disabled,
+  direction,
+  label,
+  onComplete,
+}: {
+  isDark: boolean;
+  disabled?: boolean;
+  direction: 'right' | 'left';
+  label: string;
+  onComplete: () => void;
+}) {
+  const trackWidth = 320;
+  const knobSize = 56;
+  const maxX = trackWidth - knobSize;
+  const x = useRef(new Animated.Value(direction === 'right' ? 0 : maxX)).current;
+  const valueRef = useRef(direction === 'right' ? 0 : maxX);
+
+  useEffect(() => {
+    Animated.spring(x, { toValue: direction === 'right' ? 0 : maxX, useNativeDriver: true }).start();
+  }, [direction, maxX, x]);
+
+  useEffect(() => {
+    const sub = x.addListener(({ value }) => {
+      valueRef.current = value;
+    });
+    return () => x.removeListener(sub);
+  }, [x]);
+
+  const pan = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => !disabled,
+        onMoveShouldSetPanResponder: () => !disabled,
+        onPanResponderMove: (_, g) => {
+          const base = direction === 'right' ? 0 : maxX;
+          const next = Math.max(0, Math.min(maxX, base + g.dx));
+          x.setValue(next);
+        },
+        onPanResponderRelease: () => {
+          const reached = direction === 'right'
+            ? valueRef.current >= maxX * 0.85
+            : valueRef.current <= maxX * 0.15;
+          const completedX = direction === 'right' ? maxX : 0;
+          const resetX = direction === 'right' ? 0 : maxX;
+
+          if (reached) {
+            Animated.timing(x, { toValue: completedX, duration: 110, useNativeDriver: true }).start(() => {
+              onComplete();
+              Animated.spring(x, { toValue: resetX, useNativeDriver: true }).start();
+            });
+          } else {
+            Animated.spring(x, { toValue: resetX, useNativeDriver: true }).start();
+          }
+        },
+      }),
+    [direction, disabled, maxX, onComplete, x],
+  );
+
+  return (
+    <View style={[styles.slideTrack, { backgroundColor: isDark ? '#1f2937' : '#e5e7eb', opacity: disabled ? 0.45 : 1, width: trackWidth }]}> 
+      <Text style={[styles.slideLabel, { color: isDark ? '#d1d5db' : '#374151' }]}>{label}</Text>
+      <Animated.View {...pan.panHandlers} style={[styles.slideKnob, { transform: [{ translateX: x }] }]}> 
+        <Image source={require('../../assets/branding/lumeo_logo_swirl_only.png')} style={styles.slideKnobLogo} resizeMode="contain" />
+      </Animated.View>
+    </View>
+  );
+}
+
+// ── Stop Confirmation Modal ───────────────────────────────────────────────────
+
+function StopModal({
+  visible,
+  onCancel,
+  onConfirm,
+  stopping,
+  isDark,
+}: {
+  visible: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+  stopping: boolean;
+  isDark: boolean;
+}) {
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      statusBarTranslucent
+      onRequestClose={onCancel}
+    >
+      <View style={stopModal.backdrop}>
+        <View style={[stopModal.card, { backgroundColor: isDark ? '#0f172a' : '#fff' }]}>
+          <Text style={[stopModal.title, { color: isDark ? '#f1f5f9' : '#111827' }]}>
+            Stop Charging?
+          </Text>
+          <Text style={[stopModal.subtitle, { color: isDark ? '#94a3b8' : '#6b7280' }]}>
+            This will end your current charging session.
+          </Text>
+          <TouchableOpacity
+            style={[stopModal.confirmBtn, stopping && stopModal.confirmBtnDisabled]}
+            onPress={onConfirm}
+            disabled={stopping}
+            activeOpacity={0.8}
+          >
+            {stopping ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text style={stopModal.confirmBtnText}>Stop Session</Text>
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[stopModal.cancelBtn, { borderColor: isDark ? '#334155' : '#d1d5db' }]}
+            onPress={onCancel}
+            disabled={stopping}
+            activeOpacity={0.7}
+          >
+            <Text style={[stopModal.cancelBtnText, { color: isDark ? '#94a3b8' : '#6b7280' }]}>
+              Keep Charging
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 // ── Live Session View ─────────────────────────────────────────────────────────
 
 function LiveSessionView({
@@ -209,24 +411,31 @@ function LiveSessionView({
   showConnectorLabel: boolean;
 }) {
   const { isDark } = useAppTheme();
+  const [showStopModal, setShowStopModal] = useState(false);
   const kwh = getLiveKwh(session);
   const liveRate = session.ratePerKwh ?? RATE_PER_KWH;
   const estimatedCost = kwh * liveRate;
   const duration = useLiveDuration(session.startedAt, true);
+  const livePowerKw = useLivePowerKw(session);
 
   function confirmStop() {
-    Alert.alert(
-      'Stop Charging?',
-      `You've used ${formatKwh(kwh)} kWh (~$${estimatedCost.toFixed(2)}) so far.`,
-      [
-        { text: 'Keep Charging', style: 'cancel' },
-        { text: 'Stop Session', style: 'destructive', onPress: onStop },
-      ],
-    );
+    setShowStopModal(true);
+  }
+
+  function handleConfirmStop() {
+    setShowStopModal(false);
+    onStop();
   }
 
   return (
     <View style={[styles.liveContainer, { backgroundColor: isDark ? '#030712' : '#f9fafb' }]}>
+      <StopModal
+        visible={showStopModal}
+        onCancel={() => setShowStopModal(false)}
+        onConfirm={handleConfirmStop}
+        stopping={stopping}
+        isDark={isDark}
+      />
       {/* Pulsing status indicator */}
       <View style={styles.liveHeader}>
         <View style={styles.liveDot} />
@@ -265,25 +474,22 @@ function LiveSessionView({
         </View>
         <View style={[styles.liveStatDivider, { backgroundColor: isDark ? '#334155' : '#e5e7eb' }]} />
         <View style={styles.liveStat}>
-          <Text style={[styles.liveStatValue, { color: isDark ? '#f8fafc' : '#111827' }]}>${liveRate.toFixed(2)}</Text>
-          <Text style={[styles.liveStatLabel, { color: isDark ? '#94a3b8' : '#9ca3af' }]}>Per kWh</Text>
+          <Text style={[styles.liveStatValue, { color: isDark ? '#f8fafc' : '#111827' }]}>{formatPowerKw(livePowerKw)}</Text>
+          <Text style={[styles.liveStatLabel, { color: isDark ? '#94a3b8' : '#9ca3af' }]}>Power</Text>
         </View>
       </View>
 
-      {/* Stop button */}
-      <TouchableOpacity
-        style={[styles.stopButton, stopping && styles.buttonDisabled]}
-        onPress={confirmStop}
+      <SlideAction
+        isDark={isDark}
         disabled={stopping}
-      >
-        {stopping ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.stopButtonText}>Stop Charging</Text>
-        )}
-      </TouchableOpacity>
+        direction="left"
+        label={stopping ? 'Stopping…' : 'Slide left to stop'}
+        onComplete={confirmStop}
+      />
 
-      <Text style={styles.pollingNote}>Updating every ~1.5 seconds</Text>
+      <Text style={styles.pollingNote}>
+        {`Rate $${liveRate.toFixed(2)}/kWh · Updating every ~1.5 seconds`}
+      </Text>
     </View>
   );
 }
@@ -296,6 +502,7 @@ export default function SessionScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [lastObservedKwh, setLastObservedKwh] = useState(0);
+  const [startError, setStartError] = useState<string | null>(null);
 
   const { data: session, isLoading } = useQuery({
     queryKey: ['session', id],
@@ -334,6 +541,52 @@ export default function SessionScreen() {
     });
   }, [session, lastObservedKwh, queryClient]);
 
+  const startMutation = useMutation({
+    mutationFn: () => {
+      if (!session) throw new Error('Session context unavailable.');
+      return api.sessions.start(session.connector.charger.id, session.connector.connectorId);
+    },
+    onMutate: () => setStartError(null),
+    onSuccess: async () => {
+      if (!session) return;
+      await queryClient.invalidateQueries({ queryKey: ['sessions'] });
+      await queryClient.invalidateQueries({ queryKey: ['charger', session.connector.charger.id] });
+      const startedAt = Date.now();
+      const timeoutMs = 45_000;
+      const poll = async () => {
+        try {
+          const res = await api.sessions.list(20, 0);
+          const active = res.sessions.find(
+            (s) =>
+              s.status === 'ACTIVE' &&
+              s.connector.charger.id === session.connector.charger.id &&
+              s.connector.connectorId === session.connector.connectorId,
+          );
+          if (active) {
+            router.replace(`/session/${active.id}` as any);
+            return;
+          }
+          if (Date.now() - startedAt < timeoutMs) {
+            setTimeout(poll, 1500);
+            return;
+          }
+          setStartError('Start command sent, but no active session was confirmed yet.');
+        } catch (err) {
+          if (Date.now() - startedAt < timeoutMs) {
+            setTimeout(poll, 1500);
+            return;
+          }
+          setStartError(err instanceof Error ? err.message : 'Unable to verify session start.');
+        }
+      };
+      setTimeout(poll, 1200);
+    },
+    onError: (err: Error) => {
+      setStartError(err.message);
+      Alert.alert('Start Failed', err.message);
+    },
+  });
+
   const stopMutation = useMutation({
     mutationFn: () => api.sessions.stop(id),
     onSuccess: () => {
@@ -345,8 +598,8 @@ export default function SessionScreen() {
         queryClient.invalidateQueries({ queryKey: ['session', id] });
       }, 3000);
     },
-    onError: (err: Error) => {
-      Alert.alert('Stop Failed', err.message);
+    onError: (_err: Error) => {
+      Alert.alert('Stop Failed', "Couldn't stop charging. Please try again or contact support.");
     },
   });
 
@@ -392,7 +645,13 @@ export default function SessionScreen() {
             showConnectorLabel={showConnectorLabel}
           />
         ) : (
-          <SessionSummary session={session} fallbackKwh={lastObservedKwh} />
+          <SessionSummary
+            session={session}
+            fallbackKwh={lastObservedKwh}
+            onStart={() => startMutation.mutate()}
+            startPending={startMutation.isPending}
+            startError={startError}
+          />
         )}
       </ScrollView>
     </>
@@ -480,6 +739,26 @@ const styles = StyleSheet.create({
   stopButtonText: { color: '#fff', fontSize: 17, fontWeight: '700' },
   buttonDisabled: { opacity: 0.6 },
   pollingNote: { fontSize: 11, color: '#d1d5db' },
+  slideTrack: {
+    height: 56,
+    borderRadius: 28,
+    justifyContent: 'center',
+    overflow: 'hidden',
+    alignSelf: 'center',
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  slideLabel: { position: 'absolute', alignSelf: 'center', fontSize: 13, fontWeight: '800' },
+  slideKnob: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+    overflow: 'hidden',
+  },
+  slideKnobLogo: { width: 56, height: 56 },
 
   // ── Summary view ──
   summaryContainer: {
@@ -563,6 +842,20 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   metaText: { fontSize: 13, color: '#6b7280' },
+  restartWrap: {
+    width: '100%',
+    marginBottom: 16,
+    alignItems: 'center',
+  },
+  restartLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  startErrorText: {
+    fontSize: 12,
+    color: '#ef4444',
+    marginTop: 6,
+  },
   doneButton: {
     backgroundColor: '#10b981',
     borderRadius: 14,
@@ -572,4 +865,70 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   doneButtonText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+});
+
+// ── Stop Modal Styles ─────────────────────────────────────────────────────────
+const stopModal = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  card: {
+    width: '100%',
+    maxWidth: 360,
+    borderRadius: 20,
+    paddingVertical: 32,
+    paddingHorizontal: 28,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 12,
+  },
+  title: {
+    fontSize: 22,
+    fontWeight: '800',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  subtitle: {
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 28,
+    lineHeight: 20,
+  },
+  confirmBtn: {
+    backgroundColor: '#dc2626',
+    borderRadius: 12,
+    paddingVertical: 15,
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+    minHeight: 50,
+  },
+  confirmBtnDisabled: {
+    opacity: 0.6,
+  },
+  confirmBtnText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  cancelBtn: {
+    borderWidth: 1.5,
+    borderRadius: 12,
+    paddingVertical: 14,
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 50,
+  },
+  cancelBtnText: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
 });

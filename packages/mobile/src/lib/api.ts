@@ -1,27 +1,37 @@
 import Constants from 'expo-constants';
+import { Buffer } from 'buffer';
 
 const API_URL =
   (Constants.expoConfig?.extra?.apiUrl as string | undefined) ||
   process.env.EXPO_PUBLIC_API_URL ||
   'http://localhost:3001';
 
+export const appEnv =
+  ((Constants.expoConfig?.extra?.appEnv as string | undefined) || process.env.APP_ENV || 'dev').toLowerCase();
+export const envLabel =
+  (Constants.expoConfig?.extra?.envLabel as string | undefined) || process.env.EXPO_PUBLIC_ENV_LABEL || 'DEV';
+export const apiBaseUrl = API_URL;
+
 const DEV_USER_ID = process.env.EXPO_PUBLIC_DEV_USER_ID || 'user-test-driver-001';
-const CLERK_KEY = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
-const AUTH_MODE = (process.env.EXPO_PUBLIC_AUTH_MODE || '').trim().toLowerCase();
+const AUTH_MODE = ((Constants.expoConfig?.extra?.authMode as string | undefined) || 'keycloak').trim().toLowerCase();
 
-export const authMode = AUTH_MODE === 'keycloak' || AUTH_MODE === 'clerk' || AUTH_MODE === 'dev'
-  ? AUTH_MODE
-  : (CLERK_KEY ? 'clerk' : 'keycloak');
+export const authMode = AUTH_MODE === 'keycloak' ? 'keycloak' : 'keycloak';
 
-export const isDevMode = authMode === 'dev';
-export const isKeycloakMode = authMode === 'keycloak';
+export const isDevMode = false;
+export const isKeycloakMode = true;
 export const isEvcPlatformReadModelEnabled = process.env.EXPO_PUBLIC_EVC_PLATFORM_BUSINESS_VIEWS === '1';
 
 // Auth state holders — set by auth context
 let _bearerToken: string | null = null;
 let _guestMode = false;
+let _authRefreshHandler: null | (() => Promise<boolean>) = null;
+
 export function setBearerToken(token: string | null) {
   _bearerToken = token;
+}
+
+export function setAuthRefreshHandler(handler: null | (() => Promise<boolean>)) {
+  _authRefreshHandler = handler;
 }
 
 export function setGuestMode(guest: boolean) {
@@ -30,6 +40,27 @@ export function setGuestMode(guest: boolean) {
 
 export function isGuestMode() {
   return _guestMode;
+}
+
+function decodeJwtSubject(token: string): string | null {
+  const parts = token.split('.');
+  if (parts.length < 2) return null;
+  try {
+    const normalized = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), '=');
+    const json = Buffer.from(padded, 'base64').toString('utf8');
+    if (!json) return null;
+    const payload = JSON.parse(json) as { sub?: unknown };
+    return typeof payload.sub === 'string' && payload.sub.trim() ? payload.sub.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+export function getAuthIdentityKey(): string | null {
+  if (_guestMode) return null;
+  if (!_bearerToken) return null;
+  return decodeJwtSubject(_bearerToken);
 }
 
 async function authHeaders(): Promise<Record<string, string>> {
@@ -51,6 +82,7 @@ async function authHeaders(): Promise<Record<string, string>> {
 async function request<T>(
   path: string,
   opts: RequestInit = {},
+  canRetryAuth = true,
 ): Promise<T> {
   const headers = new Headers({
     'Content-Type': 'application/json',
@@ -58,12 +90,25 @@ async function request<T>(
     ...(opts.headers as Record<string, string> | undefined),
   });
 
+  headers.set('x-app-env', appEnv);
+
   const res = await fetch(`${API_URL}${path}`, {
     ...opts,
     headers,
   });
 
   if (!res.ok) {
+    if (canRetryAuth && (res.status === 401 || res.status === 403) && !_guestMode && _authRefreshHandler) {
+      try {
+        const refreshed = await _authRefreshHandler();
+        if (refreshed) {
+          return request<T>(path, opts, false);
+        }
+      } catch {
+        // fall through to regular error handling
+      }
+    }
+
     const body = await res.json().catch(() => ({ error: res.statusText }));
     throw new ApiError(res.status, body.error ?? res.statusText);
   }
@@ -120,6 +165,7 @@ export interface Session {
   meterStart: number;
   meterStop: number | null;
   kwhDelivered: number | null;
+  powerActiveImportW?: number | null;
   ratePerKwh: number | null;
   startedAt: string;
   endedAt: string | null;
@@ -182,6 +228,10 @@ export interface InAppNotificationItem {
   createdAt: string;
   readAt?: string | null;
   isRead: boolean;
+}
+
+export interface FavoriteListResponse {
+  chargerIds: string[];
 }
 
 
@@ -356,7 +406,7 @@ export const api = {
       if (params?.limit != null) query.set('limit', String(params.limit));
       if (params?.offset != null) query.set('offset', String(params.offset));
       const qs = query.toString();
-      return request<EnrichedTransactionsResponse>(`/transactions/enriched${qs ? `?${qs}` : ''}`);
+      return request<EnrichedTransactionsResponse>(`/me/transactions/enriched${qs ? `?${qs}` : ''}`);
     },
   },
 
@@ -388,6 +438,29 @@ export const api = {
       return request<UserProfile>('/me/profile', {
         method: 'PUT',
         body: JSON.stringify(input),
+      });
+    },
+  },
+
+  favorites: {
+    list() {
+      return request<FavoriteListResponse>('/me/favorites');
+    },
+    add(chargerId: string) {
+      return request<{ ok: boolean }>('/me/favorites', {
+        method: 'POST',
+        body: JSON.stringify({ chargerId }),
+      });
+    },
+    remove(chargerId: string) {
+      return request<{ ok: boolean }>(`/me/favorites/${chargerId}`, {
+        method: 'DELETE',
+      });
+    },
+    replace(chargerIds: string[]) {
+      return request<FavoriteListResponse>('/me/favorites', {
+        method: 'PUT',
+        body: JSON.stringify({ chargerIds }),
       });
     },
   },

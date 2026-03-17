@@ -68,11 +68,25 @@ export async function handleStatusNotification(
   if (connectorId === 0) {
     await recordUptimeEvent(chargerId, toUptimeEvent(status), { reason: `StatusNotification connector=0 status=${status}`, errorCode });
   } else if (status === 'Faulted' || status === 'Unavailable') {
+    // Record connector-level down signal; uptime math later applies >1s persistence filter.
     await recordUptimeEvent(chargerId, status === 'Faulted' ? 'FAULTED' : 'OFFLINE', {
       connectorId,
       reason: `StatusNotification connector=${connectorId} status=${status}`,
       errorCode,
     });
+  } else {
+    // Record connector recovery only if last connector-level signal was down.
+    const last = await prisma.uptimeEvent.findFirst({
+      where: { chargerId, connectorId },
+      orderBy: { createdAt: 'desc' },
+      select: { event: true },
+    });
+    if (last && (last.event === 'FAULTED' || last.event === 'OFFLINE')) {
+      await recordUptimeEvent(chargerId, 'RECOVERED', {
+        connectorId,
+        reason: `StatusNotification connector=${connectorId} status=${status}`,
+      });
+    }
   }
 
   return {};
