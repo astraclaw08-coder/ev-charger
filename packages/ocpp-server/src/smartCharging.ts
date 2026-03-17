@@ -134,24 +134,31 @@ export async function applySmartChargingForCharger(chargerId: string, trigger: s
       ? allProfiles.find((p) => p.id === resolution.sourceProfileId)
       : undefined;
 
-    const payload = sourceProfile
-      ? (buildRecurringWeeklyPayload(sourceProfile, resolution.effectiveLimitKw, new Date()) ?? buildConstantPayload(resolution.effectiveLimitKw, sourceProfile))
-      : buildConstantPayload(resolution.effectiveLimitKw);
-
-    // Avoid stale constraints from previous pushes at same stack/purpose.
-    await remoteClearChargingProfile(charger.ocppId, {
-      connectorId: 0,
-      chargingProfilePurpose: 'ChargePointMaxProfile',
-      stackLevel: STACK_LEVEL,
-    });
-
-    const ocppStatus = await remoteSetChargingProfile(charger.ocppId, payload);
-    if (ocppStatus === 'Accepted') {
-      status = resolution.fallbackApplied ? 'FALLBACK_APPLIED' : 'APPLIED';
-      lastAppliedAt = new Date();
+    // If no matching profile is active for this charger, do not push default/fallback
+    // Clear/SetChargingProfile commands. This avoids applying smart charging to
+    // chargers that are not explicitly scoped by a profile.
+    if (!sourceProfile) {
+      status = 'FALLBACK_APPLIED';
+      lastError = null;
     } else {
-      status = 'ERROR';
-      lastError = `SetChargingProfile rejected (${ocppStatus})`;
+      const payload = buildRecurringWeeklyPayload(sourceProfile, resolution.effectiveLimitKw, new Date())
+        ?? buildConstantPayload(resolution.effectiveLimitKw, sourceProfile);
+
+      // Avoid stale constraints from previous pushes at same stack/purpose.
+      await remoteClearChargingProfile(charger.ocppId, {
+        connectorId: 0,
+        chargingProfilePurpose: 'ChargePointMaxProfile',
+        stackLevel: STACK_LEVEL,
+      });
+
+      const ocppStatus = await remoteSetChargingProfile(charger.ocppId, payload);
+      if (ocppStatus === 'Accepted') {
+        status = 'APPLIED';
+        lastAppliedAt = new Date();
+      } else {
+        status = 'ERROR';
+        lastError = `SetChargingProfile rejected (${ocppStatus})`;
+      }
     }
   } else {
     status = resolution.fallbackApplied ? 'FALLBACK_APPLIED' : 'PENDING_OFFLINE';
