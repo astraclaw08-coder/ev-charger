@@ -4,6 +4,7 @@ const HEARTBEAT_THRESHOLD_SECONDS = Number(process.env.OCPP_HEARTBEAT_THRESHOLD_
 const OFFLINE_GRACE_SECONDS = Number(process.env.OCPP_OFFLINE_GRACE_SECONDS ?? 120);
 const OFFLINE_CONFIRM_SECONDS = Number(process.env.OCPP_OFFLINE_CONFIRM_SECONDS ?? 120);
 const UPTIME_ALERT_THRESHOLD_PERCENT = Number(process.env.OCPP_UPTIME_ALERT_THRESHOLD_PERCENT ?? 95);
+const CONNECTOR_FAULT_NOISE_MS = 1000;
 
 export type UptimeIncident = {
   event: UptimeEventType;
@@ -14,7 +15,8 @@ export type UptimeIncident = {
 };
 
 function isUp(status: ChargerStatus): boolean {
-  return status === 'ONLINE';
+  // DEGRADED means reachable but stale-risk; count as available uptime.
+  return status === 'ONLINE' || status === 'DEGRADED';
 }
 
 export async function ensureChargerLiveness(chargerId: string) {
@@ -82,12 +84,26 @@ export async function getChargerUptime(chargerId: string) {
     d30: new Date(now - 30 * 24 * 60 * 60 * 1000),
   };
 
-  const allEvents = await prisma.uptimeEvent.findMany({
+  // Timeline events for uptime % calculation:
+  // - include charger-level transitions only (connectorId null/0)
+  // - exclude synthetic alert marker events so they don't feed back into downtime math
+  const timelineEvents = await prisma.uptimeEvent.findMany({
+    where: {
+      chargerId,
+      createdAt: { gte: windows.d30 },
+      OR: [{ connectorId: null }, { connectorId: 0 }],
+      NOT: { reason: 'uptime-alert-below-threshold' },
+    },
+    orderBy: { createdAt: 'asc' },
+  });
+
+  // Incidents panel can still include connector-level issues for operational visibility.
+  const incidentEvents = await prisma.uptimeEvent.findMany({
     where: { chargerId, createdAt: { gte: windows.d30 } },
     orderBy: { createdAt: 'asc' },
   });
 
-  const incidents: UptimeIncident[] = allEvents
+  const incidents: UptimeIncident[] = incidentEvents
     .filter((e: any) => e.event === 'OFFLINE' || e.event === 'FAULTED' || e.event === 'DEGRADED')
     .slice(-20)
     .map((e: any) => ({
@@ -98,42 +114,59 @@ export async function getChargerUptime(chargerId: string) {
       timestamp: e.createdAt.toISOString(),
     }));
 
+  const toStatus = (event: UptimeEventType): ChargerStatus => (
+    event === 'ONLINE' || event === 'RECOVERED'
+      ? 'ONLINE'
+      : event === 'FAULTED'
+        ? 'FAULTED'
+        : event === 'DEGRADED'
+          ? 'DEGRADED'
+          : 'OFFLINE'
+  );
+
+  const mergeIntervals = (intervals: Array<[number, number]>): Array<[number, number]> => {
+    if (!intervals.length) return [];
+    const sorted = [...intervals].sort((a, b) => a[0] - b[0]);
+    const merged: Array<[number, number]> = [sorted[0]];
+    for (let i = 1; i < sorted.length; i++) {
+      const [s, e] = sorted[i];
+      const last = merged[merged.length - 1];
+      if (s <= last[1]) last[1] = Math.max(last[1], e);
+      else merged.push([s, e]);
+    }
+    return merged;
+  };
+
   const calcPct = (from: Date) => {
-    const totalMs = now - from.getTime();
+    const fromMs = from.getTime();
+    const totalMs = now - fromMs;
     if (totalMs <= 0) return 100;
 
-    // Find latest status before window starts, then fold transitions
+    // Charger-level down intervals from timeline events
     let state: ChargerStatus = charger.status;
-    const before = allEvents.filter((e: any) => e.createdAt < from).at(-1);
-    if (before) {
-      state = before.event === 'ONLINE' || before.event === 'RECOVERED'
-        ? 'ONLINE'
-        : before.event === 'FAULTED'
-          ? 'FAULTED'
-          : before.event === 'DEGRADED'
-            ? 'DEGRADED'
-            : 'OFFLINE';
-    }
+    const before = timelineEvents.filter((e: any) => e.createdAt < from).at(-1);
+    if (before) state = toStatus(before.event as UptimeEventType);
 
-    let upMs = 0;
-    let cursor = from.getTime();
+    let cursor = fromMs;
+    const chargerDownIntervals: Array<[number, number]> = [];
 
-    for (const e of allEvents) {
+    for (const e of timelineEvents) {
       const ts = e.createdAt.getTime();
-      if (ts < from.getTime()) continue;
-      if (isUp(state)) upMs += ts - cursor;
+      if (ts < fromMs) continue;
+      if (!isUp(state) && ts > cursor) chargerDownIntervals.push([cursor, ts]);
       cursor = ts;
-
-      state = e.event === 'ONLINE' || e.event === 'RECOVERED'
-        ? 'ONLINE'
-        : e.event === 'FAULTED'
-          ? 'FAULTED'
-          : e.event === 'DEGRADED'
-            ? 'DEGRADED'
-            : 'OFFLINE';
+      state = toStatus(e.event as UptimeEventType);
     }
+    if (!isUp(state) && now > cursor) chargerDownIntervals.push([cursor, now]);
 
-    if (isUp(state)) upMs += now - cursor;
+    // Ignore sub-second down flaps as noise (fault flip <=1s).
+    const stableDown = chargerDownIntervals.filter(([s, e]) => (e - s) > CONNECTOR_FAULT_NOISE_MS);
+
+    // Merge to avoid double-counting overlaps.
+    const allDown = mergeIntervals(stableDown);
+    const downMs = allDown.reduce((sum, [s, e]) => sum + Math.max(0, e - s), 0);
+    const upMs = Math.max(0, totalMs - downMs);
+
     return Math.max(0, Math.min(100, Math.round((upMs / totalMs) * 10000) / 100));
   };
 
@@ -142,21 +175,8 @@ export async function getChargerUptime(chargerId: string) {
   const uptimePercent30d = calcPct(windows.d30);
 
   if (uptimePercent24h < UPTIME_ALERT_THRESHOLD_PERCENT) {
-    const lastAlert = await prisma.uptimeEvent.findFirst({
-      where: { chargerId, event: 'DEGRADED', reason: 'uptime-alert-below-threshold' },
-      orderBy: { createdAt: 'desc' },
-    });
-    if (!lastAlert || Date.now() - lastAlert.createdAt.getTime() > 60 * 60 * 1000) {
-      await prisma.uptimeEvent.create({
-        data: {
-          chargerId,
-          event: 'DEGRADED',
-          reason: 'uptime-alert-below-threshold',
-          errorCode: `24h=${uptimePercent24h}%`,
-        },
-      });
-      console.warn(`[UptimeAlert] charger ${chargerId} below threshold: ${uptimePercent24h}% < ${UPTIME_ALERT_THRESHOLD_PERCENT}%`);
-    }
+    // Keep alerting side-effect free for uptime timeline math.
+    console.warn(`[UptimeAlert] charger ${chargerId} below threshold: ${uptimePercent24h}% < ${UPTIME_ALERT_THRESHOLD_PERCENT}%`);
   }
 
   return {

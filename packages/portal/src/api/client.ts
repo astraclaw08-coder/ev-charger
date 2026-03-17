@@ -11,11 +11,15 @@ export interface SiteListItem {
   idleFeePerMinUsd?: number;
   activationFeeUsd?: number;
   gracePeriodMin?: number;
+  softwareVendorFeeMode?: 'none' | 'percentage_total' | 'fixed_per_kwh' | 'fixed_per_minute';
+  softwareVendorFeeValue?: number;
+  softwareFeeIncludesActivation?: boolean;
   touWindows?: unknown;
   organizationName?: string | null;
   portfolioName?: string | null;
   createdAt: string;
   chargerCount: number;
+  connectorCount?: number;
   statusSummary: { online: number; offline: number; faulted: number };
 }
 
@@ -57,6 +61,9 @@ export interface SiteDetail {
   idleFeePerMinUsd?: number;
   activationFeeUsd?: number;
   gracePeriodMin?: number;
+  softwareVendorFeeMode?: 'none' | 'percentage_total' | 'fixed_per_kwh' | 'fixed_per_minute';
+  softwareVendorFeeValue?: number;
+  softwareFeeIncludesActivation?: boolean;
   touWindows?: unknown;
   organizationName?: string | null;
   portfolioName?: string | null;
@@ -408,9 +415,20 @@ export interface SmartChargingEffectiveResponse {
 // ─── Client ──────────────────────────────────────────────────────────────────
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
+const QR_REDIRECT_BASE_URL = import.meta.env.VITE_QR_REDIRECT_BASE_URL ?? API_URL;
 const DEV_OPERATOR_ID = import.meta.env.VITE_DEV_OPERATOR_ID ?? 'operator-001';
 const AUTH_MODE = String(import.meta.env.VITE_AUTH_MODE ?? '').trim().toLowerCase();
 const IS_DEV_MODE = AUTH_MODE === 'dev';
+
+const GET_CACHE_TTL_MS = 30_000;
+type CacheEntry = { expiresAt: number; value: unknown };
+const responseCache = new Map<string, CacheEntry>();
+const inFlightGets = new Map<string, Promise<unknown>>();
+
+function cacheKey(path: string, token: string | null | undefined) {
+  const tokenKey = token ? token.slice(0, 24) : 'anon';
+  return `${tokenKey}::${path}`;
+}
 
 async function request<T>(
   path: string,
@@ -430,17 +448,69 @@ async function request<T>(
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const res = await fetch(`${API_URL}${path}`, {
+  const method = (options?.method ?? 'GET').toUpperCase();
+  const isGet = method === 'GET';
+  const key = cacheKey(path, token);
+
+  if (isGet) {
+    const cached = responseCache.get(key);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.value as T;
+    }
+
+    const pending = inFlightGets.get(key);
+    if (pending) return pending as Promise<T>;
+  } else {
+    // Conservative invalidation on mutations to avoid stale UI state.
+    responseCache.clear();
+  }
+
+  const doFetch = async () => fetch(`${API_URL}${path}`, {
     ...options,
     headers: { ...headers, ...(options?.headers as Record<string, string> ?? {}) },
   });
 
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error((err as { error?: string }).error ?? `HTTP ${res.status}`);
-  }
+  const run = (async () => {
+    let res: Response;
+    try {
+      res = await doFetch();
+    } catch (e) {
+      // transient startup/network hiccup; one quick retry for GET requests prevents hard-refresh UX.
+      if (!isGet) throw e;
+      await new Promise((r) => setTimeout(r, 450));
+      res = await doFetch();
+    }
 
-  return res.json() as Promise<T>;
+    if (!res.ok && isGet && (res.status === 401 || res.status >= 500)) {
+      // first-load auth/API warmup race: retry once before surfacing an error.
+      await new Promise((r) => setTimeout(r, 450));
+      res = await doFetch();
+    }
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error((err as { error?: string }).error ?? `HTTP ${res.status}`);
+    }
+
+    const data = await res.json() as T;
+    if (isGet) {
+      responseCache.set(key, { value: data, expiresAt: Date.now() + GET_CACHE_TTL_MS });
+    }
+    return data;
+  })();
+
+  if (!isGet) return run;
+
+  inFlightGets.set(key, run as Promise<unknown>);
+  try {
+    return await run;
+  } finally {
+    inFlightGets.delete(key);
+  }
+}
+
+export function buildChargerQrRedirectUrl(chargerId: string) {
+  return `${QR_REDIRECT_BASE_URL}/r/charger/${encodeURIComponent(chargerId)}`;
 }
 
 export function createApiClient(token: string | null | undefined) {
@@ -520,6 +590,9 @@ export function createApiClient(token: string | null | undefined) {
         idleFeePerMinUsd?: number;
         activationFeeUsd?: number;
         gracePeriodMin?: number;
+        softwareVendorFeeMode?: 'none' | 'percentage_total' | 'fixed_per_kwh' | 'fixed_per_minute';
+        softwareVendorFeeValue?: number;
+        softwareFeeIncludesActivation?: boolean;
         touWindows?: unknown;
         organizationName?: string;
         portfolioName?: string;
@@ -675,13 +748,13 @@ export function createApiClient(token: string | null | undefined) {
         body: JSON.stringify(body),
       }),
 
-    addAdminUserRole: (userId: string, role: string, reason?: string) =>
+    addAdminUserRole: (userId: string, role: string, reason: string) =>
       request<{ ok: boolean }>(`/admin/users/${userId}/roles/add`, token, {
         method: 'POST',
         body: JSON.stringify({ role, reason }),
       }),
 
-    removeAdminUserRole: (userId: string, role: string, options?: { reason?: string; confirmPrivilegedRoleRemoval?: boolean }) =>
+    removeAdminUserRole: (userId: string, role: string, options?: { reason: string; confirmPrivilegedRoleRemoval?: boolean }) =>
       request<{ ok: boolean }>(`/admin/users/${userId}/roles/remove`, token, {
         method: 'POST',
         body: JSON.stringify({ role, reason: options?.reason, confirmPrivilegedRoleRemoval: options?.confirmPrivilegedRoleRemoval }),

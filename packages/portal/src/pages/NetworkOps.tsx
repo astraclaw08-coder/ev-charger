@@ -98,25 +98,25 @@ export default function NetworkOps() {
     };
   }, [effectiveSiteChargers]);
 
-  if (loading) return <div className="text-sm text-gray-500">Loading network ops workspace…</div>;
+  if (loading) return <div className="text-sm text-gray-500 dark:text-slate-400">Loading network ops workspace…</div>;
   if (error) return <div className="rounded-lg bg-red-50 p-4 text-sm text-red-700">{error}</div>;
 
   return (
     <div className="space-y-6">
       <div>
-        <div className="flex items-center gap-2 text-sm text-gray-500">
-          <Link to="/" className="hover:text-gray-700">Dashboard</Link>
+        <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-slate-400">
+          <Link to="/overview" className="hover:text-gray-700 dark:hover:text-slate-200 dark:text-slate-300">Overview</Link>
           <span>/</span>
-          <span className="text-gray-900">Network Ops</span>
+          <span className="text-gray-900 dark:text-slate-100">Network Ops</span>
         </div>
-        <h1 className="mt-1 text-2xl font-bold text-gray-900">Network Reliability Console</h1>
-        <p className="text-sm text-gray-500">Health/alerts, offline triage, remote retry panel, firmware rollout, incident timeline</p>
+        <h1 className="mt-1 text-2xl font-bold text-gray-900 dark:text-slate-100">Network Reliability Console</h1>
+        <p className="text-sm text-gray-500 dark:text-slate-400">Charger health monitoring, offline triage, remote commands, and incident timeline.</p>
       </div>
 
-      <div className="grid gap-4 rounded-xl border border-gray-200 bg-white p-4 md:grid-cols-3">
+      <div className="grid gap-4 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 md:grid-cols-3">
         <div>
-          <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">Site</label>
-          <select className="w-full rounded-md border border-gray-300 px-2 py-2 text-sm" value={selectedSiteId || site?.id || ''} onChange={async (e)=>{
+          <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Site</label>
+          <select className="w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-2 text-sm" value={selectedSiteId || site?.id || ''} onChange={async (e)=>{
             const nextSiteId = e.target.value;
             setSelectedSiteId(nextSiteId);
 
@@ -138,8 +138,8 @@ export default function NetworkOps() {
           </select>
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">Charger</label>
-          <select className="w-full rounded-md border border-gray-300 px-2 py-2 text-sm" value={selectedChargerId} onChange={(e)=>{ const cid=e.target.value; setSelectedChargerId(cid); const ch=effectiveSiteChargers.find(c=>c.id===cid); setSelectedConnectorId(ch?.connectors?.[0]?.connectorId ?? 1); }}>
+          <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Charger</label>
+          <select className="w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-2 text-sm" value={selectedChargerId} onChange={(e)=>{ const cid=e.target.value; setSelectedChargerId(cid); const ch=effectiveSiteChargers.find(c=>c.id===cid); setSelectedConnectorId(ch?.connectors?.[0]?.connectorId ?? 1); }}>
             {effectiveSiteChargers.map((c)=><option key={c.id} value={c.id}>{c.ocppId} · {c.status}</option>)}
           </select>
         </div>
@@ -152,16 +152,16 @@ export default function NetworkOps() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <div className="rounded-xl border border-gray-200 bg-white p-4 lg:col-span-2">
-          <h2 className="mb-3 text-sm font-semibold text-gray-700">Charger health + offline triage</h2>
+        <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 lg:col-span-2">
+          <h2 className="mb-3 text-sm font-semibold text-gray-700 dark:text-slate-300">Charger health + offline triage</h2>
           <div className="space-y-2">
             {effectiveSiteChargers.map((c) => (
-              <div key={c.id} className="rounded-md border border-gray-200 p-3">
+              <div key={c.id} className="rounded-md border border-gray-200 dark:border-slate-700 p-3">
                 <div className="flex items-center justify-between">
-                  <p className="text-sm font-medium text-gray-900">{c.ocppId}</p>
+                  <p className="text-sm font-medium text-gray-900 dark:text-slate-100">{c.ocppId}</p>
                   <span className={`rounded-full px-2 py-0.5 text-xs ${c.status==='ONLINE'?'bg-green-100 text-green-700':c.status==='DEGRADED'?'bg-amber-100 text-amber-700':c.status==='OFFLINE'?'bg-yellow-100 text-yellow-700':'bg-red-100 text-red-700'}`}>{c.status}</span>
                 </div>
-                <p className="mt-1 text-xs text-gray-500">Last heartbeat: {c.lastHeartbeat ? new Date(c.lastHeartbeat).toLocaleString() : 'never'}</p>
+                <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">Last heartbeat: {c.lastHeartbeat ? new Date(c.lastHeartbeat).toLocaleString() : 'never'}</p>
                 {c.status === 'DEGRADED' && (
                   <p className="mt-1 text-xs text-amber-700">Pending offline confirmation (heartbeat stale/disconnect window).</p>
                 )}
@@ -169,7 +169,7 @@ export default function NetworkOps() {
                   <p className="mt-1 text-xs text-yellow-700">Confirmed unreachable after heartbeat timeout window.</p>
                 )}
                 <div className="mt-2 flex flex-wrap gap-2">
-                  <button className="rounded-md border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 hover:bg-gray-50" onClick={()=>{
+                  <button className="rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-2 py-1 text-xs text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60" onClick={()=>{
                     if(!site) return;
                     const incident: Incident={id:crypto.randomUUID(), chargerId:c.id, title:`Offline triage opened for ${c.ocppId}`, severity:c.status==='FAULTED'?'high':'medium', createdAt:new Date().toISOString()};
                     const next=[incident,...incidents]; setIncidents(next); save(incidentsKey(site.id),next);
@@ -181,13 +181,13 @@ export default function NetworkOps() {
         </div>
 
         <div className="space-y-4">
-          <div className="rounded-xl border border-gray-200 bg-white p-4">
-            <h2 className="mb-2 text-sm font-semibold text-gray-700">Remote retry panel</h2>
+          <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+            <h2 className="mb-2 text-sm font-semibold text-gray-700 dark:text-slate-300">Remote retry panel</h2>
             <div className="space-y-2">
               <div>
-                <label className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-gray-500">Target connector (for ChangeAvailability)</label>
+                <label className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Target connector (for ChangeAvailability)</label>
                 <select
-                  className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-xs"
+                  className="w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5 text-xs"
                   value={selectedConnectorId}
                   onChange={(e)=>setSelectedConnectorId(Number(e.target.value))}
                   disabled={!effectiveSiteChargers.find(c=>c.id===selectedChargerId)}
@@ -198,7 +198,7 @@ export default function NetworkOps() {
                 </select>
               </div>
               {(['RemoteStartTransaction','Reset','ChangeAvailability'] as const).map((cmd)=>(
-                <button key={cmd} className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-xs text-gray-700 hover:bg-gray-50" onClick={()=>{
+                <button key={cmd} className="w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-2 py-1.5 text-xs text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60" onClick={()=>{
                   if(!site || !selectedChargerId) return;
 
                   if (cmd === 'Reset') {
@@ -214,8 +214,8 @@ export default function NetworkOps() {
             </div>
           </div>
 
-          <div className="rounded-xl border border-gray-200 bg-white p-4">
-            <h2 className="mb-2 text-sm font-semibold text-gray-700">Firmware rollout status</h2>
+          <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+            <h2 className="mb-2 text-sm font-semibold text-gray-700 dark:text-slate-300">Firmware rollout status</h2>
             <button className="rounded-md bg-brand-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-700" onClick={()=>{
               if(!site || !selectedChargerId) return;
               const job: FirmwareRollout={id:crypto.randomUUID(), chargerId:selectedChargerId, version:'fw-2026.03.1', status:'rolling', createdAt:new Date().toISOString()};
@@ -227,23 +227,23 @@ export default function NetworkOps() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <div className="rounded-xl border border-gray-200 bg-white p-4">
-          <h2 className="mb-3 text-sm font-semibold text-gray-700">Retry history</h2>
+        <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+          <h2 className="mb-3 text-sm font-semibold text-gray-700 dark:text-slate-300">Retry history</h2>
           <div className="space-y-2">
-            {retryEvents.length===0 && <p className="text-xs text-gray-500">No retry commands sent.</p>}
-            {retryEvents.slice(0,10).map((r)=><div key={r.id} className="rounded-md border border-gray-200 p-2 text-xs">
-              <p className="text-gray-800">{r.command}{r.command==='ChangeAvailability' && r.connectorId ? ` · connector #${r.connectorId}` : ''}</p><p className="text-gray-500">{new Date(r.createdAt).toLocaleString()} · {r.status}</p>
+            {retryEvents.length===0 && <p className="text-xs text-gray-500 dark:text-slate-400">No retry commands sent.</p>}
+            {retryEvents.slice(0,10).map((r)=><div key={r.id} className="rounded-md border border-gray-200 dark:border-slate-700 p-2 text-xs">
+              <p className="text-gray-800 dark:text-slate-200">{r.command}{r.command==='ChangeAvailability' && r.connectorId ? ` · connector #${r.connectorId}` : ''}</p><p className="text-gray-500 dark:text-slate-400">{new Date(r.createdAt).toLocaleString()} · {r.status}</p>
             </div>)}
           </div>
         </div>
 
-        <div className="rounded-xl border border-gray-200 bg-white p-4">
-          <h2 className="mb-3 text-sm font-semibold text-gray-700">Incident timeline drilldown</h2>
+        <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+          <h2 className="mb-3 text-sm font-semibold text-gray-700 dark:text-slate-300">Incident timeline drilldown</h2>
           <div className="space-y-2">
-            {incidents.length===0 && <p className="text-xs text-gray-500">No incidents yet.</p>}
-            {incidents.slice(0,12).map((i)=><div key={i.id} className="rounded-md border border-gray-200 p-2 text-xs">
-              <p className="font-medium text-gray-800">{i.title}</p>
-              <p className="text-gray-500">{new Date(i.createdAt).toLocaleString()} · severity {i.severity}</p>
+            {incidents.length===0 && <p className="text-xs text-gray-500 dark:text-slate-400">No incidents yet.</p>}
+            {incidents.slice(0,12).map((i)=><div key={i.id} className="rounded-md border border-gray-200 dark:border-slate-700 p-2 text-xs">
+              <p className="font-medium text-gray-800 dark:text-slate-200">{i.title}</p>
+              <p className="text-gray-500 dark:text-slate-400">{new Date(i.createdAt).toLocaleString()} · severity {i.severity}</p>
             </div>)}
           </div>
         </div>

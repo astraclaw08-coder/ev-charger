@@ -2,7 +2,7 @@
  * Charger detail screen - connector list, status, price per kWh, Start button.
  * Also handles Stripe payment setup (save card) before first session.
  */
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -19,118 +19,22 @@ import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, type Charger, type Connector } from '@/lib/api';
-import { ConnectorStatusBadge } from '@/components/ConnectorStatusBadge';
 import { useAppTheme } from '@/theme';
 import { useFavorites } from '@/hooks/useFavorites';
 import { HeartButton } from '@/components/HeartButton';
+import { Ionicons } from '@expo/vector-icons';
 import { useAppAuth } from '@/providers/AuthProvider';
 
 const RATE_PER_KWH = 0.35; // fallback only
 
-// ── Payment Setup Modal ───────────────────────────────────────────────────────
-
-function PaymentSetupBanner({ onSetupComplete, isDark }: { onSetupComplete: () => void; isDark: boolean }) {
-  const [loading, setLoading] = useState(false);
-  const STRIPE_KEY = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY;
-
-  async function handleSetupCard() {
-    if (!STRIPE_KEY) {
-      Alert.alert(
-        'Stripe not configured',
-        'Set EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY to enable payments. In dev mode, payment is skipped.',
-        [{ text: 'Continue anyway', onPress: onSetupComplete }],
-      );
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const { confirmSetupIntent } = require('@stripe/stripe-react-native').useStripe();
-      const { clientSecret } = await api.payments.setupIntent();
-      const { error } = await confirmSetupIntent(clientSecret, {
-        paymentMethodType: 'Card',
-      });
-      if (error) {
-        Alert.alert('Payment Setup Failed', error.message);
-      } else {
-        Alert.alert('Card saved!', 'Your card has been saved for future sessions.', [
-          { text: 'OK', onPress: onSetupComplete },
-        ]);
-      }
-    } catch (err: unknown) {
-      Alert.alert('Error', (err as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  return (
-    <View style={[styles.paymentBanner, { backgroundColor: isDark ? '#1f2937' : '#fffbeb', borderColor: isDark ? '#374151' : '#fde68a' }]}>
-      <Text style={[styles.paymentBannerTitle, { color: isDark ? '#f9fafb' : '#92400e' }]}>Save a payment method</Text>
-      <Text style={[styles.paymentBannerSubtitle, { color: isDark ? '#d1d5db' : '#78350f' }]}>
-        Add a card to start charging. You'll only be charged for energy used.
-      </Text>
-      <TouchableOpacity
-        style={[styles.paymentButton, loading && styles.buttonDisabled]}
-        onPress={handleSetupCard}
-        disabled={loading}
-      >
-        {loading ? (
-          <ActivityIndicator color="#fff" size="small" />
-        ) : (
-          <Text style={styles.paymentButtonText}>💳 Add Payment Method</Text>
-        )}
-      </TouchableOpacity>
-    </View>
-  );
-}
-
-// ── Connector Row ─────────────────────────────────────────────────────────────
-
-function ConnectorRow({
-  connector,
-  chargerId,
-  onSessionStarted,
-  isDark,
-  ratePerKwh,
-}: {
-  connector: Connector;
-  chargerId: string;
-  onSessionStarted: (
-    chargerId: string,
-    connectorId: number,
-    connectorStatus: Connector['status'],
-  ) => void;
-  isDark: boolean;
-  ratePerKwh: number;
-}) {
-  const isStartable = connector.status === 'AVAILABLE' || connector.status === 'PREPARING' || connector.status === 'SUSPENDED_EV';
-  const isCharging = connector.status === 'CHARGING' || connector.status === 'FINISHING';
-
-  return (
-    <View style={[styles.connectorRow, { borderTopColor: isDark ? '#1f2937' : '#f3f4f6' }]}>
-      <View style={styles.connectorLeft}>
-        <Text style={[styles.connectorLabel, { color: isDark ? '#e5e7eb' : '#374151' }]}>Connector {connector.connectorId}</Text>
-        <ConnectorStatusBadge status={connector.status} />
-        <Text style={[styles.rateText, { color: isDark ? '#9ca3af' : '#9ca3af' }]}>${ratePerKwh.toFixed(2)}/kWh</Text>
-      </View>
-
-      {isStartable && (
-        <TouchableOpacity
-          style={styles.startButton}
-          onPress={() => onSessionStarted(chargerId, connector.connectorId, connector.status)}
-        >
-          <Text style={styles.startButtonText}>Start</Text>
-        </TouchableOpacity>
-      )}
-
-      {isCharging && (
-        <View style={styles.inUseTag}>
-          <Text style={styles.inUseText}>In Use</Text>
-        </View>
-      )}
-    </View>
-  );
+function chargerStatusLabel(charger: Charger): string {
+  const statuses = charger.connectors.map((c) => c.status);
+  if (statuses.some((s) => s === 'AVAILABLE')) return 'Available';
+  if (statuses.some((s) => s === 'CHARGING' || s === 'PREPARING' || s === 'FINISHING' || s === 'SUSPENDED_EV' || s === 'SUSPENDED_EVSE')) return 'In Use';
+  if (statuses.some((s) => s === 'FAULTED')) return 'Faulted';
+  if (statuses.some((s) => s === 'UNAVAILABLE')) return 'Unavailable';
+  if (String(charger.status || '').toUpperCase() === 'OFFLINE') return 'Offline';
+  return 'Unknown';
 }
 
 // ── Screen ────────────────────────────────────────────────────────────────────
@@ -142,15 +46,16 @@ export default function ChargerDetailScreen() {
   const [startingConnector, setStartingConnector] = useState<number | null>(null);
   const [activationMessage, setActivationMessage] = useState<string | null>(null);
   const [showActivationModal, setShowActivationModal] = useState(false);
+  const [manualRefreshing, setManualRefreshing] = useState(false);
   const [activationDeadlineMs, setActivationDeadlineMs] = useState<number | null>(null);
   const [countdownText, setCountdownText] = useState('02:00');
   const activationPollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const startContextRef = useRef<{ alreadyPlugged: boolean } | null>(null);
   const { isDark } = useAppTheme();
   const { toggle, isFav } = useFavorites();
-  const { isGuest } = useAppAuth();
+  const { isGuest, loading: authLoading } = useAppAuth();
 
-  const { data: charger, isLoading, refetch, isRefetching } = useQuery({
+  const { data: charger, isLoading, refetch } = useQuery({
     queryKey: ['charger', id],
     queryFn: () => api.chargers.get(id),
   });
@@ -191,12 +96,21 @@ export default function ChargerDetailScreen() {
   });
 
   useFocusEffect(
-    React.useCallback(() => {
-      refetch();
-      refetchAllChargers();
+    useCallback(() => {
+      queryClient.invalidateQueries({ queryKey: ['charger', id] });
+      queryClient.invalidateQueries({ queryKey: ['chargers'] });
       return undefined;
-    }, [refetch, refetchAllChargers]),
+    }, [id, queryClient]),
   );
+
+  const onPullRefresh = useCallback(async () => {
+    setManualRefreshing(true);
+    try {
+      await Promise.all([refetch(), refetchAllChargers()]);
+    } finally {
+      setManualRefreshing(false);
+    }
+  }, [refetch, refetchAllChargers]);
 
   useEffect(() => {
     if (!showActivationModal || !activationDeadlineMs) return;
@@ -255,7 +169,7 @@ export default function ChargerDetailScreen() {
             setActivationMessage('Charging started. Opening live session…');
             setShowActivationModal(false);
             setActivationDeadlineMs(null);
-            router.replace(`/session/${active.id}`);
+            router.replace(`/charger/detail/${variables.chargerId}` as any);
             return;
           }
 
@@ -299,6 +213,14 @@ export default function ChargerDetailScreen() {
         Alert.alert('Activation timeout', 'The charger did not confirm start in time. Please try again.');
         return;
       }
+      if (lower.includes('unauthorized') || lower.includes('forbidden')) {
+        Alert.alert(
+          'Sign in required',
+          'Your session is not authenticated. Please sign in again, then retry.',
+          [{ text: 'Go to Sign In', onPress: () => router.push('/(auth)/sign-in') }, { text: 'Cancel', style: 'cancel' }],
+        );
+        return;
+      }
       Alert.alert('Failed to Start', err.message);
     },
   });
@@ -314,6 +236,20 @@ export default function ChargerDetailScreen() {
     connectorId: number,
     connectorStatus: Connector['status'],
   ) {
+    if (authLoading) {
+      Alert.alert('Authenticating', 'Please wait a moment and try again.');
+      return;
+    }
+
+    if (isGuest) {
+      Alert.alert(
+        'Sign in required',
+        'Please sign in before starting a charging session.',
+        [{ text: 'Go to Sign In', onPress: () => router.push('/(auth)/sign-in') }, { text: 'Cancel', style: 'cancel' }],
+      );
+      return;
+    }
+
     if (activationPollRef.current) {
       clearTimeout(activationPollRef.current);
       activationPollRef.current = null;
@@ -357,6 +293,7 @@ export default function ChargerDetailScreen() {
   );
   const showPaymentSetupBanner = !hasDefaultPaymentMethod && hasBillablePricing;
 
+
   return (
     <>
       <Stack.Screen
@@ -367,6 +304,11 @@ export default function ChargerDetailScreen() {
           headerTintColor: isDark ? '#f9fafb' : '#111827',
           headerShadowVisible: false,
           headerBackButtonDisplayMode: 'minimal',
+          headerLeft: () => (
+            <TouchableOpacity onPress={() => router.back()} style={{ paddingHorizontal: 4, paddingVertical: 4 }}>
+              <Ionicons name="chevron-back" size={30} color={isDark ? '#f9fafb' : '#111827'} />
+            </TouchableOpacity>
+          ),
           headerRight: () => (
             <HeartButton
               isFavorited={isFav(selectedCharger?.id ?? charger.id)}
@@ -378,31 +320,39 @@ export default function ChargerDetailScreen() {
       <ScrollView
         style={[styles.container, { backgroundColor: isDark ? '#030712' : '#f9fafb' }]}
         contentContainerStyle={styles.content}
-        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}
+        refreshControl={<RefreshControl refreshing={manualRefreshing} onRefresh={onPullRefresh} />}
       >
         {/* Site info */}
         <View style={[styles.siteCard, { backgroundColor: isDark ? '#111827' : '#fff' }]}>
           <Text style={[styles.siteAddress, { color: isDark ? '#9ca3af' : '#6b7280' }]}>{charger.site.address}</Text>
-          <View style={styles.siteMetaRow}>
-            <Text style={[styles.chargerModel, { color: isDark ? '#d1d5db' : '#374151' }]}>
-              {siteChargers.length} charger{siteChargers.length !== 1 ? 's' : ''} at this site
-            </Text>
-            <Text style={[styles.availCount, { color: '#10b981' }]}>
-              {siteAvailableChargers} charger{siteAvailableChargers !== 1 ? 's' : ''} available
-            </Text>
+
+          <View style={[styles.pricingWrap, { borderTopColor: isDark ? '#1f2937' : '#e5e7eb' }]}>
+            <Text style={[styles.pricingTitle, { color: isDark ? '#e5e7eb' : '#111827' }]}>Charging pricing</Text>
+            <View style={styles.priceTilesRow}>
+              <View style={[styles.priceTile, { backgroundColor: isDark ? '#0f172a' : '#f3f4f6' }]}>
+                <Text style={[styles.priceTileLabel, { color: isDark ? '#9ca3af' : '#6b7280' }]}>Energy</Text>
+                <Text numberOfLines={1} style={[styles.priceTileValue, { color: isDark ? '#f9fafb' : '#111827' }]}>${(selectedCharger?.site.pricePerKwhUsd ?? RATE_PER_KWH).toFixed(2)}/kWh</Text>
+              </View>
+              <View style={[styles.priceTile, { backgroundColor: isDark ? '#0f172a' : '#f3f4f6' }]}>
+                <Text style={[styles.priceTileLabel, { color: isDark ? '#9ca3af' : '#6b7280' }]}>Idle</Text>
+                <Text numberOfLines={1} style={[styles.priceTileValue, { color: isDark ? '#f9fafb' : '#111827' }]}>${idleFeePerMinUsd.toFixed(2)}/min</Text>
+              </View>
+              <View style={[styles.priceTile, { backgroundColor: isDark ? '#0f172a' : '#f3f4f6' }]}>
+                <Text style={[styles.priceTileLabel, { color: isDark ? '#9ca3af' : '#6b7280' }]}>Activation</Text>
+                <Text numberOfLines={1} style={[styles.priceTileValue, { color: isDark ? '#f9fafb' : '#111827' }]}>${activationFeeUsd.toFixed(2)}</Text>
+              </View>
+            </View>
           </View>
-
         </View>
-
-        {/* Payment setup: show only for signed-in users without a default payment method on billable sites */}
-        {showPaymentSetupBanner && <PaymentSetupBanner onSetupComplete={() => {}} isDark={isDark} />}
 
         {/* Chargers at this site */}
         <View style={[styles.section, { backgroundColor: isDark ? '#111827' : '#fff' }]}>
-          <Text style={[styles.sectionTitle, { color: isDark ? '#f9fafb' : '#111827' }]}>Chargers at this site</Text>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={[styles.sectionTitle, { color: isDark ? '#f9fafb' : '#111827' }]}>Chargers at this site</Text>
+            <Text style={[styles.sectionAvailability, { color: '#10b981' }]}>{siteAvailableChargers}/{siteChargers.length} available</Text>
+          </View>
           {siteChargers.map((siteCharger) => {
             const selected = siteCharger.id === selectedCharger?.id;
-            const available = siteCharger.connectors.filter((c) => c.status === 'AVAILABLE').length;
             return (
               <TouchableOpacity
                 key={siteCharger.id}
@@ -410,39 +360,25 @@ export default function ChargerDetailScreen() {
                   styles.chargerSelectRow,
                   { backgroundColor: selected ? (isDark ? '#1f2937' : '#ecfdf5') : 'transparent' },
                 ]}
-                onPress={() => setSelectedChargerId(siteCharger.id)}
+                onPress={() => {
+                  setSelectedChargerId(siteCharger.id);
+                  router.push(`/charger/detail/${siteCharger.id}` as any);
+                }}
               >
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.chargerSelectTitle, { color: isDark ? '#f9fafb' : '#111827' }]}>
                     {siteCharger.ocppId}
                   </Text>
                   <Text style={[styles.chargerSelectMeta, { color: isDark ? '#9ca3af' : '#6b7280' }]}>
-                    {siteCharger.vendor} {siteCharger.model} · {available}/{siteCharger.connectors.length} available
+                    {siteCharger.vendor} {siteCharger.model}
                   </Text>
                 </View>
-                {selected && <Text style={styles.selectedTag}>Selected</Text>}
+                <Text style={[styles.chargerOpenHint, { color: isDark ? '#93c5fd' : '#2563eb' }]}>{chargerStatusLabel(siteCharger)}</Text>
               </TouchableOpacity>
             );
           })}
         </View>
 
-        {/* Connectors for selected charger */}
-        <View style={[styles.section, { backgroundColor: isDark ? '#111827' : '#fff' }]}>
-          <Text style={[styles.sectionTitle, { color: isDark ? '#f9fafb' : '#111827' }]}>Connectors</Text>
-          {selectedCharger?.connectors.map((connector) => (
-            <ConnectorRow
-              key={connector.id}
-              connector={connector}
-              chargerId={selectedCharger.id}
-              isDark={isDark}
-              ratePerKwh={selectedCharger.site.pricePerKwhUsd ?? RATE_PER_KWH}
-              onSessionStarted={(cid, connId, connectorStatus) => {
-                if (startMutation.isPending) return;
-                handleStartSession(cid, connId, connectorStatus);
-              }}
-            />
-          ))}
-        </View>
 
         {startMutation.isPending && (
           <View style={[styles.startingOverlay, { backgroundColor: isDark ? '#052e2b' : '#ecfdf5' }]}>
@@ -481,12 +417,7 @@ export default function ChargerDetailScreen() {
           </View>
         </Modal>
 
-        {/* Price info */}
-        <View style={[styles.priceNote, { backgroundColor: isDark ? '#1f2937' : '#f3f4f6' }]}>
-          <Text style={[styles.priceNoteText, { color: isDark ? '#d1d5db' : '#6b7280' }]}> 
-            ⚡ Rate: ${(selectedCharger?.site.pricePerKwhUsd ?? RATE_PER_KWH).toFixed(2)}/kWh{activationFeeUsd > 0 ? ` · Activation fee: $${activationFeeUsd.toFixed(2)}` : ''} · Billed based on energy delivered
-          </Text>
-        </View>
+
       </ScrollView>
     </>
   );
@@ -509,9 +440,12 @@ const styles = StyleSheet.create({
   },
   siteName: { fontSize: 18, fontWeight: '700', color: '#111827' },
   siteAddress: { fontSize: 13, color: '#6b7280' },
-  siteMetaRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 },
-  chargerModel: { fontSize: 13, color: '#374151' },
-  availCount: { fontSize: 13, fontWeight: '600', color: '#10b981' },
+  pricingWrap: { marginTop: 12, borderTopWidth: 1, paddingTop: 10, gap: 8 },
+  pricingTitle: { fontSize: 13, fontWeight: '700' },
+  priceTilesRow: { flexDirection: 'row', gap: 8 },
+  priceTile: { flex: 1, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 8 },
+  priceTileLabel: { fontSize: 11, fontWeight: '600' },
+  priceTileValue: { fontSize: 14, fontWeight: '700', marginTop: 4 },
 
   paymentBanner: {
     backgroundColor: '#fffbeb',
@@ -541,7 +475,9 @@ const styles = StyleSheet.create({
     elevation: 2,
     gap: 12,
   },
+  sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   sectionTitle: { fontSize: 16, fontWeight: '700', color: '#111827', marginBottom: 4 },
+  sectionAvailability: { fontSize: 12, fontWeight: '700' },
   chargerSelectRow: {
     borderRadius: 10,
     paddingVertical: 10,
@@ -553,34 +489,8 @@ const styles = StyleSheet.create({
   },
   chargerSelectTitle: { fontSize: 14, fontWeight: '700' },
   chargerSelectMeta: { fontSize: 12, marginTop: 2 },
-  selectedTag: { color: '#10b981', fontWeight: '700', fontSize: 12 },
+  chargerOpenHint: { fontWeight: '700', fontSize: 12 },
 
-  connectorRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 10,
-    borderTopWidth: 1,
-    borderTopColor: '#f3f4f6',
-  },
-  connectorLeft: { flex: 1, gap: 4 },
-  connectorLabel: { fontSize: 14, fontWeight: '600', color: '#374151' },
-  rateText: { fontSize: 12, color: '#9ca3af', marginTop: 2 },
-
-  startButton: {
-    backgroundColor: '#10b981',
-    borderRadius: 10,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-  },
-  startButtonText: { color: '#fff', fontWeight: '700', fontSize: 14 },
-
-  inUseTag: {
-    backgroundColor: '#fef3c7',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  inUseText: { color: '#92400e', fontSize: 12, fontWeight: '600' },
 
   startingOverlay: {
     flexDirection: 'row',
@@ -592,13 +502,6 @@ const styles = StyleSheet.create({
   },
   startingText: { color: '#065f46', fontSize: 13, flex: 1 },
 
-  priceNote: {
-    backgroundColor: '#f3f4f6',
-    borderRadius: 10,
-    padding: 12,
-    alignItems: 'center',
-  },
-  priceNoteText: { fontSize: 12, color: '#6b7280', textAlign: 'center' },
 
   modalBackdrop: {
     flex: 1,

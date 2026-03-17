@@ -1,5 +1,5 @@
-import { prisma, resolveEffectiveSmartChargingLimit, type SmartChargingProfileLike } from '@ev-charger/shared';
-import { remoteSetChargingProfile } from './remote';
+import { prisma, parseSmartChargingSchedule, resolveEffectiveSmartChargingLimit, type SmartChargingProfileLike } from '@ev-charger/shared';
+import { remoteClearChargingProfile, remoteSetChargingProfile } from './remote';
 
 const SAFE_LIMIT_KW = Number(process.env.SMART_CHARGING_SAFE_LIMIT_KW ?? '7.2') || 7.2;
 const STACK_LEVEL = Number.parseInt(process.env.SMART_CHARGING_STACK_LEVEL ?? '50', 10) || 50;
@@ -19,7 +19,72 @@ function toProfileLike(profile: any): SmartChargingProfileLike {
   };
 }
 
-function toSetChargingProfilePayload(limitKw: number) {
+function toW(limitKw: number): number {
+  return Math.max(1, Math.round(limitKw * 1000));
+}
+
+function startOfUtcWeek(at: Date): Date {
+  const d = new Date(at);
+  const day = d.getUTCDay(); // Sun=0
+  d.setUTCDate(d.getUTCDate() - day);
+  d.setUTCHours(0, 0, 0, 0);
+  return d;
+}
+
+function hhmmToSec(v: string): number {
+  const [h, m] = v.split(':').map((x) => Number(x));
+  return (h * 3600) + (m * 60);
+}
+
+function buildRecurringWeeklyPayload(profile: SmartChargingProfileLike, fallbackLimitKw: number, at: Date) {
+  const parsed = parseSmartChargingSchedule(profile.schedule);
+  if (parsed.windows.length === 0) return null;
+
+  const baseLimitKw = (profile.defaultLimitKw != null && profile.defaultLimitKw > 0) ? profile.defaultLimitKw : fallbackLimitKw;
+  const periods: Array<{ startPeriod: number; limit: number }> = [{ startPeriod: 0, limit: toW(baseLimitKw) }];
+
+  for (const w of parsed.windows) {
+    const startSecInDay = hhmmToSec(w.startTime);
+    const endSecInDay = hhmmToSec(w.endTime);
+
+    for (const day of w.daysOfWeek) {
+      const dayBase = day * 86400;
+      periods.push({ startPeriod: dayBase + startSecInDay, limit: toW(w.limitKw) });
+      if (startSecInDay < endSecInDay) {
+        periods.push({ startPeriod: dayBase + endSecInDay, limit: toW(baseLimitKw) });
+      } else if (startSecInDay > endSecInDay) {
+        // Overnight window: restore next day
+        const restore = ((day + 1) % 7) * 86400 + endSecInDay;
+        periods.push({ startPeriod: restore, limit: toW(baseLimitKw) });
+      }
+    }
+  }
+
+  // Keep earliest period per second; sorted ascending
+  const unique = new Map<number, number>();
+  for (const p of periods.sort((a, b) => a.startPeriod - b.startPeriod)) unique.set(p.startPeriod, p.limit);
+
+  return {
+    connectorId: 0,
+    csChargingProfiles: {
+      chargingProfileId: 1,
+      stackLevel: STACK_LEVEL,
+      chargingProfilePurpose: 'ChargePointMaxProfile',
+      chargingProfileKind: 'Recurring',
+      recurrencyKind: 'Weekly',
+      ...(profile.validFrom ? { validFrom: profile.validFrom.toISOString() } : {}),
+      ...(profile.validTo ? { validTo: profile.validTo.toISOString() } : {}),
+      chargingSchedule: {
+        startSchedule: startOfUtcWeek(at).toISOString(),
+        duration: 7 * 24 * 3600,
+        chargingRateUnit: 'W',
+        chargingSchedulePeriod: Array.from(unique.entries()).map(([startPeriod, limit]) => ({ startPeriod, limit })),
+      },
+    },
+  };
+}
+
+function buildConstantPayload(limitKw: number, profile?: SmartChargingProfileLike) {
   return {
     connectorId: 0,
     csChargingProfiles: {
@@ -27,9 +92,11 @@ function toSetChargingProfilePayload(limitKw: number) {
       stackLevel: STACK_LEVEL,
       chargingProfilePurpose: 'ChargePointMaxProfile',
       chargingProfileKind: 'Absolute',
+      ...(profile?.validFrom ? { validFrom: profile.validFrom.toISOString() } : {}),
+      ...(profile?.validTo ? { validTo: profile.validTo.toISOString() } : {}),
       chargingSchedule: {
         chargingRateUnit: 'W',
-        chargingSchedulePeriod: [{ startPeriod: 0, limit: Math.max(1, Math.round(limitKw * 1000)) }],
+        chargingSchedulePeriod: [{ startPeriod: 0, limit: toW(limitKw) }],
       },
     },
   };
@@ -62,7 +129,23 @@ export async function applySmartChargingForCharger(chargerId: string, trigger: s
   let lastAppliedAt: Date | null = null;
 
   if (charger.status === 'ONLINE') {
-    const ocppStatus = await remoteSetChargingProfile(charger.ocppId, toSetChargingProfilePayload(resolution.effectiveLimitKw));
+    const allProfiles = [...chargerProfiles, ...groupProfiles, ...siteProfiles].map(toProfileLike);
+    const sourceProfile = resolution.sourceProfileId
+      ? allProfiles.find((p) => p.id === resolution.sourceProfileId)
+      : undefined;
+
+    const payload = sourceProfile
+      ? (buildRecurringWeeklyPayload(sourceProfile, resolution.effectiveLimitKw, new Date()) ?? buildConstantPayload(resolution.effectiveLimitKw, sourceProfile))
+      : buildConstantPayload(resolution.effectiveLimitKw);
+
+    // Avoid stale constraints from previous pushes at same stack/purpose.
+    await remoteClearChargingProfile(charger.ocppId, {
+      connectorId: 0,
+      chargingProfilePurpose: 'ChargePointMaxProfile',
+      stackLevel: STACK_LEVEL,
+    });
+
+    const ocppStatus = await remoteSetChargingProfile(charger.ocppId, payload);
     if (ocppStatus === 'Accepted') {
       status = resolution.fallbackApplied ? 'FALLBACK_APPLIED' : 'APPLIED';
       lastAppliedAt = new Date();

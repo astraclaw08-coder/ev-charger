@@ -1,6 +1,7 @@
 import React from 'react';
 import { Tabs, useRouter } from 'expo-router';
 import { TouchableOpacity, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '@/theme';
 import { useAppAuth } from '@/providers/AuthProvider';
 import { useChargingNotifications } from '@/providers/ChargingNotificationsProvider';
@@ -47,7 +48,7 @@ function ActiveSessionBanner({ active }: { active: Session }) {
           alignItems: 'center',
           justifyContent: 'space-between',
         }}
-        onPress={() => router.push(`/session/${active.id}`)}
+        onPress={() => router.push(`/charger/detail/${active.connector.charger.id}`)}
         activeOpacity={0.85}
       >
         <View style={{ flex: 1, paddingRight: 8 }}>
@@ -85,11 +86,12 @@ export default function TabsLayout() {
       {active && bannerVisible ? <ActiveSessionBanner active={active} /> : null}
       <Tabs
         screenOptions={{
-          tabBarActiveTintColor: '#10b981',
-          tabBarInactiveTintColor: isDark ? '#9ca3af' : '#6b7280',
+          tabBarActiveTintColor: isDark ? '#67e8f9' : '#0f766e',
+          tabBarInactiveTintColor: isDark ? '#64748b' : '#94a3b8',
           tabBarStyle: {
-            borderTopColor: isDark ? '#1f2937' : '#e5e7eb',
-            backgroundColor: isDark ? '#0b1220' : '#ffffff',
+            borderTopColor: isDark ? '#1f293766' : '#e5e7ebaa',
+            backgroundColor: isDark ? '#0b1220cc' : '#ffffffcc',
+            position: 'absolute',
             paddingBottom: tabBottomGap,
             paddingTop: tabIconGap,
             height: 62 + tabBottomGap,
@@ -104,9 +106,18 @@ export default function TabsLayout() {
             marginTop: 2,
             paddingTop: 0,
             lineHeight: 14,
+            fontWeight: '700',
+            fontSize: 11,
+            letterSpacing: 0.2,
           },
           sceneStyle: { backgroundColor: isDark ? '#030712' : '#f9fafb' },
           headerStyle: { backgroundColor: isDark ? '#0b1220' : '#fff' },
+          headerTitle: 'Lumeo',
+          headerTitleStyle: {
+            color: isDark ? '#ffffff' : '#000000',
+            fontWeight: '800',
+            letterSpacing: 0.4,
+          },
           headerTintColor: isDark ? '#f9fafb' : '#111827',
           headerShadowVisible: false,
         }}
@@ -114,35 +125,39 @@ export default function TabsLayout() {
         <Tabs.Screen
           name="index"
           options={{
-            title: 'Find Chargers',
+            title: 'Lumeo',
+            headerTransparent: true,
+            headerStyle: { backgroundColor: 'transparent' },
+            headerShadowVisible: false,
+            headerTitleAlign: 'center',
             tabBarLabel: 'Find Charger',
-            tabBarIcon: ({ size }) => <TabIcon icon="🗺️" size={size} />,
+            tabBarIcon: ({ size, color }) => <TabIcon icon="map-outline" size={size} color={color} />,
           }}
         />
         <Tabs.Screen
           name="favorites"
           options={{
-            title: 'Favorites',
+            title: 'Lumeo',
             tabBarLabel: 'Favorites',
-            tabBarIcon: ({ size }) => <TabIcon icon="❤️" size={size} />,
+            tabBarIcon: ({ size, color }) => <TabIcon icon="heart-outline" size={size} color={color} />,
             href: isGuest ? null : undefined,
           }}
         />
         <Tabs.Screen
           name="sessions"
           options={{
-            title: 'Session History',
+            title: 'Lumeo',
             tabBarLabel: 'History',
-            tabBarIcon: ({ size }) => <TabIcon icon="📋" size={size} />,
+            tabBarIcon: ({ size, color }) => <TabIcon icon="receipt-outline" size={size} color={color} />,
             href: isGuest ? null : undefined,
           }}
         />
         <Tabs.Screen
           name="profile"
           options={{
-            title: 'Profile',
+            title: 'Lumeo',
             tabBarLabel: 'Profile',
-            tabBarIcon: ({ size }) => <TabIcon icon="👤" size={size} />,
+            tabBarIcon: ({ size, color }) => <TabIcon icon="person-circle-outline" size={size} color={color} />,
           }}
         />
       </Tabs>
@@ -150,6 +165,6 @@ export default function TabsLayout() {
   );
 }
 
-function TabIcon({ icon, size }: { icon: string; size: number }) {
-  return <Text style={{ fontSize: size - 4 }}>{icon}</Text>;
+function TabIcon({ icon, size, color }: { icon: React.ComponentProps<typeof Ionicons>['name']; size: number; color: string }) {
+  return <Ionicons name={icon} size={size - 2} color={color} />;
 }

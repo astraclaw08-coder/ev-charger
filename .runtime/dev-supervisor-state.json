@@ -1,26 +1,26 @@
 {
-  "ts": "2026-03-13T00:25:05.698Z",
+  "ts": "2026-03-16T22:32:02.281Z",
   "services": {
     "api": {
-      "pid": 46433,
+      "pid": 45382,
       "running": true,
       "health": "ok",
       "port": 3001
     },
     "portal": {
-      "pid": 46082,
+      "pid": 70272,
       "running": true,
       "health": "ok",
       "port": 5175
     },
     "mobile": {
-      "pid": 46093,
+      "pid": 14076,
       "running": true,
       "health": "ok",
       "port": 8082
     },
     "ocpp": {
-      "pid": 46102,
+      "pid": 45326,
       "running": true,
       "health": "ok",
       "port": 9000

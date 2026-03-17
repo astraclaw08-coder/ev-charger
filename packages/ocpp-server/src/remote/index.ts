@@ -123,6 +123,26 @@ export async function remoteGetConfiguration(
   }
 }
 
+export async function remoteClearChargingProfile(
+  ocppId: string,
+  payload: Record<string, unknown>,
+): Promise<'Accepted' | 'Rejected' | 'Unknown'> {
+  const client = clientRegistry.get(ocppId);
+  if (!client) {
+    console.warn(`[RemoteClearChargingProfile] Charger ${ocppId} is not connected`);
+    return 'Rejected';
+  }
+
+  try {
+    const result = await client.call('ClearChargingProfile', payload);
+    console.log(`[RemoteClearChargingProfile] Charger ${ocppId} responded: ${result.status}`);
+    return result.status as 'Accepted' | 'Rejected' | 'Unknown';
+  } catch (err) {
+    console.error(`[RemoteClearChargingProfile] Error calling charger ${ocppId}:`, err);
+    return 'Rejected';
+  }
+}
+
 export async function remoteSetChargingProfile(
   ocppId: string,
   profile: Record<string, unknown>,

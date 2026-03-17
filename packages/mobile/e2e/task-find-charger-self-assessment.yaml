@@ -1,0 +1,14 @@
+appId: dev.evcharger.app.rc
+---
+- launchApp:
+    clearState: true
+- tapOn:
+    text: "Find Charger"
+    optional: true
+- assertVisible:
+    id: "map-search-input"
+- assertVisible:
+    id: "map-qr-scan-tile"
+- assertVisible:
+    text: "Scan QR"
+- takeScreenshot: "find-charger-self-assessment"

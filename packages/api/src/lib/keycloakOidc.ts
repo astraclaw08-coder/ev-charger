@@ -8,6 +8,15 @@ type KeycloakIntrospectionResponse = {
   [key: string]: unknown;
 };
 
+type IntrospectionCacheEntry = {
+  payload: KeycloakIntrospectionResponse | null;
+  expiresAt: number;
+};
+
+const INTROSPECTION_CACHE_TTL_MS = 60_000;
+const introspectionCache = new Map<string, IntrospectionCacheEntry>();
+const introspectionInFlight = new Map<string, Promise<KeycloakIntrospectionResponse | null>>();
+
 function readEnv(name: string): string {
   const value = process.env[name];
   if (!value) throw new Error(`Missing required env var: ${name}`);
@@ -15,17 +24,18 @@ function readEnv(name: string): string {
 }
 
 function getOidcConfig() {
-  const baseUrl = readEnv('KEYCLOAK_BASE_URL').replace(/\/$/, '');
+  const baseUrl = (process.env.KEYCLOAK_BASE_URL ?? process.env.KEYCLOAK_URL);
+  if (!baseUrl) throw new Error('Missing required env var: KEYCLOAK_BASE_URL (or KEYCLOAK_URL)');
   const realm = readEnv('KEYCLOAK_REALM');
-  const clientId = process.env.KEYCLOAK_PORTAL_CLIENT_ID ?? process.env.KEYCLOAK_ADMIN_CLIENT_ID;
-  const clientSecret = process.env.KEYCLOAK_PORTAL_CLIENT_SECRET ?? process.env.KEYCLOAK_ADMIN_CLIENT_SECRET;
+  const clientId = process.env.KEYCLOAK_PORTAL_CLIENT_ID ?? process.env.KEYCLOAK_ADMIN_CLIENT_ID ?? process.env.KEYCLOAK_CLIENT_ID;
+  const clientSecret = process.env.KEYCLOAK_PORTAL_CLIENT_SECRET ?? process.env.KEYCLOAK_ADMIN_CLIENT_SECRET ?? process.env.KEYCLOAK_CLIENT_SECRET;
 
   if (!clientId || !clientSecret) {
     throw new Error('Missing Keycloak portal client credentials');
   }
 
   return {
-    baseUrl,
+    baseUrl: baseUrl.replace(/\/$/, ''),
     realm,
     clientId,
     clientSecret,
@@ -36,10 +46,10 @@ function getOidcConfig() {
 
 export function keycloakPasswordAuthEnabled() {
   return Boolean(
-    process.env.KEYCLOAK_BASE_URL &&
+    (process.env.KEYCLOAK_BASE_URL || process.env.KEYCLOAK_URL) &&
     process.env.KEYCLOAK_REALM &&
-    (process.env.KEYCLOAK_PORTAL_CLIENT_ID || process.env.KEYCLOAK_ADMIN_CLIENT_ID) &&
-    (process.env.KEYCLOAK_PORTAL_CLIENT_SECRET || process.env.KEYCLOAK_ADMIN_CLIENT_SECRET),
+    (process.env.KEYCLOAK_PORTAL_CLIENT_ID || process.env.KEYCLOAK_ADMIN_CLIENT_ID || process.env.KEYCLOAK_CLIENT_ID) &&
+    (process.env.KEYCLOAK_PORTAL_CLIENT_SECRET || process.env.KEYCLOAK_ADMIN_CLIENT_SECRET || process.env.KEYCLOAK_CLIENT_SECRET),
   );
 }
 
@@ -122,19 +132,41 @@ export async function refreshGrantLogin(input: { refreshToken: string }) {
 
 export async function introspectAccessToken(accessToken: string): Promise<KeycloakIntrospectionResponse | null> {
   if (!accessToken) return null;
-  const cfg = getOidcConfig();
-  const body = new URLSearchParams({
-    token: accessToken,
-    client_id: cfg.clientId,
-    client_secret: cfg.clientSecret,
-  });
 
-  const res = await fetch(cfg.introspectionEndpoint, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body,
-  });
-  if (!res.ok) return null;
-  const payload = await res.json() as KeycloakIntrospectionResponse;
-  return payload.active ? payload : null;
+  const now = Date.now();
+  const cached = introspectionCache.get(accessToken);
+  if (cached && cached.expiresAt > now) return cached.payload;
+
+  const existingInFlight = introspectionInFlight.get(accessToken);
+  if (existingInFlight) return existingInFlight;
+
+  const run = (async () => {
+    const cfg = getOidcConfig();
+    const body = new URLSearchParams({
+      token: accessToken,
+      client_id: cfg.clientId,
+      client_secret: cfg.clientSecret,
+    });
+
+    const res = await fetch(cfg.introspectionEndpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body,
+    });
+    if (!res.ok) {
+      introspectionCache.set(accessToken, { payload: null, expiresAt: now + 10_000 });
+      return null;
+    }
+    const payload = await res.json() as KeycloakIntrospectionResponse;
+    const normalized = payload.active ? payload : null;
+    introspectionCache.set(accessToken, { payload: normalized, expiresAt: now + INTROSPECTION_CACHE_TTL_MS });
+    return normalized;
+  })();
+
+  introspectionInFlight.set(accessToken, run);
+  try {
+    return await run;
+  } finally {
+    introspectionInFlight.delete(accessToken);
+  }
 }
