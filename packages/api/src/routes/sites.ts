@@ -42,7 +42,7 @@ export async function siteRoutes(app: FastifyInstance) {
       orderBy: { createdAt: 'desc' },
     });
 
-    return sites.map((site) => ({
+    return (sites as any[]).map((site: any) => ({
       id: site.id,
       name: site.name,
       address: site.address,
