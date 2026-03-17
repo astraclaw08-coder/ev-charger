@@ -85,6 +85,7 @@ function SlideToStart({
   const maxX = trackWidth - knobSize;
   const x = useRef(new Animated.Value(0)).current;
   const valueRef = useRef(0);
+  const [logoFailed, setLogoFailed] = useState(false);
 
   useEffect(() => {
     const sub = x.addListener(({ value }) => {
@@ -117,7 +118,16 @@ function SlideToStart({
     <View style={[styles.slideTrack, { backgroundColor: isDark ? '#1f2937' : '#e5e7eb', opacity: disabled ? 0.45 : 1, width: trackWidth }]}>
       <Text style={[styles.slideLabel, { color: isDark ? '#d1d5db' : '#374151' }]}>{label}</Text>
       <Animated.View {...pan.panHandlers} style={[styles.slideKnob, { transform: [{ translateX: x }] }]}>
-        <Image source={require('../../../assets/branding/lumeo_logo_swirl_only.png')} style={styles.slideKnobLogo} resizeMode="contain" />
+        {logoFailed ? (
+          <Text style={styles.slideKnobFallback}>⚡</Text>
+        ) : (
+          <Image
+            source={require('../../../assets/branding/lumeo_logo_swirl_only.png')}
+            style={styles.slideKnobLogo}
+            resizeMode="contain"
+            onError={() => setLogoFailed(true)}
+          />
+        )}
       </Animated.View>
     </View>
   );
@@ -202,26 +212,31 @@ function TopMetricsHero({
 
   const haloColor =
     haloMode === 'faulted'
-      ? '#ef4444'
+      ? '#dc2626'
       : haloMode === 'charging'
-        ? '#7dd3fc'
+        ? '#0891b2'
         : haloMode === 'idle'
-          ? '#facc15'
-          : '#ffffff';
+          ? '#d97706'
+          : haloMode === 'awaitingPlug'
+            ? '#16a34a'
+            : '#2563eb';
   const haloAura =
     haloMode === 'faulted'
-      ? '#ef444455'
+      ? '#fca5a566'
       : haloMode === 'charging'
-        ? '#7dd3fc66'
+        ? '#67e8f966'
         : haloMode === 'idle'
-          ? '#facc1566'
-          : '#ffffff55';
-  const valueColor = forceWhiteText ? '#ffffff' : isDark ? '#f9fafb' : '#0f172a';
-  const labelColor = forceWhiteText ? '#e5e7eb' : isDark ? '#9ca3af' : '#64748b';
+          ? '#fcd34d66'
+          : haloMode === 'awaitingPlug'
+            ? '#86efac66'
+            : '#93c5fd66';
+  const valueColor = forceWhiteText ? '#ffffff' : isDark ? '#f9fafb' : '#0b1220';
+  const labelColor = forceWhiteText ? '#e5e7eb' : isDark ? '#9ca3af' : '#475569';
 
   return (
-    <View style={[styles.metricsHeroCard, { backgroundColor: isDark ? '#0b1220' : '#e0f2fe' }]}>
+    <View style={[styles.metricsHeroCard, { backgroundColor: isDark ? '#0b1220' : '#f8fbff' }]}>
       {/* Animated halo border + aura - only this layer blinks, not the card content */}
+      <View pointerEvents="none" style={[styles.haloAuraOverlay, { borderColor: haloAura }]} />
       <Animated.View pointerEvents="none" style={[styles.haloRingOverlay, { borderColor: haloColor, shadowColor: haloAura, opacity: haloBlink }]} />
       <View style={styles.metricsGrid}>
         <View style={[styles.metricTile, { backgroundColor: isDark ? '#111827' : '#ffffff' }]}>
@@ -771,6 +786,16 @@ const styles = StyleSheet.create({
     elevation: 0,
     overflow: 'visible',
   },
+  haloAuraOverlay: {
+    position: 'absolute',
+    top: -4,
+    left: -4,
+    right: -4,
+    bottom: -4,
+    borderRadius: 22,
+    borderWidth: 4,
+    backgroundColor: 'transparent',
+  },
   haloRingOverlay: {
     position: 'absolute',
     top: 0,
@@ -795,6 +820,8 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingVertical: 15,
     paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
   },
   metricLabel: { fontSize: 13, fontWeight: '700' },
   metricValue: { fontSize: 30, fontWeight: '900', marginTop: 6 },
@@ -995,6 +1022,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   slideKnobLogo: { width: 56, height: 56 },
+  slideKnobFallback: { fontSize: 28, lineHeight: 30 },
 
   modalBackdrop: {
     flex: 1,
