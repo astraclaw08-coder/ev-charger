@@ -8,7 +8,7 @@ const appEnv = ((process.env.APP_ENV || process.env.EAS_BUILD_PROFILE || 'dev').
 
 const isProd = appEnv === 'prod';
 
-const name = isProd ? 'EV Charger' : 'Lumeo (dev)';
+const name = 'Lumeo';
 const slug = isProd ? 'ev-charger' : 'ev-charger-dev';
 const scheme = isProd ? 'evcharger' : 'evcharger-dev';
 const bundleIdentifier = isProd ? 'app.evcharger.app' : 'dev.evcharger.app';
