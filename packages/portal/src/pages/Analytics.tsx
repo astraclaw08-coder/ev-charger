@@ -81,13 +81,19 @@ export default function Analytics() {
 
   const [roleScope, setRoleScope] = useState<AnalystRole>('owner');
   const [exportQueue, setExportQueue] = useState<ExportJob[]>([]);
+  const [resolvedSiteId, setResolvedSiteId] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
       try {
         const token = await getToken();
-        const result = await createApiClient(token).getAnalytics(id!);
+        const client = createApiClient(token);
+        const sites = await client.getSites().catch(() => []);
+        const matchedSite = sites.find((s) => s.id === id || s.id.startsWith(id ?? ''));
+        const siteId = matchedSite?.id ?? id!;
+        const result = await client.getAnalytics(siteId);
         setData(result);
+        setResolvedSiteId(siteId);
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : 'Failed to load analytics');
       } finally {
@@ -98,10 +104,10 @@ export default function Analytics() {
   }, [id, getToken]);
 
   useEffect(() => {
-    if (!id) return;
-    setSavedViews(loadSavedViews(id));
-    setExportQueue(loadExportQueue(id));
-  }, [id]);
+    if (!resolvedSiteId) return;
+    setSavedViews(loadSavedViews(resolvedSiteId));
+    setExportQueue(loadExportQueue(resolvedSiteId));
+  }, [resolvedSiteId]);
 
   const visibleDaily = useMemo(() => {
     if (!data) return [];
@@ -148,7 +154,7 @@ export default function Analytics() {
         <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-slate-400">
           <Link to="/overview" className="hover:text-gray-700 dark:hover:text-slate-200 dark:text-slate-300">Overview</Link>
           <span>/</span>
-          <Link to={`/sites/${id}`} className="hover:text-gray-700 dark:hover:text-slate-200 dark:text-slate-300">{data.siteName}</Link>
+          <Link to={`/sites/${resolvedSiteId ?? id}`} className="hover:text-gray-700 dark:hover:text-slate-200 dark:text-slate-300">{data.siteName}</Link>
           <span>/</span>
           <span className="text-gray-900 dark:text-slate-100">Analytics</span>
         </div>
@@ -189,10 +195,10 @@ export default function Analytics() {
           <button
             type="button"
             onClick={() => {
-              if (!id || !viewName.trim()) return;
+              if (!resolvedSiteId || !viewName.trim()) return;
               const next = [{ name: viewName.trim(), filter: timeFilter }, ...savedViews.filter((v) => v.name !== viewName.trim())];
               setSavedViews(next);
-              persistSavedViews(id, next);
+              persistSavedViews(resolvedSiteId, next);
               setViewName('');
             }}
             className="rounded-md bg-brand-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-700"
@@ -202,7 +208,7 @@ export default function Analytics() {
           <button
             type="button"
             onClick={() => {
-              if (!id) return;
+              if (!resolvedSiteId) return;
               const job: ExportJob = {
                 id: crypto.randomUUID(),
                 createdAt: new Date().toISOString(),
@@ -212,11 +218,11 @@ export default function Analytics() {
               };
               const next = [job, ...exportQueue];
               setExportQueue(next);
-              persistExportQueue(id, next);
+              persistExportQueue(resolvedSiteId, next);
               setTimeout(() => {
                 setExportQueue((current) => {
                   const updated = current.map((j) => (j.id === job.id ? { ...j, status: 'complete' as const } : j));
-                  persistExportQueue(id, updated);
+                  persistExportQueue(resolvedSiteId, updated);
                   return updated;
                 });
               }, 800);

@@ -135,7 +135,12 @@ export default function SiteDetail() {
       const client = createApiClient(token);
       const periodDays = rangePreset === '7d' ? 7 : rangePreset === '30d' ? 30 : 60;
 
-      const data = await client.getSite(id!);
+      let resolvedSiteId = id!;
+      const sites = await client.getSites().catch(() => []);
+      const matchedSite = sites.find((s) => s.id === id || s.id.startsWith(id ?? ''));
+      if (matchedSite?.id) resolvedSiteId = matchedSite.id;
+
+      const data = await client.getSite(resolvedSiteId);
       setSite(data);
       setEditSiteForm({
         name: data.name,
