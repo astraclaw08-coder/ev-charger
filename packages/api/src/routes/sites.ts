@@ -26,7 +26,7 @@ export async function siteRoutes(app: FastifyInstance) {
     const operator = req.currentOperator!;
     const scopedSiteIds = operator.claims?.siteIds ?? [];
 
-    const isOwner = (operator.roles ?? []).includes('owner');
+    const isOwner = (operator.roles ?? []).some(r => r === 'owner' || r === 'super_admin');
     const sites = await prisma.site.findMany({
       where: scopedSiteIds.length > 0 && !scopedSiteIds.includes('*')
         ? { id: { in: scopedSiteIds } }

@@ -1,4 +1,6 @@
 {
+  "buildCommand": "VITE_APP_VERSION=$(node scripts/gen-version.mjs) vite build",
+  "outputDirectory": "dist",
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }
   ]
