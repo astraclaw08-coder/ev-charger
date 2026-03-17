@@ -30,7 +30,9 @@ export async function handleBootNotification(
   });
 
   await recordUptimeEvent(chargerId, 'ONLINE', { reason: 'BootNotification accepted' });
-  await applySmartChargingForCharger(chargerId, 'boot_notification');
+  // Defer smart charging application until at least one successful Heartbeat
+  // after BootNotification to avoid pushing Clear/SetChargingProfile during
+  // initial connection stabilization.
 
   return {
     currentTime: new Date().toISOString(),

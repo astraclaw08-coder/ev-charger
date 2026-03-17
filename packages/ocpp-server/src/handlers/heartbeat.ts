@@ -31,8 +31,10 @@ export async function handleHeartbeat(
 
   if (shouldRecover) {
     await recordUptimeEvent(chargerId, 'RECOVERED', { reason: 'Heartbeat restored' });
-    await applySmartChargingForCharger(chargerId, 'heartbeat_recovered');
   }
+
+  // Apply smart charging after heartbeat gating (not on raw boot/connect).
+  await applySmartChargingForCharger(chargerId, shouldRecover ? 'heartbeat_recovered' : 'heartbeat');
 
   return { currentTime: now.toISOString() };
 }
