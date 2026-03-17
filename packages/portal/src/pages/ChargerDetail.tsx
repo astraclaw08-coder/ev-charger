@@ -59,15 +59,20 @@ export default function ChargerDetail() {
     try {
       const token = await getToken();
       const client = createApiClient(token);
-      const [chargerStatus, recentSessions, uptimeData, chargers] = await Promise.all([
-        client.getChargerStatus(id!),
-        client.getChargerSessions(id!),
-        client.getChargerUptime(id!).catch(() => null),
-        client.getChargers().catch(() => []),
+
+      const chargers = await client.getChargers().catch(() => []);
+      const foundByRoute = chargers.find((c) => c.id === id || c.id.startsWith(id ?? '') || c.ocppId === id);
+      const targetId = foundByRoute?.id ?? id;
+
+      const [chargerStatus, recentSessions, uptimeData] = await Promise.all([
+        client.getChargerStatus(targetId!),
+        client.getChargerSessions(targetId!),
+        client.getChargerUptime(targetId!).catch(() => null),
       ]);
+
       setStatus(chargerStatus);
-      const found = chargers.find((c) => c.id === id || c.id.startsWith(id ?? '') || c.ocppId === id || c.ocppId === chargerStatus.ocppId);
-      setResolvedChargerId(found?.id ?? id ?? null);
+      const found = foundByRoute ?? chargers.find((c) => c.id === targetId || c.ocppId === chargerStatus.ocppId);
+      setResolvedChargerId(found?.id ?? targetId ?? null);
       setChargerSite(found ? { id: found.site.id, name: found.site.name } : null);
       setChargerMeta(found ? { serialNumber: found.serialNumber, model: found.model, vendor: found.vendor } : null);
       setSessions(recentSessions);
