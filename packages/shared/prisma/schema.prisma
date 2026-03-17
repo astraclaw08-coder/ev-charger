@@ -82,6 +82,9 @@ model Site {
   idleFeePerMinUsd Float               @default(0.08)
   activationFeeUsd Float               @default(0)
   gracePeriodMin   Int                 @default(10)
+  softwareVendorFeeMode  String        @default("none") // none | percentage_total | fixed_per_kwh | fixed_per_minute
+  softwareVendorFeeValue Float         @default(0)
+  softwareFeeIncludesActivation Boolean @default(false)
   touWindows       Json?
   organizationName String?
   portfolioName    String?

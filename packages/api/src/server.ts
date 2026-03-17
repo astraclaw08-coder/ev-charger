@@ -12,6 +12,7 @@ import { adminSettingsRoutes } from './routes/adminSettings';
 import { readModelRoutes } from './routes/readModels';
 import { smartChargingRoutes } from './routes/smartCharging';
 import { favoriteRoutes } from './routes/favorites';
+import { qrRedirectRoutes } from './routes/qrRedirect';
 // Temporarily disabled until notification Prisma models/types are aligned.
 // import { notificationRoutes } from './routes/notifications';
 import { prisma } from '@ev-charger/shared';
@@ -30,8 +31,14 @@ export async function buildServer() {
     { parseAs: 'buffer' },
     (_req, body, done) => {
       (_req as unknown as { rawBody: Buffer }).rawBody = body as Buffer;
+      const str = (body as Buffer).toString();
+      // Empty body is valid for POST routes that take no request body (e.g. /sessions/:id/stop)
+      if (!str) {
+        done(null, {});
+        return;
+      }
       try {
-        done(null, JSON.parse((body as Buffer).toString()));
+        done(null, JSON.parse(str));
       } catch (err: unknown) {
         const e = err as Error & { statusCode?: number };
         e.statusCode = 400;
@@ -62,6 +69,7 @@ export async function buildServer() {
   await app.register(adminSettingsRoutes);
   await app.register(readModelRoutes);
   await app.register(smartChargingRoutes);
+  await app.register(qrRedirectRoutes);
   // await app.register(notificationRoutes);
 
   return app;

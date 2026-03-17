@@ -14,6 +14,7 @@ export default function UserManagement() {
   const [newFirstName, setNewFirstName] = useState('');
   const [newLastName, setNewLastName] = useState('');
   const [roleDraftByUser, setRoleDraftByUser] = useState<Record<string, string>>({});
+  const [roleReasonByUser, setRoleReasonByUser] = useState<Record<string, string>>({});
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const trimmedEmail = useMemo(() => newEmail.trim(), [newEmail]);
@@ -66,15 +67,23 @@ export default function UserManagement() {
     setRoleDraftByUser((prev) => ({ ...prev, [userId]: role }));
   }
 
+  function roleReasonForUser(userId: string) {
+    return roleReasonByUser[userId] ?? '';
+  }
+
+  function setRoleReasonForUser(userId: string, reason: string) {
+    setRoleReasonByUser((prev) => ({ ...prev, [userId]: reason }));
+  }
+
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold text-gray-900">User Management</h1>
-        <p className="text-sm text-gray-500">Keycloak-backed admin workflows + audit trail</p>
+        <h1 className="text-2xl font-semibold text-gray-900 dark:text-slate-100">User Management</h1>
+        <p className="text-sm text-gray-500 dark:text-slate-400">Keycloak-backed admin workflows + audit trail</p>
       </div>
 
-      <section className="rounded-xl border border-gray-200 bg-white p-4">
-        <h2 className="mb-3 text-sm font-semibold text-gray-700">Invite / Create user</h2>
+      <section className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+        <h2 className="mb-3 text-sm font-semibold text-gray-700 dark:text-slate-300">Invite / Create user</h2>
         <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
           <input className="rounded border px-3 py-2 text-sm" placeholder="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} />
           <input className="rounded border px-3 py-2 text-sm" placeholder="first name" value={newFirstName} onChange={(e) => setNewFirstName(e.target.value)} />
@@ -89,9 +98,9 @@ export default function UserManagement() {
         </div>
       </section>
 
-      <section className="rounded-xl border border-gray-200 bg-white p-4">
+      <section className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
         <div className="mb-3 flex items-center gap-2">
-          <h2 className="text-sm font-semibold text-gray-700">Users</h2>
+          <h2 className="text-sm font-semibold text-gray-700 dark:text-slate-300">Users</h2>
           <input className="rounded border px-2 py-1 text-sm" placeholder="search" value={search} onChange={(e) => setSearch(e.target.value)} />
           <button className="rounded border px-2 py-1 text-xs" onClick={() => refresh().catch((err) => setLoadError(err instanceof Error ? err.message : 'Failed to refresh users'))}>Refresh</button>
         </div>
@@ -100,13 +109,15 @@ export default function UserManagement() {
           {users.map((u) => {
             const selectedRole = roleForUser(u.id);
             const hasRole = !!u.realmRoles?.includes(selectedRole);
+            const roleReason = roleReasonForUser(u.id);
+            const roleReasonTrimmed = roleReason.trim();
             return (
-              <div key={u.id} className="rounded border border-gray-100 p-3">
+              <div key={u.id} className="rounded border border-gray-100 dark:border-slate-800 p-3">
                 <div className="flex items-center justify-between gap-2">
                   <div>
-                    <p className="text-sm font-medium text-gray-900">{u.email ?? u.username ?? u.id}</p>
-                    <p className="text-xs text-gray-500">{u.firstName} {u.lastName} · {u.enabled ? 'Active' : 'Disabled'}</p>
-                    <p className="text-xs text-gray-500">roles: {(u.realmRoles?.length ? u.realmRoles.join(', ') : 'none')}</p>
+                    <p className="text-sm font-medium text-gray-900 dark:text-slate-100">{u.email ?? u.username ?? u.id}</p>
+                    <p className="text-xs text-gray-500 dark:text-slate-400">{u.firstName} {u.lastName} · {u.enabled ? 'Active' : 'Disabled'}</p>
+                    <p className="text-xs text-gray-500 dark:text-slate-400">roles: {(u.realmRoles?.length ? u.realmRoles.join(', ') : 'none')}</p>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <button
@@ -152,24 +163,30 @@ export default function UserManagement() {
                         Reactivate
                       </button>
                     )}
+                    <input
+                      className="min-w-56 rounded border px-2 py-1 text-xs"
+                      placeholder="Reason for role/scope change (required)"
+                      value={roleReason}
+                      onChange={(e) => setRoleReasonForUser(u.id, e.target.value)}
+                    />
                     <select className="rounded border px-2 py-1 text-xs" value={selectedRole} onChange={(e) => setRoleForUser(u.id, e.target.value)}>
                       {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
                     </select>
                     <button
                       className="rounded border px-2 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-50"
-                      disabled={hasRole}
-                      onClick={() => run((api) => api.addAdminUserRole(u.id, selectedRole, 'Admin role grant'), 'Role granted')}
+                      disabled={hasRole || !roleReasonTrimmed}
+                      onClick={() => run((api) => api.addAdminUserRole(u.id, selectedRole, roleReasonTrimmed), 'Role granted')}
                     >
                       + role
                     </button>
                     <button
                       className="rounded border px-2 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-50"
-                      disabled={!hasRole}
+                      disabled={!hasRole || !roleReasonTrimmed}
                       onClick={() => {
                         if (selectedRole === 'owner' && !confirm('Remove OWNER role? This is a privileged action.')) return;
                         run(
                           (api) => api.removeAdminUserRole(u.id, selectedRole, {
-                            reason: 'Admin role removal',
+                            reason: roleReasonTrimmed,
                             confirmPrivilegedRoleRemoval: selectedRole === 'owner',
                           }),
                           'Role removed',
@@ -186,11 +203,11 @@ export default function UserManagement() {
         </div>
       </section>
 
-      <section className="rounded-xl border border-gray-200 bg-white p-4">
-        <h2 className="mb-3 text-sm font-semibold text-gray-700">Audit trail</h2>
+      <section className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+        <h2 className="mb-3 text-sm font-semibold text-gray-700 dark:text-slate-300">Audit trail</h2>
         <div className="space-y-2">
           {audit.map((a) => (
-            <div key={a.id} className="rounded border border-gray-100 p-2 text-xs text-gray-600">
+            <div key={a.id} className="rounded border border-gray-100 dark:border-slate-800 p-2 text-xs text-gray-600 dark:text-slate-400">
               <div>{new Date(a.createdAt).toLocaleString()} · <span className="font-medium">{a.action}</span></div>
               <div>operator={a.operatorId} target={a.targetEmail ?? a.targetUserId ?? 'n/a'}</div>
             </div>

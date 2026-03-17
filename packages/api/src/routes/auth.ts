@@ -19,6 +19,10 @@ type PasswordRefreshBody = {
   refreshToken: string;
 };
 
+type PasswordResetRequestBody = {
+  identifier: string;
+};
+
 type BootstrapSuperAdminBody = {
   bootstrapSecret: string;
   username: string;
@@ -165,6 +169,40 @@ export async function authRoutes(app: FastifyInstance) {
       };
     } catch {
       return reply.status(401).send({ error: 'Refresh token is invalid or expired' });
+    }
+  });
+
+  app.post<{ Body: PasswordResetRequestBody }>('/auth/password-reset-request', async (req, reply) => {
+    if (!keycloakPasswordAuthEnabled()) {
+      return reply.status(503).send({ error: 'Password reset is not configured' });
+    }
+
+    const identifier = req.body?.identifier?.trim();
+    if (!identifier) {
+      return reply.status(400).send({ error: 'identifier is required' });
+    }
+
+    const normalized = identifier.toLowerCase();
+
+    try {
+      const kc = getKeycloakAdminClient();
+      const matches = await kc.listUsers({ search: identifier, max: 10 });
+      const user = matches.find((u) => (u.email ?? '').toLowerCase() === normalized)
+        ?? matches.find((u) => (u.username ?? '').toLowerCase() === normalized)
+        ?? null;
+
+      if (user?.id) {
+        await kc.executeActionsEmail(user.id, ['UPDATE_PASSWORD']);
+      }
+
+      req.log.info({ event: 'portal-password-reset-request', identifier, ip: req.ip }, 'Password reset requested');
+      return reply.status(202).send({
+        ok: true,
+        message: 'If an account exists for that email/username, a password reset email has been sent.',
+      });
+    } catch (error) {
+      req.log.error({ event: 'portal-password-reset-request-failed', identifier, ip: req.ip, err: error }, 'Password reset request failed');
+      return reply.status(500).send({ error: 'Unable to process password reset right now' });
     }
   });
 

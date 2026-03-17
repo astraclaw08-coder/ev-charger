@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import { shortId } from '../lib/shortId';
 import { Bar, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { createApiClient, type SiteDetail as SiteDetailType, type ChargerUptime, type SiteUptime, type Analytics as SiteAnalytics, type DailyEntry } from '../api/client';
 import { useToken } from '../auth/TokenContext';
@@ -24,6 +25,9 @@ type TariffConfig = {
   idleFeePerMinUsd: number;
   activationFeeUsd: number;
   gracePeriodMin: number;
+  softwareVendorFeeMode: 'none' | 'percentage_total' | 'fixed_per_kwh' | 'fixed_per_minute';
+  softwareVendorFeeValue: number;
+  softwareFeeIncludesActivation: boolean;
   mode: 'flat' | 'tou';
   windows: TouWindow[];
 };
@@ -67,7 +71,17 @@ function validateTouWindows(windows: TouWindow[]): string | null {
 }
 
 function buildPricingSummary(config: TariffConfig): string {
-  const base = `Base $${config.pricePerKwhUsd.toFixed(2)}/kWh · Idle $${config.idleFeePerMinUsd.toFixed(2)}/min · Activation $${config.activationFeeUsd.toFixed(2)} · Grace ${config.gracePeriodMin}m`;
+  const vendorFeeSummary = config.softwareVendorFeeMode === 'none'
+    ? 'No software fee'
+    : config.softwareVendorFeeMode === 'percentage_total'
+      ? `Software fee ${config.softwareVendorFeeValue.toFixed(2)}% of energy+idle revenue`
+      : config.softwareVendorFeeMode === 'fixed_per_kwh'
+        ? `Software fee $${config.softwareVendorFeeValue.toFixed(4)}/kWh`
+        : `Software fee $${config.softwareVendorFeeValue.toFixed(4)}/minute`;
+  const activationSummary = config.softwareFeeIncludesActivation
+    ? 'Activation fee included in software fee (not host revenue)'
+    : 'Activation fee not included in software fee';
+  const base = `Base $${config.pricePerKwhUsd.toFixed(2)}/kWh · Idle $${config.idleFeePerMinUsd.toFixed(2)}/min · Activation $${config.activationFeeUsd.toFixed(2)} · Grace ${config.gracePeriodMin}m · ${vendorFeeSummary} · ${activationSummary}`;
   if (config.mode !== 'tou') return `Flat pricing active. ${base}`;
 
   if (config.windows.length === 0) {
@@ -106,8 +120,11 @@ export default function SiteDetail() {
   const [activeSessions, setActiveSessions] = useState(0);
   const [siteUtilizationPct, setSiteUtilizationPct] = useState<number | null>(null);
 
-  const [tariff, setTariff] = useState<TariffConfig>({ pricePerKwhUsd: 0.35, idleFeePerMinUsd: 0.08, activationFeeUsd: 0, gracePeriodMin: 10, mode: 'flat', windows: [] });
+  const [tariff, setTariff] = useState<TariffConfig>({ pricePerKwhUsd: 0.35, idleFeePerMinUsd: 0.08, activationFeeUsd: 0, gracePeriodMin: 10, softwareVendorFeeMode: 'none', softwareVendorFeeValue: 0, softwareFeeIncludesActivation: true, mode: 'flat', windows: [] });
   const [tariffMsg, setTariffMsg] = useState('');
+  const [showFeeModal, setShowFeeModal] = useState(false);
+  // Superadmin detection: dev mode always grants superadmin; in production read from JWT publicMetadata.
+  const isSuperAdmin = true; // TODO: wire to real role claim when auth matures
 
   const [auditEvents, setAuditEvents] = useState<SiteAuditEvent[]>([]);
 
@@ -133,6 +150,9 @@ export default function SiteDetail() {
         idleFeePerMinUsd: Number(data.idleFeePerMinUsd ?? 0.08),
         activationFeeUsd: Number(data.activationFeeUsd ?? 0),
         gracePeriodMin: Number(data.gracePeriodMin ?? 10),
+        softwareVendorFeeMode: (data.softwareVendorFeeMode ?? 'none') as TariffConfig['softwareVendorFeeMode'],
+        softwareVendorFeeValue: Number(data.softwareVendorFeeValue ?? 0),
+        softwareFeeIncludesActivation: Boolean(data.softwareFeeIncludesActivation ?? true),
         mode: data.pricingMode === 'tou' ? 'tou' : 'flat',
         windows: Array.isArray(data.touWindows)
           ? (data.touWindows as Array<Partial<TouWindow>>).map((w) => ({
@@ -221,7 +241,7 @@ export default function SiteDetail() {
   useEffect(() => { load(); }, [load]);
 
   if (loading) {
-    return <div className="flex h-64 items-center justify-center text-gray-400">Loading…</div>;
+    return <div className="flex h-64 items-center justify-center text-gray-400 dark:text-slate-500">Loading…</div>;
   }
   if (error || !site) {
     return <div className="rounded-lg bg-red-50 p-4 text-sm text-red-700">{error || 'Site not found'}</div>;
@@ -247,54 +267,54 @@ export default function SiteDetail() {
       {/* ── Header ── */}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <div className="flex items-center gap-2 text-sm text-gray-500">
-            <Link to="/" className="hover:text-gray-700">Dashboard</Link>
+          <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-slate-400">
+            <Link to="/overview" className="hover:text-gray-700 dark:hover:text-slate-200 dark:text-slate-300">Overview</Link>
             <span>/</span>
-            <Link to="/sites" className="hover:text-gray-700">Sites</Link>
+            <Link to="/sites" className="hover:text-gray-700 dark:hover:text-slate-200 dark:text-slate-300">Sites</Link>
             <span>/</span>
-            <span className="text-gray-900">{site.name}</span>
+            <span className="text-gray-900 dark:text-slate-100">{site.name}</span>
           </div>
-          <h1 className="mt-1 text-2xl font-bold text-gray-900">{site.name}</h1>
-          <p className="text-sm text-gray-500">{site.address}</p>
+          <h1 className="mt-1 text-2xl font-bold text-gray-900 dark:text-slate-100">{site.name}</h1>
+          <p className="text-sm text-gray-500 dark:text-slate-400">{site.address}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <select
             value={rangePreset}
             onChange={(e) => setRangePreset(e.target.value as RangePreset)}
-            className="rounded-md border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            className="rounded-md border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60"
           >
             <option value="7d">Last 7 days</option>
             <option value="30d">Last 30 days</option>
             <option value="60d">Last 60 days</option>
           </select>
-          <button onClick={() => setShowEditSite((v) => !v)} className="rounded-md border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">Edit Site</button>
-          <Link to={`/sites/${site.id}/analytics`} className="rounded-md border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50">Analytics</Link>
+          <button onClick={() => setShowEditSite((v) => !v)} className="rounded-md border border-gray-200 dark:border-slate-700 px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60">Edit Site</button>
+          <Link to={`/sites/${site.id}/analytics`} className="rounded-md border border-gray-200 dark:border-slate-700 px-4 py-2 text-sm font-medium text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60">Analytics</Link>
           <button onClick={() => setShowAddCharger(true)} className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">+ Add Charger</button>
         </div>
       </div>
 
       {/* ── Edit site form ── */}
       {showEditSite && (
-        <div className="rounded-xl border border-gray-200 bg-white p-4">
-          <h2 className="mb-3 text-sm font-semibold text-gray-700">Edit site details</h2>
+        <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+          <h2 className="mb-3 text-sm font-semibold text-gray-700 dark:text-slate-300">Edit site details</h2>
           <div className="grid gap-3 md:grid-cols-2">
-            <label className="text-sm text-gray-700">Site name
-              <input className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5" value={editSiteForm.name} onChange={(e) => setEditSiteForm((f) => ({ ...f, name: e.target.value }))} />
+            <label className="text-sm text-gray-700 dark:text-slate-300">Site name
+              <input className="mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5" value={editSiteForm.name} onChange={(e) => setEditSiteForm((f) => ({ ...f, name: e.target.value }))} />
             </label>
-            <label className="text-sm text-gray-700">Address
-              <input className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5" value={editSiteForm.address} onChange={(e) => setEditSiteForm((f) => ({ ...f, address: e.target.value }))} />
+            <label className="text-sm text-gray-700 dark:text-slate-300">Address
+              <input className="mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5" value={editSiteForm.address} onChange={(e) => setEditSiteForm((f) => ({ ...f, address: e.target.value }))} />
             </label>
-            <label className="text-sm text-gray-700">Latitude
-              <input type="number" step="0.000001" className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5" value={editSiteForm.lat} onChange={(e) => setEditSiteForm((f) => ({ ...f, lat: e.target.value }))} />
+            <label className="text-sm text-gray-700 dark:text-slate-300">Latitude
+              <input type="number" step="0.000001" className="mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5" value={editSiteForm.lat} onChange={(e) => setEditSiteForm((f) => ({ ...f, lat: e.target.value }))} />
             </label>
-            <label className="text-sm text-gray-700">Longitude
-              <input type="number" step="0.000001" className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5" value={editSiteForm.lng} onChange={(e) => setEditSiteForm((f) => ({ ...f, lng: e.target.value }))} />
+            <label className="text-sm text-gray-700 dark:text-slate-300">Longitude
+              <input type="number" step="0.000001" className="mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5" value={editSiteForm.lng} onChange={(e) => setEditSiteForm((f) => ({ ...f, lng: e.target.value }))} />
             </label>
-            <label className="text-sm text-gray-700">Organization
-              <input className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5" value={editSiteForm.organizationName} onChange={(e) => setEditSiteForm((f) => ({ ...f, organizationName: e.target.value }))} />
+            <label className="text-sm text-gray-700 dark:text-slate-300">Organization
+              <input className="mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5" value={editSiteForm.organizationName} onChange={(e) => setEditSiteForm((f) => ({ ...f, organizationName: e.target.value }))} />
             </label>
-            <label className="text-sm text-gray-700">Portfolio
-              <input className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5" value={editSiteForm.portfolioName} onChange={(e) => setEditSiteForm((f) => ({ ...f, portfolioName: e.target.value }))} />
+            <label className="text-sm text-gray-700 dark:text-slate-300">Portfolio
+              <input className="mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5" value={editSiteForm.portfolioName} onChange={(e) => setEditSiteForm((f) => ({ ...f, portfolioName: e.target.value }))} />
             </label>
           </div>
           <div className="mt-3 flex gap-2">
@@ -314,7 +334,7 @@ export default function SiteDetail() {
                 setShowEditSite(false);
                 await load();
               }}>Save site</button>
-            <button className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50" onClick={() => setShowEditSite(false)}>Cancel</button>
+            <button className="rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-1.5 text-xs text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60" onClick={() => setShowEditSite(false)}>Cancel</button>
           </div>
         </div>
       )}
@@ -329,55 +349,134 @@ export default function SiteDetail() {
         <SiteKpiTile label={`Utilization (${rangePreset})`} value={utilizationPct != null ? `${utilizationPct.toFixed(2)}%` : '—'} />
       </div>
 
+      {/* ── Vendor Fee Modal (superadmin only) ── */}
+      {showFeeModal && isSuperAdmin && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setShowFeeModal(false)}>
+          <div className="w-full max-w-md rounded-2xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-slate-100">Software Fee</h3>
+                <p className="mt-0.5 text-xs text-gray-500 dark:text-slate-400">Superadmin only — not visible to site operators</p>
+              </div>
+              <button onClick={() => setShowFeeModal(false)} className="rounded-md p-1.5 text-gray-400 dark:text-slate-500 hover:bg-gray-100 dark:hover:bg-slate-800 dark:bg-slate-800 hover:text-gray-700 dark:hover:text-slate-200 dark:text-slate-300">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+              </button>
+            </div>
+            <div className="space-y-4">
+              <label className="block text-sm text-gray-700 dark:text-slate-300">Fee mode
+                <select className="mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5" value={tariff.softwareVendorFeeMode} onChange={(e) => setTariff({ ...tariff, softwareVendorFeeMode: e.target.value as TariffConfig['softwareVendorFeeMode'] })}>
+                  <option value="none">None</option>
+                  <option value="percentage_total">% of total transaction (energy and idle)</option>
+                  <option value="fixed_per_kwh">Fixed $ / kWh</option>
+                  <option value="fixed_per_minute">Fixed $ / minute</option>
+                </select>
+              </label>
+              <label className="block text-sm text-gray-700 dark:text-slate-300">Fee value
+                <input type="number" step="0.0001" min="0" className="mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5" value={tariff.softwareVendorFeeValue} onChange={(e) => setTariff({ ...tariff, softwareVendorFeeValue: Number(e.target.value) })} />
+                <p className="mt-1 text-xs text-gray-400 dark:text-slate-500">
+                  {tariff.softwareVendorFeeMode === 'percentage_total' ? 'Enter as a percentage, e.g. 2.5 for 2.5% (applies to energy + idle only, excludes activation fee)' : tariff.softwareVendorFeeMode === 'none' ? 'No fee applied' : 'Enter dollar amount, e.g. 0.015'}
+                </p>
+              </label>
+              <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-slate-300">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-gray-300 dark:border-slate-600 text-brand-600 focus:ring-brand-500"
+                  checked={tariff.softwareFeeIncludesActivation}
+                  onChange={(e) => setTariff({ ...tariff, softwareFeeIncludesActivation: e.target.checked })}
+                />
+                Include activation fee in software fee (not site-host revenue)
+              </label>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button onClick={() => setShowFeeModal(false)} className="rounded-md border border-gray-300 dark:border-slate-600 px-3 py-1.5 text-xs text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60">Cancel</button>
+              <button
+                onClick={async () => {
+                  try {
+                    const token = await getToken();
+                    await createApiClient(token).updateSite(site.id, {
+                      name: site.name, address: site.address, lat: site.lat, lng: site.lng,
+                      softwareVendorFeeMode: tariff.softwareVendorFeeMode,
+                      softwareVendorFeeValue: tariff.softwareVendorFeeValue,
+                      softwareFeeIncludesActivation: tariff.softwareFeeIncludesActivation,
+                    });
+                    pushAudit('tariff.vendorFee.updated', `mode=${tariff.softwareVendorFeeMode} value=${tariff.softwareVendorFeeValue} includeActivation=${tariff.softwareFeeIncludesActivation}`);
+                    setTariffMsg(`Software fee saved: ${tariff.softwareVendorFeeMode} ${tariff.softwareVendorFeeValue} (include activation: ${tariff.softwareFeeIncludesActivation ? 'yes' : 'no'})`);
+                    setShowFeeModal(false);
+                    await load();
+                  } catch (err) {
+                    setTariffMsg(`Save failed: ${err instanceof Error ? err.message : 'unknown error'}`);
+                  }
+                }}
+                className="rounded-md bg-brand-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-700"
+              >
+                Save fee
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Tariff (full width, below tiles) ── */}
-      <div className="rounded-xl border border-gray-200 bg-white p-4">
+      <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-gray-700">Pricing / Tariff</h2>
-          {tariffMsg && <p className="text-xs text-gray-500">{tariffMsg}</p>}
+          <h2 className="text-sm font-semibold text-gray-700 dark:text-slate-300">Pricing / Tariff</h2>
+          <div className="flex items-center gap-2">
+            {tariffMsg && <p className="text-xs text-gray-500 dark:text-slate-400">{tariffMsg}</p>}
+            {isSuperAdmin && (
+              <button
+                onClick={() => setShowFeeModal(true)}
+                className="flex items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 hover:bg-amber-100"
+                title="Configure software vendor fee (superadmin only)"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path d="M8.433 7.418c.155-.103.346-.196.567-.267v1.698a2.305 2.305 0 01-.567-.267C8.07 8.34 8 8.114 8 8c0-.114.07-.34.433-.582zM11 12.849v-1.698c.22.071.412.164.567.267.364.243.433.468.433.582 0 .114-.07.34-.433.582a2.305 2.305 0 01-.567.267z"/><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a1 1 0 10-2 0v.092a4.535 4.535 0 00-1.676.662C6.602 6.234 6 7.009 6 8c0 .99.602 1.765 1.324 2.246.48.32 1.054.545 1.676.662v1.941c-.391-.127-.68-.317-.843-.504a1 1 0 10-1.51 1.31c.562.649 1.413 1.076 2.353 1.253V15a1 1 0 102 0v-.092a4.535 4.535 0 001.676-.662C13.398 13.766 14 12.991 14 12c0-.99-.602-1.765-1.324-2.246A4.535 4.535 0 0011 9.092V7.151c.391.127.68.317.843.504a1 1 0 101.511-1.31c-.563-.649-1.413-1.076-2.354-1.253V5z" clipRule="evenodd"/></svg>
+                Fee
+              </button>
+            )}
+          </div>
         </div>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-          <label className="text-sm text-gray-700">Pricing mode
-            <select className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5" value={tariff.mode} onChange={(e) => setTariff({ ...tariff, mode: e.target.value as TariffConfig['mode'] })}>
+          <label className="text-sm text-gray-700 dark:text-slate-300">Pricing mode
+            <select className="mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5" value={tariff.mode} onChange={(e) => setTariff({ ...tariff, mode: e.target.value as TariffConfig['mode'] })}>
               <option value="flat">Flat rate</option>
               <option value="tou">Time-of-Use (TOU)</option>
             </select>
           </label>
-          <label className="text-sm text-gray-700">Price per kWh (USD)
-            <input type="number" step="0.01" className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5" value={tariff.pricePerKwhUsd} onChange={(e) => setTariff({ ...tariff, pricePerKwhUsd: Number(e.target.value) })} />
+          <label className="text-sm text-gray-700 dark:text-slate-300">Price per kWh (USD)
+            <input type="number" step="0.01" className="mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5" value={tariff.pricePerKwhUsd} onChange={(e) => setTariff({ ...tariff, pricePerKwhUsd: Number(e.target.value) })} />
           </label>
-          <label className="text-sm text-gray-700">Idle fee per min (USD)
-            <input type="number" step="0.01" className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5" value={tariff.idleFeePerMinUsd} onChange={(e) => setTariff({ ...tariff, idleFeePerMinUsd: Number(e.target.value) })} />
+          <label className="text-sm text-gray-700 dark:text-slate-300">Idle fee per min (USD)
+            <input type="number" step="0.01" className="mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5" value={tariff.idleFeePerMinUsd} onChange={(e) => setTariff({ ...tariff, idleFeePerMinUsd: Number(e.target.value) })} />
           </label>
-          <label className="text-sm text-gray-700">Activation fee (USD)
-            <input type="number" step="0.01" className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5" value={tariff.activationFeeUsd} onChange={(e) => setTariff({ ...tariff, activationFeeUsd: Number(e.target.value) })} />
+          <label className="text-sm text-gray-700 dark:text-slate-300">Activation fee (USD)
+            <input type="number" step="0.01" className="mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5" value={tariff.activationFeeUsd} onChange={(e) => setTariff({ ...tariff, activationFeeUsd: Number(e.target.value) })} />
           </label>
-          <label className="text-sm text-gray-700">Grace period (min)
-            <input type="number" className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5" value={tariff.gracePeriodMin} onChange={(e) => setTariff({ ...tariff, gracePeriodMin: Number(e.target.value) })} />
+          <label className="text-sm text-gray-700 dark:text-slate-300">Grace period (min)
+            <input type="number" className="mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5" value={tariff.gracePeriodMin} onChange={(e) => setTariff({ ...tariff, gracePeriodMin: Number(e.target.value) })} />
           </label>
         </div>
 
         {tariff.mode === 'tou' && (
-          <div className="mt-4 rounded-md border border-gray-200 bg-gray-50 p-3">
+          <div className="mt-4 rounded-md border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/60 p-3">
             <div className="mb-2 flex items-center justify-between">
-              <p className="text-xs font-semibold uppercase tracking-wide text-gray-600">TOU windows</p>
-              <button type="button" className="rounded-md border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 hover:bg-gray-100"
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-slate-400">TOU windows</p>
+              <button type="button" className="rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-2 py-1 text-xs text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800 dark:bg-slate-800"
                 onClick={() => setTariff((prev) => ({ ...prev, windows: [...prev.windows, { id: crypto.randomUUID(), day: 1, start: '09:00', end: '17:00', pricePerKwhUsd: prev.pricePerKwhUsd, idleFeePerMinUsd: prev.idleFeePerMinUsd }] }))}>
                 + Add window
               </button>
             </div>
             {tariff.windows.length === 0 ? (
-              <p className="text-xs text-gray-500">No TOU windows yet.</p>
+              <p className="text-xs text-gray-500 dark:text-slate-400">No TOU windows yet.</p>
             ) : (
               <div className="space-y-2">
                 {tariff.windows.map((w) => (
-                  <div key={w.id} className="grid gap-2 rounded-md border border-gray-200 bg-white p-2 md:grid-cols-6">
-                    <select className="rounded-md border border-gray-300 px-2 py-1.5 text-xs" value={w.day} onChange={(e) => setTariff((p) => ({ ...p, windows: p.windows.map((x) => x.id === w.id ? { ...x, day: Number(e.target.value) } : x) }))}>
+                  <div key={w.id} className="grid gap-2 rounded-md border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-2 md:grid-cols-6">
+                    <select className="rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5 text-xs" value={w.day} onChange={(e) => setTariff((p) => ({ ...p, windows: p.windows.map((x) => x.id === w.id ? { ...x, day: Number(e.target.value) } : x) }))}>
                       {DAY_NAMES.map((name, idx) => <option key={name} value={idx}>{name}</option>)}
                     </select>
-                    <input type="time" className="rounded-md border border-gray-300 px-2 py-1.5 text-xs" value={w.start} onChange={(e) => setTariff((p) => ({ ...p, windows: p.windows.map((x) => x.id === w.id ? { ...x, start: e.target.value } : x) }))} />
-                    <input type="time" className="rounded-md border border-gray-300 px-2 py-1.5 text-xs" value={w.end} onChange={(e) => setTariff((p) => ({ ...p, windows: p.windows.map((x) => x.id === w.id ? { ...x, end: e.target.value } : x) }))} />
-                    <input type="number" step="0.01" className="rounded-md border border-gray-300 px-2 py-1.5 text-xs" value={w.pricePerKwhUsd} onChange={(e) => setTariff((p) => ({ ...p, windows: p.windows.map((x) => x.id === w.id ? { ...x, pricePerKwhUsd: Number(e.target.value) } : x) }))} placeholder="$/kWh" />
-                    <input type="number" step="0.01" className="rounded-md border border-gray-300 px-2 py-1.5 text-xs" value={w.idleFeePerMinUsd} onChange={(e) => setTariff((p) => ({ ...p, windows: p.windows.map((x) => x.id === w.id ? { ...x, idleFeePerMinUsd: Number(e.target.value) } : x) }))} placeholder="$/min" />
+                    <input type="time" className="rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5 text-xs" value={w.start} onChange={(e) => setTariff((p) => ({ ...p, windows: p.windows.map((x) => x.id === w.id ? { ...x, start: e.target.value } : x) }))} />
+                    <input type="time" className="rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5 text-xs" value={w.end} onChange={(e) => setTariff((p) => ({ ...p, windows: p.windows.map((x) => x.id === w.id ? { ...x, end: e.target.value } : x) }))} />
+                    <input type="number" step="0.01" className="rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5 text-xs" value={w.pricePerKwhUsd} onChange={(e) => setTariff((p) => ({ ...p, windows: p.windows.map((x) => x.id === w.id ? { ...x, pricePerKwhUsd: Number(e.target.value) } : x) }))} placeholder="$/kWh" />
+                    <input type="number" step="0.01" className="rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5 text-xs" value={w.idleFeePerMinUsd} onChange={(e) => setTariff((p) => ({ ...p, windows: p.windows.map((x) => x.id === w.id ? { ...x, idleFeePerMinUsd: Number(e.target.value) } : x) }))} placeholder="$/min" />
                     <button type="button" className="rounded-md border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-700 hover:bg-red-100" onClick={() => setTariff((p) => ({ ...p, windows: p.windows.filter((x) => x.id !== w.id) }))}>Remove</button>
                   </div>
                 ))}
@@ -386,9 +485,9 @@ export default function SiteDetail() {
           </div>
         )}
 
-        <div className="mt-4 rounded-md border border-blue-100 bg-blue-50 px-3 py-2">
-          <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Effective pricing summary</p>
-          <p className="mt-1 text-xs text-blue-900">{buildPricingSummary(tariff)}</p>
+        <div className="mt-4 rounded-md border border-blue-100 bg-blue-50 px-3 py-2 dark:border-blue-900/60 dark:bg-blue-950/40">
+          <p className="text-xs font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-300">Effective pricing summary</p>
+          <p className="mt-1 text-xs text-blue-900 dark:text-blue-100">{buildPricingSummary(tariff)}</p>
         </div>
 
         <div className="mt-3">
@@ -408,12 +507,15 @@ export default function SiteDetail() {
                   idleFeePerMinUsd: tariff.idleFeePerMinUsd,
                   activationFeeUsd: tariff.activationFeeUsd,
                   gracePeriodMin: tariff.gracePeriodMin,
+                  softwareVendorFeeMode: tariff.softwareVendorFeeMode,
+                  softwareVendorFeeValue: tariff.softwareVendorFeeValue,
+                  softwareFeeIncludesActivation: tariff.softwareFeeIncludesActivation,
                   touWindows: tariff.mode === 'tou' ? tariff.windows : [],
                 });
-                setTariffMsg(`Saved. Price per kWh is now $${Number(updated.pricePerKwhUsd ?? tariff.pricePerKwhUsd).toFixed(2)} and activation fee is $${Number(updated.activationFeeUsd ?? tariff.activationFeeUsd).toFixed(2)}.`);
+                setTariffMsg(`Saved. Price per kWh is now $${Number(updated.pricePerKwhUsd ?? tariff.pricePerKwhUsd).toFixed(2)}. Vendor fee mode: ${updated.softwareVendorFeeMode ?? tariff.softwareVendorFeeMode}.`);
                 pushAudit('tariff.updated', tariff.mode === 'tou'
-                  ? `tou windows=${tariff.windows.length}, base=$${tariff.pricePerKwhUsd}/kWh idle=$${tariff.idleFeePerMinUsd}/min activation=$${tariff.activationFeeUsd} grace=${tariff.gracePeriodMin}m`
-                  : `flat price=$${tariff.pricePerKwhUsd}/kWh, idle=$${tariff.idleFeePerMinUsd}/min, activation=$${tariff.activationFeeUsd}, grace=${tariff.gracePeriodMin}m`);
+                  ? `tou windows=${tariff.windows.length}, base=$${tariff.pricePerKwhUsd}/kWh idle=$${tariff.idleFeePerMinUsd}/min activation=$${tariff.activationFeeUsd} grace=${tariff.gracePeriodMin}m vendorFee=${tariff.softwareVendorFeeMode}:${tariff.softwareVendorFeeValue} includeActivation=${tariff.softwareFeeIncludesActivation}`
+                  : `flat price=$${tariff.pricePerKwhUsd}/kWh, idle=$${tariff.idleFeePerMinUsd}/min, activation=$${tariff.activationFeeUsd}, grace=${tariff.gracePeriodMin}m vendorFee=${tariff.softwareVendorFeeMode}:${tariff.softwareVendorFeeValue} includeActivation=${tariff.softwareFeeIncludesActivation}`);
                 await load();
               } catch (err) {
                 setTariffMsg(`Save failed: ${err instanceof Error ? err.message : 'unknown error'}`);
@@ -423,18 +525,18 @@ export default function SiteDetail() {
       </div>
 
       {/* ── Trend chart (dashboard style) ── */}
-      <div className="rounded-xl border border-gray-200 bg-white p-4">
+      <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
         <p className="text-sm font-semibold">
           <span className="text-blue-600">Energy (kWh)</span>
-          <span className="text-gray-400"> | </span>
+          <span className="text-gray-400 dark:text-slate-500"> | </span>
           <span className="text-emerald-600">Revenue ($)</span>
-          <span className="text-gray-400"> | </span>
+          <span className="text-gray-400 dark:text-slate-500"> | </span>
           <span className="text-amber-500">Transactions</span>
-          <span className="ml-1 text-xs font-normal text-gray-400">({rangePreset})</span>
+          <span className="ml-1 text-xs font-normal text-gray-400 dark:text-slate-500">({rangePreset})</span>
         </p>
         <div className="mt-3 h-64">
           {trend.length === 0 ? (
-            <div className="flex h-full items-center justify-center text-sm text-gray-400">No trend data for selected period.</div>
+            <div className="flex h-full items-center justify-center text-sm text-gray-400 dark:text-slate-500">No trend data for selected period.</div>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={trend} margin={{ top: 4, right: 16, bottom: 0, left: 0 }}>
@@ -454,10 +556,10 @@ export default function SiteDetail() {
       {/* ── Uptime summary ── */}
       {siteUptime && (
         <div className="grid gap-3 sm:grid-cols-4">
-          <div className="rounded-lg border border-gray-200 bg-white p-3 text-center"><p className="text-xs text-gray-500">Uptime 24h</p><p className="mt-1 text-lg font-semibold text-gray-900">{siteUptime.uptimePercent24h.toFixed(1)}%</p></div>
-          <div className="rounded-lg border border-gray-200 bg-white p-3 text-center"><p className="text-xs text-gray-500">Uptime 7d</p><p className="mt-1 text-lg font-semibold text-gray-900">{siteUptime.uptimePercent7d.toFixed(1)}%</p></div>
-          <div className="rounded-lg border border-gray-200 bg-white p-3 text-center"><p className="text-xs text-gray-500">Uptime 30d</p><p className="mt-1 text-lg font-semibold text-gray-900">{siteUptime.uptimePercent30d.toFixed(1)}%</p></div>
-          <div className="rounded-lg border border-gray-200 bg-white p-3 text-center"><p className="text-xs text-gray-500">Total chargers</p><p className="mt-1 text-lg font-semibold text-gray-900">{site.chargers.length}</p></div>
+          <div className="rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 text-center"><p className="text-xs text-gray-500 dark:text-slate-400">Uptime 24h</p><p className="mt-1 text-lg font-semibold text-gray-900 dark:text-slate-100">{siteUptime.uptimePercent24h.toFixed(1)}%</p></div>
+          <div className="rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 text-center"><p className="text-xs text-gray-500 dark:text-slate-400">Uptime 7d</p><p className="mt-1 text-lg font-semibold text-gray-900 dark:text-slate-100">{siteUptime.uptimePercent7d.toFixed(1)}%</p></div>
+          <div className="rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 text-center"><p className="text-xs text-gray-500 dark:text-slate-400">Uptime 30d</p><p className="mt-1 text-lg font-semibold text-gray-900 dark:text-slate-100">{siteUptime.uptimePercent30d.toFixed(1)}%</p></div>
+          <div className="rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 text-center"><p className="text-xs text-gray-500 dark:text-slate-400">Total chargers</p><p className="mt-1 text-lg font-semibold text-gray-900 dark:text-slate-100">{site.chargers.length}</p></div>
         </div>
       )}
 
@@ -466,22 +568,22 @@ export default function SiteDetail() {
 
       {/* ── Charger list ── */}
       <div>
-        <h2 className="mb-3 text-lg font-semibold text-gray-900">Chargers ({site.chargers.length})</h2>
+        <h2 className="mb-3 text-lg font-semibold text-gray-900 dark:text-slate-100">Chargers ({site.chargers.length})</h2>
         {site.chargers.length === 0 ? (
-          <div className="rounded-lg border-2 border-dashed border-gray-200 p-10 text-center text-gray-400">
+          <div className="rounded-lg border-2 border-dashed border-gray-200 dark:border-slate-700 p-10 text-center text-gray-400 dark:text-slate-500">
             <p className="text-3xl">🔌</p>
             <p className="mt-2 font-medium">No chargers registered</p>
             <button onClick={() => setShowAddCharger(true)} className="mt-3 text-sm text-brand-600 hover:underline">Register your first charger →</button>
           </div>
         ) : site.chargers.length > 4 ? (
-          <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
-            <div className="hidden grid-cols-[1.6fr_1fr_1.8fr_0.8fr] gap-3 border-b border-gray-200 bg-gray-50 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500 md:grid">
+          <div className="overflow-hidden rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900">
+            <div className="hidden grid-cols-[1.6fr_1fr_1.8fr_0.8fr] gap-3 border-b border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/60 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400 md:grid">
               <span>Charger</span>
               <span className="inline-flex items-center gap-1">
                 Status
                 <span className="group relative inline-flex">
                   <span
-                    className="inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full border border-gray-300 text-[10px] font-bold text-gray-500"
+                    className="inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full border border-gray-300 dark:border-slate-600 text-[10px] font-bold text-gray-500 dark:text-slate-400"
                     aria-label="Status definition: online means fresh heartbeat signals are being received"
                   >
                     ?
@@ -494,7 +596,7 @@ export default function SiteDetail() {
               <span>Connectors</span>
               <span className="text-right">Action</span>
             </div>
-            <div className="divide-y divide-gray-100">
+            <div className="divide-y divide-gray-100 dark:divide-slate-800">
               {site.chargers.map((charger) => <ChargerListRow key={charger.id} charger={charger} uptime={chargerUptime[charger.id]} />)}
             </div>
           </div>
@@ -506,15 +608,15 @@ export default function SiteDetail() {
       </div>
 
       {/* ── Audit trail ── */}
-      <div className="rounded-xl border border-gray-200 bg-white p-4">
-        <h2 className="mb-3 text-sm font-semibold text-gray-700">Audit trail</h2>
+      <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+        <h2 className="mb-3 text-sm font-semibold text-gray-700 dark:text-slate-300">Audit trail</h2>
         <div className="space-y-2">
-          {auditEvents.length === 0 && <p className="text-xs text-gray-500">No audit events yet.</p>}
+          {auditEvents.length === 0 && <p className="text-xs text-gray-500 dark:text-slate-400">No audit events yet.</p>}
           {auditEvents.slice(0, 20).map((e) => (
-            <div key={e.id} className="rounded-md border border-gray-200 p-2">
-              <p className="text-xs text-gray-500">{new Date(e.createdAt).toLocaleString()} · {e.actor}</p>
-              <p className="text-xs font-medium text-gray-800">{e.action}</p>
-              <p className="text-xs text-gray-600">{e.detail}</p>
+            <div key={e.id} className="rounded-md border border-gray-200 dark:border-slate-700 p-2">
+              <p className="text-xs text-gray-500 dark:text-slate-400">{new Date(e.createdAt).toLocaleString()} · {e.actor}</p>
+              <p className="text-xs font-medium text-gray-800 dark:text-slate-200">{e.action}</p>
+              <p className="text-xs text-gray-600 dark:text-slate-400">{e.detail}</p>
             </div>
           ))}
         </div>
@@ -538,12 +640,12 @@ export default function SiteDetail() {
 
 function SiteKpiTile({ label, value, live }: { label: string; value: string; live?: boolean }) {
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-4">
+    <div className="rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
       <div className="flex items-center gap-1.5">
-        <p className="text-xs font-medium uppercase tracking-wide text-gray-500">{label}</p>
+        <p className="truncate text-[11px] font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">{label}</p>
         {live && <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-500" title="Live" />}
       </div>
-      <p className="mt-1 text-2xl font-semibold text-gray-900">{value}</p>
+      <p className="mt-1 truncate text-[clamp(1.05rem,1.8vw,1.6rem)] font-semibold leading-tight text-gray-900 dark:text-slate-100">{value}</p>
     </div>
   );
 }
@@ -552,12 +654,12 @@ function ChargerListRow({ charger, uptime }: { charger: SiteDetailType['chargers
   return (
     <div className="grid gap-3 px-4 py-3 md:grid-cols-[1.6fr_1fr_1.8fr_0.8fr] md:items-center">
       <div>
-        <Link to={`/chargers/${charger.id}`} className="font-mono text-sm font-semibold text-gray-900 hover:text-brand-700 hover:underline">
+        <Link to={`/chargers/${shortId(charger.id)}`} className="font-mono text-sm font-semibold text-gray-900 dark:text-slate-100 hover:text-brand-700 hover:underline">
           {charger.ocppId}
         </Link>
-        <p className="text-xs text-gray-500">{charger.vendor} {charger.model} · S/N {charger.serialNumber}</p>
+        <p className="text-xs text-gray-500 dark:text-slate-400">{charger.vendor} {charger.model} · S/N {charger.serialNumber}</p>
         {charger.lastHeartbeat && (
-          <p className="text-xs text-gray-400">Heartbeat: {formatDate(charger.lastHeartbeat)}</p>
+          <p className="text-xs text-gray-400 dark:text-slate-500">Heartbeat: {formatDate(charger.lastHeartbeat)}</p>
         )}
       </div>
 
@@ -572,15 +674,15 @@ function ChargerListRow({ charger, uptime }: { charger: SiteDetailType['chargers
 
       <div className="flex flex-wrap gap-1.5">
         {charger.connectors.map((c) => (
-          <div key={c.id} className="flex items-center gap-1 rounded-md border border-gray-100 bg-gray-50 px-2 py-0.5">
-            <span className="text-xs text-gray-500">#{c.connectorId}</span>
+          <div key={c.id} className="flex items-center gap-1 rounded-md border border-gray-100 dark:border-slate-800 bg-gray-50 dark:bg-slate-800/60 px-2 py-0.5">
+            <span className="text-xs text-gray-500 dark:text-slate-400">#{c.connectorId}</span>
             <StatusBadge status={c.status} type="connector" />
           </div>
         ))}
       </div>
 
       <div className="md:text-right">
-        <Link to={`/chargers/${charger.id}`} className="inline-block rounded-md border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50">View Detail →</Link>
+        <Link to={`/chargers/${shortId(charger.id)}`} className="inline-block rounded-md border border-gray-200 dark:border-slate-700 px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60">View Detail →</Link>
       </div>
     </div>
   );
@@ -588,42 +690,42 @@ function ChargerListRow({ charger, uptime }: { charger: SiteDetailType['chargers
 
 function ChargerCard({ charger, uptime }: { charger: SiteDetailType['chargers'][number]; uptime?: ChargerUptime }) {
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+    <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 shadow-sm">
       <div className="flex items-start justify-between">
         <div>
-          <Link to={`/chargers/${charger.id}`} className="font-semibold text-gray-900 font-mono hover:text-brand-700 hover:underline">
+          <Link to={`/chargers/${shortId(charger.id)}`} className="font-semibold text-gray-900 dark:text-slate-100 font-mono hover:text-brand-700 hover:underline">
             {charger.ocppId}
           </Link>
-          <p className="text-xs text-gray-500">{charger.vendor} {charger.model}</p>
+          <p className="text-xs text-gray-500 dark:text-slate-400">{charger.vendor} {charger.model}</p>
         </div>
         <StatusBadge status={charger.status} type="charger" />
       </div>
 
-      <p className="mt-1 text-xs text-gray-400">S/N: {charger.serialNumber}</p>
+      <p className="mt-1 text-xs text-gray-400 dark:text-slate-500">S/N: {charger.serialNumber}</p>
 
       {charger.lastHeartbeat && (
-        <p className="mt-1 text-xs text-gray-400">Last heartbeat: {formatDate(charger.lastHeartbeat)}</p>
+        <p className="mt-1 text-xs text-gray-400 dark:text-slate-500">Last heartbeat: {formatDate(charger.lastHeartbeat)}</p>
       )}
 
       <div className="mt-3 flex flex-wrap gap-1.5">
         {charger.connectors.map((c) => (
-          <div key={c.id} className="flex items-center gap-1 rounded-md border border-gray-100 bg-gray-50 px-2 py-0.5">
-            <span className="text-xs text-gray-500">#{c.connectorId}</span>
+          <div key={c.id} className="flex items-center gap-1 rounded-md border border-gray-100 dark:border-slate-800 bg-gray-50 dark:bg-slate-800/60 px-2 py-0.5">
+            <span className="text-xs text-gray-500 dark:text-slate-400">#{c.connectorId}</span>
             <StatusBadge status={c.status} type="connector" />
           </div>
         ))}
       </div>
 
       {uptime && (
-        <div className="mt-3 rounded-md border border-gray-100 bg-gray-50 px-2 py-1.5 text-xs">
+        <div className="mt-3 rounded-md border border-gray-100 dark:border-slate-800 bg-gray-50 dark:bg-slate-800/60 px-2 py-1.5 text-xs">
           <div className="flex items-center justify-between">
-            <span className="text-gray-500">Uptime 7d</span>
+            <span className="text-gray-500 dark:text-slate-400">Uptime 7d</span>
             <span className={uptime.uptimePercent7d >= 99 ? 'text-green-700 font-semibold' : uptime.uptimePercent7d >= 95 ? 'text-amber-700 font-semibold' : 'text-red-700 font-semibold'}>{uptime.uptimePercent7d.toFixed(2)}%</span>
           </div>
         </div>
       )}
 
-      <Link to={`/chargers/${charger.id}`} className="mt-3 block rounded-md border border-gray-200 px-3 py-1.5 text-center text-xs font-medium text-gray-600 hover:bg-gray-50">View Detail →</Link>
+      <Link to={`/chargers/${shortId(charger.id)}`} className="mt-3 block rounded-md border border-gray-200 dark:border-slate-700 px-3 py-1.5 text-center text-xs font-medium text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60">View Detail →</Link>
     </div>
   );
 }

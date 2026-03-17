@@ -13,6 +13,16 @@ function hasSiteAccess(siteId: string, siteIds: string[] | undefined) {
   return siteIds.includes(siteId);
 }
 
+/** Resolve a charger by exact id OR by short prefix (first 8 chars of UUID). */
+async function resolveChargerId(param: string): Promise<string | null> {
+  if (param.length === 36 || (param.includes('-') && param.length > 12)) {
+    const c = await prisma.charger.findUnique({ where: { id: param }, select: { id: true } });
+    return c?.id ?? null;
+  }
+  const c = await prisma.charger.findFirst({ where: { id: { startsWith: param } }, select: { id: true } });
+  return c?.id ?? null;
+}
+
 export async function chargerRoutes(app: FastifyInstance) {
   // GET /chargers — list chargers with optional bbox filter
   app.get<{
@@ -55,8 +65,11 @@ export async function chargerRoutes(app: FastifyInstance) {
 
   // GET /chargers/:id — full charger detail
   app.get<{ Params: { id: string } }>('/chargers/:id', async (req, reply) => {
+    const resolvedId = await resolveChargerId(req.params.id);
+    if (!resolvedId) return reply.status(404).send({ error: 'Charger not found' });
+
     const charger = await prisma.charger.findUnique({
-      where: { id: req.params.id },
+      where: { id: resolvedId },
       include: {
         site: true,
         connectors: {
@@ -77,8 +90,11 @@ export async function chargerRoutes(app: FastifyInstance) {
   app.get<{ Params: { id: string } }>('/chargers/:id/status', {
     preHandler: [requireOperator, requirePolicy('charger.status.read')],
   }, async (req, reply) => {
+    const resolvedStatusId = await resolveChargerId(req.params.id);
+    if (!resolvedStatusId) return reply.status(404).send({ error: 'Charger not found' });
+
     const charger = await prisma.charger.findUnique({
-      where: { id: req.params.id },
+      where: { id: resolvedStatusId },
       include: {
         connectors: {
           include: {
@@ -177,6 +193,7 @@ export async function chargerRoutes(app: FastifyInstance) {
 
     const connectorIds = charger.connectors.map((c: { id: string }) => c.id);
     const limit = Math.min(parseInt(req.query.limit ?? '20', 10), 100);
+    const site = await prisma.site.findUnique({ where: { id: charger.siteId }, select: { softwareVendorFeeMode: true, softwareVendorFeeValue: true } });
 
     const sessions = await prisma.session.findMany({
       where: { connectorId: { in: connectorIds } },
@@ -190,7 +207,11 @@ export async function chargerRoutes(app: FastifyInstance) {
     });
 
     return sessions.map((s: any) => {
-      const amounts = computeSessionAmounts(s);
+      const amounts = computeSessionAmounts({
+        ...s,
+        softwareVendorFeeMode: site?.softwareVendorFeeMode,
+        softwareVendorFeeValue: site?.softwareVendorFeeValue,
+      });
       return {
         ...s,
         kwhDelivered: amounts.kwhDelivered,

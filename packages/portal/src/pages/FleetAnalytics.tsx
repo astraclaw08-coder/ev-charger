@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   AreaChart,
   Area,
@@ -23,7 +24,6 @@ import {
 import { useToken } from '../auth/TokenContext';
 
 type TimeFilter = '7d' | '30d' | '60d' | 'custom';
-type AnalystRole = 'owner' | 'operator' | 'analyst';
 
 type DailyMerged = { date: string; sessions: number; kwhDelivered: number; revenueCents: number };
 
@@ -43,7 +43,6 @@ export default function FleetAnalytics() {
   const [rebateIntervals, setRebateIntervals] = useState<RebateInterval[]>([]);
 
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('30d');
-  const [roleScope, setRoleScope] = useState<AnalystRole>('owner');
   const [siteFilter, setSiteFilter] = useState<'all' | string>('all');
   const [orgFilter, setOrgFilter] = useState<'all' | string>('all');
   const [portfolioFilter, setPortfolioFilter] = useState<'all' | string>('all');
@@ -184,13 +183,30 @@ export default function FleetAnalytics() {
     const weightedUtil = totalAvailable > 0
       ? utilRows.reduce((s, r) => s + ((r.utilizationRatePct || 0) * (r.availableConnectorSeconds || 0)), 0) / totalAvailable
       : (utilRows.length ? utilRows.reduce((s, r) => s + (r.utilizationRatePct || 0), 0) / utilRows.length : 0);
+    const weightedUptime = totalAvailable > 0
+      ? utilRows.reduce((s, r) => s + ((r.uptimePct || 0) * (r.availableConnectorSeconds || 0)), 0) / totalAvailable
+      : (utilRows.length ? utilRows.reduce((s, r) => s + (r.uptimePct || 0), 0) / utilRows.length : 0);
 
     const utilizationRatePct = weightedUtil > 0
       ? weightedUtil
       : (weightedPower > 0 ? Math.min(weightedPower * 5, 100) : (sessionsCount > 0 ? 0.01 : 0));
 
-    return { sessionsCount, kwhDelivered, revenueUsd, utilizationRatePct };
-  }, [merged, selectedSiteIds, analyticsBySite, rebateIntervals, chargerFilter]);
+    const filteredChargers = selectedSiteIds.flatMap((siteId) => (chargersBySite[siteId] ?? []))
+      .filter((c) => chargerFilter === 'all' || c.id === chargerFilter);
+    const totalChargers = filteredChargers.length;
+    const totalConnectors = filteredChargers.reduce((sum, charger) => sum + (charger.connectors?.length ?? 0), 0);
+
+    return {
+      sessionsCount,
+      kwhDelivered,
+      revenueUsd,
+      utilizationRatePct,
+      uptimePct: weightedUptime,
+      totalSites: selectedSiteIds.length,
+      totalChargers,
+      totalConnectors,
+    };
+  }, [merged, selectedSiteIds, analyticsBySite, rebateIntervals, chargerFilter, chargersBySite]);
 
   const chartData = useMemo(
     () =>
@@ -202,11 +218,6 @@ export default function FleetAnalytics() {
     [merged],
   );
 
-  const scopedSummary = useMemo(() => {
-    if (roleScope === 'owner' || roleScope === 'operator') return summary;
-    return { ...summary, revenueUsd: Number.NaN };
-  }, [summary, roleScope]);
-
   const chargerOptions = useMemo(() => {
     if (siteFilter === 'all') return [] as ChargerInfo[];
     return chargersBySite[siteFilter] ?? [];
@@ -215,14 +226,45 @@ export default function FleetAnalytics() {
   const orgOptions = useMemo(() => Array.from(new Set(sites.map((s) => s.organizationName ?? '').filter(Boolean))).sort(), [sites]);
   const portfolioOptions = useMemo(() => Array.from(new Set(sites.map((s) => s.portfolioName ?? '').filter(Boolean))).sort(), [sites]);
 
-  if (loading) return <div className="flex h-64 items-center justify-center text-gray-400">Loading analytics…</div>;
+  if (loading) return <div className="flex h-64 items-center justify-center text-gray-400 dark:text-slate-500">Loading analytics…</div>;
   if (error) return <div className="rounded-lg bg-red-50 p-4 text-sm text-red-700">{error}</div>;
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Fleet Analytics</h1>
-        <p className="text-sm text-gray-500">Fleet-wide analytics with site and charger filters.</p>
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-slate-400">
+            <Link to="/overview" className="hover:text-gray-700 dark:hover:text-slate-200 dark:text-slate-300">Overview</Link>
+            <span>/</span>
+            <span className="text-gray-900 dark:text-slate-100">Analytics</span>
+          </div>
+          <h1 className="mt-1 text-2xl font-bold text-gray-900 dark:text-slate-100">Analytics</h1>
+          <p className="text-sm text-gray-500 dark:text-slate-400">Monitor charging performance, revenue, and utilization across your network.</p>
+        </div>
+
+        <div className="flex flex-wrap items-end gap-2">
+          <div>
+            <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">DATE RANGE</label>
+            <select value={timeFilter} onChange={(e) => setTimeFilter(e.target.value as TimeFilter)} className="rounded-md border border-gray-300 dark:border-slate-600 px-2 py-2 text-sm">
+              <option value="7d">Last 7 days</option>
+              <option value="30d">Last 30 days</option>
+              <option value="60d">Last 60 days</option>
+              <option value="custom">Custom</option>
+            </select>
+          </div>
+          {timeFilter === 'custom' && (
+            <>
+              <div>
+                <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">START</label>
+                <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="rounded-md border border-gray-300 dark:border-slate-600 px-2 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">END</label>
+                <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="rounded-md border border-gray-300 dark:border-slate-600 px-2 py-2 text-sm" />
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       {ENABLE_EVC_PLATFORM_BUSINESS_VIEWS && (
@@ -231,53 +273,41 @@ export default function FleetAnalytics() {
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-gray-200 bg-white p-4">
-        <label className="text-xs font-medium uppercase tracking-wide text-gray-500">Range</label>
-        <select value={timeFilter} onChange={(e) => setTimeFilter(e.target.value as TimeFilter)} className="rounded-md border border-gray-300 px-2 py-1 text-sm">
-          <option value="7d">Last 7 days</option>
-          <option value="30d">Last 30 days</option>
-          <option value="60d">Last 60 days</option>
-          <option value="custom">Custom</option>
-        </select>
+      <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+        <div className="grid gap-3 md:grid-cols-4">
+          <div>
+            <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Organization</label>
+            <select value={orgFilter} onChange={(e) => setOrgFilter(e.target.value)} className="w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-2 text-sm">
+              <option value="all">All Organizations</option>
+              {orgOptions.map((o) => <option key={o} value={o}>{o}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Portfolio</label>
+            <select value={portfolioFilter} onChange={(e) => setPortfolioFilter(e.target.value)} className="w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-2 text-sm">
+              <option value="all">All Portfolios</option>
+              {portfolioOptions.map((p) => <option key={p} value={p}>{p}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Sites</label>
+            <select value={siteFilter} onChange={(e) => setSiteFilter(e.target.value)} className="w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-2 text-sm">
+              <option value="all">All Sites</option>
+              {filteredSites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Chargers</label>
+            <select value={chargerFilter} onChange={(e) => setChargerFilter(e.target.value)} disabled={siteFilter === 'all'} className="w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-2 text-sm disabled:opacity-50">
+              <option value="all">All Chargers</option>
+              {chargerOptions.map((c) => <option key={c.id} value={c.id}>{c.ocppId}</option>)}
+            </select>
+          </div>
+        </div>
 
-        {timeFilter === 'custom' && (
-          <>
-            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="rounded-md border border-gray-300 px-2 py-1 text-sm" />
-            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="rounded-md border border-gray-300 px-2 py-1 text-sm" />
-            {!startDate || !endDate ? <span className="text-xs text-amber-700">Pick start & end date to apply custom range.</span> : null}
-          </>
-        )}
-
-        <label className="ml-2 text-xs font-medium uppercase tracking-wide text-gray-500">Organization</label>
-        <select value={orgFilter} onChange={(e) => setOrgFilter(e.target.value)} className="rounded-md border border-gray-300 px-2 py-1 text-sm">
-          <option value="all">All Organizations</option>
-          {orgOptions.map((o) => <option key={o} value={o}>{o}</option>)}
-        </select>
-
-        <label className="ml-2 text-xs font-medium uppercase tracking-wide text-gray-500">Portfolio</label>
-        <select value={portfolioFilter} onChange={(e) => setPortfolioFilter(e.target.value)} className="rounded-md border border-gray-300 px-2 py-1 text-sm">
-          <option value="all">All Portfolios</option>
-          {portfolioOptions.map((p) => <option key={p} value={p}>{p}</option>)}
-        </select>
-
-        <label className="ml-2 text-xs font-medium uppercase tracking-wide text-gray-500">Site</label>
-        <select value={siteFilter} onChange={(e) => setSiteFilter(e.target.value)} className="rounded-md border border-gray-300 px-2 py-1 text-sm">
-          <option value="all">All Sites</option>
-          {filteredSites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-        </select>
-
-        <label className="ml-2 text-xs font-medium uppercase tracking-wide text-gray-500">Charger</label>
-        <select value={chargerFilter} onChange={(e) => setChargerFilter(e.target.value)} disabled={siteFilter === 'all'} className="rounded-md border border-gray-300 px-2 py-1 text-sm disabled:opacity-50">
-          <option value="all">All Chargers</option>
-          {chargerOptions.map((c) => <option key={c.id} value={c.id}>{c.ocppId}</option>)}
-        </select>
-
-        <label className="ml-2 text-xs font-medium uppercase tracking-wide text-gray-500">Role scope</label>
-        <select value={roleScope} onChange={(e) => setRoleScope(e.target.value as AnalystRole)} className="rounded-md border border-gray-300 px-2 py-1 text-sm">
-          <option value="analyst">Analyst (no revenue access)</option>
-          <option value="operator">Operator</option>
-          <option value="owner">Owner</option>
-        </select>
+        {timeFilter === 'custom' && (!startDate || !endDate) ? (
+          <p className="mt-3 border-t border-gray-100 dark:border-slate-800 pt-3 text-xs text-amber-700">Pick start & end date to apply custom range.</p>
+        ) : null}
       </div>
 
       {siteFilter !== 'all' && chargerFilter !== 'all' && (
@@ -286,11 +316,14 @@ export default function FleetAnalytics() {
         </div>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiTile label="Transactions" value={scopedSummary.sessionsCount.toString()} />
-        <KpiTile label="Total kWh" value={scopedSummary.kwhDelivered.toFixed(1)} />
-        <KpiTile label="Total Revenue" value={Number.isNaN(scopedSummary.revenueUsd) ? 'Restricted' : `$${scopedSummary.revenueUsd.toFixed(2)}`} />
-        <KpiTile label="Utilization" value={`${scopedSummary.utilizationRatePct.toFixed(2)}%`} />
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+        <KpiTile label="Total kWh" value={summary.kwhDelivered.toFixed(1)} />
+        <KpiTile label="Total Revenue" value={`$${summary.revenueUsd.toFixed(2)}`} />
+        <KpiTile label="Total Sites" value={summary.totalSites.toString()} />
+        <KpiTile label="Total Chargers" value={summary.totalChargers.toString()} />
+        <KpiTile label="Total Connectors" value={summary.totalConnectors.toString()} />
+        <KpiTile label="Utilization" value={`${summary.utilizationRatePct.toFixed(2)}%`} />
+        <KpiTile label="Uptime" value={`${summary.uptimePct.toFixed(2)}%`} />
       </div>
 
       <ChartCard title="Sessions per Day">
@@ -315,23 +348,105 @@ export default function FleetAnalytics() {
         </ResponsiveContainer>
       </ChartCard>
 
-      {roleScope !== 'analyst' ? (
-        <ChartCard title="Revenue per Day (USD)">
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={chartData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
-              <XAxis dataKey="label" tick={{ fontSize: 11 }} tickLine={false} />
-              <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `$${v}`} />
-              <Tooltip formatter={(v: number) => [`$${v.toFixed(2)}`, 'Revenue']} labelFormatter={(l) => `Date: ${l}`} />
-              <Bar dataKey="revenueUsd" fill="#16a34a" radius={[3, 3, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </ChartCard>
-      ) : (
-        <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
-          Revenue chart hidden for analyst role scope.
+      <ChartCard title="Revenue per Day (USD)">
+        <ResponsiveContainer width="100%" height={200}>
+          <BarChart data={chartData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+            <XAxis dataKey="label" tick={{ fontSize: 11 }} tickLine={false} />
+            <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `$${v}`} />
+            <Tooltip formatter={(v: number) => [`$${v.toFixed(2)}`, 'Revenue']} labelFormatter={(l) => `Date: ${l}`} />
+            <Bar dataKey="revenueUsd" fill="#16a34a" radius={[3, 3, 0, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </ChartCard>
+
+      {/* Site performance breakdown table */}
+      <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm">
+        <div className="border-b border-gray-200 dark:border-slate-700 px-5 py-4">
+          <h3 className="text-sm font-semibold text-gray-700 dark:text-slate-300">Site Performance Breakdown</h3>
+          <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">Revenue, energy, and utilization per site for the selected period.</p>
         </div>
-      )}
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-100 dark:border-slate-800 bg-gray-50 dark:bg-slate-800/60 text-left text-xs font-medium text-gray-500 dark:text-slate-400">
+                <th className="px-5 py-3">Site</th>
+                <th className="px-5 py-3">Sessions</th>
+                <th className="px-5 py-3">kWh</th>
+                <th className="px-5 py-3">Revenue</th>
+                <th className="px-5 py-3">Utilization</th>
+                <th className="px-5 py-3">Uptime</th>
+                <th className="px-5 py-3">Rev / kWh</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50 dark:divide-slate-800">
+              {filteredSites.map((site) => {
+                const a = analyticsBySite[site.id];
+                if (!a) return null;
+                const revenueUsd = a.revenueCents / 100;
+                const revPerKwh = a.kwhDelivered > 0 ? revenueUsd / a.kwhDelivered : 0;
+                return (
+                  <tr key={site.id} className="hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60">
+                    <td className="px-5 py-3 font-medium text-gray-800 dark:text-slate-200">{site.name}</td>
+                    <td className="px-5 py-3 text-gray-600 dark:text-slate-400">{a.sessionsCount}</td>
+                    <td className="px-5 py-3 text-gray-600 dark:text-slate-400">{a.kwhDelivered.toFixed(1)}</td>
+                    <td className="px-5 py-3 text-gray-600 dark:text-slate-400">${revenueUsd.toFixed(2)}</td>
+                    <td className="px-5 py-3 text-gray-600 dark:text-slate-400">{a.utilizationRatePct.toFixed(1)}%</td>
+                    <td className="px-5 py-3 text-gray-600 dark:text-slate-400">{a.uptimePct.toFixed(1)}%</td>
+                    <td className="px-5 py-3 text-gray-600 dark:text-slate-400">${revPerKwh.toFixed(3)}</td>
+                  </tr>
+                );
+              })}
+              {filteredSites.length === 0 && (
+                <tr><td colSpan={7} className="px-5 py-8 text-center text-sm text-gray-400 dark:text-slate-500">No sites in selected scope.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Sessions by day of week — recharts BarChart */}
+      <ChartCard title="Average Sessions by Day of Week">
+        <div className="mb-3 flex items-center gap-4 text-xs text-gray-500 dark:text-slate-400">
+          <span>⚡ Avg kWh / Session: <strong className="text-gray-800 dark:text-slate-200">{summary.sessionsCount > 0 ? `${(summary.kwhDelivered / summary.sessionsCount).toFixed(2)} kWh` : '—'}</strong></span>
+          <span>📅 Total sessions in period: <strong className="text-gray-800 dark:text-slate-200">{summary.sessionsCount}</strong></span>
+        </div>
+        <DayOfWeekChart data={merged} />
+      </ChartCard>
     </div>
+  );
+}
+
+function DayOfWeekChart({ data }: { data: Array<{ date: string; sessions: number }> }) {
+  const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const counts = Array(7).fill(0);
+  const totals = Array(7).fill(0);
+  for (const d of data) {
+    const day = new Date(d.date).getDay();
+    counts[day] += 1;
+    totals[day] += d.sessions;
+  }
+  const chartData = DAYS.map((day, i) => ({
+    day,
+    avg: counts[i] > 0 ? +(totals[i] / counts[i]).toFixed(1) : 0,
+  }));
+
+  return (
+    <ResponsiveContainer width="100%" height={220}>
+      <BarChart data={chartData} margin={{ top: 8, right: 8, left: -16, bottom: 0 }} barSize={32}>
+        <XAxis dataKey="day" tick={{ fontSize: 12 }} tickLine={false} axisLine={{ stroke: '#94a3b8', strokeWidth: 1 }} />
+        <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={{ stroke: '#94a3b8', strokeWidth: 1 }} allowDecimals={false} />
+        <Tooltip
+          cursor={{ fill: '#f3f4f6' }}
+          formatter={(v: number) => [`${v}`, 'Avg Sessions']}
+          labelFormatter={(l) => `${l}`}
+        />
+        <Bar dataKey="avg" fill="#2563eb" radius={[4, 4, 0, 0]}>
+          {chartData.map((entry, i) => (
+            <rect key={i} fill={entry.avg === Math.max(...chartData.map((d) => d.avg)) ? '#16a34a' : '#2563eb'} />
+          ))}
+        </Bar>
+      </BarChart>
+    </ResponsiveContainer>
   );
 }
 
@@ -364,17 +479,17 @@ function siteRowsFromPortfolio(source: SiteListItem[], summary: PortfolioSummary
 
 function KpiTile({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-4">
-      <p className="text-xs font-medium uppercase tracking-wide text-gray-500">{label}</p>
-      <p className="mt-1 text-2xl font-semibold text-gray-900">{value}</p>
+    <div className="rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2.5">
+      <p className="truncate text-[10px] font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">{label}</p>
+      <p className="mt-1 truncate text-lg font-semibold leading-tight text-gray-900 dark:text-slate-100">{value}</p>
     </div>
   );
 }
 
 function ChartCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-      <h3 className="mb-4 text-sm font-semibold text-gray-700">{title}</h3>
+    <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-5 shadow-sm">
+      <h3 className="mb-4 text-sm font-semibold text-gray-700 dark:text-slate-300">{title}</h3>
       {children}
     </div>
   );

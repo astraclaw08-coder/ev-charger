@@ -6,12 +6,25 @@ import { ApiError, api, getAuthIdentityKey, isGuestMode } from '@/lib/api';
 
 const LEGACY_KEY = 'ev_favorites_v1';
 const MIGRATION_KEY_PREFIX = 'ev_favorites_migrated_v1';
+const CACHE_KEY_PREFIX = 'ev_favorites_cache_v1';
 let migrationPromise: Promise<void> | null = null;
 
-function migrationKeyForCurrentUser() {
+function identityForCurrentUser() {
   const identity = getAuthIdentityKey();
   if (!identity) return null;
+  return identity;
+}
+
+function migrationKeyForCurrentUser() {
+  const identity = identityForCurrentUser();
+  if (!identity) return null;
   return `${MIGRATION_KEY_PREFIX}:${identity}`;
+}
+
+function cacheKeyForCurrentUser() {
+  const identity = identityForCurrentUser();
+  if (!identity) return null;
+  return `${CACHE_KEY_PREFIX}:${identity}`;
 }
 
 function sanitizeIds(raw: unknown): string[] {
@@ -60,17 +73,41 @@ async function ensureMigrated() {
   await migrationPromise;
 }
 
+async function readCachedFavorites(): Promise<string[]> {
+  const key = cacheKeyForCurrentUser();
+  if (!key) return [];
+  try {
+    const raw = await AsyncStorage.getItem(key);
+    return sanitizeIds(raw ? JSON.parse(raw) : []);
+  } catch {
+    return [];
+  }
+}
+
+async function writeCachedFavorites(chargerIds: string[]): Promise<void> {
+  const key = cacheKeyForCurrentUser();
+  if (!key) return;
+  try {
+    await AsyncStorage.setItem(key, JSON.stringify(sanitizeIds(chargerIds)));
+  } catch {
+    // best effort cache only
+  }
+}
+
 export async function getFavorites(): Promise<string[]> {
   if (isGuestMode()) return [];
   try {
     await ensureMigrated();
     const res = await api.favorites.list();
-    return sanitizeIds(res.chargerIds);
+    const list = sanitizeIds(res.chargerIds);
+    await writeCachedFavorites(list);
+    return list;
   } catch (error) {
     if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
-      return [];
+      // Session can transiently lapse during refresh; keep UX stable with last known favorites.
+      return readCachedFavorites();
     }
-    return [];
+    return readCachedFavorites();
   }
 }
 
@@ -86,9 +123,13 @@ export async function toggleFavorite(id: string): Promise<boolean> {
   try {
     if (alreadyFavorite) {
       await api.favorites.remove(chargerId);
+      const next = favorites.filter((x) => x !== chargerId);
+      await writeCachedFavorites(next);
       return false;
     }
     await api.favorites.add(chargerId);
+    const next = sanitizeIds([...favorites, chargerId]);
+    await writeCachedFavorites(next);
     return true;
   } catch {
     return alreadyFavorite;
@@ -98,6 +139,10 @@ export async function toggleFavorite(id: string): Promise<boolean> {
 export async function clearFavorites(): Promise<void> {
   try {
     await AsyncStorage.removeItem(LEGACY_KEY);
+    const cacheKey = cacheKeyForCurrentUser();
+    if (cacheKey) {
+      await AsyncStorage.removeItem(cacheKey);
+    }
   } catch {
     // ignore cleanup errors
   }

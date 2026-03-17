@@ -34,6 +34,14 @@ function parseOptionalReason(reason: unknown) {
   return trimmed.length ? trimmed.slice(0, 500) : undefined;
 }
 
+function requireReason(reason: unknown) {
+  const parsed = parseOptionalReason(reason);
+  return parsed && parsed.length > 0 ? parsed : null;
+}
+
+function uniqueSorted(values: string[]) {
+  return Array.from(new Set(values)).sort((a, b) => a.localeCompare(b));
+}
 
 async function guardSensitiveAction(req: { currentOperator?: { id: string }; ip: string }, reply: { header: (n: string, v: string) => void; status: (code: number) => { send: (payload: unknown) => unknown } }) {
   const operatorId = req.currentOperator?.id;
@@ -112,23 +120,34 @@ export async function adminUserRoutes(app: FastifyInstance) {
     preHandler: [requireOperator, requirePolicy('admin.users.write'), guardSensitiveAction as any],
   }, async (req, reply) => {
     const role = req.body.role?.trim();
+    const reason = requireReason(req.body.reason);
     const assignableRoles = getAssignableRoles();
 
     if (!role || !assignableRoles.includes(role)) {
       return reply.status(400).send({ error: `Role is required and must be one of: ${assignableRoles.join(', ')}` });
     }
+    if (!reason) {
+      return reply.status(400).send({ error: 'Non-empty reason is required for role changes' });
+    }
 
     const kc = getKeycloakAdminClient();
+    const beforeRoles = uniqueSorted((await kc.listRealmRolesForUser(req.params.userId)).map((r) => r.name).filter(Boolean));
     await kc.addRealmRole(req.params.userId, role);
     await kc.logoutUser(req.params.userId);
+    const afterRoles = uniqueSorted((await kc.listRealmRolesForUser(req.params.userId)).map((r) => r.name).filter(Boolean));
 
     await writeAdminAudit({
       operatorId: req.currentOperator!.id,
       action: 'keycloak.user.role.add',
       targetUserId: req.params.userId,
       metadata: {
+        actor: { operatorId: req.currentOperator!.id },
+        target: { userId: req.params.userId },
+        timestamp: new Date().toISOString(),
         role,
-        reason: parseOptionalReason(req.body.reason),
+        reason,
+        before: { roles: beforeRoles },
+        after: { roles: afterRoles },
         sessionsRevoked: true,
       },
     });
@@ -140,10 +159,14 @@ export async function adminUserRoutes(app: FastifyInstance) {
     preHandler: [requireOperator, requirePolicy('admin.users.write'), guardSensitiveAction as any],
   }, async (req, reply) => {
     const role = req.body.role?.trim();
+    const reason = requireReason(req.body.reason);
     const assignableRoles = getAssignableRoles();
 
     if (!role || !assignableRoles.includes(role)) {
       return reply.status(400).send({ error: `Role is required and must be one of: ${assignableRoles.join(', ')}` });
+    }
+    if (!reason) {
+      return reply.status(400).send({ error: 'Non-empty reason is required for role changes' });
     }
 
     const isPrivilegedRole = role === 'owner';
@@ -152,16 +175,23 @@ export async function adminUserRoutes(app: FastifyInstance) {
     }
 
     const kc = getKeycloakAdminClient();
+    const beforeRoles = uniqueSorted((await kc.listRealmRolesForUser(req.params.userId)).map((r) => r.name).filter(Boolean));
     await kc.removeRealmRole(req.params.userId, role);
     await kc.logoutUser(req.params.userId);
+    const afterRoles = uniqueSorted((await kc.listRealmRolesForUser(req.params.userId)).map((r) => r.name).filter(Boolean));
 
     await writeAdminAudit({
       operatorId: req.currentOperator!.id,
       action: 'keycloak.user.role.remove',
       targetUserId: req.params.userId,
       metadata: {
+        actor: { operatorId: req.currentOperator!.id },
+        target: { userId: req.params.userId },
+        timestamp: new Date().toISOString(),
         role,
-        reason: parseOptionalReason(req.body.reason),
+        reason,
+        before: { roles: beforeRoles },
+        after: { roles: afterRoles },
         sessionsRevoked: true,
       },
     });

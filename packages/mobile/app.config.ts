@@ -17,6 +17,10 @@ const androidPackage = isProd ? 'app.evcharger.app' : 'dev.evcharger.app';
 const devApiUrl = process.env.EXPO_PUBLIC_API_URL_DEV || process.env.EXPO_PUBLIC_API_URL || 'http://127.0.0.1:3001';
 const prodApiUrl = process.env.EXPO_PUBLIC_API_URL_PROD || 'https://api-production-26cf.up.railway.app';
 const authMode = 'keycloak';
+const googleMapsApiKey = process.env.GOOGLE_MAPS_API_KEY
+  || process.env.GOOGLE_MAPS_API_KEY_IOS
+  || process.env.GOOGLE_MAPS_API_KEY_ANDROID
+  || '';
 
 const config: ExpoConfig = {
   name,
@@ -34,9 +38,13 @@ const config: ExpoConfig = {
   ios: {
     supportsTablet: true,
     bundleIdentifier,
+    config: {
+      googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY_IOS || googleMapsApiKey,
+    },
     infoPlist: {
       NSLocationWhenInUseUsageDescription: 'We use your location to show nearby chargers.',
       NSLocationAlwaysAndWhenInUseUsageDescription: 'We use your location to show nearby chargers.',
+      NSCameraUsageDescription: 'We use the camera to scan charger QR codes and open the right charger.',
       ITSAppUsesNonExemptEncryption: false,
     },
   },
@@ -46,7 +54,16 @@ const config: ExpoConfig = {
       backgroundColor: '#ffffff',
     },
     package: androidPackage,
-    permissions: ['android.permission.ACCESS_COARSE_LOCATION', 'android.permission.ACCESS_FINE_LOCATION'],
+    config: {
+      googleMaps: {
+        apiKey: process.env.GOOGLE_MAPS_API_KEY_ANDROID || googleMapsApiKey,
+      },
+    },
+    permissions: [
+      'android.permission.ACCESS_COARSE_LOCATION',
+      'android.permission.ACCESS_FINE_LOCATION',
+      'android.permission.CAMERA',
+    ],
   },
   web: {
     bundler: 'metro',
@@ -57,6 +74,7 @@ const config: ExpoConfig = {
     'expo-router',
     ['expo-build-properties', { ios: {} }],
     ['expo-location', { locationWhenInUsePermission: 'We use your location to show nearby chargers.' }],
+    ['expo-camera', { cameraPermission: 'We use the camera to scan charger QR codes and open the right charger.' }],
   ],
   experiments: {
     typedRoutes: true,

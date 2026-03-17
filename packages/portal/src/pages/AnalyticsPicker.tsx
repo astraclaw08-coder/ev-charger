@@ -27,11 +27,11 @@ export default function AnalyticsPicker() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Analytics</h1>
-        <p className="text-sm text-gray-600">Select a site to open analytics dashboards.</p>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-slate-100">Analytics</h1>
+        <p className="text-sm text-gray-600 dark:text-slate-400">Select a site to open analytics dashboards.</p>
       </div>
 
-      {loading && <div className="rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-600">Loading sites…</div>}
+      {loading && <div className="rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 text-sm text-gray-600 dark:text-slate-400">Loading sites…</div>}
       {error && <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>}
 
       {!loading && !error && (
@@ -40,10 +40,10 @@ export default function AnalyticsPicker() {
             <Link
               key={site.id}
               to={`/sites/${site.id}/analytics`}
-              className="rounded-lg border border-gray-200 bg-white p-4 transition hover:border-brand-200 hover:shadow-sm"
+              className="rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 transition hover:border-brand-200 hover:shadow-sm"
             >
-              <div className="text-sm font-semibold text-gray-900">{site.name}</div>
-              <div className="mt-1 text-xs text-gray-600">{site.address}</div>
+              <div className="text-sm font-semibold text-gray-900 dark:text-slate-100">{site.name}</div>
+              <div className="mt-1 text-xs text-gray-600 dark:text-slate-400">{site.address}</div>
               <div className="mt-3 text-xs font-medium text-brand-700">Open analytics →</div>
             </Link>
           ))}

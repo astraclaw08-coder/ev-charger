@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { useRouter } from 'expo-router';
-import { api, authMode, isDevMode, isKeycloakMode, setBearerToken, setGuestMode } from '@/lib/api';
+import { api, authMode, isDevMode, isKeycloakMode, setAuthRefreshHandler, setBearerToken, setGuestMode } from '@/lib/api';
 import { clearFavorites } from '@/lib/favorites';
 
 type AppAuthContextValue = {
@@ -53,8 +53,10 @@ function KeycloakAuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const refreshingRef = useRef(false);
+  const sessionRef = useRef<PasswordSession | null>(null);
 
   const persistSession = async (next: PasswordSession | null) => {
+    sessionRef.current = next;
     setSession(next);
     if (!next) {
       await SecureStore.deleteItemAsync(PASSWORD_SESSION_KEY).catch(() => {});
@@ -139,6 +141,10 @@ function KeycloakAuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
+    sessionRef.current = session;
+  }, [session]);
+
+  useEffect(() => {
     restoreSession();
   }, []);
 
@@ -151,6 +157,17 @@ function KeycloakAuthProvider({ children }: { children: React.ReactNode }) {
     });
     return () => sub.remove();
   }, [session]);
+
+  useEffect(() => {
+    setAuthRefreshHandler(async () => {
+      const active = sessionRef.current;
+      if (!active) return false;
+      const next = await refreshSession(active);
+      return Boolean(next?.accessToken);
+    });
+
+    return () => setAuthRefreshHandler(null);
+  }, []);
 
   const value: AppAuthContextValue = useMemo(() => ({
     isGuest: !session?.accessToken,

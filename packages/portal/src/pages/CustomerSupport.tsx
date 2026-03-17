@@ -131,26 +131,26 @@ export default function CustomerSupport() {
     return map;
   }, [notes]);
 
-  if (loading) return <div className="text-sm text-gray-500">Loading customer support workspace…</div>;
+  if (loading) return <div className="text-sm text-gray-500 dark:text-slate-400">Loading customer support workspace…</div>;
   if (error) return <div className="rounded-lg bg-red-50 p-4 text-sm text-red-700">{error}</div>;
 
   return (
     <div className="space-y-6">
       <div>
-        <div className="flex items-center gap-2 text-sm text-gray-500">
-          <Link to="/" className="hover:text-gray-700">Dashboard</Link>
+        <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-slate-400">
+          <Link to="/overview" className="hover:text-gray-700 dark:hover:text-slate-200 dark:text-slate-300">Overview</Link>
           <span>/</span>
-          <span className="text-gray-900">Customer Support</span>
+          <span className="text-gray-900 dark:text-slate-100">Customer Support</span>
         </div>
-        <h1 className="mt-1 text-2xl font-bold text-gray-900">Customer Support Console</h1>
-        <p className="text-sm text-gray-500">Customer lookup + timeline + payment/refund triage + support audit history</p>
+        <h1 className="mt-1 text-2xl font-bold text-gray-900 dark:text-slate-100">Customer Support Console</h1>
+        <p className="text-sm text-gray-500 dark:text-slate-400">Look up drivers, review session timelines, process refunds, and track support actions.</p>
       </div>
 
-      <div className="grid gap-4 rounded-xl border border-gray-200 bg-white p-4 md:grid-cols-3">
+      <div className="grid gap-4 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 md:grid-cols-3">
         <div>
-          <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">Site</label>
+          <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Site</label>
           <select
-            className="w-full rounded-md border border-gray-300 px-2 py-2 text-sm"
+            className="w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-2 text-sm"
             value={site?.id ?? ''}
             onChange={async (e) => {
               const id = e.target.value;
@@ -166,9 +166,9 @@ export default function CustomerSupport() {
         </div>
 
         <div>
-          <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">Charger</label>
+          <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Charger</label>
           <select
-            className="w-full rounded-md border border-gray-300 px-2 py-2 text-sm"
+            className="w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-2 text-sm"
             value={selectedChargerId}
             onChange={(e) => setSelectedChargerId(e.target.value)}
           >
@@ -179,9 +179,9 @@ export default function CustomerSupport() {
         </div>
 
         <div>
-          <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">Customer lookup</label>
+          <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Customer lookup</label>
           <input
-            className="w-full rounded-md border border-gray-300 px-2 py-2 text-sm"
+            className="w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-2 text-sm"
             placeholder="email, name, idTag, session id"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -190,21 +190,21 @@ export default function CustomerSupport() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <div className="lg:col-span-2 rounded-xl border border-gray-200 bg-white p-4">
-          <h2 className="mb-3 text-sm font-semibold text-gray-700">Session timeline + payment triage</h2>
+        <div className="lg:col-span-2 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+          <h2 className="mb-3 text-sm font-semibold text-gray-700 dark:text-slate-300">Session timeline + payment triage</h2>
           <div className="space-y-3">
-            {filteredSessions.length === 0 && <p className="text-sm text-gray-500">No sessions found for this query.</p>}
+            {filteredSessions.length === 0 && <p className="text-sm text-gray-500 dark:text-slate-400">No sessions found for this query.</p>}
             {filteredSessions.map((s) => (
-              <div key={s.id} className="rounded-lg border border-gray-200 p-3">
+              <div key={s.id} className="rounded-lg border border-gray-200 dark:border-slate-700 p-3">
                 <div className="flex items-center justify-between">
-                  <p className="text-sm font-medium text-gray-900">{s.user?.email ?? s.idTag}</p>
-                  <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700">{s.status}</span>
+                  <p className="text-sm font-medium text-gray-900 dark:text-slate-100">{s.user?.email ?? s.idTag}</p>
+                  <span className="rounded-full bg-gray-100 dark:bg-slate-800 px-2 py-0.5 text-xs text-gray-700 dark:text-slate-300">{s.status}</span>
                 </div>
-                <p className="mt-1 text-xs text-gray-500">Session {s.id} · Connector {s.connector.connectorId}</p>
-                <p className="mt-1 text-xs text-gray-500">
+                <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">Session {s.id} · Connector {s.connector.connectorId}</p>
+                <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
                   {new Date(s.startedAt).toLocaleString()} → {s.stoppedAt ? new Date(s.stoppedAt).toLocaleString() : 'Active'}
                 </p>
-                <p className="mt-1 text-xs text-gray-600">
+                <p className="mt-1 text-xs text-gray-600 dark:text-slate-400">
                   Energy: {s.kwhDelivered ?? 0} kWh · Payment: {s.payment?.status ?? s.amountLabel ?? 'N/A'}
                   {(s.effectiveAmountCents ?? s.estimatedAmountCents ?? s.payment?.amountCents) != null ? ` · $${(((s.effectiveAmountCents ?? s.estimatedAmountCents ?? s.payment?.amountCents) as number) / 100).toFixed(2)}` : ''}
                   {s.amountState === 'PENDING' ? ' · Estimated while settlement is pending' : ''}
@@ -279,10 +279,10 @@ export default function CustomerSupport() {
         </div>
 
         <div className="space-y-4">
-          <div className="rounded-xl border border-gray-200 bg-white p-4">
-            <h2 className="mb-3 text-sm font-semibold text-gray-700">Case notes</h2>
+          <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+            <h2 className="mb-3 text-sm font-semibold text-gray-700 dark:text-slate-300">Case notes</h2>
             <textarea
-              className="h-24 w-full rounded-md border border-gray-300 p-2 text-sm"
+              className="h-24 w-full rounded-md border border-gray-300 dark:border-slate-600 p-2 text-sm"
               placeholder="Write a support note..."
               value={noteText}
               onChange={(e) => setNoteText(e.target.value)}
@@ -310,24 +310,24 @@ export default function CustomerSupport() {
               Add note to top filtered session
             </button>
             <div className="mt-2">
-              <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">Triage reason</label>
+              <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Triage reason</label>
               <input
-                className="w-full rounded-md border border-gray-300 px-2 py-2 text-sm"
+                className="w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-2 text-sm"
                 value={triageReason}
                 onChange={(e) => setTriageReason(e.target.value)}
               />
             </div>
           </div>
 
-          <div className="rounded-xl border border-gray-200 bg-white p-4">
-            <h2 className="mb-3 text-sm font-semibold text-gray-700">Support action audit history</h2>
+          <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+            <h2 className="mb-3 text-sm font-semibold text-gray-700 dark:text-slate-300">Support action audit history</h2>
             <div className="space-y-2">
-              {audit.length === 0 && <p className="text-xs text-gray-500">No support actions recorded yet.</p>}
+              {audit.length === 0 && <p className="text-xs text-gray-500 dark:text-slate-400">No support actions recorded yet.</p>}
               {audit.slice(0, 12).map((a) => (
-                <div key={a.id} className="rounded-md border border-gray-200 p-2">
-                  <p className="text-xs text-gray-500">{new Date(a.createdAt).toLocaleString()} · session {a.sessionId}</p>
-                  <p className="text-xs font-medium text-gray-800">{a.action}</p>
-                  <p className="text-xs text-gray-600">{a.reason}</p>
+                <div key={a.id} className="rounded-md border border-gray-200 dark:border-slate-700 p-2">
+                  <p className="text-xs text-gray-500 dark:text-slate-400">{new Date(a.createdAt).toLocaleString()} · session {a.sessionId}</p>
+                  <p className="text-xs font-medium text-gray-800 dark:text-slate-200">{a.action}</p>
+                  <p className="text-xs text-gray-600 dark:text-slate-400">{a.reason}</p>
                 </div>
               ))}
             </div>

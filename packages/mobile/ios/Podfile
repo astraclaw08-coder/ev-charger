@@ -23,6 +23,10 @@ platform :ios, podfile_properties['ios.deploymentTarget'] || '15.1'
 prepare_react_native_project!
 
 target 'EVCharger' do
+  # Google Maps SDK required for react-native-maps PROVIDER_GOOGLE
+  pod 'GoogleMaps', '9.4.0'
+  pod 'Google-Maps-iOS-Utils', '6.1.0'
+
   use_expo_modules!
 
   if ENV['EXPO_USE_COMMUNITY_AUTOLINKING'] == '1'
@@ -42,6 +46,9 @@ target 'EVCharger' do
   end
 
   config = use_native_modules!(config_command)
+
+  # Override autolinking for react-native-maps to use Google subspec
+  pod 'react-native-maps', :path => '../../../node_modules/react-native-maps', :subspecs => ['Maps', 'Google']
 
   use_frameworks! :linkage => podfile_properties['ios.useFrameworks'].to_sym if podfile_properties['ios.useFrameworks']
   use_frameworks! :linkage => ENV['USE_FRAMEWORKS'].to_sym if ENV['USE_FRAMEWORKS']

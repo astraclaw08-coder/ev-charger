@@ -81,9 +81,9 @@ export default function SiteRoleAssignment() {
     <div className="space-y-3">
       <div className="flex flex-wrap items-end gap-2">
         <div>
-          <label className="block text-xs text-gray-500 mb-1">Site</label>
+          <label className="block text-xs text-gray-500 dark:text-slate-400 mb-1">Site</label>
           <select
-            className="rounded-md border border-gray-300 px-2 py-2 text-sm"
+            className="rounded-md border border-gray-300 dark:border-slate-600 px-2 py-2 text-sm"
             value={selectedSiteId}
             onChange={(e) => selectSite(e.target.value)}
           >
@@ -93,18 +93,18 @@ export default function SiteRoleAssignment() {
           </select>
         </div>
         <div>
-          <label className="block text-xs text-gray-500 mb-1">Email</label>
+          <label className="block text-xs text-gray-500 dark:text-slate-400 mb-1">Email</label>
           <input
-            className="rounded-md border border-gray-300 px-2 py-2 text-sm min-w-48"
+            className="rounded-md border border-gray-300 dark:border-slate-600 px-2 py-2 text-sm min-w-48"
             placeholder="user@example.com"
             value={emailInput}
             onChange={(e) => setEmailInput(e.target.value)}
           />
         </div>
         <div>
-          <label className="block text-xs text-gray-500 mb-1">Role</label>
+          <label className="block text-xs text-gray-500 dark:text-slate-400 mb-1">Role</label>
           <select
-            className="rounded-md border border-gray-300 px-2 py-2 text-sm"
+            className="rounded-md border border-gray-300 dark:border-slate-600 px-2 py-2 text-sm"
             value={roleDraft}
             onChange={(e) => setRoleDraft(e.target.value as RoleName)}
           >
@@ -117,7 +117,7 @@ export default function SiteRoleAssignment() {
         </div>
         <button
           type="button"
-          className="rounded-md border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
+          className="rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-2 text-xs font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60"
           onClick={assignRole}
         >
           Assign role
@@ -126,13 +126,13 @@ export default function SiteRoleAssignment() {
 
       <div className="space-y-2">
         {assignments.length === 0 ? (
-          <p className="text-xs text-gray-500">No role assignments for this site.</p>
+          <p className="text-xs text-gray-500 dark:text-slate-400">No role assignments for this site.</p>
         ) : (
           assignments.map((a) => (
-            <div key={a.id} className="flex items-center justify-between rounded-md border border-gray-200 px-3 py-2">
+            <div key={a.id} className="flex items-center justify-between rounded-md border border-gray-200 dark:border-slate-700 px-3 py-2">
               <div>
-                <p className="text-sm font-medium text-gray-900">{a.email}</p>
-                <p className="text-xs text-gray-500">{a.roles.join(', ')}</p>
+                <p className="text-sm font-medium text-gray-900 dark:text-slate-100">{a.email}</p>
+                <p className="text-xs text-gray-500 dark:text-slate-400">{a.roles.join(', ')}</p>
               </div>
               <button
                 type="button"

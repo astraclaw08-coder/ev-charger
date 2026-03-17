@@ -24,8 +24,14 @@ export const isEvcPlatformReadModelEnabled = process.env.EXPO_PUBLIC_EVC_PLATFOR
 // Auth state holders — set by auth context
 let _bearerToken: string | null = null;
 let _guestMode = false;
+let _authRefreshHandler: null | (() => Promise<boolean>) = null;
+
 export function setBearerToken(token: string | null) {
   _bearerToken = token;
+}
+
+export function setAuthRefreshHandler(handler: null | (() => Promise<boolean>)) {
+  _authRefreshHandler = handler;
 }
 
 export function setGuestMode(guest: boolean) {
@@ -76,6 +82,7 @@ async function authHeaders(): Promise<Record<string, string>> {
 async function request<T>(
   path: string,
   opts: RequestInit = {},
+  canRetryAuth = true,
 ): Promise<T> {
   const headers = new Headers({
     'Content-Type': 'application/json',
@@ -91,6 +98,17 @@ async function request<T>(
   });
 
   if (!res.ok) {
+    if (canRetryAuth && (res.status === 401 || res.status === 403) && !_guestMode && _authRefreshHandler) {
+      try {
+        const refreshed = await _authRefreshHandler();
+        if (refreshed) {
+          return request<T>(path, opts, false);
+        }
+      } catch {
+        // fall through to regular error handling
+      }
+    }
+
     const body = await res.json().catch(() => ({ error: res.statusText }));
     throw new ApiError(res.status, body.error ?? res.statusText);
   }
@@ -147,6 +165,7 @@ export interface Session {
   meterStart: number;
   meterStop: number | null;
   kwhDelivered: number | null;
+  powerActiveImportW?: number | null;
   ratePerKwh: number | null;
   startedAt: string;
   endedAt: string | null;

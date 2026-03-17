@@ -1,0 +1,3 @@
+ALTER TABLE "Site"
+ADD COLUMN "softwareVendorFeeMode" TEXT NOT NULL DEFAULT 'none',
+ADD COLUMN "softwareVendorFeeValue" DOUBLE PRECISION NOT NULL DEFAULT 0;

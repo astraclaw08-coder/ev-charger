@@ -40,7 +40,7 @@ Set these for each environment (locally or in EAS env):
 
 - `EXPO_PUBLIC_API_URL_DEV` (dev only)
 - `EXPO_PUBLIC_API_URL_PROD` (optional override; defaults to prod Railway API)
-- `EXPO_PUBLIC_MAPBOX_TOKEN`
+- `GOOGLE_MAPS_API_KEY` (or platform-specific `GOOGLE_MAPS_API_KEY_IOS` / `GOOGLE_MAPS_API_KEY_ANDROID`)
 - `EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY` (prod/live payment flow)
 
 Notes:

@@ -11,6 +11,9 @@ export interface SiteListItem {
   idleFeePerMinUsd?: number;
   activationFeeUsd?: number;
   gracePeriodMin?: number;
+  softwareVendorFeeMode?: 'none' | 'percentage_total' | 'fixed_per_kwh' | 'fixed_per_minute';
+  softwareVendorFeeValue?: number;
+  softwareFeeIncludesActivation?: boolean;
   touWindows?: unknown;
   organizationName?: string | null;
   portfolioName?: string | null;
@@ -58,6 +61,9 @@ export interface SiteDetail {
   idleFeePerMinUsd?: number;
   activationFeeUsd?: number;
   gracePeriodMin?: number;
+  softwareVendorFeeMode?: 'none' | 'percentage_total' | 'fixed_per_kwh' | 'fixed_per_minute';
+  softwareVendorFeeValue?: number;
+  softwareFeeIncludesActivation?: boolean;
   touWindows?: unknown;
   organizationName?: string | null;
   portfolioName?: string | null;
@@ -409,6 +415,7 @@ export interface SmartChargingEffectiveResponse {
 // ─── Client ──────────────────────────────────────────────────────────────────
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
+const QR_REDIRECT_BASE_URL = import.meta.env.VITE_QR_REDIRECT_BASE_URL ?? API_URL;
 const DEV_OPERATOR_ID = import.meta.env.VITE_DEV_OPERATOR_ID ?? 'operator-001';
 const AUTH_MODE = String(import.meta.env.VITE_AUTH_MODE ?? '').trim().toLowerCase();
 const IS_DEV_MODE = AUTH_MODE === 'dev';
@@ -458,11 +465,27 @@ async function request<T>(
     responseCache.clear();
   }
 
+  const doFetch = async () => fetch(`${API_URL}${path}`, {
+    ...options,
+    headers: { ...headers, ...(options?.headers as Record<string, string> ?? {}) },
+  });
+
   const run = (async () => {
-    const res = await fetch(`${API_URL}${path}`, {
-      ...options,
-      headers: { ...headers, ...(options?.headers as Record<string, string> ?? {}) },
-    });
+    let res: Response;
+    try {
+      res = await doFetch();
+    } catch (e) {
+      // transient startup/network hiccup; one quick retry for GET requests prevents hard-refresh UX.
+      if (!isGet) throw e;
+      await new Promise((r) => setTimeout(r, 450));
+      res = await doFetch();
+    }
+
+    if (!res.ok && isGet && (res.status === 401 || res.status >= 500)) {
+      // first-load auth/API warmup race: retry once before surfacing an error.
+      await new Promise((r) => setTimeout(r, 450));
+      res = await doFetch();
+    }
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: res.statusText }));
@@ -484,6 +507,10 @@ async function request<T>(
   } finally {
     inFlightGets.delete(key);
   }
+}
+
+export function buildChargerQrRedirectUrl(chargerId: string) {
+  return `${QR_REDIRECT_BASE_URL}/r/charger/${encodeURIComponent(chargerId)}`;
 }
 
 export function createApiClient(token: string | null | undefined) {
@@ -563,6 +590,9 @@ export function createApiClient(token: string | null | undefined) {
         idleFeePerMinUsd?: number;
         activationFeeUsd?: number;
         gracePeriodMin?: number;
+        softwareVendorFeeMode?: 'none' | 'percentage_total' | 'fixed_per_kwh' | 'fixed_per_minute';
+        softwareVendorFeeValue?: number;
+        softwareFeeIncludesActivation?: boolean;
         touWindows?: unknown;
         organizationName?: string;
         portfolioName?: string;
@@ -718,13 +748,13 @@ export function createApiClient(token: string | null | undefined) {
         body: JSON.stringify(body),
       }),
 
-    addAdminUserRole: (userId: string, role: string, reason?: string) =>
+    addAdminUserRole: (userId: string, role: string, reason: string) =>
       request<{ ok: boolean }>(`/admin/users/${userId}/roles/add`, token, {
         method: 'POST',
         body: JSON.stringify({ role, reason }),
       }),
 
-    removeAdminUserRole: (userId: string, role: string, options?: { reason?: string; confirmPrivilegedRoleRemoval?: boolean }) =>
+    removeAdminUserRole: (userId: string, role: string, options?: { reason: string; confirmPrivilegedRoleRemoval?: boolean }) =>
       request<{ ok: boolean }>(`/admin/users/${userId}/roles/remove`, token, {
         method: 'POST',
         body: JSON.stringify({ role, reason: options?.reason, confirmPrivilegedRoleRemoval: options?.confirmPrivilegedRoleRemoval }),

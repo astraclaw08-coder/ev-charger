@@ -1,0 +1,18 @@
+appId: dev.evcharger.app.dev
+---
+- launchApp:
+    clearState: false
+- tapOn:
+    text: "Continue as Guest"
+    optional: true
+- tapOn:
+    text: "Find Charger"
+    optional: true
+- assertVisible:
+    id: "map-search-input"
+- assertVisible:
+    id: "map-qr-scan-tile"
+- assertVisible:
+    text: "⚡ Active charging session"
+    optional: true
+- takeScreenshot: "find-charger-active-attempt"

@@ -10,6 +10,7 @@ import {
   Alert,
   ActivityIndicator,
   Pressable,
+  Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { AntDesign, Ionicons } from '@expo/vector-icons';
@@ -68,6 +69,19 @@ function formatPhoneForDisplay(identifier: string) {
   return trimmed;
 }
 
+function BrandHeader({ isDark }: { isDark: boolean }) {
+  return (
+    <View style={styles.brandWrap}>
+      <Image
+        source={isDark ? require('../../assets/branding/lumeo_logo_darktheme.png') : require('../../assets/branding/lumeo_logo_transparent.png')}
+        style={styles.brandLogo}
+        resizeMode="contain"
+      />
+
+    </View>
+  );
+}
+
 export default function SignInScreen() {
   const router = useRouter();
   const { signIn, continueAsGuest: continueAsGuestFromAuth } = useAppAuth();
@@ -100,7 +114,7 @@ export default function SignInScreen() {
     return (
       <View style={[styles.container, { backgroundColor: isDark ? '#0b1220' : '#f3f4f6' }]}> 
         <View style={styles.card}>
-          <Text style={[styles.title, { color: isDark ? '#f8fafc' : '#111827' }]}>Sign In</Text>
+          <BrandHeader isDark={isDark} />
           <Text style={[styles.devNote, { color: isDark ? '#cbd5e1' : '#334155' }]}>Dev Mode — No Clerk Key Set</Text>
           <TouchableOpacity
             style={styles.button}
@@ -181,7 +195,7 @@ function KeycloakSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onCo
         >
           <Ionicons name="arrow-back" size={18} color={isDark ? '#f8fafc' : '#111827'} />
         </TouchableOpacity>
-        <Text style={[styles.title, styles.otpTitle, { color: isDark ? '#f8fafc' : '#111827' }]}>Enter Your Code</Text>
+        <BrandHeader isDark={isDark} />
         <Text style={[styles.helperText, styles.otpHelperText, { marginBottom: 12 }]}>Code was sent to {formatPhoneForDisplay(otpTarget)}</Text>
         <Pressable style={styles.codeDotsWrap} onPress={() => {}}>
           {Array.from({ length: 5 }).map((_, idx) => (
@@ -207,7 +221,7 @@ function KeycloakSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onCo
 
   return (
     <View style={styles.card}>
-      <Text style={[styles.title, { color: isDark ? '#f8fafc' : '#111827' }]}>Sign In</Text>
+      <BrandHeader isDark={isDark} />
 
       <TextInput
         style={[styles.input, styles.centerText]}
@@ -395,7 +409,7 @@ function ClerkSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onConti
         >
           <Ionicons name="arrow-back" size={18} color={isDark ? '#f8fafc' : '#111827'} />
         </TouchableOpacity>
-        <Text style={[styles.title, styles.otpTitle, { color: isDark ? '#f8fafc' : '#111827' }]}>Enter Your Code</Text>
+        <BrandHeader isDark={isDark} />
         <Text style={[styles.helperText, styles.otpHelperText, { marginBottom: 12 }]}>Code was sent to {formatPhoneForDisplay(otpTarget)}</Text>
         <Pressable style={styles.codeDotsWrap}>
           {Array.from({ length: 5 }).map((_, idx) => (
@@ -422,7 +436,7 @@ function ClerkSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onConti
 
   return (
     <View style={styles.card}>
-      <Text style={[styles.title, { color: isDark ? '#f8fafc' : '#111827' }]}>Sign In</Text>
+      <BrandHeader isDark={isDark} />
 
       <TextInput
         style={[styles.input, styles.centerText]}
@@ -480,7 +494,10 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     paddingVertical: 8,
   },
+  brandWrap: { alignItems: 'center', marginBottom: 8 },
+  brandLogo: { width: 220, height: 80, marginBottom: 4 },
   title: { fontSize: 28, fontWeight: '700', marginBottom: 12, textAlign: 'center' },
+  brandTitle: { fontSize: 32, fontWeight: '800', letterSpacing: 0.4, marginBottom: 14 },
   devNote: { fontSize: 13, textAlign: 'center', marginBottom: 20, lineHeight: 20 },
   input: {
     borderWidth: 1,
