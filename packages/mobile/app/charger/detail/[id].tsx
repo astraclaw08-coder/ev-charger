@@ -841,9 +841,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     borderWidth: 1,
     borderColor: '#e2e8f0',
+    alignItems: 'center',
   },
-  metricLabel: { fontSize: 13, fontWeight: '700' },
-  metricValue: { fontSize: 30, fontWeight: '900', marginTop: 6 },
+  metricLabel: { fontSize: 13, fontWeight: '700', textAlign: 'center' },
+  metricValue: { fontSize: 30, fontWeight: '900', marginTop: 6, textAlign: 'center' },
   chargingAnimWrap: {
     width: '100%',
     borderRadius: 12,
@@ -981,13 +982,13 @@ const styles = StyleSheet.create({
   collapseHeader: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', position: 'relative' },
   collapseTitle: { fontSize: 15, fontWeight: '800' },
   collapseChevron: { fontSize: 18, fontWeight: '800', position: 'absolute', right: 0 },
-  heroTitle: { fontSize: 18, fontWeight: '800' },
-  heroSubtitle: { fontSize: 13, marginTop: 2 },
+  heroTitle: { fontSize: 18, fontWeight: '800', textAlign: 'center' },
+  heroSubtitle: { fontSize: 13, marginTop: 2, textAlign: 'center' },
 
   priceTilesRow: { flexDirection: 'row', gap: 8 },
-  priceTile: { flex: 1, borderRadius: 12, paddingVertical: 9, paddingHorizontal: 8 },
-  priceTileLabel: { fontSize: 11, fontWeight: '700' },
-  priceTileValue: { fontSize: 14, fontWeight: '800', marginTop: 3 },
+  priceTile: { flex: 1, borderRadius: 12, paddingVertical: 9, paddingHorizontal: 8, alignItems: 'center' },
+  priceTileLabel: { fontSize: 11, fontWeight: '700', textAlign: 'center' },
+  priceTileValue: { fontSize: 14, fontWeight: '800', marginTop: 3, textAlign: 'center' },
 
 
   liveCard: { borderRadius: 18, padding: 16, gap: 8 },
@@ -1002,10 +1003,10 @@ const styles = StyleSheet.create({
   startCard: { borderRadius: 18, padding: 16, gap: 10 },
   sectionTitle: { fontSize: 18, fontWeight: '800' },
   subText: { fontSize: 13 },
-  paymentCard: { borderWidth: 1, borderRadius: 12, padding: 12, gap: 4 },
-  paymentCardTitle: { fontSize: 13, fontWeight: '800' },
-  paymentCardBody: { fontSize: 13, fontWeight: '700' },
-  paymentCardHint: { fontSize: 12, fontWeight: '700' },
+  paymentCard: { borderWidth: 1, borderRadius: 12, padding: 12, gap: 4, alignItems: 'center' },
+  paymentCardTitle: { fontSize: 13, fontWeight: '800', textAlign: 'center' },
+  paymentCardBody: { fontSize: 13, fontWeight: '700', textAlign: 'center' },
+  paymentCardHint: { fontSize: 12, fontWeight: '700', textAlign: 'center' },
 
   connectorRow: {
     borderWidth: 1,
