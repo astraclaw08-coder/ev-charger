@@ -13,11 +13,22 @@ import { usePortalTheme } from '../theme/ThemeContext';
 type RangePreset = '7d' | '30d' | '60d';
 
 
+// ── TOU v2: Bucket-based pricing ─────────────────────────────────────────────
+// Each bucket defines energy ($/kWh) and idle ($/min) rates.
+// A daily profile assigns a bucket to each hour (0–23) for selected days.
+type PriceBucket = { id: 'low' | 'medium' | 'high'; label: string; pricePerKwhUsd: number; idleFeePerMinUsd: number };
+type TouDailyProfile = {
+  id: string;
+  days: number[]; // 0=Sun … 6=Sat
+  // hourBuckets: 24 entries, each is 'low'|'medium'|'high'|null (null = use default/flat)
+  hourBuckets: Array<'low' | 'medium' | 'high' | null>;
+};
+// Legacy window type kept for backward-compat API serialization
 type TouWindow = {
   id: string;
-  day: number; // 0=Sun ... 6=Sat
-  start: string; // HH:mm
-  end: string; // HH:mm
+  day: number;
+  start: string;
+  end: string;
   pricePerKwhUsd: number;
   idleFeePerMinUsd: number;
 };
@@ -30,8 +41,64 @@ type TariffConfig = {
   softwareVendorFeeValue: number;
   softwareFeeIncludesActivation: boolean;
   mode: 'flat' | 'tou';
+  // v2 bucket model
+  buckets: PriceBucket[];
+  profiles: TouDailyProfile[];
+  // legacy windows (kept for API compat, derived from v2 on save)
   windows: TouWindow[];
 };
+
+const DEFAULT_BUCKETS: PriceBucket[] = [
+  { id: 'low',    label: 'Low',    pricePerKwhUsd: 0.15, idleFeePerMinUsd: 0.02 },
+  { id: 'medium', label: 'Medium', pricePerKwhUsd: 0.30, idleFeePerMinUsd: 0.05 },
+  { id: 'high',   label: 'High',   pricePerKwhUsd: 0.50, idleFeePerMinUsd: 0.10 },
+];
+const BUCKET_COLORS: Record<string, { bg: string; text: string; border: string; dark: string }> = {
+  low:    { bg: 'bg-emerald-100', text: 'text-emerald-800', border: 'border-emerald-300', dark: 'bg-emerald-700/30' },
+  medium: { bg: 'bg-amber-100',   text: 'text-amber-800',   border: 'border-amber-300',   dark: 'bg-amber-700/30' },
+  high:   { bg: 'bg-rose-100',    text: 'text-rose-800',    border: 'border-rose-300',    dark: 'bg-rose-700/30' },
+  none:   { bg: 'bg-gray-100',    text: 'text-gray-500',    border: 'border-gray-300',    dark: 'bg-slate-700/30' },
+};
+
+function makeDailyProfile(days: number[] = [1,2,3,4,5]): TouDailyProfile {
+  const hourBuckets: Array<'low'|'medium'|'high'|null> = Array(24).fill(null);
+  // Default: low 21-08, medium 08-16, high 16-21
+  for (let h=21; h<24; h++) hourBuckets[h]='low';
+  for (let h=0;  h<8;  h++) hourBuckets[h]='low';
+  for (let h=8;  h<16; h++) hourBuckets[h]='medium';
+  for (let h=16; h<21; h++) hourBuckets[h]='high';
+  return { id: crypto.randomUUID(), days, hourBuckets };
+}
+
+// Convert v2 bucket profiles back to legacy TouWindow[] for API
+function profilesToWindows(profiles: TouDailyProfile[], buckets: PriceBucket[]): TouWindow[] {
+  const wins: TouWindow[] = [];
+  for (const profile of profiles) {
+    for (const day of profile.days) {
+      // Merge consecutive same-bucket hours into one window
+      let i = 0;
+      while (i < 24) {
+        const bucket = profile.hourBuckets[i];
+        if (!bucket) { i++; continue; }
+        let j = i + 1;
+        while (j < 24 && profile.hourBuckets[j] === bucket) j++;
+        const b = buckets.find(b => b.id === bucket);
+        if (b) {
+          wins.push({
+            id: crypto.randomUUID(),
+            day,
+            start: `${String(i).padStart(2,'0')}:00`,
+            end: j === 24 ? '23:59' : `${String(j).padStart(2,'0')}:00`,
+            pricePerKwhUsd: b.pricePerKwhUsd,
+            idleFeePerMinUsd: b.idleFeePerMinUsd,
+          });
+        }
+        i = j;
+      }
+    }
+  }
+  return wins;
+}
 type SiteAuditEvent = { id: string; action: string; actor: string; detail: string; createdAt: string };
 
 function auditKey(siteId: string) { return `ev-portal:site:audit:${siteId}`; }
@@ -132,7 +199,8 @@ export default function SiteDetail() {
   const [activeSessions, setActiveSessions] = useState(0);
   const [siteUtilizationPct, setSiteUtilizationPct] = useState<number | null>(null);
 
-  const [tariff, setTariff] = useState<TariffConfig>({ pricePerKwhUsd: 0.35, idleFeePerMinUsd: 0.08, activationFeeUsd: 0, gracePeriodMin: 10, softwareVendorFeeMode: 'none', softwareVendorFeeValue: 0, softwareFeeIncludesActivation: true, mode: 'flat', windows: [] });
+  const [tariff, setTariff] = useState<TariffConfig>({ pricePerKwhUsd: 0.35, idleFeePerMinUsd: 0.08, activationFeeUsd: 0, gracePeriodMin: 10, softwareVendorFeeMode: 'none', softwareVendorFeeValue: 0, softwareFeeIncludesActivation: true, mode: 'flat', buckets: DEFAULT_BUCKETS, profiles: [], windows: [] });
+  const [activeBucketPaint, setActiveBucketPaint] = useState<'low'|'medium'|'high'|null>('medium');
   const [tariffMsg, setTariffMsg] = useState('');
   const [showFeeModal, setShowFeeModal] = useState(false);
   // Superadmin detection: dev mode always grants superadmin; in production read from JWT publicMetadata.
@@ -171,6 +239,13 @@ export default function SiteDetail() {
         softwareVendorFeeValue: Number(data.softwareVendorFeeValue ?? 0),
         softwareFeeIncludesActivation: Boolean(data.softwareFeeIncludesActivation ?? true),
         mode: data.pricingMode === 'tou' ? 'tou' : 'flat',
+        // Load v2 bucket model from API if present, else default
+        buckets: Array.isArray((data as any).priceBuckets) && (data as any).priceBuckets.length === 3
+          ? (data as any).priceBuckets
+          : DEFAULT_BUCKETS,
+        profiles: Array.isArray((data as any).touProfiles) && (data as any).touProfiles.length > 0
+          ? (data as any).touProfiles
+          : [],
         windows: Array.isArray(data.touWindows)
           ? (data.touWindows as Array<Partial<TouWindow>>).map((w) => ({
               id: typeof w.id === 'string' && w.id.length > 0 ? w.id : crypto.randomUUID(),
@@ -473,32 +548,169 @@ export default function SiteDetail() {
         </div>
 
         {tariff.mode === 'tou' && (
-          <div className="mt-4 rounded-md border border-gray-300 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/60 p-3">
-            <div className="mb-2 flex items-center justify-between">
-              <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-slate-400">TOU windows</p>
-              <button type="button" className="rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-2 py-1 text-xs text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700"
-                onClick={() => setTariff((prev) => ({ ...prev, windows: [...prev.windows, { id: crypto.randomUUID(), day: 1, start: '09:00', end: '17:00', pricePerKwhUsd: prev.pricePerKwhUsd, idleFeePerMinUsd: prev.idleFeePerMinUsd }] }))}>
-                + Add window
+          <div className="mt-4 space-y-5">
+
+            {/* ── Step 1: Price buckets ─────────────────────────────────── */}
+            <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-slate-400">Step 1 — Define price buckets</p>
+              <div className="grid gap-3 sm:grid-cols-3">
+                {tariff.buckets.map((bucket) => {
+                  const col = BUCKET_COLORS[bucket.id] ?? BUCKET_COLORS.none;
+                  return (
+                    <div key={bucket.id} className={`rounded-lg border p-3 ${col.border} ${isDark ? col.dark : col.bg}`}>
+                      <p className={`mb-2 text-xs font-bold uppercase tracking-wide ${col.text}`}>{bucket.label}</p>
+                      <label className="block text-xs text-gray-700 dark:text-slate-300 mb-1">
+                        Energy rate ($/kWh)
+                        <input
+                          type="number" step="0.01" min="0"
+                          className="mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-2 py-1.5 text-xs"
+                          value={bucket.pricePerKwhUsd}
+                          onChange={(e) => setTariff((p) => ({ ...p, buckets: p.buckets.map((b) => b.id === bucket.id ? { ...b, pricePerKwhUsd: Number(e.target.value) } : b) }))}
+                        />
+                      </label>
+                      <label className="block text-xs text-gray-700 dark:text-slate-300">
+                        Idle fee ($/min)
+                        <input
+                          type="number" step="0.001" min="0"
+                          className="mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-2 py-1.5 text-xs"
+                          value={bucket.idleFeePerMinUsd}
+                          onChange={(e) => setTariff((p) => ({ ...p, buckets: p.buckets.map((b) => b.id === bucket.id ? { ...b, idleFeePerMinUsd: Number(e.target.value) } : b) }))}
+                        />
+                      </label>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* ── Step 2: Daily schedules ────────────────────────────────── */}
+            <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-slate-400">Step 2 — Assign bucket to each hour</p>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-xs text-gray-500 dark:text-slate-400">Paint bucket:</span>
+                  {([null, 'low', 'medium', 'high'] as const).map((b) => {
+                    const col = b ? BUCKET_COLORS[b] : BUCKET_COLORS.none;
+                    const active = activeBucketPaint === b;
+                    return (
+                      <button
+                        key={String(b)}
+                        type="button"
+                        onClick={() => setActiveBucketPaint(b)}
+                        className={`rounded-md border px-2.5 py-1 text-xs font-medium transition-all ${col.border} ${isDark ? col.dark : col.bg} ${col.text} ${active ? 'ring-2 ring-brand-500 ring-offset-1' : 'opacity-70 hover:opacity-100'}`}
+                      >
+                        {b ? (b.charAt(0).toUpperCase() + b.slice(1)) : 'Clear'}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {tariff.profiles.length === 0 && (
+                <p className="mb-3 text-xs text-gray-400 dark:text-slate-500">No daily schedules yet. Add one below.</p>
+              )}
+
+              {tariff.profiles.map((profile, pi) => (
+                <div key={profile.id} className="mb-4 rounded-lg border border-gray-200 dark:border-slate-700 p-3 bg-gray-50 dark:bg-slate-800/50">
+                  {/* Day selector */}
+                  <div className="mb-3 flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-medium text-gray-600 dark:text-slate-400">Days:</span>
+                    {DAY_NAMES.map((name, di) => {
+                      const selected = profile.days.includes(di);
+                      return (
+                        <button
+                          key={name}
+                          type="button"
+                          onClick={() => setTariff((p) => ({
+                            ...p,
+                            profiles: p.profiles.map((pr, pIdx) => pIdx !== pi ? pr : {
+                              ...pr,
+                              days: selected ? pr.days.filter((d) => d !== di) : [...pr.days, di].sort(),
+                            }),
+                          }))}
+                          className={`rounded px-2 py-0.5 text-xs font-medium border transition-colors ${selected ? 'bg-brand-600 text-white border-brand-600' : 'bg-white dark:bg-slate-800 text-gray-700 dark:text-slate-300 border-gray-300 dark:border-slate-600 hover:border-brand-400'}`}
+                        >
+                          {name}
+                        </button>
+                      );
+                    })}
+                    <button
+                      type="button"
+                      className="ml-auto rounded border border-red-200 bg-red-50 px-2 py-0.5 text-xs text-red-700 hover:bg-red-100"
+                      onClick={() => setTariff((p) => ({ ...p, profiles: p.profiles.filter((_, idx) => idx !== pi) }))}
+                    >
+                      Remove
+                    </button>
+                  </div>
+
+                  {/* 24-hour grid */}
+                  <div className="overflow-x-auto">
+                    <div className="flex min-w-[640px] gap-px">
+                      {profile.hourBuckets.map((bucket, hour) => {
+                        const col = bucket ? BUCKET_COLORS[bucket] : BUCKET_COLORS.none;
+                        const fmt = (h: number) => `${String(h).padStart(2,'0')}`;
+                        return (
+                          <button
+                            key={hour}
+                            type="button"
+                            title={`${fmt(hour)}:00–${fmt(hour+1)}:00 → ${bucket ?? 'unset'}`}
+                            onClick={() => setTariff((p) => ({
+                              ...p,
+                              profiles: p.profiles.map((pr, pIdx) => pIdx !== pi ? pr : {
+                                ...pr,
+                                hourBuckets: pr.hourBuckets.map((b, hIdx) => hIdx === hour ? activeBucketPaint : b),
+                              }),
+                            }))}
+                            className={`group relative flex-1 h-12 rounded-sm border transition-all hover:opacity-80 hover:scale-y-110 ${col.border} ${isDark ? col.dark : col.bg} ${col.text}`}
+                            style={{ minWidth: 22 }}
+                          >
+                            {hour % 6 === 0 && (
+                              <span className="absolute -bottom-4 left-0 text-[10px] text-gray-500 dark:text-slate-400 select-none">{fmt(hour)}</span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {/* Hour labels below grid */}
+                    <div className="mt-5 flex min-w-[640px] gap-px text-[10px] text-gray-400 dark:text-slate-500 select-none">
+                      {Array.from({length: 25}, (_,h) => h % 6 === 0 ? (
+                        <span key={h} className="flex-1" style={{minWidth: 22, flexBasis: `${(6/24)*100}%`}}>{String(h).padStart(2,'0')}</span>
+                      ) : null)}
+                    </div>
+                  </div>
+
+                  {/* Bucket legend for this profile */}
+                  <div className="mt-6 flex flex-wrap gap-2">
+                    {tariff.buckets.map((b) => {
+                      const count = profile.hourBuckets.filter(h => h === b.id).length;
+                      if (count === 0) return null;
+                      const col = BUCKET_COLORS[b.id];
+                      return (
+                        <span key={b.id} className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs ${col.border} ${isDark ? col.dark : col.bg} ${col.text}`}>
+                          {b.label}: {count}h — ${b.pricePerKwhUsd}/kWh · ${b.idleFeePerMinUsd}/min
+                        </span>
+                      );
+                    })}
+                    {profile.hourBuckets.filter(h => !h).length > 0 && (
+                      <span className="inline-flex items-center rounded-full border border-gray-300 bg-gray-100 dark:bg-slate-700 px-2.5 py-0.5 text-xs text-gray-500 dark:text-slate-400">
+                        Unset: {profile.hourBuckets.filter(h => !h).length}h → uses flat base rate
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+
+              <button
+                type="button"
+                className="rounded-md border border-brand-200 bg-brand-50 px-3 py-1.5 text-xs font-medium text-brand-700 hover:bg-brand-100"
+                onClick={() => setTariff((p) => ({
+                  ...p,
+                  profiles: [...p.profiles, makeDailyProfile()],
+                }))}
+              >
+                + Add daily schedule
               </button>
             </div>
-            {tariff.windows.length === 0 ? (
-              <p className="text-xs text-gray-500 dark:text-slate-400">No TOU windows yet.</p>
-            ) : (
-              <div className="space-y-2">
-                {tariff.windows.map((w) => (
-                  <div key={w.id} className="grid gap-2 rounded-md border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-2 md:grid-cols-6">
-                    <select className="rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5 text-xs" value={w.day} onChange={(e) => setTariff((p) => ({ ...p, windows: p.windows.map((x) => x.id === w.id ? { ...x, day: Number(e.target.value) } : x) }))}>
-                      {DAY_NAMES.map((name, idx) => <option key={name} value={idx}>{name}</option>)}
-                    </select>
-                    <input type="time" className="rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5 text-xs" value={w.start} onChange={(e) => setTariff((p) => ({ ...p, windows: p.windows.map((x) => x.id === w.id ? { ...x, start: e.target.value } : x) }))} />
-                    <input type="time" className="rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5 text-xs" value={w.end} onChange={(e) => setTariff((p) => ({ ...p, windows: p.windows.map((x) => x.id === w.id ? { ...x, end: e.target.value } : x) }))} />
-                    <input type="number" step="0.01" className="rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5 text-xs" value={w.pricePerKwhUsd} onChange={(e) => setTariff((p) => ({ ...p, windows: p.windows.map((x) => x.id === w.id ? { ...x, pricePerKwhUsd: Number(e.target.value) } : x) }))} placeholder="$/kWh" />
-                    <input type="number" step="0.01" className="rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5 text-xs" value={w.idleFeePerMinUsd} onChange={(e) => setTariff((p) => ({ ...p, windows: p.windows.map((x) => x.id === w.id ? { ...x, idleFeePerMinUsd: Number(e.target.value) } : x) }))} placeholder="$/min" />
-                    <button type="button" className="rounded-md border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-700 hover:bg-red-100" onClick={() => setTariff((p) => ({ ...p, windows: p.windows.filter((x) => x.id !== w.id) }))}>Remove</button>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
         )}
 
@@ -527,7 +739,7 @@ export default function SiteDetail() {
                   softwareVendorFeeMode: tariff.softwareVendorFeeMode,
                   softwareVendorFeeValue: tariff.softwareVendorFeeValue,
                   softwareFeeIncludesActivation: tariff.softwareFeeIncludesActivation,
-                  touWindows: tariff.mode === 'tou' ? tariff.windows : [],
+                  touWindows: tariff.mode === 'tou' ? profilesToWindows(tariff.profiles, tariff.buckets) : [],
                 });
                 setTariffMsg(`Saved. Price per kWh is now $${Number(updated.pricePerKwhUsd ?? tariff.pricePerKwhUsd).toFixed(2)}. Vendor fee mode: ${updated.softwareVendorFeeMode ?? tariff.softwareVendorFeeMode}.`);
                 pushAudit('tariff.updated', tariff.mode === 'tou'
