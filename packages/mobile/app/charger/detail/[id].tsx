@@ -85,8 +85,6 @@ function SlideToStart({
   const maxX = trackWidth - knobSize;
   const x = useRef(new Animated.Value(0)).current;
   const valueRef = useRef(0);
-  const [logoFailed, setLogoFailed] = useState(false);
-
   useEffect(() => {
     const sub = x.addListener(({ value }) => {
       valueRef.current = value;
@@ -118,16 +116,11 @@ function SlideToStart({
     <View style={[styles.slideTrack, { backgroundColor: isDark ? '#1f2937' : '#e5e7eb', opacity: disabled ? 0.45 : 1, width: trackWidth }]}>
       <Text style={[styles.slideLabel, { color: isDark ? '#d1d5db' : '#374151' }]}>{label}</Text>
       <Animated.View {...pan.panHandlers} style={[styles.slideKnob, { transform: [{ translateX: x }] }]}>
-        {logoFailed ? (
-          <Text style={styles.slideKnobFallback}>⚡</Text>
-        ) : (
-          <Image
-            source={require('../../../assets/branding/lumeo_logo_swirl_only.png')}
-            style={styles.slideKnobLogo}
-            resizeMode="contain"
-            onError={() => setLogoFailed(true)}
-          />
-        )}
+        <Image
+          source={require('../../../assets/branding/lumeo_logo_swirl_only.png')}
+          style={styles.slideKnobLogo}
+          resizeMode="contain"
+        />
       </Animated.View>
     </View>
   );
@@ -220,24 +213,16 @@ function TopMetricsHero({
           : haloMode === 'awaitingPlug'
             ? '#16a34a'
             : '#2563eb';
-  const haloAura =
-    haloMode === 'faulted'
-      ? '#fca5a566'
-      : haloMode === 'charging'
-        ? '#67e8f966'
-        : haloMode === 'idle'
-          ? '#fcd34d66'
-          : haloMode === 'awaitingPlug'
-            ? '#86efac66'
-            : '#93c5fd66';
+
   const valueColor = forceWhiteText ? '#ffffff' : isDark ? '#f9fafb' : '#0b1220';
   const labelColor = forceWhiteText ? '#e5e7eb' : isDark ? '#9ca3af' : '#475569';
 
   return (
     <View style={[styles.metricsHeroCard, { backgroundColor: isDark ? '#0b1220' : '#f8fbff' }]}>
-      {/* Animated halo border + aura - only this layer blinks, not the card content */}
-      <View pointerEvents="none" style={[styles.haloAuraOverlay, { borderColor: haloAura }]} />
-      <Animated.View pointerEvents="none" style={[styles.haloRingOverlay, { borderColor: haloColor, shadowColor: haloAura, opacity: haloBlink }]} />
+      {/* 30% glow bloom behind the ring — blinks in sync with ring */}
+      <Animated.View pointerEvents="none" style={[styles.haloGlowOverlay, { shadowColor: haloColor, opacity: haloBlink }]} />
+      {/* Crisp halo ring — sits outside tile so tile edge is never exposed */}
+      <Animated.View pointerEvents="none" style={[styles.haloRingOverlay, { borderColor: haloColor, shadowColor: haloColor, opacity: haloBlink }]} />
       <View style={styles.metricsGrid}>
         <View style={[styles.metricTile, { backgroundColor: isDark ? '#111827' : '#ffffff' }]}>
           <Text style={[styles.metricLabel, { color: labelColor }]}>Total kWh</Text>
@@ -780,35 +765,40 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     padding: 18,
     gap: 14,
-    borderWidth: 3,
+    borderWidth: 0,
     borderColor: 'transparent',
     shadowOpacity: 0,
     elevation: 0,
     overflow: 'visible',
   },
-  haloAuraOverlay: {
+  // 30% glow bloom — sits furthest out, soft and wide
+  haloGlowOverlay: {
     position: 'absolute',
-    top: -4,
-    left: -4,
-    right: -4,
-    bottom: -4,
-    borderRadius: 22,
-    borderWidth: 4,
+    top: -14,
+    left: -14,
+    right: -14,
+    bottom: -14,
+    borderRadius: 32,
+    borderWidth: 0,
     backgroundColor: 'transparent',
+    shadowOpacity: 0.30,
+    shadowRadius: 28,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 0,
   },
+  // Crisp halo ring — sits just outside tile edge so tile edge is never visible
   haloRingOverlay: {
     position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    borderRadius: 18,
+    top: -3,
+    left: -3,
+    right: -3,
+    bottom: -3,
+    borderRadius: 21,
     borderWidth: 3,
-    shadowOpacity: 1,
-    shadowRadius: 18,
+    shadowOpacity: 0.85,
+    shadowRadius: 10,
     shadowOffset: { width: 0, height: 0 },
-    elevation: 10,
-    pointerEvents: 'none',
+    elevation: 8,
   },
   metricsGrid: {
     flexDirection: 'row',
@@ -1018,11 +1008,15 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'transparent',
+    backgroundColor: '#ffffff',
     overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOpacity: 0.18,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
   },
-  slideKnobLogo: { width: 56, height: 56 },
-  slideKnobFallback: { fontSize: 28, lineHeight: 30 },
+  slideKnobLogo: { width: 48, height: 48 },
 
   modalBackdrop: {
     flex: 1,
