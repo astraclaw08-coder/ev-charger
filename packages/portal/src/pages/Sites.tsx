@@ -225,7 +225,7 @@ export default function Sites() {
               <div className="mt-2 flex justify-end gap-2">
                 <button
                   type="button"
-                  className="rounded-md border border-gray-300 dark:border-slate-600 px-3 py-2 text-sm text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60"
+                  className="rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-700"
                   onClick={() => setShowAddSiteModal(false)}
                   disabled={createLoading}
                 >
@@ -265,7 +265,7 @@ function SiteListRow({ site }: { site: SiteListItem }) {
         {offline > 0 && <span className="rounded-full border border-gray-300 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/60 px-2 py-0.5 text-gray-600 dark:text-slate-400">Offline {offline}</span>}
       </div>
       <div className="md:text-right">
-        <Link to={`/sites/${shortId(site.id)}`} className="inline-block rounded-md border border-gray-300 dark:border-slate-700 px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60">
+        <Link to={`/sites/${shortId(site.id)}`} className="inline-block rounded-md border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-700">
           View Site →
         </Link>
       </div>

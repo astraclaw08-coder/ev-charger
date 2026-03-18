@@ -400,10 +400,10 @@ function KpiTile({ label, value, live }: { label: string; value: string; live?: 
 
 function ActionTile({ label, value, tone }: { label: string; value: number; tone: 'red' | 'slate' | 'blue' }) {
   const toneClass = tone === 'red'
-    ? 'text-red-700 bg-red-50 border-red-200'
+    ? 'text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/25 border-red-200 dark:border-red-800/60'
     : tone === 'slate'
-      ? 'text-slate-700 bg-slate-100 border-slate-300'
-      : 'text-brand-700 bg-brand-50 border-brand-200';
+      ? 'text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700'
+      : 'text-brand-700 dark:text-brand-200 bg-brand-50 dark:bg-brand-900/25 border-brand-200 dark:border-brand-800/60';
 
   return (
     <div className={`rounded-lg border p-3 ${toneClass}`}>
