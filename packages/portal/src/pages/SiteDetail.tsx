@@ -92,6 +92,36 @@ function makeDailyProfile(days: number[] = [1,2,3,4,5]): TouDailyProfile {
   };
 }
 
+function normalizeSegments(segments: TouTierSegment[]): TouTierSegment[] {
+  const sorted = segments
+    .slice()
+    .filter((s) => s.endHour > s.startHour)
+    .sort((a, b) => a.startHour - b.startHour || a.endHour - b.endHour);
+  if (sorted.length === 0) return [];
+  const merged: TouTierSegment[] = [sorted[0]];
+  for (let i = 1; i < sorted.length; i += 1) {
+    const prev = merged[merged.length - 1];
+    const curr = sorted[i];
+    if (prev.bucket === curr.bucket && prev.endHour >= curr.startHour) {
+      merged[merged.length - 1] = { ...prev, endHour: Math.max(prev.endHour, curr.endHour) };
+    } else {
+      merged.push(curr);
+    }
+  }
+  return merged;
+}
+
+function tariffFingerprint(t: TariffConfig): string {
+  return JSON.stringify({
+    mode: t.mode,
+    buckets: t.buckets.map((b) => ({ id: b.id, e: Number(b.pricePerKwhUsd.toFixed(4)), i: Number(b.idleFeePerMinUsd.toFixed(4)) })),
+    profiles: t.profiles.map((p) => ({
+      days: [...p.days].sort((a, b) => a - b),
+      segments: normalizeSegments(p.segments).map((s) => ({ b: s.bucket, s: s.startHour, e: s.endHour })),
+    })),
+  });
+}
+
 // Convert segment profiles → legacy TouWindow[] for API
 function profilesToWindows(profiles: TouDailyProfile[], buckets: PriceBucket[]): TouWindow[] {
   const wins: TouWindow[] = [];
@@ -229,6 +259,7 @@ export default function SiteDetail() {
 
   const [auditEvents, setAuditEvents] = useState<SiteAuditEvent[]>([]);
 
+  const hasTariffEdits = !savedTariff || tariffFingerprint(tariff) !== tariffFingerprint(savedTariff);
 
   const load = useCallback(async () => {
     try {
@@ -562,7 +593,17 @@ export default function SiteDetail() {
         </div>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <label className="text-sm text-gray-700 dark:text-slate-300">Pricing mode
-            <select className="mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5" value={tariff.mode} onChange={(e) => setTariff({ ...tariff, mode: e.target.value as TariffConfig['mode'] })}>
+            <select
+              className="mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5"
+              value={tariff.mode}
+              onChange={(e) => setTariff((p) => {
+                const nextMode = e.target.value as TariffConfig['mode'];
+                if (nextMode === 'tou' && p.profiles.length === 0) {
+                  return { ...p, mode: nextMode, profiles: [makeDailyProfile()] };
+                }
+                return { ...p, mode: nextMode };
+              })}
+            >
               <option value="flat">Flat rate</option>
               <option value="tou">Time-of-Use (TOU)</option>
             </select>
@@ -591,7 +632,7 @@ export default function SiteDetail() {
 
             {/* ── Step 1: Price tiers ───────────────────────────────────── */}
             <div className="rounded-xl border border-gray-200 dark:border-slate-700 p-4">
-              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">Step 1 — Price tiers</p>
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">Price tiers</p>
               <div className="grid gap-3 sm:grid-cols-3">
                 {tariff.buckets.map((bucket) => {
                   const col = BUCKET_COLORS[bucket.id] ?? BUCKET_COLORS.none;
@@ -624,7 +665,7 @@ export default function SiteDetail() {
 
             {/* ── Step 2: Daily schedule (single schedule per site) ─────── */}
             <div className="rounded-xl border border-gray-200 dark:border-slate-700 p-4">
-              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">Step 2 — Daily schedule</p>
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">Daily schedule</p>
 
               {tariff.profiles.length === 0 && (
                 <div className="mb-3">
@@ -717,6 +758,7 @@ export default function SiteDetail() {
                       const width = ((seg.endHour - seg.startHour) / 24) * 100;
                       const style = SEGMENT_STYLE[seg.bucket] ?? { bg: 'bg-gray-300', label: 'text-white' };
                       const durationH = seg.endHour - seg.startHour;
+                      const bucketRates = tariff.buckets.find((b) => b.id === seg.bucket);
                       return (
                         <div
                           key={seg.id}
@@ -726,8 +768,11 @@ export default function SiteDetail() {
                         >
                           {/* Label — always white on solid bg */}
                           {durationH >= 2 && (
-                            <span className={`absolute inset-0 flex items-center justify-center text-[10px] font-bold uppercase select-none pointer-events-none drop-shadow-sm ${style.label}`}>
-                              {seg.bucket}
+                            <span className={`absolute inset-0 flex flex-col items-center justify-center text-[10px] font-bold uppercase select-none pointer-events-none drop-shadow-sm ${style.label}`}>
+                              <span>{seg.bucket}</span>
+                              {durationH >= 3 && bucketRates && (
+                                <span className="text-[9px] font-semibold normal-case opacity-95">${bucketRates.pricePerKwhUsd}/kWh · ${bucketRates.idleFeePerMinUsd}/min</span>
+                              )}
                             </span>
                           )}
                           {/* Remove button */}
@@ -778,72 +823,54 @@ export default function SiteDetail() {
                     ))}
                   </div>
 
-                  {/* Add tier buttons — hide bucket if already present to avoid confusion */}
+                  {/* Add price tier: always show all tiers unless every hour is already assigned */}
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-xs text-gray-400 dark:text-slate-500">Add price tier:</span>
-                    {tariff.buckets
-                      .filter((b) => !profile.segments.some((s) => s.bucket === b.id))
-                      .map((b) => (
+                    {(() => {
+                      const allHoursAssigned = Array.from({ length: 24 }, (_, h) => profile.segments.some((s) => h >= s.startHour && h < s.endHour)).every(Boolean);
+                      if (allHoursAssigned) {
+                        return <span className="text-xs text-gray-400 dark:text-slate-500 italic">All 24 hours assigned</span>;
+                      }
+                      return tariff.buckets.map((b) => (
                         <button
                           key={b.id}
                           type="button"
                           className={`rounded border px-2.5 py-1 text-xs font-medium transition-colors ${ADD_TIER_CLASSES[b.id]}`}
                           onClick={() => {
-                            const existing = profile.segments.map(s => ({ s: s.startHour, e: s.endHour })).sort((a, z) => a.s - z.s);
+                            const existing = profile.segments.map((s) => ({ s: s.startHour, e: s.endHour, bucket: s.bucket })).sort((a, z) => a.s - z.s);
                             let start = 0; let end = 4;
                             for (let h = 0; h < 24; h++) {
-                              if (!existing.some(w => h >= w.s && h < w.e)) { start = h; end = Math.min(h + 4, 24); break; }
+                              if (!existing.some((w) => h >= w.s && h < w.e)) { start = h; end = Math.min(h + 4, 24); break; }
                             }
+
+                            // If adjacent segment has same bucket, attach and normalize (merge)
+                            const leftNeighbor = existing.find((w) => w.e === start && w.bucket === b.id);
+                            const rightNeighbor = existing.find((w) => w.s === end && w.bucket === b.id);
+                            if (leftNeighbor) start = leftNeighbor.s;
+                            if (rightNeighbor) end = rightNeighbor.e;
+
                             setTariff((p) => ({
                               ...p,
                               profiles: p.profiles.map((pr, pIdx) => pIdx !== pi ? pr : {
                                 ...pr,
-                                segments: [...pr.segments, { id: crypto.randomUUID(), bucket: b.id, startHour: start, endHour: end }],
+                                segments: normalizeSegments([
+                                  ...pr.segments.filter((s) => !(s.bucket === b.id && (s.endHour === start || s.startHour === end))),
+                                  { id: crypto.randomUUID(), bucket: b.id, startHour: start, endHour: end },
+                                ]),
                               }),
                             }));
                           }}
                         >
                           + {b.label}
                         </button>
-                      ))}
-                    {tariff.buckets.every((b) => profile.segments.some((s) => s.bucket === b.id)) && (
-                      <span className="text-xs text-gray-400 dark:text-slate-500 italic">All tiers added</span>
-                    )}
+                      ));
+                    })()}
                   </div>
                 </div>
               ))}
             </div>
 
-            {/* ── Effective TOU schedule summary (reflects last save) ─── */}
-            {(savedTariff?.mode === 'tou' && savedTariff.profiles.length > 0) && (() => {
-              const profile = savedTariff.profiles[0];
-              const sorted = profile.segments.slice().sort((a,b) => a.startHour - b.startHour);
-              return (
-                <div className="rounded-xl border border-gray-200 dark:border-slate-700 p-4">
-                  <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">Effective TOU schedule</p>
-                  <div className="flex flex-wrap gap-2">
-                    {sorted.map((seg) => {
-                      const style = SEGMENT_STYLE[seg.bucket] ?? { bg: 'bg-gray-300', label: 'text-white' };
-                      const b = savedTariff!.buckets.find(x => x.id === seg.bucket);
-                      return (
-                        <div key={seg.id} className={`rounded-lg ${style.bg} px-3 py-2 min-w-[110px]`}>
-                          <p className={`text-[10px] font-bold uppercase tracking-wide ${style.label}`}>{seg.bucket}</p>
-                          <p className={`text-xs font-semibold mt-0.5 ${style.label}`}>
-                            {String(seg.startHour).padStart(2,'0')}:00 – {seg.endHour >= 24 ? '24:00' : String(seg.endHour).padStart(2,'0')+':00'}
-                          </p>
-                          {b && <p className={`text-[10px] mt-1 opacity-90 ${style.label}`}>${b.pricePerKwhUsd}/kWh · ${b.idleFeePerMinUsd}/min</p>}
-                        </div>
-                      );
-                    })}
-                  </div>
-                  {profile.days.length > 0 && (
-                    <p className="mt-2 text-xs text-gray-500 dark:text-slate-400">
-                      Applied on: {profile.days.map(d => DAY_NAMES[d]).join(', ')}
-                    </p>
-                  )}
-                </div>
-              );
-            })()}
+            {/* Effective TOU schedule card removed per UX request; dynamic tier data stays in timeline bar labels. */}
           </div>
         )}
 
@@ -853,23 +880,24 @@ export default function SiteDetail() {
           const summary = buildPricingSummary(displayTariff);
           return (
             <div className="mt-4 border-t border-gray-100 dark:border-slate-800 pt-4">
-              <button
-                type="button"
-                onClick={() => setPricingSummaryOpen((v) => !v)}
-                className="flex w-full items-center justify-between text-left group"
-              >
-                <span className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400 group-hover:text-gray-700 dark:group-hover:text-slate-200 transition-colors">
-                  Effective pricing summary
-                  {savedTariff && <span className="ml-2 inline-flex items-center rounded-full bg-gray-100 dark:bg-slate-800 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 dark:text-slate-400">saved</span>}
-                </span>
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className={`h-3.5 w-3.5 text-gray-400 dark:text-slate-500 transition-transform ${pricingSummaryOpen ? 'rotate-180' : ''}`}
-                  fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+              <div className="flex items-center justify-end gap-2">
+                <span className="text-xs font-semibold tracking-wide text-gray-500 dark:text-slate-400">Show effective pricing summary?</span>
+                <button
+                  type="button"
+                  onClick={() => setPricingSummaryOpen((v) => !v)}
+                  className="inline-flex items-center justify-center rounded-md border border-gray-200 dark:border-slate-700 p-1.5 hover:bg-gray-50 dark:hover:bg-slate-800"
+                  aria-label="Toggle effective pricing summary"
                 >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className={`h-3.5 w-3.5 text-gray-400 dark:text-slate-500 transition-transform ${pricingSummaryOpen ? 'rotate-180' : ''}`}
+                    fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                {savedTariff && <span className="inline-flex items-center rounded-full bg-gray-100 dark:bg-slate-800 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 dark:text-slate-400">saved</span>}
+              </div>
               {pricingSummaryOpen && (
                 <ul className="mt-2 space-y-1">
                   {summary.lines.map((line, i) => (
@@ -882,7 +910,10 @@ export default function SiteDetail() {
         })()}
 
         <div className="mt-3">
-          <button type="button" className="rounded-md bg-brand-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-700"
+          <button
+            type="button"
+            disabled={!hasTariffEdits}
+            className={`rounded-md px-3 py-1.5 text-xs font-medium text-white ${hasTariffEdits ? 'bg-brand-600 hover:bg-brand-700' : 'bg-gray-300 dark:bg-slate-700 cursor-not-allowed text-gray-500 dark:text-slate-400'}`}
             onClick={async () => {
               try {
                 const token = await getToken();
