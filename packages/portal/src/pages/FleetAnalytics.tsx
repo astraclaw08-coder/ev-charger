@@ -424,13 +424,21 @@ export default function FleetAnalytics() {
           <span>⚡ Avg kWh / Session: <strong className="text-gray-800 dark:text-slate-200">{summary.sessionsCount > 0 ? `${(summary.kwhDelivered / summary.sessionsCount).toFixed(2)} kWh` : '—'}</strong></span>
           <span>📅 Total sessions in period: <strong className="text-gray-800 dark:text-slate-200">{summary.sessionsCount}</strong></span>
         </div>
-        <DayOfWeekChart data={merged} />
+        <DayOfWeekChart data={merged} chartColors={chartColors} isDark={isDark} />
       </ChartCard>
     </div>
   );
 }
 
-function DayOfWeekChart({ data }: { data: Array<{ date: string; sessions: number }> }) {
+function DayOfWeekChart({
+  data,
+  chartColors,
+  isDark,
+}: {
+  data: Array<{ date: string; sessions: number }>;
+  chartColors: { grid: string; tick: string; tooltip: { backgroundColor: string; border: string; color: string } };
+  isDark: boolean;
+}) {
   const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const counts = Array(7).fill(0);
   const totals = Array(7).fill(0);
