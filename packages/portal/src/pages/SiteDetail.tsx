@@ -13,15 +13,20 @@ import { usePortalTheme } from '../theme/ThemeContext';
 type RangePreset = '7d' | '30d' | '60d';
 
 
-// ── TOU v2: Bucket-based pricing ─────────────────────────────────────────────
-// Each bucket defines energy ($/kWh) and idle ($/min) rates.
-// A daily profile assigns a bucket to each hour (0–23) for selected days.
+// ── TOU v2: Segment-based pricing ────────────────────────────────────────────
+// Each price tier is a named bucket (low/medium/high) with energy + idle rates.
+// A daily profile holds ordered segments (start/end hour) assigned to a bucket.
 type PriceBucket = { id: 'low' | 'medium' | 'high'; label: string; pricePerKwhUsd: number; idleFeePerMinUsd: number };
+type TouTierSegment = {
+  id: string;
+  bucket: 'low' | 'medium' | 'high';
+  startHour: number; // 0–23
+  endHour: number;   // 1–24, exclusive end; must be > startHour
+};
 type TouDailyProfile = {
   id: string;
   days: number[]; // 0=Sun … 6=Sat
-  // hourBuckets: 24 entries, each is 'low'|'medium'|'high'|null (null = use default/flat)
-  hourBuckets: Array<'low' | 'medium' | 'high' | null>;
+  segments: TouTierSegment[];
 };
 // Legacy window type kept for backward-compat API serialization
 type TouWindow = {
@@ -41,11 +46,9 @@ type TariffConfig = {
   softwareVendorFeeValue: number;
   softwareFeeIncludesActivation: boolean;
   mode: 'flat' | 'tou';
-  // v2 bucket model
   buckets: PriceBucket[];
   profiles: TouDailyProfile[];
-  // legacy windows (kept for API compat, derived from v2 on save)
-  windows: TouWindow[];
+  windows: TouWindow[]; // derived on save — not stored in state
 };
 
 const DEFAULT_BUCKETS: PriceBucket[] = [
@@ -53,47 +56,58 @@ const DEFAULT_BUCKETS: PriceBucket[] = [
   { id: 'medium', label: 'Medium', pricePerKwhUsd: 0.30, idleFeePerMinUsd: 0.05 },
   { id: 'high',   label: 'High',   pricePerKwhUsd: 0.50, idleFeePerMinUsd: 0.10 },
 ];
-const BUCKET_COLORS: Record<string, { bg: string; text: string; border: string; dark: string }> = {
-  low:    { bg: 'bg-emerald-100', text: 'text-emerald-800', border: 'border-emerald-300', dark: 'bg-emerald-700/30' },
-  medium: { bg: 'bg-amber-100',   text: 'text-amber-800',   border: 'border-amber-300',   dark: 'bg-amber-700/30' },
-  high:   { bg: 'bg-rose-100',    text: 'text-rose-800',    border: 'border-rose-300',    dark: 'bg-rose-700/30' },
-  none:   { bg: 'bg-gray-100',    text: 'text-gray-500',    border: 'border-gray-300',    dark: 'bg-slate-700/30' },
+
+// Text + border colors for bucket labels and badges (no background fills)
+const BUCKET_COLORS: Record<string, { text: string; border: string }> = {
+  low:    { text: 'text-emerald-600 dark:text-emerald-400', border: 'border-emerald-300 dark:border-emerald-700' },
+  medium: { text: 'text-amber-600 dark:text-amber-400',     border: 'border-amber-300 dark:border-amber-700' },
+  high:   { text: 'text-rose-600 dark:text-rose-400',       border: 'border-rose-300 dark:border-rose-700' },
+  none:   { text: 'text-gray-400 dark:text-slate-500',      border: 'border-gray-200 dark:border-slate-700' },
+};
+// Solid fill for timeline segment bars
+const SEGMENT_BG: Record<string, string> = {
+  low:    'bg-emerald-400 dark:bg-emerald-500',
+  medium: 'bg-amber-400 dark:bg-amber-500',
+  high:   'bg-rose-500 dark:bg-rose-500',
+};
+// Add-tier button styles per bucket
+const ADD_TIER_CLASSES: Record<string, string> = {
+  low:    'border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-400 dark:hover:bg-emerald-950/40',
+  medium: 'border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-950/40',
+  high:   'border-rose-300 text-rose-700 hover:bg-rose-50 dark:border-rose-700 dark:text-rose-400 dark:hover:bg-rose-950/40',
 };
 
+type TouDragState = { pi: number; segId: string; handle: 'start' | 'end'; containerLeft: number; containerWidth: number };
+
 function makeDailyProfile(days: number[] = [1,2,3,4,5]): TouDailyProfile {
-  const hourBuckets: Array<'low'|'medium'|'high'|null> = Array(24).fill(null);
-  // Default: low 21-08, medium 08-16, high 16-21
-  for (let h=21; h<24; h++) hourBuckets[h]='low';
-  for (let h=0;  h<8;  h++) hourBuckets[h]='low';
-  for (let h=8;  h<16; h++) hourBuckets[h]='medium';
-  for (let h=16; h<21; h++) hourBuckets[h]='high';
-  return { id: crypto.randomUUID(), days, hourBuckets };
+  return {
+    id: crypto.randomUUID(),
+    days,
+    segments: [
+      { id: crypto.randomUUID(), bucket: 'low',    startHour: 0,  endHour: 8  },
+      { id: crypto.randomUUID(), bucket: 'medium', startHour: 8,  endHour: 16 },
+      { id: crypto.randomUUID(), bucket: 'high',   startHour: 16, endHour: 21 },
+      { id: crypto.randomUUID(), bucket: 'low',    startHour: 21, endHour: 24 },
+    ],
+  };
 }
 
-// Convert v2 bucket profiles back to legacy TouWindow[] for API
+// Convert segment profiles → legacy TouWindow[] for API
 function profilesToWindows(profiles: TouDailyProfile[], buckets: PriceBucket[]): TouWindow[] {
   const wins: TouWindow[] = [];
   for (const profile of profiles) {
     for (const day of profile.days) {
-      // Merge consecutive same-bucket hours into one window
-      let i = 0;
-      while (i < 24) {
-        const bucket = profile.hourBuckets[i];
-        if (!bucket) { i++; continue; }
-        let j = i + 1;
-        while (j < 24 && profile.hourBuckets[j] === bucket) j++;
-        const b = buckets.find(b => b.id === bucket);
-        if (b) {
-          wins.push({
-            id: crypto.randomUUID(),
-            day,
-            start: `${String(i).padStart(2,'0')}:00`,
-            end: j === 24 ? '23:59' : `${String(j).padStart(2,'0')}:00`,
-            pricePerKwhUsd: b.pricePerKwhUsd,
-            idleFeePerMinUsd: b.idleFeePerMinUsd,
-          });
-        }
-        i = j;
+      for (const seg of profile.segments) {
+        const b = buckets.find((b) => b.id === seg.bucket);
+        if (!b) continue;
+        wins.push({
+          id: crypto.randomUUID(),
+          day,
+          start: `${String(seg.startHour).padStart(2,'0')}:00`,
+          end: seg.endHour >= 24 ? '23:59' : `${String(seg.endHour).padStart(2,'0')}:00`,
+          pricePerKwhUsd: b.pricePerKwhUsd,
+          idleFeePerMinUsd: b.idleFeePerMinUsd,
+        });
       }
     }
   }
@@ -200,7 +214,7 @@ export default function SiteDetail() {
   const [siteUtilizationPct, setSiteUtilizationPct] = useState<number | null>(null);
 
   const [tariff, setTariff] = useState<TariffConfig>({ pricePerKwhUsd: 0.35, idleFeePerMinUsd: 0.08, activationFeeUsd: 0, gracePeriodMin: 10, softwareVendorFeeMode: 'none', softwareVendorFeeValue: 0, softwareFeeIncludesActivation: true, mode: 'flat', buckets: DEFAULT_BUCKETS, profiles: [], windows: [] });
-  const [activeBucketPaint, setActiveBucketPaint] = useState<'low'|'medium'|'high'|null>('medium');
+  const touDragRef = useRef<TouDragState | null>(null);
   const [tariffMsg, setTariffMsg] = useState('');
   const [showFeeModal, setShowFeeModal] = useState(false);
   // Superadmin detection: dev mode always grants superadmin; in production read from JWT publicMetadata.
@@ -239,7 +253,6 @@ export default function SiteDetail() {
         softwareVendorFeeValue: Number(data.softwareVendorFeeValue ?? 0),
         softwareFeeIncludesActivation: Boolean(data.softwareFeeIncludesActivation ?? true),
         mode: data.pricingMode === 'tou' ? 'tou' : 'flat',
-        // Load v2 bucket model from API if present, else default
         buckets: Array.isArray((data as any).priceBuckets) && (data as any).priceBuckets.length === 3
           ? (data as any).priceBuckets
           : DEFAULT_BUCKETS,
@@ -550,29 +563,29 @@ export default function SiteDetail() {
         {tariff.mode === 'tou' && (
           <div className="mt-4 space-y-5">
 
-            {/* ── Step 1: Price buckets ─────────────────────────────────── */}
-            <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
-              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-slate-400">Step 1 — Define price buckets</p>
+            {/* ── Step 1: Price tiers ───────────────────────────────────── */}
+            <div className="rounded-xl border border-gray-200 dark:border-slate-700 p-4">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">Step 1 — Price tiers</p>
               <div className="grid gap-3 sm:grid-cols-3">
                 {tariff.buckets.map((bucket) => {
                   const col = BUCKET_COLORS[bucket.id] ?? BUCKET_COLORS.none;
                   return (
-                    <div key={bucket.id} className={`rounded-lg border p-3 ${col.border} ${isDark ? col.dark : col.bg}`}>
-                      <p className={`mb-2 text-xs font-bold uppercase tracking-wide ${col.text}`}>{bucket.label}</p>
-                      <label className="block text-xs text-gray-700 dark:text-slate-300 mb-1">
+                    <div key={bucket.id} className="rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3">
+                      <p className={`mb-3 text-xs font-bold uppercase tracking-wide ${col.text}`}>{bucket.label}</p>
+                      <label className="block text-xs text-gray-600 dark:text-slate-400 mb-1">
                         Energy rate ($/kWh)
                         <input
                           type="number" step="0.01" min="0"
-                          className="mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-2 py-1.5 text-xs"
+                          className="mt-1 w-full rounded-md border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-2 py-1.5 text-xs text-gray-900 dark:text-slate-100"
                           value={bucket.pricePerKwhUsd}
                           onChange={(e) => setTariff((p) => ({ ...p, buckets: p.buckets.map((b) => b.id === bucket.id ? { ...b, pricePerKwhUsd: Number(e.target.value) } : b) }))}
                         />
                       </label>
-                      <label className="block text-xs text-gray-700 dark:text-slate-300">
+                      <label className="block text-xs text-gray-600 dark:text-slate-400">
                         Idle fee ($/min)
                         <input
                           type="number" step="0.001" min="0"
-                          className="mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-2 py-1.5 text-xs"
+                          className="mt-1 w-full rounded-md border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-2 py-1.5 text-xs text-gray-900 dark:text-slate-100"
                           value={bucket.idleFeePerMinUsd}
                           onChange={(e) => setTariff((p) => ({ ...p, buckets: p.buckets.map((b) => b.id === bucket.id ? { ...b, idleFeePerMinUsd: Number(e.target.value) } : b) }))}
                         />
@@ -584,37 +597,18 @@ export default function SiteDetail() {
             </div>
 
             {/* ── Step 2: Daily schedules ────────────────────────────────── */}
-            <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-slate-400">Step 2 — Assign bucket to each hour</p>
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="text-xs text-gray-500 dark:text-slate-400">Paint bucket:</span>
-                  {([null, 'low', 'medium', 'high'] as const).map((b) => {
-                    const col = b ? BUCKET_COLORS[b] : BUCKET_COLORS.none;
-                    const active = activeBucketPaint === b;
-                    return (
-                      <button
-                        key={String(b)}
-                        type="button"
-                        onClick={() => setActiveBucketPaint(b)}
-                        className={`rounded-md border px-2.5 py-1 text-xs font-medium transition-all ${col.border} ${isDark ? col.dark : col.bg} ${col.text} ${active ? 'ring-2 ring-brand-500 ring-offset-1' : 'opacity-70 hover:opacity-100'}`}
-                      >
-                        {b ? (b.charAt(0).toUpperCase() + b.slice(1)) : 'Clear'}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+            <div className="rounded-xl border border-gray-200 dark:border-slate-700 p-4">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">Step 2 — Daily schedules</p>
 
               {tariff.profiles.length === 0 && (
-                <p className="mb-3 text-xs text-gray-400 dark:text-slate-500">No daily schedules yet. Add one below.</p>
+                <p className="mb-3 text-xs text-gray-400 dark:text-slate-500">No schedules yet. Add one below.</p>
               )}
 
               {tariff.profiles.map((profile, pi) => (
-                <div key={profile.id} className="mb-4 rounded-lg border border-gray-200 dark:border-slate-700 p-3 bg-gray-50 dark:bg-slate-800/50">
+                <div key={profile.id} className="mb-5 rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
                   {/* Day selector */}
-                  <div className="mb-3 flex flex-wrap items-center gap-2">
-                    <span className="text-xs font-medium text-gray-600 dark:text-slate-400">Days:</span>
+                  <div className="mb-4 flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-medium text-gray-500 dark:text-slate-400">Days:</span>
                     {DAY_NAMES.map((name, di) => {
                       const selected = profile.days.includes(di);
                       return (
@@ -628,7 +622,7 @@ export default function SiteDetail() {
                               days: selected ? pr.days.filter((d) => d !== di) : [...pr.days, di].sort(),
                             }),
                           }))}
-                          className={`rounded px-2 py-0.5 text-xs font-medium border transition-colors ${selected ? 'bg-brand-600 text-white border-brand-600' : 'bg-white dark:bg-slate-800 text-gray-700 dark:text-slate-300 border-gray-300 dark:border-slate-600 hover:border-brand-400'}`}
+                          className={`rounded px-2.5 py-1 text-xs font-medium border transition-colors ${selected ? 'bg-brand-600 text-white border-brand-600' : 'bg-white dark:bg-slate-800 text-gray-600 dark:text-slate-300 border-gray-200 dark:border-slate-600 hover:border-brand-400'}`}
                         >
                           {name}
                         </button>
@@ -636,77 +630,165 @@ export default function SiteDetail() {
                     })}
                     <button
                       type="button"
-                      className="ml-auto rounded border border-red-200 bg-red-50 px-2 py-0.5 text-xs text-red-700 hover:bg-red-100"
+                      className="ml-auto text-xs text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
                       onClick={() => setTariff((p) => ({ ...p, profiles: p.profiles.filter((_, idx) => idx !== pi) }))}
                     >
-                      Remove
+                      Remove schedule
                     </button>
                   </div>
 
-                  {/* 24-hour grid */}
-                  <div className="overflow-x-auto">
-                    <div className="flex min-w-[640px] gap-px">
-                      {profile.hourBuckets.map((bucket, hour) => {
-                        const col = bucket ? BUCKET_COLORS[bucket] : BUCKET_COLORS.none;
-                        const fmt = (h: number) => `${String(h).padStart(2,'0')}`;
-                        return (
+                  {/* ── Timeline bar ─────────────────────────────────────── */}
+                  <div
+                    className="relative mb-6 h-10 rounded-md bg-gray-100 dark:bg-slate-800 select-none overflow-visible"
+                    style={{ touchAction: 'none' }}
+                    onMouseMove={(e) => {
+                      const drag = touDragRef.current;
+                      if (!drag || drag.pi !== pi) return;
+                      const pct = Math.max(0, Math.min(1, (e.clientX - drag.containerLeft) / drag.containerWidth));
+                      const rawHour = Math.round(pct * 24);
+                      const clampedHour = Math.max(0, Math.min(24, rawHour));
+                      setTariff((p) => ({
+                        ...p,
+                        profiles: p.profiles.map((pr, pIdx) => {
+                          if (pIdx !== pi) return pr;
+                          return {
+                            ...pr,
+                            segments: pr.segments.map((seg) => {
+                              if (seg.id !== drag.segId) return seg;
+                              if (drag.handle === 'start') {
+                                const newStart = Math.min(clampedHour, seg.endHour - 1);
+                                return { ...seg, startHour: Math.max(0, newStart) };
+                              } else {
+                                const newEnd = Math.max(clampedHour, seg.startHour + 1);
+                                return { ...seg, endHour: Math.min(24, newEnd) };
+                              }
+                            }),
+                          };
+                        }),
+                      }));
+                    }}
+                    onMouseUp={() => { touDragRef.current = null; }}
+                    onMouseLeave={() => { touDragRef.current = null; }}
+                  >
+                    {/* Render segments */}
+                    {profile.segments.map((seg) => {
+                      const left = (seg.startHour / 24) * 100;
+                      const width = ((seg.endHour - seg.startHour) / 24) * 100;
+                      const col = BUCKET_COLORS[seg.bucket] ?? BUCKET_COLORS.none;
+                      const bgCls = SEGMENT_BG[seg.bucket] ?? 'bg-gray-300';
+                      const durationH = seg.endHour - seg.startHour;
+                      return (
+                        <div
+                          key={seg.id}
+                          className={`absolute top-0 h-full rounded-sm ${bgCls} opacity-80`}
+                          style={{ left: `${left}%`, width: `${width}%` }}
+                          title={`${seg.bucket} | ${seg.startHour}:00–${seg.endHour}:00`}
+                        >
+                          {/* Label */}
+                          {durationH >= 2 && (
+                            <span className={`absolute inset-0 flex items-center justify-center text-[10px] font-semibold uppercase select-none pointer-events-none ${col.text}`}>
+                              {seg.bucket}
+                            </span>
+                          )}
+                          {/* Remove button */}
                           <button
-                            key={hour}
                             type="button"
-                            title={`${fmt(hour)}:00–${fmt(hour+1)}:00 → ${bucket ?? 'unset'}`}
+                            className="absolute -top-2.5 right-0.5 text-[10px] text-white/70 hover:text-white z-10 leading-none"
                             onClick={() => setTariff((p) => ({
                               ...p,
-                              profiles: p.profiles.map((pr, pIdx) => pIdx !== pi ? pr : {
-                                ...pr,
-                                hourBuckets: pr.hourBuckets.map((b, hIdx) => hIdx === hour ? activeBucketPaint : b),
-                              }),
+                              profiles: p.profiles.map((pr, pIdx) => pIdx !== pi ? pr : { ...pr, segments: pr.segments.filter((s) => s.id !== seg.id) }),
                             }))}
-                            className={`group relative flex-1 h-12 rounded-sm border transition-all hover:opacity-80 hover:scale-y-110 ${col.border} ${isDark ? col.dark : col.bg} ${col.text}`}
-                            style={{ minWidth: 22 }}
+                            title="Remove tier"
+                          >✕</button>
+                          {/* Start handle */}
+                          <div
+                            className="absolute left-0 top-0 h-full w-2 cursor-ew-resize flex items-center justify-center group"
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              const rect = (e.currentTarget.closest('.relative') as HTMLElement)?.getBoundingClientRect();
+                              if (!rect) return;
+                              touDragRef.current = { pi, segId: seg.id, handle: 'start', containerLeft: rect.left, containerWidth: rect.width };
+                            }}
                           >
-                            {hour % 6 === 0 && (
-                              <span className="absolute -bottom-4 left-0 text-[10px] text-gray-500 dark:text-slate-400 select-none">{fmt(hour)}</span>
-                            )}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    {/* Hour labels below grid */}
-                    <div className="mt-5 flex min-w-[640px] gap-px text-[10px] text-gray-400 dark:text-slate-500 select-none">
-                      {Array.from({length: 25}, (_,h) => h % 6 === 0 ? (
-                        <span key={h} className="flex-1" style={{minWidth: 22, flexBasis: `${(6/24)*100}%`}}>{String(h).padStart(2,'0')}</span>
-                      ) : null)}
-                    </div>
-                  </div>
-
-                  {/* Bucket legend for this profile */}
-                  <div className="mt-6 flex flex-wrap gap-2">
-                    {tariff.buckets.map((b) => {
-                      const count = profile.hourBuckets.filter(h => h === b.id).length;
-                      if (count === 0) return null;
-                      const col = BUCKET_COLORS[b.id];
-                      return (
-                        <span key={b.id} className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs ${col.border} ${isDark ? col.dark : col.bg} ${col.text}`}>
-                          {b.label}: {count}h — ${b.pricePerKwhUsd}/kWh · ${b.idleFeePerMinUsd}/min
-                        </span>
+                            <div className="w-1 h-5 rounded-full bg-white/80 group-hover:bg-white" />
+                          </div>
+                          {/* End handle */}
+                          <div
+                            className="absolute right-0 top-0 h-full w-2 cursor-ew-resize flex items-center justify-center group"
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              const rect = (e.currentTarget.closest('.relative') as HTMLElement)?.getBoundingClientRect();
+                              if (!rect) return;
+                              touDragRef.current = { pi, segId: seg.id, handle: 'end', containerLeft: rect.left, containerWidth: rect.width };
+                            }}
+                          >
+                            <div className="w-1 h-5 rounded-full bg-white/80 group-hover:bg-white" />
+                          </div>
+                        </div>
                       );
                     })}
-                    {profile.hourBuckets.filter(h => !h).length > 0 && (
-                      <span className="inline-flex items-center rounded-full border border-gray-300 bg-gray-100 dark:bg-slate-700 px-2.5 py-0.5 text-xs text-gray-500 dark:text-slate-400">
-                        Unset: {profile.hourBuckets.filter(h => !h).length}h → uses flat base rate
-                      </span>
-                    )}
+                    {/* Hour tick marks */}
+                    {[0,3,6,9,12,15,18,21,24].map((h) => (
+                      <div key={h} className="absolute top-0 h-full flex flex-col justify-end pointer-events-none" style={{ left: `${(h/24)*100}%` }}>
+                        <span className="absolute -bottom-5 text-[9px] text-gray-400 dark:text-slate-500 -translate-x-1/2">{String(h).padStart(2,'0')}</span>
+                        <div className="h-1.5 w-px bg-gray-300 dark:bg-slate-600" />
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Add tier buttons */}
+                  <div className="flex flex-wrap gap-2 mt-8">
+                    <span className="text-xs text-gray-400 dark:text-slate-500 self-center">Add price tier:</span>
+                    {tariff.buckets.map((b) => (
+                      <button
+                        key={b.id}
+                        type="button"
+                        className={`rounded border px-2.5 py-1 text-xs font-medium transition-colors ${ADD_TIER_CLASSES[b.id]}`}
+                        onClick={() => {
+                          // Find a gap or default to 12-18
+                          const existing = profile.segments.map(s => ({s: s.startHour, e: s.endHour})).sort((a,z)=>a.s-z.s);
+                          let start = 0, end = 4;
+                          // Try to find a gap
+                          for (let h = 0; h < 24; h++) {
+                            const occupied = existing.some(w => h >= w.s && h < w.e);
+                            if (!occupied) { start = h; end = Math.min(h + 4, 24); break; }
+                          }
+                          setTariff((p) => ({
+                            ...p,
+                            profiles: p.profiles.map((pr, pIdx) => pIdx !== pi ? pr : {
+                              ...pr,
+                              segments: [...pr.segments, { id: crypto.randomUUID(), bucket: b.id, startHour: start, endHour: end }],
+                            }),
+                          }));
+                        }}
+                      >
+                        + {b.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Segment summary */}
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {profile.segments
+                      .slice()
+                      .sort((a,b) => a.startHour - b.startHour)
+                      .map((seg) => {
+                        const col = BUCKET_COLORS[seg.bucket] ?? BUCKET_COLORS.none;
+                        const b = tariff.buckets.find(x => x.id === seg.bucket);
+                        return (
+                          <span key={seg.id} className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${col.border} ${col.text}`}>
+                            {String(seg.startHour).padStart(2,'0')}:00–{seg.endHour >= 24 ? '24:00' : `${String(seg.endHour).padStart(2,'0')}:00`} · {seg.bucket}{b ? ` ($${b.pricePerKwhUsd}/kWh)` : ''}
+                          </span>
+                        );
+                      })}
                   </div>
                 </div>
               ))}
 
               <button
                 type="button"
-                className="rounded-md border border-brand-200 bg-brand-50 px-3 py-1.5 text-xs font-medium text-brand-700 hover:bg-brand-100"
-                onClick={() => setTariff((p) => ({
-                  ...p,
-                  profiles: [...p.profiles, makeDailyProfile()],
-                }))}
+                className="rounded-md border border-brand-300 dark:border-brand-700 px-3 py-1.5 text-xs font-medium text-brand-700 dark:text-brand-400 hover:bg-brand-50 dark:hover:bg-brand-950/40"
+                onClick={() => setTariff((p) => ({ ...p, profiles: [...p.profiles, makeDailyProfile()] }))}
               >
                 + Add daily schedule
               </button>
