@@ -22,6 +22,7 @@ import { parseChargerQrPayload } from '@/lib/chargerQr';
 import { useAppTheme } from '@/theme';
 import { useChargingNotifications } from '@/providers/ChargingNotificationsProvider';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 
 type Coord = { latitude: number; longitude: number };
 
@@ -416,12 +417,12 @@ export default function MapScreen() {
           })}
         </MapView>
 
-        <View pointerEvents="box-none" style={styles.mapControls}>
+        <View pointerEvents="box-none" style={[styles.mapControls, { bottom: controlsBottom + 116 }]}> 
           <TouchableOpacity style={styles.locateBtn} onPress={recenterToUser}>
-            <Text style={styles.locateText}>◎</Text>
+            <Ionicons name="locate" size={20} color="#ffffff" />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.zoomBtn} onPress={() => zoomBy(1)}><Text style={styles.zoomText}>＋</Text></TouchableOpacity>
-          <TouchableOpacity style={styles.zoomBtn} onPress={() => zoomBy(-1)}><Text style={styles.zoomText}>－</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.zoomBtn} onPress={() => zoomBy(1)}><Ionicons name="add" size={22} color="#ffffff" /></TouchableOpacity>
+          <TouchableOpacity style={styles.zoomBtn} onPress={() => zoomBy(-1)}><Ionicons name="remove" size={22} color="#ffffff" /></TouchableOpacity>
         </View>
 
         <TouchableOpacity
@@ -438,8 +439,7 @@ export default function MapScreen() {
           ]}
           onPress={openScanner}
         >
-          <Text style={[styles.qrTileIcon, { color: isDark ? '#34d399' : '#065f46' }]}>▦</Text>
-          <Text style={[styles.qrTileLabel, { color: isDark ? '#f9fafb' : '#111827' }]}>Scan QR</Text>
+          <Ionicons name="qr-code" size={30} color={isDark ? '#34d399' : '#065f46'} />
         </TouchableOpacity>
 
         <View
@@ -668,25 +668,19 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   mapSection: { flex: 1, position: 'relative' },
   map: { flex: 1 },
-  mapControls: { position: 'absolute', right: 12, top: 12, gap: 8 },
-  locateBtn: { width: 40, height: 40, backgroundColor: '#111827cc', borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
-  locateText: { color: '#fff', fontWeight: '800', fontSize: 18 },
-  zoomBtn: { width: 40, height: 40, backgroundColor: '#111827cc', borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  zoomText: { color: '#fff', fontSize: 22, fontWeight: '700', lineHeight: 22 },
+  mapControls: { position: 'absolute', right: 12, gap: 8 },
+  locateBtn: { width: 42, height: 42, backgroundColor: '#111827cc', borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
+  zoomBtn: { width: 42, height: 42, backgroundColor: '#111827cc', borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   qrTile: {
     position: 'absolute',
     right: 12,
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: 1,
-    minWidth: 96,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    width: 58,
+    height: 58,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 2,
   },
-  qrTileIcon: { fontSize: 20, fontWeight: '900', lineHeight: 20 },
-  qrTileLabel: { fontSize: 12, fontWeight: '800' },
   searchWrap: {
     position: 'absolute',
     left: 12,

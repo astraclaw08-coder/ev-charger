@@ -70,13 +70,17 @@ function formatPhoneForDisplay(identifier: string) {
 }
 
 function BrandHeader() {
+  const { isDark } = useAppTheme();
   return (
     <View style={styles.brandWrap}>
-      <Image
-        source={require('../../assets/branding/lumeo_logo_darktheme.png')}
-        style={styles.brandLogo}
-        resizeMode="contain"
-      />
+      <View style={styles.brandRow}>
+        <Image
+          source={require('../../assets/branding/lumeo_logo_swirl_only.png')}
+          style={styles.brandSwirl}
+          resizeMode="contain"
+        />
+        <Text style={[styles.brandWordmark, { color: isDark ? '#ffffff' : '#111827' }]}>Lumeo</Text>
+      </View>
     </View>
   );
 }
@@ -502,6 +506,9 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   brandWrap: { alignItems: 'center', marginBottom: 8 },
+  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
+  brandSwirl: { width: 42, height: 42 },
+  brandWordmark: { fontSize: 36, fontWeight: '900', letterSpacing: 0.3 },
   brandLogo: { width: 220, height: 80, marginBottom: 4 },
   title: { fontSize: 28, fontWeight: '700', marginBottom: 12, textAlign: 'center' },
   brandTitle: { fontSize: 32, fontWeight: '800', letterSpacing: 0.4, marginBottom: 14 },
@@ -533,6 +540,7 @@ const styles = StyleSheet.create({
     borderWidth: 0,
     backgroundColor: 'transparent',
     paddingHorizontal: 0,
+    textAlign: 'center',
   },
   row: { flexDirection: 'row', gap: 10 },
   countryInput: { width: 78 },
