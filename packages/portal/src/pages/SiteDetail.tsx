@@ -143,6 +143,86 @@ function profilesToWindows(profiles: TouDailyProfile[], buckets: PriceBucket[]):
   }
   return wins;
 }
+
+function deriveBucketsFromWindows(windows: TouWindow[]): PriceBucket[] {
+  const uniq = new Map<string, { pricePerKwhUsd: number; idleFeePerMinUsd: number }>();
+  for (const w of windows) {
+    const e = Number(w.pricePerKwhUsd ?? 0);
+    const i = Number(w.idleFeePerMinUsd ?? 0);
+    const key = `${e.toFixed(6)}|${i.toFixed(6)}`;
+    if (!uniq.has(key)) uniq.set(key, { pricePerKwhUsd: e, idleFeePerMinUsd: i });
+  }
+  const pairs = Array.from(uniq.values()).sort((a, b) => a.pricePerKwhUsd - b.pricePerKwhUsd || a.idleFeePerMinUsd - b.idleFeePerMinUsd);
+  if (pairs.length === 0) return DEFAULT_BUCKETS;
+  const labels: Array<{ id: 'low'|'medium'|'high'; label: string }> = [
+    { id: 'low', label: 'Low' },
+    { id: 'medium', label: 'Medium' },
+    { id: 'high', label: 'High' },
+  ];
+  const out: PriceBucket[] = labels.map((l, idx) => {
+    const p = pairs[idx] ?? pairs[pairs.length - 1] ?? DEFAULT_BUCKETS[idx];
+    return { id: l.id, label: l.label, pricePerKwhUsd: p.pricePerKwhUsd, idleFeePerMinUsd: p.idleFeePerMinUsd };
+  });
+  return out;
+}
+
+function windowsToProfileFromMostCommonSchedule(windows: TouWindow[], buckets: PriceBucket[]): TouDailyProfile[] {
+  if (!Array.isArray(windows) || windows.length === 0) return [];
+
+  const bucketForWindow = (w: TouWindow): 'low'|'medium'|'high' => {
+    const exact = buckets.find((b) => Number(b.pricePerKwhUsd) === Number(w.pricePerKwhUsd) && Number(b.idleFeePerMinUsd) === Number(w.idleFeePerMinUsd));
+    if (exact) return exact.id;
+    // fallback: nearest by energy then idle
+    let best = buckets[0];
+    let bestScore = Number.POSITIVE_INFINITY;
+    for (const b of buckets) {
+      const score = Math.abs(Number(b.pricePerKwhUsd) - Number(w.pricePerKwhUsd)) + Math.abs(Number(b.idleFeePerMinUsd) - Number(w.idleFeePerMinUsd));
+      if (score < bestScore) { best = b; bestScore = score; }
+    }
+    return best.id;
+  };
+
+  const daySegments: Record<number, TouTierSegment[]> = { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] };
+  for (let day = 0; day < 7; day += 1) {
+    const dWins = windows
+      .filter((w) => Number(w.day) === day)
+      .sort((a, b) => timeToMinutes(String(a.start)) - timeToMinutes(String(b.start)));
+
+    const segs: TouTierSegment[] = dWins.map((w) => {
+      const start = Math.max(0, Math.min(23, Math.floor(timeToMinutes(String(w.start)) / 60)));
+      const endMins = timeToMinutes(String(w.end));
+      const end = String(w.end) === '23:59' ? 24 : Math.max(start + 1, Math.min(24, Math.ceil(endMins / 60)));
+      return {
+        id: crypto.randomUUID(),
+        bucket: bucketForWindow(w),
+        startHour: start,
+        endHour: end,
+      };
+    });
+    daySegments[day] = normalizeSegments(segs);
+  }
+
+  const signatureByDay = new Map<number, string>();
+  const countBySignature = new Map<string, number>();
+  const segmentsBySignature = new Map<string, TouTierSegment[]>();
+
+  for (let day = 0; day < 7; day += 1) {
+    const segs = daySegments[day];
+    if (segs.length === 0) continue;
+    const sig = JSON.stringify(segs.map((s) => ({ b: s.bucket, s: s.startHour, e: s.endHour })));
+    signatureByDay.set(day, sig);
+    countBySignature.set(sig, (countBySignature.get(sig) ?? 0) + 1);
+    if (!segmentsBySignature.has(sig)) segmentsBySignature.set(sig, segs);
+  }
+
+  if (countBySignature.size === 0) return [];
+
+  const bestSig = Array.from(countBySignature.entries()).sort((a, b) => b[1] - a[1])[0][0];
+  const days = Array.from(signatureByDay.entries()).filter(([, sig]) => sig === bestSig).map(([d]) => d).sort((a, b) => a - b);
+  const segments = (segmentsBySignature.get(bestSig) ?? []).map((s) => ({ ...s, id: crypto.randomUUID() }));
+
+  return [{ id: crypto.randomUUID(), days, segments }];
+}
 type SiteAuditEvent = { id: string; action: string; actor: string; detail: string; createdAt: string };
 
 function auditKey(siteId: string) { return `ev-portal:site:audit:${siteId}`; }
@@ -292,6 +372,25 @@ export default function SiteDetail() {
         organizationName: data.organizationName ?? '',
         portfolioName: data.portfolioName ?? '',
       });
+      const loadedWindows: TouWindow[] = Array.isArray(data.touWindows)
+        ? (data.touWindows as Array<Partial<TouWindow>>).map((w) => ({
+            id: typeof w.id === 'string' && w.id.length > 0 ? w.id : crypto.randomUUID(),
+            day: Number(w.day ?? 0),
+            start: String(w.start ?? '09:00'),
+            end: String(w.end ?? '17:00'),
+            pricePerKwhUsd: Number(w.pricePerKwhUsd ?? data.pricePerKwhUsd ?? 0.35),
+            idleFeePerMinUsd: Number(w.idleFeePerMinUsd ?? data.idleFeePerMinUsd ?? 0.08),
+          }))
+        : [];
+
+      const loadedBuckets: PriceBucket[] = Array.isArray((data as any).priceBuckets) && (data as any).priceBuckets.length === 3
+        ? (data as any).priceBuckets
+        : deriveBucketsFromWindows(loadedWindows);
+
+      const loadedProfiles: TouDailyProfile[] = Array.isArray((data as any).touProfiles) && (data as any).touProfiles.length > 0
+        ? (data as any).touProfiles
+        : windowsToProfileFromMostCommonSchedule(loadedWindows, loadedBuckets);
+
       setTariff({
         pricePerKwhUsd: Number(data.pricePerKwhUsd ?? 0.35),
         idleFeePerMinUsd: Number(data.idleFeePerMinUsd ?? 0.08),
@@ -301,25 +400,12 @@ export default function SiteDetail() {
         softwareVendorFeeValue: Number(data.softwareVendorFeeValue ?? 0),
         softwareFeeIncludesActivation: Boolean(data.softwareFeeIncludesActivation ?? true),
         mode: data.pricingMode === 'tou' ? 'tou' : 'flat',
-        buckets: Array.isArray((data as any).priceBuckets) && (data as any).priceBuckets.length === 3
-          ? (data as any).priceBuckets
-          : DEFAULT_BUCKETS,
-        profiles: Array.isArray((data as any).touProfiles) && (data as any).touProfiles.length > 0
-          ? (data as any).touProfiles
-          : [],
-        windows: Array.isArray(data.touWindows)
-          ? (data.touWindows as Array<Partial<TouWindow>>).map((w) => ({
-              id: typeof w.id === 'string' && w.id.length > 0 ? w.id : crypto.randomUUID(),
-              day: Number(w.day ?? 0),
-              start: String(w.start ?? '09:00'),
-              end: String(w.end ?? '17:00'),
-              pricePerKwhUsd: Number(w.pricePerKwhUsd ?? data.pricePerKwhUsd ?? 0.35),
-              idleFeePerMinUsd: Number(w.idleFeePerMinUsd ?? data.idleFeePerMinUsd ?? 0.08),
-            }))
-          : [],
+        buckets: loadedBuckets,
+        profiles: loadedProfiles,
+        windows: loadedWindows,
       });
-      // Mirror loaded tariff as the last-saved baseline so the saved state card shows on load
-      setSavedTariff((prev) => prev ?? {
+      // Mirror loaded tariff as the last-saved baseline so refreshed UI matches persisted data
+      setSavedTariff({
         pricePerKwhUsd: Number(data.pricePerKwhUsd ?? 0.35),
         idleFeePerMinUsd: Number(data.idleFeePerMinUsd ?? 0.08),
         activationFeeUsd: Number(data.activationFeeUsd ?? 0),
@@ -328,9 +414,9 @@ export default function SiteDetail() {
         softwareVendorFeeValue: Number(data.softwareVendorFeeValue ?? 0),
         softwareFeeIncludesActivation: Boolean(data.softwareFeeIncludesActivation ?? true),
         mode: data.pricingMode === 'tou' ? 'tou' : 'flat',
-        buckets: Array.isArray((data as any).priceBuckets) && (data as any).priceBuckets.length === 3 ? (data as any).priceBuckets : DEFAULT_BUCKETS,
-        profiles: Array.isArray((data as any).touProfiles) && (data as any).touProfiles.length > 0 ? (data as any).touProfiles : [],
-        windows: [],
+        buckets: loadedBuckets,
+        profiles: loadedProfiles,
+        windows: loadedWindows,
       });
       setAuditEvents(loadAudit(data.id));
 
