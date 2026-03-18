@@ -441,9 +441,15 @@ export default function ChargerDetailScreen() {
                     { color: '#06b6d4', darkColor: '#22d3ee' },
                   ];
                   const unique = Array.from(new Set(touWindows.map((w) => `${w.pricePerKwhUsd.toFixed(4)}|${w.idleFeePerMinUsd.toFixed(4)}`)));
-                  unique.forEach((k, i) => {
-                    const [e, idl] = k.split('|').map(Number);
-                    tierMap.set(k, { label: `Tier ${i + 1}`, ...colors[i % colors.length], energy: e, idle: idl });
+                  const sortedByEnergy = unique
+                    .map((k) => {
+                      const [e, idl] = k.split('|').map(Number);
+                      return { k, e, idl };
+                    })
+                    .sort((a, b) => a.e - b.e || a.idl - b.idl);
+                  const tierName = (idx: number) => (idx === 0 ? 'Low' : idx === 1 ? 'Med' : idx === 2 ? 'High' : `Tier ${idx + 1}`);
+                  sortedByEnergy.forEach((row, i) => {
+                    tierMap.set(row.k, { label: tierName(i), ...colors[i % colors.length], energy: row.e, idle: row.idl });
                   });
 
                   const rows = canonical?.rows ?? [];
@@ -455,7 +461,8 @@ export default function ChargerDetailScreen() {
 
                       <View style={styles.touVisualDayRow}>
                         <Text style={[styles.touDayName, { color: isDark ? '#93c5fd' : '#1d4ed8' }]}>Day</Text>
-                        <View style={[styles.touTrack, { backgroundColor: isDark ? '#1f2937' : '#e5e7eb' }]}>
+                        <View style={styles.touTrackWrap}>
+                          <View style={[styles.touTrack, { backgroundColor: isDark ? '#1f2937' : '#e5e7eb' }]}>
                           {rows.map((w, idx) => {
                             const k = `${w.pricePerKwhUsd.toFixed(4)}|${w.idleFeePerMinUsd.toFixed(4)}`;
                             const meta = tierMap.get(k)!;
@@ -477,6 +484,12 @@ export default function ChargerDetailScreen() {
                               />
                             );
                           })}
+                          </View>
+                          <View style={styles.touAxisRow}>
+                            {['12A', '6A', '12P', '6P', '12A'].map((t, idx) => (
+                              <Text key={`${t}-${idx}`} style={[styles.touAxisText, { color: isDark ? '#94a3b8' : '#64748b' }]}>{t}</Text>
+                            ))}
+                          </View>
                         </View>
                       </View>
 
@@ -487,18 +500,18 @@ export default function ChargerDetailScreen() {
                             <View key={k} style={styles.touLegendItem}>
                               <View style={[styles.touLegendDot, { backgroundColor: isDark ? meta.darkColor : meta.color }]} />
                               <Text style={[styles.touLegendText, { color: isDark ? '#cbd5e1' : '#334155' }]}>
-                                {meta.label}: ${meta.energy.toFixed(2)}/kWh · ${meta.idle.toFixed(2)}/min
+                                {meta.label}: ${meta.energy.toFixed(2)}/kWh · ${meta.idle.toFixed(2)}/min (idle)
                               </Text>
                             </View>
                           );
                         })}
-                        {activationFeeUsd > 0 && (
-                          <View style={styles.touLegendItem}>
-                            <View style={[styles.touLegendDot, { backgroundColor: isDark ? '#94a3b8' : '#64748b' }]} />
-                            <Text style={[styles.touLegendText, { color: isDark ? '#cbd5e1' : '#334155' }]}>Activation: ${activationFeeUsd.toFixed(2)}</Text>
-                          </View>
-                        )}
                       </View>
+
+                      {activationFeeUsd > 0 && (
+                        <View style={[styles.touActivationNote, { backgroundColor: isDark ? '#111827' : '#eef2ff', borderColor: isDark ? '#374151' : '#c7d2fe' }]}>
+                          <Text style={[styles.touActivationText, { color: isDark ? '#c7d2fe' : '#3730a3' }]}>Session start fee: ${activationFeeUsd.toFixed(2)} (applies once per charging session)</Text>
+                        </View>
+                      )}
                     </>
                   );
                 })()}
@@ -632,10 +645,15 @@ const styles = StyleSheet.create({
   touLegendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   touLegendDot: { width: 10, height: 10, borderRadius: 5 },
   touLegendText: { fontSize: 11, fontWeight: '700' },
-  touVisualDayRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  touDayName: { width: 34, fontSize: 11, fontWeight: '800' },
-  touTrack: { flex: 1, height: 18, borderRadius: 9, position: 'relative', overflow: 'hidden' },
+  touVisualDayRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  touDayName: { width: 34, fontSize: 11, fontWeight: '800', marginTop: 2 },
+  touTrackWrap: { flex: 1, gap: 4 },
+  touTrack: { height: 18, borderRadius: 9, position: 'relative', overflow: 'hidden' },
+  touAxisRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  touAxisText: { fontSize: 10, fontWeight: '700' },
   touSegment: { position: 'absolute', top: 0, bottom: 0, borderRadius: 8 },
+  touActivationNote: { marginTop: 6, borderWidth: 1, borderRadius: 10, paddingVertical: 7, paddingHorizontal: 9 },
+  touActivationText: { fontSize: 11, fontWeight: '700', lineHeight: 16 },
 
   paymentBanner: {
     backgroundColor: '#fffbeb',
