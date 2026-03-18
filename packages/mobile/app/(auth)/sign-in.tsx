@@ -29,8 +29,8 @@ function normalizePhoneInput(value: string) {
 
   const ten = digits.slice(0, 10);
   if (ten.length <= 3) return ten;
-  if (ten.length <= 6) return `${ten.slice(0, 3)}-${ten.slice(3)}`;
-  return `${ten.slice(0, 3)}-${ten.slice(3, 6)}-${ten.slice(6)}`;
+  if (ten.length <= 6) return `(${ten.slice(0, 3)}) ${ten.slice(3)}`;
+  return `(${ten.slice(0, 3)}) ${ten.slice(3, 6)}-${ten.slice(6)}`;
 }
 
 function toPhoneIdentifier(value: string) {
@@ -69,15 +69,14 @@ function formatPhoneForDisplay(identifier: string) {
   return trimmed;
 }
 
-function BrandHeader({ isDark }: { isDark: boolean }) {
+function BrandHeader() {
   return (
     <View style={styles.brandWrap}>
       <Image
-        source={isDark ? require('../../assets/branding/lumeo_logo_darktheme.png') : require('../../assets/branding/lumeo_logo_transparent.png')}
+        source={require('../../assets/branding/lumeo_logo_darktheme.png')}
         style={styles.brandLogo}
         resizeMode="contain"
       />
-
     </View>
   );
 }
@@ -114,7 +113,7 @@ export default function SignInScreen() {
     return (
       <View style={[styles.container, { backgroundColor: isDark ? '#0b1220' : '#f3f4f6' }]}> 
         <View style={styles.card}>
-          <BrandHeader isDark={isDark} />
+          <BrandHeader />
           <Text style={[styles.devNote, { color: isDark ? '#cbd5e1' : '#334155' }]}>Dev Mode — No Clerk Key Set</Text>
           <TouchableOpacity
             style={styles.button}
@@ -168,7 +167,7 @@ function KeycloakSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onCo
   function handleNextOtp() {
     const identifier = toPhoneIdentifier(phone);
     if (!identifier) {
-      Alert.alert('Invalid phone number', 'Enter a complete phone number (example: 123-456-7890).');
+      Alert.alert('Invalid phone number', 'Enter a complete phone number (example: (123) 456-7890).');
       return;
     }
     setOtpTarget(identifier);
@@ -195,7 +194,7 @@ function KeycloakSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onCo
         >
           <Ionicons name="arrow-back" size={18} color={isDark ? '#f8fafc' : '#111827'} />
         </TouchableOpacity>
-        <BrandHeader isDark={isDark} />
+        <BrandHeader />
         <Text style={[styles.helperText, styles.otpHelperText, { marginBottom: 12 }]}>Code was sent to {formatPhoneForDisplay(otpTarget)}</Text>
         <Pressable style={styles.codeDotsWrap} onPress={() => {}}>
           {Array.from({ length: 5 }).map((_, idx) => (
@@ -221,15 +220,19 @@ function KeycloakSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onCo
 
   return (
     <View style={styles.card}>
-      <BrandHeader isDark={isDark} />
+      <BrandHeader />
 
-      <TextInput
-        style={[styles.input, styles.centerText]}
-        placeholder="123-456-7890"
-        value={phone}
-        onChangeText={(value) => setPhone(normalizePhoneInput(value))}
-        keyboardType="phone-pad"
-      />
+      <View style={styles.phoneInputWrap}>
+        <Ionicons name="call-outline" size={18} color="#64748b" />
+        <TextInput
+          style={[styles.input, styles.phoneInput]}
+          placeholder="(123) 456-7890"
+          placeholderTextColor="#94a3b8"
+          value={phone}
+          onChangeText={(value) => setPhone(normalizePhoneInput(value))}
+          keyboardType="phone-pad"
+        />
+      </View>
       <Text style={[styles.helperText, styles.centerText]}>A code will be sent to your phone for verification</Text>
 
       <TouchableOpacity style={styles.button} onPress={handleNextOtp}>
@@ -307,7 +310,7 @@ function ClerkSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onConti
     if (!isLoaded) return;
     const identifier = toPhoneIdentifier(phone);
     if (!identifier) {
-      Alert.alert('Invalid phone number', 'Enter a complete phone number (example: 123-456-7890).');
+      Alert.alert('Invalid phone number', 'Enter a complete phone number (example: (123) 456-7890).');
       return;
     }
 
@@ -409,7 +412,7 @@ function ClerkSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onConti
         >
           <Ionicons name="arrow-back" size={18} color={isDark ? '#f8fafc' : '#111827'} />
         </TouchableOpacity>
-        <BrandHeader isDark={isDark} />
+        <BrandHeader />
         <Text style={[styles.helperText, styles.otpHelperText, { marginBottom: 12 }]}>Code was sent to {formatPhoneForDisplay(otpTarget)}</Text>
         <Pressable style={styles.codeDotsWrap}>
           {Array.from({ length: 5 }).map((_, idx) => (
@@ -436,15 +439,19 @@ function ClerkSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onConti
 
   return (
     <View style={styles.card}>
-      <BrandHeader isDark={isDark} />
+      <BrandHeader />
 
-      <TextInput
-        style={[styles.input, styles.centerText]}
-        placeholder="123-456-7890"
-        value={phone}
-        onChangeText={(value) => setPhone(normalizePhoneInput(value))}
-        keyboardType="phone-pad"
-      />
+      <View style={styles.phoneInputWrap}>
+        <Ionicons name="call-outline" size={18} color="#64748b" />
+        <TextInput
+          style={[styles.input, styles.phoneInput]}
+          placeholder="(123) 456-7890"
+          placeholderTextColor="#94a3b8"
+          value={phone}
+          onChangeText={(value) => setPhone(normalizePhoneInput(value))}
+          keyboardType="phone-pad"
+        />
+      </View>
       <Text style={[styles.helperText, styles.centerText]}>A code will be sent to your phone for verification</Text>
       <TouchableOpacity style={[styles.button, loading && styles.buttonDisabled]} onPress={handleRequestOtp} disabled={loading}>
         {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Next</Text>}
@@ -508,6 +515,24 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     backgroundColor: '#f9fafb',
     color: '#111827',
+  },
+  phoneInputWrap: {
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 10,
+    backgroundColor: '#f9fafb',
+    marginBottom: 12,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  phoneInput: {
+    flex: 1,
+    marginBottom: 0,
+    borderWidth: 0,
+    backgroundColor: 'transparent',
+    paddingHorizontal: 0,
   },
   row: { flexDirection: 'row', gap: 10 },
   countryInput: { width: 78 },
