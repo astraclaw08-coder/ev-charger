@@ -370,7 +370,7 @@
 					"FB_SONARKIT_ENABLED=1",
 				);
 				INFOPLIST_FILE = EVCharger/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "EVCharger Dev";
+				INFOPLIST_KEY_CFBundleDisplayName = "Lumeo Dev";
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -383,8 +383,8 @@
 					"-lc++",
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_DEBUG";
-				PRODUCT_BUNDLE_IDENTIFIER = dev.evcharger.app.dev;
-				PRODUCT_NAME = "EVCharger Dev";
+				PRODUCT_BUNDLE_IDENTIFIER = dev.evcharger.app.lumeodev;
+				PRODUCT_NAME = "Lumeo Dev";
 				SWIFT_OBJC_BRIDGING_HEADER = "EVCharger/EVCharger-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
