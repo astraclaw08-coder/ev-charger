@@ -72,6 +72,13 @@ function formatPhoneForDisplay(identifier: string) {
 function BrandHeader({ isDark }: { isDark: boolean }) {
   return (
     <View style={styles.brandWrap}>
+      <View
+        pointerEvents="none"
+        style={[
+          styles.brandGlow,
+          { backgroundColor: isDark ? 'rgba(255,255,255,0.20)' : 'rgba(13,104,190,0.12)' },
+        ]}
+      />
       <Image
         source={isDark ? require('../../assets/branding/lumeo_logo_darktheme.png') : require('../../assets/branding/lumeo_logo_transparent.png')}
         style={styles.brandLogo}
@@ -501,15 +508,22 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     paddingVertical: 8,
   },
-  brandWrap: { alignItems: 'center', marginBottom: 8 },
+  brandWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+    minHeight: 98,
+  },
+  brandGlow: {
+    position: 'absolute',
+    width: 232,
+    height: 58,
+    borderRadius: 999,
+  },
   brandLogo: {
     width: 264,
     height: 92,
     marginBottom: 4,
-    shadowColor: '#ffffff',
-    shadowOpacity: 0.45,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 0 },
   },
   title: { fontSize: 28, fontWeight: '700', marginBottom: 12, textAlign: 'center' },
   brandTitle: { fontSize: 32, fontWeight: '800', letterSpacing: 0.4, marginBottom: 14 },
@@ -633,9 +647,6 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
     alignItems: 'center',
     backgroundColor: 'rgba(255,255,255,0.6)',
-  },
-  guestBtnText: { color: '#334155', fontWeight: '700', fontSize: 14 },
-});,
   },
   guestBtnText: { color: '#334155', fontWeight: '700', fontSize: 14 },
 });
