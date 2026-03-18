@@ -559,9 +559,34 @@ export default function ChargerStartScreen() {
 
   if (isLoading || !charger) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator color="#10b981" />
-      </View>
+      <>
+        <Stack.Screen
+          options={{
+            title: 'Lumeo',
+            headerShown: true,
+            headerStyle: { backgroundColor: isDark ? '#0b1220' : '#ffffff' },
+            headerTintColor: isDark ? '#f9fafb' : '#111827',
+            headerShadowVisible: false,
+            headerTitleStyle: {
+              color: isDark ? '#ffffff' : '#000000',
+              fontWeight: '300',
+              letterSpacing: 1.5,
+              fontSize: 22,
+            },
+            gestureEnabled: false,
+            headerBackButtonDisplayMode: 'minimal',
+            headerLeft: () => (
+              <TouchableOpacity onPress={() => router.back()} style={{ paddingHorizontal: 4, paddingVertical: 4 }}>
+                <Ionicons name="chevron-back" size={30} color={isDark ? '#ffffff' : '#111827'} />
+              </TouchableOpacity>
+            ),
+            headerRight: () => <View style={{ width: 40, height: 40 }} />,
+          }}
+        />
+        <View style={styles.centered}>
+          <ActivityIndicator color="#10b981" />
+        </View>
+      </>
     );
   }
 
@@ -607,7 +632,9 @@ export default function ChargerStartScreen() {
           headerShadowVisible: false,
           headerTitleStyle: {
             color: isDark ? '#ffffff' : '#000000',
-            fontWeight: '800',
+            fontWeight: '300',
+            letterSpacing: 1.5,
+            fontSize: 22,
           },
           gestureEnabled: false,
           headerBackButtonDisplayMode: 'minimal',
@@ -617,10 +644,12 @@ export default function ChargerStartScreen() {
             </TouchableOpacity>
           ),
           headerRight: () => (
-            <HeartButton
-              isFavorited={isFav(charger.id)}
-              onToggle={() => toggle(charger.id)}
-            />
+            <View style={{ width: 40, alignItems: 'flex-end' }}>
+              <HeartButton
+                isFavorited={isFav(charger.id)}
+                onToggle={() => toggle(charger.id)}
+              />
+            </View>
           ),
         }}
       />
@@ -1008,13 +1037,8 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#ffffff',
+    backgroundColor: 'transparent',
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOpacity: 0.18,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 4,
   },
   slideKnobLogo: { width: 48, height: 48 },
 

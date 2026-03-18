@@ -115,8 +115,9 @@ export default function TabsLayout() {
           headerTitle: 'Lumeo',
           headerTitleStyle: {
             color: isDark ? '#ffffff' : '#000000',
-            fontWeight: '800',
-            letterSpacing: 0.4,
+            fontWeight: '300',
+            letterSpacing: 1.5,
+            fontSize: 22,
           },
           headerTintColor: isDark ? '#f9fafb' : '#111827',
           headerShadowVisible: false,

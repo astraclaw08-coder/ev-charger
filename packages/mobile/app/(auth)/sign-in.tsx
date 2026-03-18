@@ -72,43 +72,31 @@ function formatPhoneForDisplay(identifier: string) {
 function BrandHeader({ isDark }: { isDark: boolean }) {
   return (
     <View style={styles.brandWrap}>
-      <View
-        pointerEvents="none"
-        style={[
-          styles.brandGlow,
-          { backgroundColor: isDark ? 'rgba(255,255,255,0.20)' : 'rgba(13,104,190,0.12)' },
-        ]}
-      />
       <Image
         source={isDark ? require('../../assets/branding/lumeo_logo_darktheme.png') : require('../../assets/branding/lumeo_logo_transparent.png')}
         style={styles.brandLogo}
         resizeMode="contain"
       />
+      <Text style={[styles.signInHeader, { color: isDark ? '#f1f5f9' : '#111827' }]}>Sign in / Sign up</Text>
     </View>
   );
 }
 
 export default function SignInScreen() {
   const router = useRouter();
-  const { signIn, continueAsGuest: continueAsGuestFromAuth } = useAppAuth();
+  const { signIn } = useAppAuth();
   const { isDark } = useAppTheme();
 
   const continueAsGuest = () => {
     setBearerToken(null);
     setGuestMode(true);
-
-    if (continueAsGuestFromAuth) {
-      continueAsGuestFromAuth();
-      return;
-    }
-
     router.replace('/(tabs)' as any);
   };
 
   if (isKeycloakMode) {
     return (
       <KeyboardAvoidingView
-        style={[styles.container, { backgroundColor: isDark ? '#0b1220' : '#f3f4f6' }]}
+        style={[styles.container, { backgroundColor: isDark ? '#0b1220' : 'transparent' }]}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <KeycloakSignInForm isDark={isDark} onContinueGuest={continueAsGuest} />
@@ -118,7 +106,7 @@ export default function SignInScreen() {
 
   if (isDevMode) {
     return (
-      <View style={[styles.container, { backgroundColor: isDark ? '#0b1220' : '#f3f4f6' }]}> 
+      <View style={[styles.container, { backgroundColor: isDark ? '#0b1220' : 'transparent' }]}> 
         <View style={styles.card}>
           <BrandHeader isDark={isDark} />
           <Text style={[styles.devNote, { color: isDark ? '#cbd5e1' : '#334155' }]}>Dev Mode — No Clerk Key Set</Text>
@@ -141,7 +129,7 @@ export default function SignInScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={[styles.container, { backgroundColor: isDark ? '#0b1220' : '#f3f4f6' }]}
+      style={[styles.container, { backgroundColor: isDark ? '#0b1220' : 'transparent' }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <ClerkSignInForm isDark={isDark} onContinueGuest={continueAsGuest} />
@@ -514,16 +502,17 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     minHeight: 98,
   },
-  brandGlow: {
-    position: 'absolute',
-    width: 232,
-    height: 58,
-    borderRadius: 999,
-  },
   brandLogo: {
-    width: 264,
-    height: 92,
+    width: 211,
+    height: 74,
     marginBottom: 4,
+  },
+  signInHeader: {
+    fontSize: 18,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginTop: 6,
+    letterSpacing: 0.2,
   },
   title: { fontSize: 28, fontWeight: '700', marginBottom: 12, textAlign: 'center' },
   brandTitle: { fontSize: 32, fontWeight: '800', letterSpacing: 0.4, marginBottom: 14 },
@@ -640,13 +629,17 @@ const styles = StyleSheet.create({
   },
   createAccountBtnText: { color: '#ffffff', fontWeight: '800', fontSize: 14 },
   guestBtn: {
-    marginTop: 10,
+    marginTop: 0,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#cbd5e1',
-    paddingVertical: 11,
+    borderColor: '#e5e7eb',
+    paddingVertical: 12,
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.6)',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 8,
+    backgroundColor: '#ffffff',
   },
-  guestBtnText: { color: '#334155', fontWeight: '700', fontSize: 14 },
+  guestBtnText: { color: '#111827', fontWeight: '600', fontSize: 15 },
 });

@@ -298,11 +298,17 @@ export default function ChargerDetailScreen() {
     <>
       <Stack.Screen
         options={{
-          title: charger.site.name,
+          title: 'Lumeo',
           headerShown: true,
           headerStyle: { backgroundColor: isDark ? '#0b1220' : '#ffffff' },
           headerTintColor: isDark ? '#f9fafb' : '#111827',
           headerShadowVisible: false,
+          headerTitleStyle: {
+            color: isDark ? '#ffffff' : '#000000',
+            fontWeight: '300',
+            letterSpacing: 1.5,
+            fontSize: 22,
+          },
           headerBackButtonDisplayMode: 'minimal',
           headerLeft: () => (
             <TouchableOpacity onPress={() => router.back()} style={{ paddingHorizontal: 4, paddingVertical: 4 }}>
@@ -323,7 +329,8 @@ export default function ChargerDetailScreen() {
         refreshControl={<RefreshControl refreshing={manualRefreshing} onRefresh={onPullRefresh} />}
       >
         {/* Site info */}
-        <View style={[styles.siteCard, { backgroundColor: isDark ? '#111827' : '#fff' }]}>
+        <View style={[styles.siteCard, { backgroundColor: isDark ? '#111827' : '#fff' }]}> 
+          <Text style={[styles.siteName, { color: isDark ? '#f9fafb' : '#111827' }]}>{charger.site.name}</Text>
           <Text style={[styles.siteAddress, { color: isDark ? '#9ca3af' : '#6b7280' }]}>{charger.site.address}</Text>
 
           <View style={[styles.pricingWrap, { borderTopColor: isDark ? '#1f2937' : '#e5e7eb' }]}>
@@ -438,14 +445,14 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 2,
   },
-  siteName: { fontSize: 18, fontWeight: '700', color: '#111827' },
-  siteAddress: { fontSize: 13, color: '#6b7280' },
+  siteName: { fontSize: 18, fontWeight: '700', color: '#111827', textAlign: 'center' },
+  siteAddress: { fontSize: 13, color: '#6b7280', textAlign: 'center' },
   pricingWrap: { marginTop: 12, borderTopWidth: 1, paddingTop: 10, gap: 8 },
-  pricingTitle: { fontSize: 13, fontWeight: '700' },
+  pricingTitle: { fontSize: 13, fontWeight: '700', textAlign: 'center' },
   priceTilesRow: { flexDirection: 'row', gap: 8 },
-  priceTile: { flex: 1, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 8 },
-  priceTileLabel: { fontSize: 11, fontWeight: '600' },
-  priceTileValue: { fontSize: 14, fontWeight: '700', marginTop: 4 },
+  priceTile: { flex: 1, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 8, alignItems: 'center' },
+  priceTileLabel: { fontSize: 11, fontWeight: '600', textAlign: 'center' },
+  priceTileValue: { fontSize: 14, fontWeight: '700', marginTop: 4, textAlign: 'center' },
 
   paymentBanner: {
     backgroundColor: '#fffbeb',
