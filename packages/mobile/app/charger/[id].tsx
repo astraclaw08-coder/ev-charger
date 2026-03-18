@@ -59,8 +59,8 @@ function time12(v: string): string {
 
 function windowLabel12(start: string, end: string): string {
   const normalizedEnd = end === '23:59' ? '24:00' : end;
-  if (normalizedEnd === '24:00') return `${time12(start)}–12 AM`;
-  return `${time12(start)}–${time12(normalizedEnd)}`;
+  if (normalizedEnd === '24:00') return `${time12(start)}-12 AM`;
+  return `${time12(start)}-${time12(normalizedEnd)}`;
 }
 
 function parseTouWindows(raw: unknown): TouWindowMobile[] {
@@ -396,54 +396,100 @@ export default function ChargerDetailScreen() {
         refreshControl={<RefreshControl refreshing={manualRefreshing} onRefresh={onPullRefresh} />}
       >
         {/* Site info */}
-        <View style={[styles.siteCard, { backgroundColor: isDark ? '#111827' : '#fff' }]}> 
+        <View style={[styles.siteCard, { backgroundColor: isDark ? '#111827' : '#fff' }]}>
           <Text style={[styles.siteName, { color: isDark ? '#f9fafb' : '#111827' }]}>{charger.site.name}</Text>
           <Text style={[styles.siteAddress, { color: isDark ? '#9ca3af' : '#6b7280' }]}>{charger.site.address}</Text>
 
           <View style={[styles.pricingWrap, { borderTopColor: isDark ? '#1f2937' : '#e5e7eb' }]}>
             <Text style={[styles.pricingTitle, { color: isDark ? '#e5e7eb' : '#111827' }]}>Charging pricing</Text>
-            <View style={styles.priceTilesRow}>
-              <View style={[styles.priceTile, { backgroundColor: isDark ? '#0f172a' : '#f3f4f6' }]}>
-                <Text style={[styles.priceTileLabel, { color: isDark ? '#9ca3af' : '#6b7280' }]}>Energy</Text>
-                <Text numberOfLines={1} style={[styles.priceTileValue, { color: isDark ? '#f9fafb' : '#111827' }]}>${(selectedCharger?.site.pricePerKwhUsd ?? RATE_PER_KWH).toFixed(2)}/kWh</Text>
-              </View>
-              <View style={[styles.priceTile, { backgroundColor: isDark ? '#0f172a' : '#f3f4f6' }]}>
-                <Text style={[styles.priceTileLabel, { color: isDark ? '#9ca3af' : '#6b7280' }]}>Idle</Text>
-                <Text numberOfLines={1} style={[styles.priceTileValue, { color: isDark ? '#f9fafb' : '#111827' }]}>${idleFeePerMinUsd.toFixed(2)}/min</Text>
-              </View>
-              <View style={[styles.priceTile, { backgroundColor: isDark ? '#0f172a' : '#f3f4f6' }]}>
-                <Text style={[styles.priceTileLabel, { color: isDark ? '#9ca3af' : '#6b7280' }]}>Activation</Text>
-                <Text numberOfLines={1} style={[styles.priceTileValue, { color: isDark ? '#f9fafb' : '#111827' }]}>${activationFeeUsd.toFixed(2)}</Text>
-              </View>
-            </View>
 
-            {pricingMode === 'tou' && touWindows.length > 0 && (
+            {pricingMode === 'tou' && touWindows.length > 0 ? (
               <View style={[styles.touBlock, { borderColor: isDark ? '#334155' : '#dbeafe', backgroundColor: isDark ? '#0b1220' : '#f8fafc' }]}>
-                <Text style={[styles.touTitle, { color: isDark ? '#dbeafe' : '#1e3a8a' }]}>Dynamic TOU pricing</Text>
                 {nowTou ? (
                   <View style={[styles.touNowPill, { backgroundColor: isDark ? '#1e3a8a33' : '#dbeafe' }]}>
                     <Text style={[styles.touNowText, { color: isDark ? '#bfdbfe' : '#1e40af' }]}>
-                      Now ({dayNames[nowTou.day]} {windowLabel12(nowTou.start, nowTou.end)}): ${nowTou.pricePerKwhUsd.toFixed(2)}/kWh · ${nowTou.idleFeePerMinUsd.toFixed(2)}/min idle
+                      Now · {dayNames[nowTou.day]} {windowLabel12(nowTou.start, nowTou.end)}
                     </Text>
                   </View>
                 ) : null}
 
-                {Array.from({ length: 7 }, (_, day) => day).map((day) => {
-                  const rows = touWindows.filter((w) => w.day === day);
-                  if (rows.length === 0) return null;
+                {/* Visual legend by unique TOU tier */}
+                {(() => {
+                  const tierMap = new Map<string, { label: string; color: string; darkColor: string }>();
+                  const colors = [
+                    { color: '#10b981', darkColor: '#34d399' },
+                    { color: '#f59e0b', darkColor: '#fbbf24' },
+                    { color: '#ef4444', darkColor: '#f87171' },
+                    { color: '#8b5cf6', darkColor: '#a78bfa' },
+                    { color: '#06b6d4', darkColor: '#22d3ee' },
+                  ];
+                  const unique = Array.from(new Set(touWindows.map((w) => `${w.pricePerKwhUsd.toFixed(4)}|${w.idleFeePerMinUsd.toFixed(4)}`)));
+                  unique.forEach((k, i) => tierMap.set(k, { label: `Tier ${i + 1}`, ...colors[i % colors.length] }));
+
                   return (
-                    <View key={day} style={styles.touDayRow}>
-                      <Text style={[styles.touDayName, { color: isDark ? '#93c5fd' : '#1d4ed8' }]}>{dayNames[day]}</Text>
-                      <View style={styles.touDayWindowsWrap}>
-                        {rows.map((w, idx) => (
-                          <Text key={`${day}-${idx}`} style={[styles.touWindowText, { color: isDark ? '#cbd5e1' : '#334155' }]}>
-                            {windowLabel12(w.start, w.end)} · ${w.pricePerKwhUsd.toFixed(2)}/kWh · ${w.idleFeePerMinUsd.toFixed(2)}/min
-                          </Text>
-                        ))}
+                    <>
+                      <View style={styles.touLegendRow}>
+                        {unique.map((k) => {
+                          const meta = tierMap.get(k)!;
+                          return (
+                            <View key={k} style={styles.touLegendItem}>
+                              <View style={[styles.touLegendDot, { backgroundColor: isDark ? meta.darkColor : meta.color }]} />
+                              <Text style={[styles.touLegendText, { color: isDark ? '#cbd5e1' : '#334155' }]}>{meta.label}</Text>
+                            </View>
+                          );
+                        })}
                       </View>
-                    </View>
+
+                      {Array.from({ length: 7 }, (_, day) => day).map((day) => {
+                        const rows = touWindows.filter((w) => w.day === day).sort((a, b) => toMinutes(a.start) - toMinutes(b.start));
+                        if (rows.length === 0) return null;
+                        return (
+                          <View key={day} style={styles.touVisualDayRow}>
+                            <Text style={[styles.touDayName, { color: isDark ? '#93c5fd' : '#1d4ed8' }]}>{dayNames[day]}</Text>
+                            <View style={[styles.touTrack, { backgroundColor: isDark ? '#1f2937' : '#e5e7eb' }]}>
+                              {rows.map((w, idx) => {
+                                const k = `${w.pricePerKwhUsd.toFixed(4)}|${w.idleFeePerMinUsd.toFixed(4)}`;
+                                const meta = tierMap.get(k)!;
+                                const start = toMinutes(w.start);
+                                const end = w.end === '23:59' ? 1440 : toMinutes(w.end);
+                                const leftPct = Math.max(0, Math.min(100, (start / 1440) * 100));
+                                const widthPct = Math.max(1, Math.min(100 - leftPct, ((end - start) / 1440) * 100));
+                                return (
+                                  <View
+                                    key={`${day}-${idx}`}
+                                    style={[
+                                      styles.touSegment,
+                                      {
+                                        left: `${leftPct}%`,
+                                        width: `${widthPct}%`,
+                                        backgroundColor: isDark ? meta.darkColor : meta.color,
+                                      },
+                                    ]}
+                                  />
+                                );
+                              })}
+                            </View>
+                          </View>
+                        );
+                      })}
+                    </>
                   );
-                })}
+                })()}
+              </View>
+            ) : (
+              <View style={styles.priceTilesRow}>
+                <View style={[styles.priceTile, { backgroundColor: isDark ? '#0f172a' : '#f3f4f6' }]}>
+                  <Text style={[styles.priceTileLabel, { color: isDark ? '#9ca3af' : '#6b7280' }]}>Energy</Text>
+                  <Text numberOfLines={1} style={[styles.priceTileValue, { color: isDark ? '#f9fafb' : '#111827' }]}>${(selectedCharger?.site.pricePerKwhUsd ?? RATE_PER_KWH).toFixed(2)}/kWh</Text>
+                </View>
+                <View style={[styles.priceTile, { backgroundColor: isDark ? '#0f172a' : '#f3f4f6' }]}>
+                  <Text style={[styles.priceTileLabel, { color: isDark ? '#9ca3af' : '#6b7280' }]}>Idle</Text>
+                  <Text numberOfLines={1} style={[styles.priceTileValue, { color: isDark ? '#f9fafb' : '#111827' }]}>${idleFeePerMinUsd.toFixed(2)}/min</Text>
+                </View>
+                <View style={[styles.priceTile, { backgroundColor: isDark ? '#0f172a' : '#f3f4f6' }]}>
+                  <Text style={[styles.priceTileLabel, { color: isDark ? '#9ca3af' : '#6b7280' }]}>Activation</Text>
+                  <Text numberOfLines={1} style={[styles.priceTileValue, { color: isDark ? '#f9fafb' : '#111827' }]}>${activationFeeUsd.toFixed(2)}</Text>
+                </View>
               </View>
             )}
           </View>
@@ -551,14 +597,17 @@ const styles = StyleSheet.create({
   priceTileLabel: { fontSize: 11, fontWeight: '600', textAlign: 'center' },
   priceTileValue: { fontSize: 14, fontWeight: '700', marginTop: 4, textAlign: 'center' },
 
-  touBlock: { marginTop: 10, borderWidth: 1, borderRadius: 12, padding: 10, gap: 8 },
-  touTitle: { fontSize: 12, fontWeight: '800', letterSpacing: 0.2 },
+  touBlock: { marginTop: 10, borderWidth: 1, borderRadius: 12, padding: 10, gap: 10 },
   touNowPill: { borderRadius: 10, paddingVertical: 7, paddingHorizontal: 9 },
   touNowText: { fontSize: 12, fontWeight: '700', lineHeight: 17 },
-  touDayRow: { flexDirection: 'row', gap: 8, alignItems: 'flex-start' },
-  touDayName: { width: 34, fontSize: 11, fontWeight: '800', marginTop: 1 },
-  touDayWindowsWrap: { flex: 1, gap: 2 },
-  touWindowText: { fontSize: 11, lineHeight: 16, fontWeight: '600' },
+  touLegendRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  touLegendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  touLegendDot: { width: 10, height: 10, borderRadius: 5 },
+  touLegendText: { fontSize: 11, fontWeight: '700' },
+  touVisualDayRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  touDayName: { width: 34, fontSize: 11, fontWeight: '800' },
+  touTrack: { flex: 1, height: 18, borderRadius: 9, position: 'relative', overflow: 'hidden' },
+  touSegment: { position: 'absolute', top: 0, bottom: 0, borderRadius: 8 },
 
   paymentBanner: {
     backgroundColor: '#fffbeb',
