@@ -73,7 +73,7 @@ function BrandHeader() {
   return (
     <View style={styles.brandWrap}>
       <Image
-        source={require('../../assets/branding/lumeo_logo_darktheme.png')}
+        source={require('../../assets/branding/lumeo_logo_darktheme-aura.png')}
         style={styles.brandLogo}
         resizeMode="contain"
       />
