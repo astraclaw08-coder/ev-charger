@@ -219,6 +219,8 @@ export default function SiteDetail() {
   const [siteUtilizationPct, setSiteUtilizationPct] = useState<number | null>(null);
 
   const [tariff, setTariff] = useState<TariffConfig>({ pricePerKwhUsd: 0.35, idleFeePerMinUsd: 0.08, activationFeeUsd: 0, gracePeriodMin: 10, softwareVendorFeeMode: 'none', softwareVendorFeeValue: 0, softwareFeeIncludesActivation: true, mode: 'flat', buckets: DEFAULT_BUCKETS, profiles: [], windows: [] });
+  const [savedTariff, setSavedTariff] = useState<TariffConfig | null>(null);
+  const [pricingSummaryOpen, setPricingSummaryOpen] = useState(false);
   const touDragRef = useRef<TouDragState | null>(null);
   const [tariffMsg, setTariffMsg] = useState('');
   const [showFeeModal, setShowFeeModal] = useState(false);
@@ -274,6 +276,20 @@ export default function SiteDetail() {
               idleFeePerMinUsd: Number(w.idleFeePerMinUsd ?? data.idleFeePerMinUsd ?? 0.08),
             }))
           : [],
+      });
+      // Mirror loaded tariff as the last-saved baseline so the saved state card shows on load
+      setSavedTariff((prev) => prev ?? {
+        pricePerKwhUsd: Number(data.pricePerKwhUsd ?? 0.35),
+        idleFeePerMinUsd: Number(data.idleFeePerMinUsd ?? 0.08),
+        activationFeeUsd: Number(data.activationFeeUsd ?? 0),
+        gracePeriodMin: Number(data.gracePeriodMin ?? 10),
+        softwareVendorFeeMode: (data.softwareVendorFeeMode ?? 'none') as TariffConfig['softwareVendorFeeMode'],
+        softwareVendorFeeValue: Number(data.softwareVendorFeeValue ?? 0),
+        softwareFeeIncludesActivation: Boolean(data.softwareFeeIncludesActivation ?? true),
+        mode: data.pricingMode === 'tou' ? 'tou' : 'flat',
+        buckets: Array.isArray((data as any).priceBuckets) && (data as any).priceBuckets.length === 3 ? (data as any).priceBuckets : DEFAULT_BUCKETS,
+        profiles: Array.isArray((data as any).touProfiles) && (data as any).touProfiles.length > 0 ? (data as any).touProfiles : [],
+        windows: [],
       });
       setAuditEvents(loadAudit(data.id));
 
@@ -551,11 +567,16 @@ export default function SiteDetail() {
               <option value="tou">Time-of-Use (TOU)</option>
             </select>
           </label>
-          <label className="text-sm text-gray-700 dark:text-slate-300">Price per kWh (USD)
-            <input type="number" step="0.01" className="mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5" value={tariff.pricePerKwhUsd} onChange={(e) => setTariff({ ...tariff, pricePerKwhUsd: Number(e.target.value) })} />
+          {/* Flat-rate fields — grayed out when TOU is active since TOU tiers take over */}
+          <label className={`text-sm transition-opacity ${tariff.mode === 'tou' ? 'opacity-35 pointer-events-none' : 'text-gray-700 dark:text-slate-300'}`}>
+            Price per kWh (USD)
+            <input type="number" step="0.01" className="mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5 bg-white dark:bg-slate-900" value={tariff.pricePerKwhUsd} onChange={(e) => setTariff({ ...tariff, pricePerKwhUsd: Number(e.target.value) })} disabled={tariff.mode === 'tou'} />
+            {tariff.mode === 'tou' && <span className="mt-0.5 block text-[10px] text-gray-400 dark:text-slate-500 italic">Set per tier below</span>}
           </label>
-          <label className="text-sm text-gray-700 dark:text-slate-300">Idle fee per min (USD)
-            <input type="number" step="0.01" className="mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5" value={tariff.idleFeePerMinUsd} onChange={(e) => setTariff({ ...tariff, idleFeePerMinUsd: Number(e.target.value) })} />
+          <label className={`text-sm transition-opacity ${tariff.mode === 'tou' ? 'opacity-35 pointer-events-none' : 'text-gray-700 dark:text-slate-300'}`}>
+            Idle fee per min (USD)
+            <input type="number" step="0.01" className="mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5 bg-white dark:bg-slate-900" value={tariff.idleFeePerMinUsd} onChange={(e) => setTariff({ ...tariff, idleFeePerMinUsd: Number(e.target.value) })} disabled={tariff.mode === 'tou'} />
+            {tariff.mode === 'tou' && <span className="mt-0.5 block text-[10px] text-gray-400 dark:text-slate-500 italic">Set per tier below</span>}
           </label>
           <label className="text-sm text-gray-700 dark:text-slate-300">Activation fee (USD)
             <input type="number" step="0.01" className="mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5" value={tariff.activationFeeUsd} onChange={(e) => setTariff({ ...tariff, activationFeeUsd: Number(e.target.value) })} />
@@ -793,9 +814,9 @@ export default function SiteDetail() {
               ))}
             </div>
 
-            {/* ── Effective TOU schedule summary ───────────────────────── */}
-            {tariff.profiles.length > 0 && (() => {
-              const profile = tariff.profiles[0];
+            {/* ── Effective TOU schedule summary (reflects last save) ─── */}
+            {(savedTariff?.mode === 'tou' && savedTariff.profiles.length > 0) && (() => {
+              const profile = savedTariff.profiles[0];
               const sorted = profile.segments.slice().sort((a,b) => a.startHour - b.startHour);
               return (
                 <div className="rounded-xl border border-gray-200 dark:border-slate-700 p-4">
@@ -803,7 +824,7 @@ export default function SiteDetail() {
                   <div className="flex flex-wrap gap-2">
                     {sorted.map((seg) => {
                       const style = SEGMENT_STYLE[seg.bucket] ?? { bg: 'bg-gray-300', label: 'text-white' };
-                      const b = tariff.buckets.find(x => x.id === seg.bucket);
+                      const b = savedTariff!.buckets.find(x => x.id === seg.bucket);
                       return (
                         <div key={seg.id} className={`rounded-lg ${style.bg} px-3 py-2 min-w-[110px]`}>
                           <p className={`text-[10px] font-bold uppercase tracking-wide ${style.label}`}>{seg.bucket}</p>
@@ -826,17 +847,36 @@ export default function SiteDetail() {
           </div>
         )}
 
-        {/* ── Effective pricing summary ─────────────────────────────── */}
+        {/* ── Collapsible effective pricing summary ────────────────── */}
         {(() => {
-          const summary = buildPricingSummary(tariff);
+          const displayTariff = savedTariff ?? tariff;
+          const summary = buildPricingSummary(displayTariff);
           return (
             <div className="mt-4 border-t border-gray-100 dark:border-slate-800 pt-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400 mb-2">Effective pricing summary</p>
-              <ul className="space-y-1">
-                {summary.lines.map((line, i) => (
-                  <li key={i} className="text-xs text-gray-700 dark:text-slate-300">{line}</li>
-                ))}
-              </ul>
+              <button
+                type="button"
+                onClick={() => setPricingSummaryOpen((v) => !v)}
+                className="flex w-full items-center justify-between text-left group"
+              >
+                <span className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400 group-hover:text-gray-700 dark:group-hover:text-slate-200 transition-colors">
+                  Effective pricing summary
+                  {savedTariff && <span className="ml-2 inline-flex items-center rounded-full bg-gray-100 dark:bg-slate-800 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 dark:text-slate-400">saved</span>}
+                </span>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className={`h-3.5 w-3.5 text-gray-400 dark:text-slate-500 transition-transform ${pricingSummaryOpen ? 'rotate-180' : ''}`}
+                  fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {pricingSummaryOpen && (
+                <ul className="mt-2 space-y-1">
+                  {summary.lines.map((line, i) => (
+                    <li key={i} className="text-xs text-gray-700 dark:text-slate-300">{line}</li>
+                  ))}
+                </ul>
+              )}
             </div>
           );
         })()}
@@ -845,10 +885,9 @@ export default function SiteDetail() {
           <button type="button" className="rounded-md bg-brand-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-700"
             onClick={async () => {
               try {
-                const overlapError = tariff.mode === 'tou' ? validateTouWindows(tariff.windows) : null;
-                if (overlapError) { setTariffMsg(overlapError); return; }
                 const token = await getToken();
-                const updated = await createApiClient(token).updateSite(site.id, {
+                const derivedWindows = tariff.mode === 'tou' ? profilesToWindows(tariff.profiles, tariff.buckets) : [];
+                await createApiClient(token).updateSite(site.id, {
                   name: site.name,
                   address: site.address,
                   lat: site.lat,
@@ -861,13 +900,15 @@ export default function SiteDetail() {
                   softwareVendorFeeMode: tariff.softwareVendorFeeMode,
                   softwareVendorFeeValue: tariff.softwareVendorFeeValue,
                   softwareFeeIncludesActivation: tariff.softwareFeeIncludesActivation,
-                  touWindows: tariff.mode === 'tou' ? profilesToWindows(tariff.profiles, tariff.buckets) : [],
+                  touWindows: derivedWindows,
                 });
-                setTariffMsg(`Saved. Price per kWh is now $${Number(updated.pricePerKwhUsd ?? tariff.pricePerKwhUsd).toFixed(2)}. Vendor fee mode: ${updated.softwareVendorFeeMode ?? tariff.softwareVendorFeeMode}.`);
+                // Snapshot the saved tariff so saved state card + summary reflect what was saved
+                setSavedTariff({ ...tariff, windows: derivedWindows });
+                const modeLabel = tariff.mode === 'tou' ? `TOU (${tariff.profiles[0]?.segments.length ?? 0} segments)` : `flat $${tariff.pricePerKwhUsd.toFixed(2)}/kWh`;
+                setTariffMsg(`Saved — ${modeLabel}`);
                 pushAudit('tariff.updated', tariff.mode === 'tou'
-                  ? `tou windows=${tariff.windows.length}, base=$${tariff.pricePerKwhUsd}/kWh idle=$${tariff.idleFeePerMinUsd}/min activation=$${tariff.activationFeeUsd} grace=${tariff.gracePeriodMin}m vendorFee=${tariff.softwareVendorFeeMode}:${tariff.softwareVendorFeeValue} includeActivation=${tariff.softwareFeeIncludesActivation}`
-                  : `flat price=$${tariff.pricePerKwhUsd}/kWh, idle=$${tariff.idleFeePerMinUsd}/min, activation=$${tariff.activationFeeUsd}, grace=${tariff.gracePeriodMin}m vendorFee=${tariff.softwareVendorFeeMode}:${tariff.softwareVendorFeeValue} includeActivation=${tariff.softwareFeeIncludesActivation}`);
-                await load();
+                  ? `tou profiles=${tariff.profiles.length}, segments=${tariff.profiles[0]?.segments.length ?? 0} vendorFee=${tariff.softwareVendorFeeMode}:${tariff.softwareVendorFeeValue}`
+                  : `flat price=$${tariff.pricePerKwhUsd}/kWh, idle=$${tariff.idleFeePerMinUsd}/min, activation=$${tariff.activationFeeUsd}, grace=${tariff.gracePeriodMin}m`);
               } catch (err) {
                 setTariffMsg(`Save failed: ${err instanceof Error ? err.message : 'unknown error'}`);
               }
