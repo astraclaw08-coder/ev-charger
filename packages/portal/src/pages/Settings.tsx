@@ -230,7 +230,7 @@ export default function Settings() {
         </button>
       </div>
 
-      <section className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+      <section className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
         <h2 className="mb-3 text-sm font-semibold text-gray-700 dark:text-slate-300">Workspace defaults</h2>
         <div className="grid gap-3 md:grid-cols-2">
           <label className="text-sm text-gray-700 dark:text-slate-300">
@@ -251,13 +251,13 @@ export default function Settings() {
               <option value="admin">Admin (Settings)</option>
             </select>
           </label>
-          <div className="rounded border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/60 px-3 py-2 text-sm text-gray-600 dark:text-slate-400">
+          <div className="rounded border border-gray-300 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/60 px-3 py-2 text-sm text-gray-600 dark:text-slate-400">
             Current default route: <span className="font-medium text-gray-900 dark:text-slate-100">{getDefaultHomePath(rolePref)}</span>
           </div>
         </div>
       </section>
 
-      <section className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+      <section className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
         <h2 className="mb-3 text-sm font-semibold text-gray-700 dark:text-slate-300">Organization / user profile + ACH/EFT remittance</h2>
         <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
           {Object.entries(org).filter(([k]) => k !== 'reason').map(([key, value]) => (
@@ -268,7 +268,7 @@ export default function Settings() {
         <button className="mt-3 rounded bg-brand-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-60" disabled={!orgValid} onClick={saveOrg}>Save org/profile/remittance</button>
       </section>
 
-      <section className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+      <section className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
         <h2 className="mb-3 text-sm font-semibold text-gray-700 dark:text-slate-300">Notification preferences</h2>
         {notifications && (
           <div className="space-y-2 text-sm">
@@ -284,7 +284,7 @@ export default function Settings() {
         )}
       </section>
 
-      <section className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+      <section className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
         <h2 className="mb-3 text-sm font-semibold text-gray-700 dark:text-slate-300">Charger model catalog</h2>
         <div className="mb-3 grid grid-cols-1 gap-2 md:grid-cols-6">
           <input className="rounded border px-2 py-1 text-sm" placeholder="modelCode" value={newModel.modelCode} onChange={(e) => setNewModel((p) => ({ ...p, modelCode: e.target.value }))} />
@@ -305,18 +305,18 @@ export default function Settings() {
         </div>
       </section>
 
-      <section className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+      <section className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
         <h2 className="mb-3 text-sm font-semibold text-gray-700 dark:text-slate-300">User management</h2>
         <UserManagement />
       </section>
 
-      <section className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+      <section className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
         <h2 className="mb-1 text-sm font-semibold text-gray-700 dark:text-slate-300">Site role assignments</h2>
         <p className="mb-3 text-xs text-gray-500 dark:text-slate-400">Assign or remove stackable per-site roles across all sites.</p>
         <SiteRoleAssignment />
       </section>
 
-      <section className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+      <section className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
         <h2 className="mb-3 text-sm font-semibold text-gray-700 dark:text-slate-300">Settings audit evidence</h2>
         <div className="space-y-2">
           {audit.map((a) => (

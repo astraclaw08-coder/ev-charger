@@ -75,7 +75,7 @@ export default function Chargers() {
         <Stat label="Faulted" value={summary.faulted} tone="red" />
       </div>
 
-      <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+      <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm font-semibold text-gray-700 dark:text-slate-300">Fleet assets</p>
           <div className="flex flex-wrap gap-2">
@@ -123,7 +123,7 @@ export default function Chargers() {
             </thead>
             <tbody>
               {filtered.map((row) => (
-                <tr key={row.id} className="border-t border-gray-200 dark:border-slate-700">
+                <tr key={row.id} className="border-t border-gray-300 dark:border-slate-700">
                   <td className="py-2 font-medium">
                     <Link to={`/chargers/${row.id}`} className="hover:text-brand-700 hover:underline">{row.ocppId}</Link>
                   </td>
@@ -166,7 +166,7 @@ function Stat({ label, value, tone = 'default' }: { label: string; value: number
           : 'text-gray-900 dark:text-slate-100';
 
   return (
-    <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+    <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
       <p className="text-xs text-gray-500 dark:text-slate-400">{label}</p>
       <p className={`mt-1 text-xl font-semibold ${toneClass}`}>{value}</p>
     </div>

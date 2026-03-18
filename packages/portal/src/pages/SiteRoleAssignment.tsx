@@ -129,7 +129,7 @@ export default function SiteRoleAssignment() {
           <p className="text-xs text-gray-500 dark:text-slate-400">No role assignments for this site.</p>
         ) : (
           assignments.map((a) => (
-            <div key={a.id} className="flex items-center justify-between rounded-md border border-gray-200 dark:border-slate-700 px-3 py-2">
+            <div key={a.id} className="flex items-center justify-between rounded-md border border-gray-300 dark:border-slate-700 px-3 py-2">
               <div>
                 <p className="text-sm font-medium text-gray-900 dark:text-slate-100">{a.email}</p>
                 <p className="text-xs text-gray-500 dark:text-slate-400">{a.roles.join(', ')}</p>

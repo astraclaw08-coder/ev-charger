@@ -18,7 +18,7 @@ function rangeDays(preset: RangePreset) {
 
 function ChargerKpiTile({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 shadow-sm">
+    <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 shadow-sm">
       <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">{label}</p>
       <p className="mt-1 text-2xl font-semibold text-gray-900 dark:text-slate-100">{value}</p>
     </div>
@@ -282,7 +282,7 @@ export default function ChargerDetail() {
             <select
               value={rangePreset}
               onChange={(e) => setRangePreset(e.target.value as RangePreset)}
-              className="rounded-md border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60"
+              className="rounded-md border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60"
             >
               <option value="7d">Last 7 days</option>
               <option value="30d">Last 30 days</option>
@@ -290,13 +290,13 @@ export default function ChargerDetail() {
             </select>
             <button
               onClick={() => setShowEditCharger((v) => !v)}
-              className="rounded-md border border-gray-200 dark:border-slate-700 px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60"
+              className="rounded-md border border-gray-300 dark:border-slate-700 px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60"
             >
               Edit Charger
             </button>
             <button
               onClick={() => setShowQrModal(true)}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-gray-200 dark:border-slate-700 text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-gray-300 dark:border-slate-700 text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60"
               title="Smart QR deep link"
               aria-label="Open Smart QR deep link"
             >
@@ -309,7 +309,7 @@ export default function ChargerDetail() {
         </div>
 
         {showEditCharger && (
-          <div className="mt-3 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+          <div className="mt-3 rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
             <h2 className="mb-3 text-sm font-semibold text-gray-700 dark:text-slate-300">Charger details</h2>
             <div className="grid gap-3 md:grid-cols-3">
               <label className="text-sm text-gray-700 dark:text-slate-300">OCPP ID
@@ -332,7 +332,7 @@ export default function ChargerDetail() {
         </div>
 
         <div className="mt-4">
-          <div className="rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+          <div className="rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
             <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">Charger Controls</p>
 
             <div className="grid gap-2 lg:grid-cols-3">
@@ -364,7 +364,7 @@ export default function ChargerDetail() {
               <button
                 onClick={() => handleReset('Soft')}
                 disabled={resetLoading}
-                className="inline-flex h-10 w-full items-center justify-center whitespace-nowrap rounded-md border border-gray-200 dark:border-slate-700 px-3 text-sm font-medium text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60 disabled:opacity-50"
+                className="inline-flex h-10 w-full items-center justify-center whitespace-nowrap rounded-md border border-gray-300 dark:border-slate-700 px-3 text-sm font-medium text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60 disabled:opacity-50"
               >
                 Soft Reset
               </button>
@@ -392,7 +392,7 @@ export default function ChargerDetail() {
             </div>
 
             {(remoteStartMsg || resetMsg || heartbeatMsg || configMsg) && (
-              <div className="mt-3 rounded-md border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/60 p-2.5 text-xs text-gray-600 dark:text-slate-300">
+              <div className="mt-3 rounded-md border border-gray-300 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/60 p-2.5 text-xs text-gray-600 dark:text-slate-300">
                 <p className="mb-1 font-semibold uppercase tracking-wide text-[10px] text-gray-500 dark:text-slate-400">OCPP request responses</p>
                 <div className="space-y-1">
                   {remoteStartMsg && <p><span className="font-medium">Remote Start:</span> {remoteStartMsg}</p>}
@@ -430,10 +430,10 @@ export default function ChargerDetail() {
 
       {showQrModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setShowQrModal(false)}>
-          <div className="w-full max-w-2xl rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
+          <div className="w-full max-w-2xl rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-sm font-semibold text-gray-800 dark:text-slate-200">Smart QR Deep Link</h2>
-              <button onClick={() => setShowQrModal(false)} className="rounded-md border border-gray-200 dark:border-slate-700 px-2 py-1 text-xs text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60">Close</button>
+              <button onClick={() => setShowQrModal(false)} className="rounded-md border border-gray-300 dark:border-slate-700 px-2 py-1 text-xs text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60">Close</button>
             </div>
             <div className="grid gap-2 sm:grid-cols-3">
               <button
@@ -470,7 +470,7 @@ export default function ChargerDetail() {
       )}
 
       {uptime && (
-        <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-5 shadow-sm">
+        <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-5 shadow-sm">
           <h2 className="mb-4 text-sm font-semibold text-gray-700 dark:text-slate-300">Uptime Monitoring (OCA v1.1)</h2>
           <div className="grid gap-3 sm:grid-cols-3 mb-4">
             <div><p className="text-xs text-gray-500 dark:text-slate-400">24h</p><p className={`text-lg font-semibold ${uptime.uptimePercent24h >= 99 ? 'text-green-700' : uptime.uptimePercent24h >= 95 ? 'text-amber-700' : 'text-red-700'}`}>{uptime.uptimePercent24h.toFixed(2)}%</p></div>
@@ -496,8 +496,8 @@ export default function ChargerDetail() {
       )}
 
       {/* Session log */}
-      <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm">
-        <div className="border-b border-gray-200 dark:border-slate-700 px-5 py-4">
+      <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm">
+        <div className="border-b border-gray-300 dark:border-slate-700 px-5 py-4">
           <h2 className="text-sm font-semibold text-gray-700 dark:text-slate-300">Recent Sessions</h2>
         </div>
 

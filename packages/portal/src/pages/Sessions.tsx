@@ -159,7 +159,7 @@ export default function Sessions() {
         <Tile label="Revenue" value={`$${totals.revenue.toFixed(2)}`} />
       </div>
 
-      <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+      <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm font-semibold text-gray-700 dark:text-slate-300">Session feed</p>
           <div className="flex flex-wrap gap-2">
@@ -215,7 +215,7 @@ export default function Sessions() {
             </thead>
             <tbody>
               {filtered.map((row) => (
-                <tr key={row.id} className="border-t border-gray-200 dark:border-slate-700">
+                <tr key={row.id} className="border-t border-gray-300 dark:border-slate-700">
                   <td className="py-2 text-gray-500 dark:text-slate-400">{new Date(row.startedAt).toLocaleString()}</td>
                   <td className="py-2 font-mono text-gray-700 dark:text-slate-300">{row.transactionId ?? '—'}</td>
                   <td className="py-2 text-gray-700 dark:text-slate-300">{row.site.name}</td>
@@ -236,7 +236,7 @@ export default function Sessions() {
 
 function Tile({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+    <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
       <p className="text-xs text-gray-500 dark:text-slate-400">{label}</p>
       <p className="mt-1 text-xl font-semibold text-gray-900 dark:text-slate-100">{value}</p>
     </div>

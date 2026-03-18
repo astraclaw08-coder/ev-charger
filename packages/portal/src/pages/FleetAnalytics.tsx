@@ -5,6 +5,7 @@ import {
   Area,
   BarChart,
   Bar,
+  CartesianGrid,
   LineChart,
   Line,
   XAxis,
@@ -22,6 +23,7 @@ import {
   type SiteListItem,
 } from '../api/client';
 import { useToken } from '../auth/TokenContext';
+import { usePortalTheme } from '../theme/ThemeContext';
 
 type TimeFilter = '7d' | '30d' | '60d' | 'custom';
 
@@ -31,6 +33,15 @@ const ENABLE_EVC_PLATFORM_BUSINESS_VIEWS = import.meta.env.VITE_EVC_PLATFORM_BUS
 
 export default function FleetAnalytics() {
   const getToken = useToken();
+  const { theme } = usePortalTheme();
+  const isDark = theme === 'dark';
+  const chartColors = {
+    grid: isDark ? '#334155' : '#e2e8f0',
+    tick: isDark ? '#94a3b8' : '#64748b',
+    tooltip: isDark
+      ? { backgroundColor: '#1e293b', border: '1px solid #334155', color: '#f1f5f9' }
+      : { backgroundColor: '#ffffff', border: '1px solid #e2e8f0', color: '#1e293b' },
+  };
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -273,7 +284,7 @@ export default function FleetAnalytics() {
         </div>
       )}
 
-      <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+      <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
         <div className="grid gap-3 md:grid-cols-4">
           <div>
             <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Organization</label>
@@ -329,9 +340,10 @@ export default function FleetAnalytics() {
       <ChartCard title="Sessions per Day">
         <ResponsiveContainer width="100%" height={200}>
           <LineChart data={chartData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
-            <XAxis dataKey="label" tick={{ fontSize: 11 }} tickLine={false} />
-            <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-            <Tooltip formatter={(v: number) => [v, 'Sessions']} labelFormatter={(l) => `Date: ${l}`} />
+            <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} />
+            <XAxis dataKey="label" tick={{ fontSize: 11, fill: chartColors.tick }} tickLine={false} />
+            <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: chartColors.tick }} />
+            <Tooltip contentStyle={chartColors.tooltip} formatter={(v: number) => [v, 'Sessions']} labelFormatter={(l) => `Date: ${l}`} />
             <Line type="monotone" dataKey="sessions" stroke="#16a34a" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
           </LineChart>
         </ResponsiveContainer>
@@ -340,10 +352,11 @@ export default function FleetAnalytics() {
       <ChartCard title="kWh Delivered per Day">
         <ResponsiveContainer width="100%" height={200}>
           <AreaChart data={chartData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
-            <XAxis dataKey="label" tick={{ fontSize: 11 }} tickLine={false} />
-            <YAxis tick={{ fontSize: 11 }} />
-            <Tooltip formatter={(v: number) => [`${v} kWh`, 'Energy']} labelFormatter={(l) => `Date: ${l}`} />
-            <Area type="monotone" dataKey="kwhDelivered" stroke="#2563eb" fill="#dbeafe" strokeWidth={2} />
+            <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} />
+            <XAxis dataKey="label" tick={{ fontSize: 11, fill: chartColors.tick }} tickLine={false} />
+            <YAxis tick={{ fontSize: 11, fill: chartColors.tick }} />
+            <Tooltip contentStyle={chartColors.tooltip} formatter={(v: number) => [`${v} kWh`, 'Energy']} labelFormatter={(l) => `Date: ${l}`} />
+            <Area type="monotone" dataKey="kwhDelivered" stroke="#2563eb" fill={isDark ? '#1e3a5f' : '#dbeafe'} strokeWidth={2} />
           </AreaChart>
         </ResponsiveContainer>
       </ChartCard>
@@ -351,17 +364,18 @@ export default function FleetAnalytics() {
       <ChartCard title="Revenue per Day (USD)">
         <ResponsiveContainer width="100%" height={200}>
           <BarChart data={chartData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
-            <XAxis dataKey="label" tick={{ fontSize: 11 }} tickLine={false} />
-            <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `$${v}`} />
-            <Tooltip formatter={(v: number) => [`$${v.toFixed(2)}`, 'Revenue']} labelFormatter={(l) => `Date: ${l}`} />
+            <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} />
+            <XAxis dataKey="label" tick={{ fontSize: 11, fill: chartColors.tick }} tickLine={false} />
+            <YAxis tick={{ fontSize: 11, fill: chartColors.tick }} tickFormatter={(v) => `$${v}`} />
+            <Tooltip contentStyle={chartColors.tooltip} formatter={(v: number) => [`$${v.toFixed(2)}`, 'Revenue']} labelFormatter={(l) => `Date: ${l}`} />
             <Bar dataKey="revenueUsd" fill="#16a34a" radius={[3, 3, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </ChartCard>
 
       {/* Site performance breakdown table */}
-      <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm">
-        <div className="border-b border-gray-200 dark:border-slate-700 px-5 py-4">
+      <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm">
+        <div className="border-b border-gray-300 dark:border-slate-700 px-5 py-4">
           <h3 className="text-sm font-semibold text-gray-700 dark:text-slate-300">Site Performance Breakdown</h3>
           <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">Revenue, energy, and utilization per site for the selected period.</p>
         </div>
@@ -433,10 +447,12 @@ function DayOfWeekChart({ data }: { data: Array<{ date: string; sessions: number
   return (
     <ResponsiveContainer width="100%" height={220}>
       <BarChart data={chartData} margin={{ top: 8, right: 8, left: -16, bottom: 0 }} barSize={32}>
-        <XAxis dataKey="day" tick={{ fontSize: 12 }} tickLine={false} axisLine={{ stroke: '#94a3b8', strokeWidth: 1 }} />
-        <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={{ stroke: '#94a3b8', strokeWidth: 1 }} allowDecimals={false} />
+        <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} />
+        <XAxis dataKey="day" tick={{ fontSize: 12, fill: chartColors.tick }} tickLine={false} axisLine={{ stroke: chartColors.grid, strokeWidth: 1 }} />
+        <YAxis tick={{ fontSize: 11, fill: chartColors.tick }} tickLine={false} axisLine={{ stroke: chartColors.grid, strokeWidth: 1 }} allowDecimals={false} />
         <Tooltip
-          cursor={{ fill: '#f3f4f6' }}
+          contentStyle={chartColors.tooltip}
+          cursor={{ fill: isDark ? '#1e293b' : '#f3f4f6' }}
           formatter={(v: number) => [`${v}`, 'Avg Sessions']}
           labelFormatter={(l) => `${l}`}
         />
@@ -479,7 +495,7 @@ function siteRowsFromPortfolio(source: SiteListItem[], summary: PortfolioSummary
 
 function KpiTile({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2.5">
+    <div className="rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2.5">
       <p className="truncate text-[10px] font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">{label}</p>
       <p className="mt-1 truncate text-lg font-semibold leading-tight text-gray-900 dark:text-slate-100">{value}</p>
     </div>
@@ -488,7 +504,7 @@ function KpiTile({ label, value }: { label: string; value: string }) {
 
 function ChartCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-5 shadow-sm">
+    <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-5 shadow-sm">
       <h3 className="mb-4 text-sm font-semibold text-gray-700 dark:text-slate-300">{title}</h3>
       {children}
     </div>

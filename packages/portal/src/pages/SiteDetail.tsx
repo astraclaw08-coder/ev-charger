@@ -1,13 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { shortId } from '../lib/shortId';
-import { Bar, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { createApiClient, type SiteDetail as SiteDetailType, type ChargerUptime, type SiteUptime, type Analytics as SiteAnalytics, type DailyEntry } from '../api/client';
 import { useToken } from '../auth/TokenContext';
 import ChargerMap from '../components/ChargerMap';
 import StatusBadge from '../components/StatusBadge';
 import AddChargerDialog from '../components/AddChargerDialog';
 import { formatDate } from '../lib/utils';
+import { usePortalTheme } from '../theme/ThemeContext';
 
 type RangePreset = '7d' | '30d' | '60d';
 
@@ -106,6 +107,15 @@ function buildPricingSummary(config: TariffConfig): string {
 export default function SiteDetail() {
   const { id } = useParams<{ id: string }>();
   const getToken = useToken();
+  const { theme } = usePortalTheme();
+  const isDark = theme === 'dark';
+  const chartColors = {
+    grid: isDark ? '#334155' : '#e2e8f0',
+    tick: isDark ? '#94a3b8' : '#64748b',
+    tooltip: isDark
+      ? { backgroundColor: '#1e293b', border: '1px solid #334155', color: '#f1f5f9' }
+      : { backgroundColor: '#ffffff', border: '1px solid #e2e8f0', color: '#1e293b' },
+  };
   const [site, setSite] = useState<SiteDetailType | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -286,21 +296,21 @@ export default function SiteDetail() {
           <select
             value={rangePreset}
             onChange={(e) => setRangePreset(e.target.value as RangePreset)}
-            className="rounded-md border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60"
+            className="rounded-md border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60"
           >
             <option value="7d">Last 7 days</option>
             <option value="30d">Last 30 days</option>
             <option value="60d">Last 60 days</option>
           </select>
-          <button onClick={() => setShowEditSite((v) => !v)} className="rounded-md border border-gray-200 dark:border-slate-700 px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60">Edit Site</button>
-          <Link to={`/sites/${site.id}/analytics`} className="rounded-md border border-gray-200 dark:border-slate-700 px-4 py-2 text-sm font-medium text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60">Analytics</Link>
+          <button onClick={() => setShowEditSite((v) => !v)} className="rounded-md border border-gray-300 dark:border-slate-700 px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60">Edit Site</button>
+          <Link to={`/sites/${site.id}/analytics`} className="rounded-md border border-gray-300 dark:border-slate-700 px-4 py-2 text-sm font-medium text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60">Analytics</Link>
           <button onClick={() => setShowAddCharger(true)} className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">+ Add Charger</button>
         </div>
       </div>
 
       {/* ── Edit site form ── */}
       {showEditSite && (
-        <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+        <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
           <h2 className="mb-3 text-sm font-semibold text-gray-700 dark:text-slate-300">Edit site details</h2>
           <div className="grid gap-3 md:grid-cols-2">
             <label className="text-sm text-gray-700 dark:text-slate-300">Site name
@@ -357,7 +367,7 @@ export default function SiteDetail() {
       {/* ── Vendor Fee Modal (superadmin only) ── */}
       {showFeeModal && isSuperAdmin && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setShowFeeModal(false)}>
-          <div className="w-full max-w-md rounded-2xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+          <div className="w-full max-w-md rounded-2xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="mb-4 flex items-center justify-between">
               <div>
                 <h3 className="text-sm font-semibold text-gray-900 dark:text-slate-100">Software Fee</h3>
@@ -422,7 +432,7 @@ export default function SiteDetail() {
       )}
 
       {/* ── Tariff (full width, below tiles) ── */}
-      <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+      <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-semibold text-gray-700 dark:text-slate-300">Pricing / Tariff</h2>
           <div className="flex items-center gap-2">
@@ -461,7 +471,7 @@ export default function SiteDetail() {
         </div>
 
         {tariff.mode === 'tou' && (
-          <div className="mt-4 rounded-md border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/60 p-3">
+          <div className="mt-4 rounded-md border border-gray-300 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/60 p-3">
             <div className="mb-2 flex items-center justify-between">
               <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-slate-400">TOU windows</p>
               <button type="button" className="rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-2 py-1 text-xs text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800 dark:bg-slate-800"
@@ -474,7 +484,7 @@ export default function SiteDetail() {
             ) : (
               <div className="space-y-2">
                 {tariff.windows.map((w) => (
-                  <div key={w.id} className="grid gap-2 rounded-md border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-2 md:grid-cols-6">
+                  <div key={w.id} className="grid gap-2 rounded-md border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-2 md:grid-cols-6">
                     <select className="rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5 text-xs" value={w.day} onChange={(e) => setTariff((p) => ({ ...p, windows: p.windows.map((x) => x.id === w.id ? { ...x, day: Number(e.target.value) } : x) }))}>
                       {DAY_NAMES.map((name, idx) => <option key={name} value={idx}>{name}</option>)}
                     </select>
@@ -530,7 +540,7 @@ export default function SiteDetail() {
       </div>
 
       {/* ── Trend chart (dashboard style) ── */}
-      <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+      <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
         <p className="text-sm font-semibold">
           <span className="text-blue-600">Energy (kWh)</span>
           <span className="text-gray-400 dark:text-slate-500"> | </span>
@@ -545,10 +555,11 @@ export default function SiteDetail() {
           ) : (
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={trend} margin={{ top: 4, right: 16, bottom: 0, left: 0 }}>
-                <XAxis dataKey="label" tick={{ fontSize: 10 }} />
-                <YAxis yAxisId="kwh" tick={{ fontSize: 10 }} />
-                <YAxis yAxisId="rev" orientation="right" tick={{ fontSize: 10 }} tickFormatter={(v: number) => `$${v}`} />
-                <Tooltip formatter={(v: number, name: string) => name === 'revenueUsd' ? [`$${v.toFixed(2)}`, 'Revenue ($)'] : name === 'kwhDelivered' ? [`${v} kWh`, 'Energy (kWh)'] : [v, 'Transactions']} />
+                <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} />
+                <XAxis dataKey="label" tick={{ fontSize: 10, fill: chartColors.tick }} />
+                <YAxis yAxisId="kwh" tick={{ fontSize: 10, fill: chartColors.tick }} />
+                <YAxis yAxisId="rev" orientation="right" tick={{ fontSize: 10, fill: chartColors.tick }} tickFormatter={(v: number) => `$${v}`} />
+                <Tooltip contentStyle={chartColors.tooltip} formatter={(v: number, name: string) => name === 'revenueUsd' ? [`$${v.toFixed(2)}`, 'Revenue ($)'] : name === 'kwhDelivered' ? [`${v} kWh`, 'Energy (kWh)'] : [v, 'Transactions']} />
                 <Bar yAxisId="kwh" dataKey="kwhDelivered" fill="#3b82f6" opacity={0.7} name="Energy (kWh)" />
                 <Line yAxisId="rev" type="monotone" dataKey="revenueUsd" stroke="#10b981" dot={false} strokeWidth={2} name="Revenue ($)" />
                 <Line yAxisId="kwh" type="monotone" dataKey="sessions" stroke="#f59e0b" dot={false} strokeWidth={1.5} name="Transactions" />
@@ -561,10 +572,10 @@ export default function SiteDetail() {
       {/* ── Uptime summary ── */}
       {siteUptime && (
         <div className="grid gap-3 sm:grid-cols-4">
-          <div className="rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 text-center"><p className="text-xs text-gray-500 dark:text-slate-400">Uptime 24h</p><p className="mt-1 text-lg font-semibold text-gray-900 dark:text-slate-100">{siteUptime.uptimePercent24h.toFixed(1)}%</p></div>
-          <div className="rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 text-center"><p className="text-xs text-gray-500 dark:text-slate-400">Uptime 7d</p><p className="mt-1 text-lg font-semibold text-gray-900 dark:text-slate-100">{siteUptime.uptimePercent7d.toFixed(1)}%</p></div>
-          <div className="rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 text-center"><p className="text-xs text-gray-500 dark:text-slate-400">Uptime 30d</p><p className="mt-1 text-lg font-semibold text-gray-900 dark:text-slate-100">{siteUptime.uptimePercent30d.toFixed(1)}%</p></div>
-          <div className="rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 text-center"><p className="text-xs text-gray-500 dark:text-slate-400">Total chargers</p><p className="mt-1 text-lg font-semibold text-gray-900 dark:text-slate-100">{site.chargers.length}</p></div>
+          <div className="rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 text-center"><p className="text-xs text-gray-500 dark:text-slate-400">Uptime 24h</p><p className="mt-1 text-lg font-semibold text-gray-900 dark:text-slate-100">{siteUptime.uptimePercent24h.toFixed(1)}%</p></div>
+          <div className="rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 text-center"><p className="text-xs text-gray-500 dark:text-slate-400">Uptime 7d</p><p className="mt-1 text-lg font-semibold text-gray-900 dark:text-slate-100">{siteUptime.uptimePercent7d.toFixed(1)}%</p></div>
+          <div className="rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 text-center"><p className="text-xs text-gray-500 dark:text-slate-400">Uptime 30d</p><p className="mt-1 text-lg font-semibold text-gray-900 dark:text-slate-100">{siteUptime.uptimePercent30d.toFixed(1)}%</p></div>
+          <div className="rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 text-center"><p className="text-xs text-gray-500 dark:text-slate-400">Total chargers</p><p className="mt-1 text-lg font-semibold text-gray-900 dark:text-slate-100">{site.chargers.length}</p></div>
         </div>
       )}
 
@@ -575,14 +586,14 @@ export default function SiteDetail() {
       <div>
         <h2 className="mb-3 text-lg font-semibold text-gray-900 dark:text-slate-100">Chargers ({site.chargers.length})</h2>
         {site.chargers.length === 0 ? (
-          <div className="rounded-lg border-2 border-dashed border-gray-200 dark:border-slate-700 p-10 text-center text-gray-400 dark:text-slate-500">
+          <div className="rounded-lg border-2 border-dashed border-gray-300 dark:border-slate-700 p-10 text-center text-gray-400 dark:text-slate-500">
             <p className="text-3xl">🔌</p>
             <p className="mt-2 font-medium">No chargers registered</p>
             <button onClick={() => setShowAddCharger(true)} className="mt-3 text-sm text-brand-600 hover:underline">Register your first charger →</button>
           </div>
         ) : site.chargers.length > 4 ? (
-          <div className="overflow-hidden rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900">
-            <div className="hidden grid-cols-[1.6fr_1fr_1.8fr_0.8fr] gap-3 border-b border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/60 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400 md:grid">
+          <div className="overflow-hidden rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900">
+            <div className="hidden grid-cols-[1.6fr_1fr_1.8fr_0.8fr] gap-3 border-b border-gray-300 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/60 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400 md:grid">
               <span>Charger</span>
               <span className="inline-flex items-center gap-1">
                 Status
@@ -613,12 +624,12 @@ export default function SiteDetail() {
       </div>
 
       {/* ── Audit trail ── */}
-      <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+      <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
         <h2 className="mb-3 text-sm font-semibold text-gray-700 dark:text-slate-300">Audit trail</h2>
         <div className="space-y-2">
           {auditEvents.length === 0 && <p className="text-xs text-gray-500 dark:text-slate-400">No audit events yet.</p>}
           {auditEvents.slice(0, 20).map((e) => (
-            <div key={e.id} className="rounded-md border border-gray-200 dark:border-slate-700 p-2">
+            <div key={e.id} className="rounded-md border border-gray-300 dark:border-slate-700 p-2">
               <p className="text-xs text-gray-500 dark:text-slate-400">{new Date(e.createdAt).toLocaleString()} · {e.actor}</p>
               <p className="text-xs font-medium text-gray-800 dark:text-slate-200">{e.action}</p>
               <p className="text-xs text-gray-600 dark:text-slate-400">{e.detail}</p>
@@ -645,7 +656,7 @@ export default function SiteDetail() {
 
 function SiteKpiTile({ label, value, live }: { label: string; value: string; live?: boolean }) {
   return (
-    <div className="rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+    <div className="rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
       <div className="flex items-center gap-1.5">
         <p className="truncate text-[11px] font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">{label}</p>
         {live && <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-500" title="Live" />}
@@ -687,7 +698,7 @@ function ChargerListRow({ charger, uptime }: { charger: SiteDetailType['chargers
       </div>
 
       <div className="md:text-right">
-        <Link to={`/chargers/${shortId(charger.id)}`} className="inline-block rounded-md border border-gray-200 dark:border-slate-700 px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60">View Detail →</Link>
+        <Link to={`/chargers/${shortId(charger.id)}`} className="inline-block rounded-md border border-gray-300 dark:border-slate-700 px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60">View Detail →</Link>
       </div>
     </div>
   );
@@ -695,7 +706,7 @@ function ChargerListRow({ charger, uptime }: { charger: SiteDetailType['chargers
 
 function ChargerCard({ charger, uptime }: { charger: SiteDetailType['chargers'][number]; uptime?: ChargerUptime }) {
   return (
-    <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 shadow-sm">
+    <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 shadow-sm">
       <div className="flex items-start justify-between">
         <div>
           <Link to={`/chargers/${shortId(charger.id)}`} className="font-semibold text-gray-900 dark:text-slate-100 font-mono hover:text-brand-700 hover:underline">
@@ -730,7 +741,7 @@ function ChargerCard({ charger, uptime }: { charger: SiteDetailType['chargers'][
         </div>
       )}
 
-      <Link to={`/chargers/${shortId(charger.id)}`} className="mt-3 block rounded-md border border-gray-200 dark:border-slate-700 px-3 py-1.5 text-center text-xs font-medium text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60">View Detail →</Link>
+      <Link to={`/chargers/${shortId(charger.id)}`} className="mt-3 block rounded-md border border-gray-300 dark:border-slate-700 px-3 py-1.5 text-center text-xs font-medium text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60">View Detail →</Link>
     </div>
   );
 }
