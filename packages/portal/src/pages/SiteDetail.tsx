@@ -64,11 +64,11 @@ const BUCKET_COLORS: Record<string, { text: string; border: string }> = {
   high:   { text: 'text-rose-600 dark:text-rose-400',       border: 'border-rose-300 dark:border-rose-700' },
   none:   { text: 'text-gray-400 dark:text-slate-500',      border: 'border-gray-200 dark:border-slate-700' },
 };
-// Solid fill for timeline segment bars
-const SEGMENT_BG: Record<string, string> = {
-  low:    'bg-emerald-400 dark:bg-emerald-500',
-  medium: 'bg-amber-400 dark:bg-amber-500',
-  high:   'bg-rose-500 dark:bg-rose-500',
+// Solid fill + guaranteed legible white label for timeline segment bars
+const SEGMENT_STYLE: Record<string, { bg: string; label: string }> = {
+  low:    { bg: 'bg-emerald-500 dark:bg-emerald-600', label: 'text-white' },
+  medium: { bg: 'bg-amber-500 dark:bg-amber-600',     label: 'text-white' },
+  high:   { bg: 'bg-rose-600 dark:bg-rose-700',       label: 'text-white' },
 };
 // Add-tier button styles per bucket
 const ADD_TIER_CLASSES: Record<string, string> = {
@@ -152,37 +152,42 @@ function validateTouWindows(windows: TouWindow[]): string | null {
   return null;
 }
 
-function buildPricingSummary(config: TariffConfig): string {
-  const vendorFeeSummary = config.softwareVendorFeeMode === 'none'
-    ? 'No software fee'
-    : config.softwareVendorFeeMode === 'percentage_total'
-      ? `Software fee ${config.softwareVendorFeeValue.toFixed(2)}% of energy+idle revenue`
-      : config.softwareVendorFeeMode === 'fixed_per_kwh'
-        ? `Software fee $${config.softwareVendorFeeValue.toFixed(4)}/kWh`
-        : `Software fee $${config.softwareVendorFeeValue.toFixed(4)}/minute`;
-  const activationSummary = config.softwareFeeIncludesActivation
-    ? 'Activation fee included in software fee (not host revenue)'
-    : 'Activation fee not included in software fee';
-  const base = `Base $${config.pricePerKwhUsd.toFixed(2)}/kWh · Idle $${config.idleFeePerMinUsd.toFixed(2)}/min · Activation $${config.activationFeeUsd.toFixed(2)} · Grace ${config.gracePeriodMin}m · ${vendorFeeSummary} · ${activationSummary}`;
-  if (config.mode !== 'tou') return `Flat pricing active. ${base}`;
+function buildPricingSummary(config: TariffConfig): { lines: string[] } {
+  const activation = config.activationFeeUsd > 0 ? ` · $${config.activationFeeUsd.toFixed(2)} to start a session` : '';
+  const grace = config.gracePeriodMin > 0 ? ` · ${config.gracePeriodMin}-min free grace period after charging ends` : '';
 
-  if (config.windows.length === 0) {
-    return `TOU mode active with no windows configured. Falls back to base rates. ${base}`;
+  if (config.mode !== 'tou' || config.profiles.length === 0) {
+    const lines = [
+      `Customers pay $${config.pricePerKwhUsd.toFixed(2)} per kWh of energy delivered${activation}${grace}.`,
+      `If the car sits plugged in after charging, an idle fee of $${config.idleFeePerMinUsd.toFixed(2)}/min applies.`,
+    ];
+    return { lines };
   }
 
+  // TOU — summarize active profile
+  const profile = config.profiles[0];
   const now = new Date();
-  const nowDay = now.getDay();
-  const nowMinutes = now.getHours() * 60 + now.getMinutes();
-  const activeWindow = config.windows
-    .slice()
-    .sort((a, b) => a.day - b.day || timeToMinutes(a.start) - timeToMinutes(b.start))
-    .find((w) => w.day === nowDay && nowMinutes >= timeToMinutes(w.start) && nowMinutes < timeToMinutes(w.end));
+  const nowH = now.getHours();
+  const activeSeg = profile.segments.find(s => nowH >= s.startHour && nowH < s.endHour);
+  const activeBucket = activeSeg ? config.buckets.find(b => b.id === activeSeg.bucket) : null;
 
-  if (!activeWindow) {
-    return `TOU mode active (${config.windows.length} windows). No active window right now; base rates apply. ${base}`;
+  const lines: string[] = [
+    `Prices vary by time of day (Time-of-Use pricing)${activation}${grace}.`,
+  ];
+
+  // Summarize each tier
+  for (const bucket of config.buckets) {
+    const segs = profile.segments.filter(s => s.bucket === bucket.id).sort((a,b) => a.startHour - b.startHour);
+    if (segs.length === 0) continue;
+    const ranges = segs.map(s => `${String(s.startHour).padStart(2,'0')}:00–${s.endHour >= 24 ? '24:00' : String(s.endHour).padStart(2,'0')+':00'}`).join(', ');
+    lines.push(`${bucket.label} tier (${ranges}): $${bucket.pricePerKwhUsd.toFixed(2)}/kWh · $${bucket.idleFeePerMinUsd.toFixed(2)}/min idle`);
   }
 
-  return `TOU mode active (${config.windows.length} windows). Current window (${DAY_NAMES[activeWindow.day]} ${activeWindow.start}-${activeWindow.end}): $${activeWindow.pricePerKwhUsd.toFixed(2)}/kWh · Idle $${activeWindow.idleFeePerMinUsd.toFixed(2)}/min.`;
+  if (activeBucket) {
+    lines.push(`Right now: ${activeBucket.label} tier — $${activeBucket.pricePerKwhUsd.toFixed(2)}/kWh`);
+  }
+
+  return { lines };
 }
 
 export default function SiteDetail() {
@@ -596,19 +601,28 @@ export default function SiteDetail() {
               </div>
             </div>
 
-            {/* ── Step 2: Daily schedules ────────────────────────────────── */}
+            {/* ── Step 2: Daily schedule (single schedule per site) ─────── */}
             <div className="rounded-xl border border-gray-200 dark:border-slate-700 p-4">
-              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">Step 2 — Daily schedules</p>
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">Step 2 — Daily schedule</p>
 
               {tariff.profiles.length === 0 && (
-                <p className="mb-3 text-xs text-gray-400 dark:text-slate-500">No schedules yet. Add one below.</p>
+                <div className="mb-3">
+                  <p className="mb-2 text-xs text-gray-400 dark:text-slate-500">No schedule set yet.</p>
+                  <button
+                    type="button"
+                    className="rounded-md border border-brand-300 dark:border-brand-700 px-3 py-1.5 text-xs font-medium text-brand-700 dark:text-brand-400 hover:bg-brand-50 dark:hover:bg-brand-950/40"
+                    onClick={() => setTariff((p) => ({ ...p, profiles: [makeDailyProfile()] }))}
+                  >
+                    + Set daily schedule
+                  </button>
+                </div>
               )}
 
-              {tariff.profiles.map((profile, pi) => (
-                <div key={profile.id} className="mb-5 rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+              {tariff.profiles.slice(0, 1).map((profile, pi) => (
+                <div key={profile.id} className="rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
                   {/* Day selector */}
                   <div className="mb-4 flex flex-wrap items-center gap-2">
-                    <span className="text-xs font-medium text-gray-500 dark:text-slate-400">Days:</span>
+                    <span className="text-xs font-medium text-gray-500 dark:text-slate-400">Active days:</span>
                     {DAY_NAMES.map((name, di) => {
                       const selected = profile.days.includes(di);
                       return (
@@ -631,7 +645,7 @@ export default function SiteDetail() {
                     <button
                       type="button"
                       className="ml-auto text-xs text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
-                      onClick={() => setTariff((p) => ({ ...p, profiles: p.profiles.filter((_, idx) => idx !== pi) }))}
+                      onClick={() => setTariff((p) => ({ ...p, profiles: [] }))}
                     >
                       Remove schedule
                     </button>
@@ -639,7 +653,7 @@ export default function SiteDetail() {
 
                   {/* ── Timeline bar ─────────────────────────────────────── */}
                   <div
-                    className="relative mb-6 h-10 rounded-md bg-gray-100 dark:bg-slate-800 select-none overflow-visible"
+                    className="relative mb-8 h-11 rounded-md bg-gray-100 dark:bg-slate-800 select-none overflow-visible"
                     style={{ touchAction: 'none' }}
                     onMouseMove={(e) => {
                       const drag = touDragRef.current;
@@ -651,15 +665,21 @@ export default function SiteDetail() {
                         ...p,
                         profiles: p.profiles.map((pr, pIdx) => {
                           if (pIdx !== pi) return pr;
+                          const others = pr.segments.filter((s) => s.id !== drag.segId);
                           return {
                             ...pr,
                             segments: pr.segments.map((seg) => {
                               if (seg.id !== drag.segId) return seg;
                               if (drag.handle === 'start') {
-                                const newStart = Math.min(clampedHour, seg.endHour - 1);
+                                // Clamp against adjacent segments to prevent overlap
+                                const leftBound = others.filter(s => s.endHour <= seg.startHour || s.endHour <= clampedHour)
+                                  .reduce((mx, s) => Math.max(mx, s.endHour), 0);
+                                const newStart = Math.max(leftBound, Math.min(clampedHour, seg.endHour - 1));
                                 return { ...seg, startHour: Math.max(0, newStart) };
                               } else {
-                                const newEnd = Math.max(clampedHour, seg.startHour + 1);
+                                const rightBound = others.filter(s => s.startHour >= seg.endHour || s.startHour >= clampedHour)
+                                  .reduce((mn, s) => Math.min(mn, s.startHour), 24);
+                                const newEnd = Math.min(rightBound, Math.max(clampedHour, seg.startHour + 1));
                                 return { ...seg, endHour: Math.min(24, newEnd) };
                               }
                             }),
@@ -674,26 +694,25 @@ export default function SiteDetail() {
                     {profile.segments.map((seg) => {
                       const left = (seg.startHour / 24) * 100;
                       const width = ((seg.endHour - seg.startHour) / 24) * 100;
-                      const col = BUCKET_COLORS[seg.bucket] ?? BUCKET_COLORS.none;
-                      const bgCls = SEGMENT_BG[seg.bucket] ?? 'bg-gray-300';
+                      const style = SEGMENT_STYLE[seg.bucket] ?? { bg: 'bg-gray-300', label: 'text-white' };
                       const durationH = seg.endHour - seg.startHour;
                       return (
                         <div
                           key={seg.id}
-                          className={`absolute top-0 h-full rounded-sm ${bgCls} opacity-80`}
+                          className={`absolute top-0 h-full rounded-sm ${style.bg}`}
                           style={{ left: `${left}%`, width: `${width}%` }}
                           title={`${seg.bucket} | ${seg.startHour}:00–${seg.endHour}:00`}
                         >
-                          {/* Label */}
+                          {/* Label — always white on solid bg */}
                           {durationH >= 2 && (
-                            <span className={`absolute inset-0 flex items-center justify-center text-[10px] font-semibold uppercase select-none pointer-events-none ${col.text}`}>
+                            <span className={`absolute inset-0 flex items-center justify-center text-[10px] font-bold uppercase select-none pointer-events-none drop-shadow-sm ${style.label}`}>
                               {seg.bucket}
                             </span>
                           )}
                           {/* Remove button */}
                           <button
                             type="button"
-                            className="absolute -top-2.5 right-0.5 text-[10px] text-white/70 hover:text-white z-10 leading-none"
+                            className="absolute -top-3 right-0.5 text-[11px] text-gray-400 hover:text-red-500 dark:text-slate-500 dark:hover:text-red-400 z-10 leading-none"
                             onClick={() => setTariff((p) => ({
                               ...p,
                               profiles: p.profiles.map((pr, pIdx) => pIdx !== pi ? pr : { ...pr, segments: pr.segments.filter((s) => s.id !== seg.id) }),
@@ -702,27 +721,29 @@ export default function SiteDetail() {
                           >✕</button>
                           {/* Start handle */}
                           <div
-                            className="absolute left-0 top-0 h-full w-2 cursor-ew-resize flex items-center justify-center group"
+                            className="absolute left-0 top-0 h-full w-2.5 cursor-ew-resize flex items-center justify-center group z-10"
                             onMouseDown={(e) => {
                               e.preventDefault();
-                              const rect = (e.currentTarget.closest('.relative') as HTMLElement)?.getBoundingClientRect();
+                              const rect = (e.currentTarget.closest('[style]') as HTMLElement)?.parentElement?.getBoundingClientRect()
+                                ?? (e.currentTarget.closest('.relative') as HTMLElement)?.getBoundingClientRect();
                               if (!rect) return;
                               touDragRef.current = { pi, segId: seg.id, handle: 'start', containerLeft: rect.left, containerWidth: rect.width };
                             }}
                           >
-                            <div className="w-1 h-5 rounded-full bg-white/80 group-hover:bg-white" />
+                            <div className="w-1 h-6 rounded-full bg-white/90 shadow group-hover:bg-white" />
                           </div>
                           {/* End handle */}
                           <div
-                            className="absolute right-0 top-0 h-full w-2 cursor-ew-resize flex items-center justify-center group"
+                            className="absolute right-0 top-0 h-full w-2.5 cursor-ew-resize flex items-center justify-center group z-10"
                             onMouseDown={(e) => {
                               e.preventDefault();
-                              const rect = (e.currentTarget.closest('.relative') as HTMLElement)?.getBoundingClientRect();
+                              const rect = (e.currentTarget.closest('[style]') as HTMLElement)?.parentElement?.getBoundingClientRect()
+                                ?? (e.currentTarget.closest('.relative') as HTMLElement)?.getBoundingClientRect();
                               if (!rect) return;
                               touDragRef.current = { pi, segId: seg.id, handle: 'end', containerLeft: rect.left, containerWidth: rect.width };
                             }}
                           >
-                            <div className="w-1 h-5 rounded-full bg-white/80 group-hover:bg-white" />
+                            <div className="w-1 h-6 rounded-full bg-white/90 shadow group-hover:bg-white" />
                           </div>
                         </div>
                       );
@@ -730,76 +751,95 @@ export default function SiteDetail() {
                     {/* Hour tick marks */}
                     {[0,3,6,9,12,15,18,21,24].map((h) => (
                       <div key={h} className="absolute top-0 h-full flex flex-col justify-end pointer-events-none" style={{ left: `${(h/24)*100}%` }}>
-                        <span className="absolute -bottom-5 text-[9px] text-gray-400 dark:text-slate-500 -translate-x-1/2">{String(h).padStart(2,'0')}</span>
-                        <div className="h-1.5 w-px bg-gray-300 dark:bg-slate-600" />
+                        <span className="absolute -bottom-5 text-[9px] text-gray-400 dark:text-slate-500 -translate-x-1/2 select-none">{String(h).padStart(2,'0')}</span>
+                        <div className="h-2 w-px bg-gray-300 dark:bg-slate-600" />
                       </div>
                     ))}
                   </div>
 
-                  {/* Add tier buttons */}
-                  <div className="flex flex-wrap gap-2 mt-8">
-                    <span className="text-xs text-gray-400 dark:text-slate-500 self-center">Add price tier:</span>
-                    {tariff.buckets.map((b) => (
-                      <button
-                        key={b.id}
-                        type="button"
-                        className={`rounded border px-2.5 py-1 text-xs font-medium transition-colors ${ADD_TIER_CLASSES[b.id]}`}
-                        onClick={() => {
-                          // Find a gap or default to 12-18
-                          const existing = profile.segments.map(s => ({s: s.startHour, e: s.endHour})).sort((a,z)=>a.s-z.s);
-                          let start = 0, end = 4;
-                          // Try to find a gap
-                          for (let h = 0; h < 24; h++) {
-                            const occupied = existing.some(w => h >= w.s && h < w.e);
-                            if (!occupied) { start = h; end = Math.min(h + 4, 24); break; }
-                          }
-                          setTariff((p) => ({
-                            ...p,
-                            profiles: p.profiles.map((pr, pIdx) => pIdx !== pi ? pr : {
-                              ...pr,
-                              segments: [...pr.segments, { id: crypto.randomUUID(), bucket: b.id, startHour: start, endHour: end }],
-                            }),
-                          }));
-                        }}
-                      >
-                        + {b.label}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Segment summary */}
-                  <div className="mt-3 flex flex-wrap gap-1.5">
-                    {profile.segments
-                      .slice()
-                      .sort((a,b) => a.startHour - b.startHour)
-                      .map((seg) => {
-                        const col = BUCKET_COLORS[seg.bucket] ?? BUCKET_COLORS.none;
-                        const b = tariff.buckets.find(x => x.id === seg.bucket);
-                        return (
-                          <span key={seg.id} className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${col.border} ${col.text}`}>
-                            {String(seg.startHour).padStart(2,'0')}:00–{seg.endHour >= 24 ? '24:00' : `${String(seg.endHour).padStart(2,'0')}:00`} · {seg.bucket}{b ? ` ($${b.pricePerKwhUsd}/kWh)` : ''}
-                          </span>
-                        );
-                      })}
+                  {/* Add tier buttons — hide bucket if already present to avoid confusion */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs text-gray-400 dark:text-slate-500">Add price tier:</span>
+                    {tariff.buckets
+                      .filter((b) => !profile.segments.some((s) => s.bucket === b.id))
+                      .map((b) => (
+                        <button
+                          key={b.id}
+                          type="button"
+                          className={`rounded border px-2.5 py-1 text-xs font-medium transition-colors ${ADD_TIER_CLASSES[b.id]}`}
+                          onClick={() => {
+                            const existing = profile.segments.map(s => ({ s: s.startHour, e: s.endHour })).sort((a, z) => a.s - z.s);
+                            let start = 0; let end = 4;
+                            for (let h = 0; h < 24; h++) {
+                              if (!existing.some(w => h >= w.s && h < w.e)) { start = h; end = Math.min(h + 4, 24); break; }
+                            }
+                            setTariff((p) => ({
+                              ...p,
+                              profiles: p.profiles.map((pr, pIdx) => pIdx !== pi ? pr : {
+                                ...pr,
+                                segments: [...pr.segments, { id: crypto.randomUUID(), bucket: b.id, startHour: start, endHour: end }],
+                              }),
+                            }));
+                          }}
+                        >
+                          + {b.label}
+                        </button>
+                      ))}
+                    {tariff.buckets.every((b) => profile.segments.some((s) => s.bucket === b.id)) && (
+                      <span className="text-xs text-gray-400 dark:text-slate-500 italic">All tiers added</span>
+                    )}
                   </div>
                 </div>
               ))}
-
-              <button
-                type="button"
-                className="rounded-md border border-brand-300 dark:border-brand-700 px-3 py-1.5 text-xs font-medium text-brand-700 dark:text-brand-400 hover:bg-brand-50 dark:hover:bg-brand-950/40"
-                onClick={() => setTariff((p) => ({ ...p, profiles: [...p.profiles, makeDailyProfile()] }))}
-              >
-                + Add daily schedule
-              </button>
             </div>
+
+            {/* ── Effective TOU schedule summary ───────────────────────── */}
+            {tariff.profiles.length > 0 && (() => {
+              const profile = tariff.profiles[0];
+              const sorted = profile.segments.slice().sort((a,b) => a.startHour - b.startHour);
+              return (
+                <div className="rounded-xl border border-gray-200 dark:border-slate-700 p-4">
+                  <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">Effective TOU schedule</p>
+                  <div className="flex flex-wrap gap-2">
+                    {sorted.map((seg) => {
+                      const style = SEGMENT_STYLE[seg.bucket] ?? { bg: 'bg-gray-300', label: 'text-white' };
+                      const b = tariff.buckets.find(x => x.id === seg.bucket);
+                      return (
+                        <div key={seg.id} className={`rounded-lg ${style.bg} px-3 py-2 min-w-[110px]`}>
+                          <p className={`text-[10px] font-bold uppercase tracking-wide ${style.label}`}>{seg.bucket}</p>
+                          <p className={`text-xs font-semibold mt-0.5 ${style.label}`}>
+                            {String(seg.startHour).padStart(2,'0')}:00 – {seg.endHour >= 24 ? '24:00' : String(seg.endHour).padStart(2,'0')+':00'}
+                          </p>
+                          {b && <p className={`text-[10px] mt-1 opacity-90 ${style.label}`}>${b.pricePerKwhUsd}/kWh · ${b.idleFeePerMinUsd}/min</p>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {profile.days.length > 0 && (
+                    <p className="mt-2 text-xs text-gray-500 dark:text-slate-400">
+                      Applied on: {profile.days.map(d => DAY_NAMES[d]).join(', ')}
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         )}
 
-        <div className="mt-4 rounded-md border border-blue-100 bg-blue-50 px-3 py-2 dark:border-blue-900/60 dark:bg-blue-950/40">
-          <p className="text-xs font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-300">Effective pricing summary</p>
-          <p className="mt-1 text-xs text-blue-900 dark:text-blue-100">{buildPricingSummary(tariff)}</p>
-        </div>
+        {/* ── Effective pricing summary ─────────────────────────────── */}
+        {(() => {
+          const summary = buildPricingSummary(tariff);
+          return (
+            <div className="mt-4 border-t border-gray-100 dark:border-slate-800 pt-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400 mb-2">Effective pricing summary</p>
+              <ul className="space-y-1">
+                {summary.lines.map((line, i) => (
+                  <li key={i} className="text-xs text-gray-700 dark:text-slate-300">{line}</li>
+                ))}
+              </ul>
+            </div>
+          );
+        })()}
 
         <div className="mt-3">
           <button type="button" className="rounded-md bg-brand-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-700"
