@@ -69,6 +69,50 @@ function getLiveKwh(session: Session): number {
   return 0;
 }
 
+type TouWindowMobile = { day: number; start: string; end: string; pricePerKwhUsd: number; idleFeePerMinUsd: number };
+function toMinutes(v: string): number {
+  const [h, m] = String(v).split(':').map(Number);
+  if (Number.isNaN(h) || Number.isNaN(m)) return -1;
+  return h * 60 + m;
+}
+function time12(v: string): string {
+  const [hh, mm] = String(v).split(':');
+  const h = Number(hh);
+  if (!Number.isFinite(h)) return v;
+  const suffix = h >= 12 ? 'PM' : 'AM';
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  if (mm === '00') return `${h12} ${suffix}`;
+  return `${h12}:${mm} ${suffix}`;
+}
+function range12(start: string, end: string): string {
+  if (end === '23:59') return `${time12(start)}–12 AM`;
+  return `${time12(start)}–${time12(end)}`;
+}
+function parseTouWindows(raw: unknown): TouWindowMobile[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((w: any) => ({
+      day: Number(w?.day ?? 0),
+      start: String(w?.start ?? '00:00'),
+      end: String(w?.end ?? '00:00'),
+      pricePerKwhUsd: Number(w?.pricePerKwhUsd ?? 0),
+      idleFeePerMinUsd: Number(w?.idleFeePerMinUsd ?? 0),
+    }))
+    .filter((w) => w.day >= 0 && w.day <= 6 && toMinutes(w.start) >= 0 && (toMinutes(w.end) > toMinutes(w.start) || w.end === '23:59'))
+    .sort((a, b) => a.day - b.day || toMinutes(a.start) - toMinutes(b.start));
+}
+function currentTouWindow(windows: TouWindowMobile[]): TouWindowMobile | null {
+  const now = new Date();
+  const d = now.getDay();
+  const mins = now.getHours() * 60 + now.getMinutes();
+  return windows.find((w) => {
+    if (w.day !== d) return false;
+    const s = toMinutes(w.start);
+    const e = w.end === '23:59' ? 24 * 60 : toMinutes(w.end);
+    return mins >= s && mins < e;
+  }) ?? null;
+}
+
 function SlideToStart({
   disabled,
   isDark,
@@ -593,6 +637,9 @@ export default function ChargerStartScreen() {
   const pricePerKwhUsd = Number(charger.site.pricePerKwhUsd ?? 0.35);
   const idleFeePerMinUsd = Number(charger.site.idleFeePerMinUsd ?? 0);
   const activationFeeUsd = Number((charger.site as any).activationFeeUsd ?? 0);
+  const pricingMode = String((charger.site as any).pricingMode ?? 'flat');
+  const touWindows = parseTouWindows((charger.site as any).touWindows);
+  const nowTou = currentTouWindow(touWindows);
 
   const liveKwh = activeSession ? getLiveKwh(activeSession) : 0;
   const liveRate = Number(activeSession?.ratePerKwh ?? pricePerKwhUsd);
@@ -685,6 +732,17 @@ export default function ChargerStartScreen() {
                 <Text style={[styles.heroSubtitle, { color: isDark ? '#9ca3af' : '#6b7280' }]}>{charger.site.address}</Text>
               </>
             ) : null}
+
+            {pricingMode === 'tou' && touWindows.length > 0 && (
+              <View style={[styles.touCompact, { backgroundColor: isDark ? '#1e293b' : '#eff6ff', borderColor: isDark ? '#334155' : '#bfdbfe' }]}>
+                <Text style={[styles.touCompactTitle, { color: isDark ? '#bfdbfe' : '#1e40af' }]}>Dynamic TOU pricing active</Text>
+                {nowTou ? (
+                  <Text style={[styles.touCompactBody, { color: isDark ? '#dbeafe' : '#1e3a8a' }]}>Now: {range12(nowTou.start, nowTou.end)} · ${nowTou.pricePerKwhUsd.toFixed(2)}/kWh · ${nowTou.idleFeePerMinUsd.toFixed(2)}/min idle</Text>
+                ) : (
+                  <Text style={[styles.touCompactBody, { color: isDark ? '#dbeafe' : '#1e3a8a' }]}>Rates vary by time of day. See site detail for full schedule.</Text>
+                )}
+              </View>
+            )}
 
             <View style={styles.priceTilesRow}>
               <View style={[styles.priceTile, { backgroundColor: isDark ? '#0f172a' : '#f1f5f9' }]}>
@@ -984,6 +1042,10 @@ const styles = StyleSheet.create({
   collapseChevron: { fontSize: 18, fontWeight: '800', position: 'absolute', right: 0 },
   heroTitle: { fontSize: 18, fontWeight: '800', textAlign: 'center' },
   heroSubtitle: { fontSize: 13, marginTop: 2, textAlign: 'center' },
+
+  touCompact: { borderWidth: 1, borderRadius: 12, paddingVertical: 9, paddingHorizontal: 10, marginBottom: 8 },
+  touCompactTitle: { fontSize: 11, fontWeight: '800', marginBottom: 2 },
+  touCompactBody: { fontSize: 11, lineHeight: 16, fontWeight: '600' },
 
   priceTilesRow: { flexDirection: 'row', gap: 8 },
   priceTile: { flex: 1, borderRadius: 12, paddingVertical: 9, paddingHorizontal: 8, alignItems: 'center' },

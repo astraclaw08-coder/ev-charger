@@ -27,6 +27,68 @@ import { useAppAuth } from '@/providers/AuthProvider';
 
 const RATE_PER_KWH = 0.35; // fallback only
 
+type TouWindowMobile = {
+  day: number; // 0 Sun..6 Sat
+  start: string; // HH:mm
+  end: string;   // HH:mm|23:59
+  pricePerKwhUsd: number;
+  idleFeePerMinUsd: number;
+};
+
+function toMinutes(v: string): number {
+  const [h, m] = String(v).split(':').map(Number);
+  if (Number.isNaN(h) || Number.isNaN(m)) return -1;
+  return h * 60 + m;
+}
+
+function hour12(h: number): string {
+  if (h === 0 || h === 24) return '12 AM';
+  if (h === 12) return '12 PM';
+  return h < 12 ? `${h} AM` : `${h - 12} PM`;
+}
+
+function time12(v: string): string {
+  const [hh, mm] = String(v).split(':');
+  const h = Number(hh);
+  if (!Number.isFinite(h)) return v;
+  const suffix = h >= 12 ? 'PM' : 'AM';
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  if (mm === '00') return `${h12} ${suffix}`;
+  return `${h12}:${mm} ${suffix}`;
+}
+
+function windowLabel12(start: string, end: string): string {
+  const normalizedEnd = end === '23:59' ? '24:00' : end;
+  if (normalizedEnd === '24:00') return `${time12(start)}–12 AM`;
+  return `${time12(start)}–${time12(normalizedEnd)}`;
+}
+
+function parseTouWindows(raw: unknown): TouWindowMobile[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((w: any) => ({
+      day: Number(w?.day ?? 0),
+      start: String(w?.start ?? '00:00'),
+      end: String(w?.end ?? '00:00'),
+      pricePerKwhUsd: Number(w?.pricePerKwhUsd ?? 0),
+      idleFeePerMinUsd: Number(w?.idleFeePerMinUsd ?? 0),
+    }))
+    .filter((w) => w.day >= 0 && w.day <= 6 && toMinutes(w.start) >= 0 && (toMinutes(w.end) > toMinutes(w.start) || w.end === '23:59'))
+    .sort((a, b) => a.day - b.day || toMinutes(a.start) - toMinutes(b.start));
+}
+
+function currentTouWindow(windows: TouWindowMobile[]): TouWindowMobile | null {
+  const now = new Date();
+  const day = now.getDay();
+  const mins = now.getHours() * 60 + now.getMinutes();
+  return windows.find((w) => {
+    if (w.day !== day) return false;
+    const s = toMinutes(w.start);
+    const e = w.end === '23:59' ? 24 * 60 : toMinutes(w.end);
+    return mins >= s && mins < e;
+  }) ?? null;
+}
+
 function chargerStatusLabel(charger: Charger): string {
   const statuses = charger.connectors.map((c) => c.status);
   if (statuses.some((s) => s === 'AVAILABLE')) return 'Available';
@@ -293,6 +355,11 @@ export default function ChargerDetailScreen() {
   );
   const showPaymentSetupBanner = !hasDefaultPaymentMethod && hasBillablePricing;
 
+  const pricingMode = String((selectedCharger?.site as any)?.pricingMode ?? 'flat');
+  const touWindows = parseTouWindows((selectedCharger?.site as any)?.touWindows);
+  const nowTou = currentTouWindow(touWindows);
+  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
 
   return (
     <>
@@ -349,6 +416,36 @@ export default function ChargerDetailScreen() {
                 <Text numberOfLines={1} style={[styles.priceTileValue, { color: isDark ? '#f9fafb' : '#111827' }]}>${activationFeeUsd.toFixed(2)}</Text>
               </View>
             </View>
+
+            {pricingMode === 'tou' && touWindows.length > 0 && (
+              <View style={[styles.touBlock, { borderColor: isDark ? '#334155' : '#dbeafe', backgroundColor: isDark ? '#0b1220' : '#f8fafc' }]}>
+                <Text style={[styles.touTitle, { color: isDark ? '#dbeafe' : '#1e3a8a' }]}>Dynamic TOU pricing</Text>
+                {nowTou ? (
+                  <View style={[styles.touNowPill, { backgroundColor: isDark ? '#1e3a8a33' : '#dbeafe' }]}>
+                    <Text style={[styles.touNowText, { color: isDark ? '#bfdbfe' : '#1e40af' }]}>
+                      Now ({dayNames[nowTou.day]} {windowLabel12(nowTou.start, nowTou.end)}): ${nowTou.pricePerKwhUsd.toFixed(2)}/kWh · ${nowTou.idleFeePerMinUsd.toFixed(2)}/min idle
+                    </Text>
+                  </View>
+                ) : null}
+
+                {Array.from({ length: 7 }, (_, day) => day).map((day) => {
+                  const rows = touWindows.filter((w) => w.day === day);
+                  if (rows.length === 0) return null;
+                  return (
+                    <View key={day} style={styles.touDayRow}>
+                      <Text style={[styles.touDayName, { color: isDark ? '#93c5fd' : '#1d4ed8' }]}>{dayNames[day]}</Text>
+                      <View style={styles.touDayWindowsWrap}>
+                        {rows.map((w, idx) => (
+                          <Text key={`${day}-${idx}`} style={[styles.touWindowText, { color: isDark ? '#cbd5e1' : '#334155' }]}>
+                            {windowLabel12(w.start, w.end)} · ${w.pricePerKwhUsd.toFixed(2)}/kWh · ${w.idleFeePerMinUsd.toFixed(2)}/min
+                          </Text>
+                        ))}
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
           </View>
         </View>
 
@@ -453,6 +550,15 @@ const styles = StyleSheet.create({
   priceTile: { flex: 1, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 8, alignItems: 'center' },
   priceTileLabel: { fontSize: 11, fontWeight: '600', textAlign: 'center' },
   priceTileValue: { fontSize: 14, fontWeight: '700', marginTop: 4, textAlign: 'center' },
+
+  touBlock: { marginTop: 10, borderWidth: 1, borderRadius: 12, padding: 10, gap: 8 },
+  touTitle: { fontSize: 12, fontWeight: '800', letterSpacing: 0.2 },
+  touNowPill: { borderRadius: 10, paddingVertical: 7, paddingHorizontal: 9 },
+  touNowText: { fontSize: 12, fontWeight: '700', lineHeight: 17 },
+  touDayRow: { flexDirection: 'row', gap: 8, alignItems: 'flex-start' },
+  touDayName: { width: 34, fontSize: 11, fontWeight: '800', marginTop: 1 },
+  touDayWindowsWrap: { flex: 1, gap: 2 },
+  touWindowText: { fontSize: 11, lineHeight: 16, fontWeight: '600' },
 
   paymentBanner: {
     backgroundColor: '#fffbeb',
