@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { shortId } from '../lib/shortId';
 import { Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
@@ -107,6 +107,8 @@ function buildPricingSummary(config: TariffConfig): string {
 export default function SiteDetail() {
   const { id } = useParams<{ id: string }>();
   const getToken = useToken();
+  const getTokenRef = useRef(getToken);
+  useEffect(() => { getTokenRef.current = getToken; }, [getToken]);
   const { theme } = usePortalTheme();
   const isDark = theme === 'dark';
   const chartColors = {
@@ -141,7 +143,7 @@ export default function SiteDetail() {
 
   const load = useCallback(async () => {
     try {
-      const token = await getToken();
+      const token = await getTokenRef.current();
       const client = createApiClient(token);
       const periodDays = rangePreset === '7d' ? 7 : rangePreset === '30d' ? 30 : 60;
 
@@ -251,7 +253,7 @@ export default function SiteDetail() {
     } finally {
       setLoading(false);
     }
-  }, [id, getToken, rangePreset]);
+  }, [id, rangePreset]);
 
   useEffect(() => { load(); }, [load]);
 
