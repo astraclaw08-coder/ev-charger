@@ -720,7 +720,7 @@ const styles = StyleSheet.create({
   scannerControlsRow: { paddingTop: 10, alignItems: 'flex-end' },
   flashBtn: { borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8 },
   flashBtnText: { color: '#ecfeff', fontSize: 12, fontWeight: '800' },
-  scannerHintWrap: { paddingVertical: 10, alignItems: 'center' },
+  scannerHintWrap: { paddingTop: 8, paddingBottom: 6, alignItems: 'center' },
   scannerHintText: { color: '#9ca3af', fontSize: 13, textAlign: 'center' },
   manualEntryCard: { borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#374151', gap: 8 },
   manualEntryTitle: { fontSize: 14, fontWeight: '800' },
@@ -862,4 +862,8 @@ const mapStyles = StyleSheet.create({
     marginBottom: 4,
   },
 });
+
+
+});
+
 
