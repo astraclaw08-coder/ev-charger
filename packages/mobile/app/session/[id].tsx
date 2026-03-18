@@ -119,15 +119,9 @@ function useLiveDuration(startedAt: string, active: boolean): string {
 function SessionSummary({
   session,
   fallbackKwh,
-  onStart,
-  startPending,
-  startError,
 }: {
   session: Session;
   fallbackKwh?: number;
-  onStart: () => void;
-  startPending: boolean;
-  startError: string | null;
 }) {
   const router = useRouter();
   const { isDark } = useAppTheme();
@@ -212,17 +206,6 @@ function SessionSummary({
         <Text style={[styles.metaText, { color: isDark ? '#cbd5e1' : '#6b7280' }]}>Payment Method: {paymentMethod}</Text>
       </View>
 
-      <View style={styles.restartWrap}>
-        <Text style={[styles.restartLabel, { color: isDark ? '#cbd5e1' : '#475569' }]}>Start another charge on this connector</Text>
-        <SlideAction
-          isDark={isDark}
-          disabled={startPending}
-          direction="right"
-          label={startPending ? 'Starting…' : 'Slide right to start'}
-          onComplete={onStart}
-        />
-        {startError ? <Text style={styles.startErrorText}>{startError}</Text> : null}
-      </View>
 
       <TouchableOpacity
         style={styles.doneButton}
@@ -499,10 +482,8 @@ function LiveSessionView({
 export default function SessionScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { isDark } = useAppTheme();
-  const router = useRouter();
   const queryClient = useQueryClient();
   const [lastObservedKwh, setLastObservedKwh] = useState(0);
-  const [startError, setStartError] = useState<string | null>(null);
 
   const { data: session, isLoading } = useQuery({
     queryKey: ['session', id],
@@ -540,52 +521,6 @@ export default function SessionScreen() {
       };
     });
   }, [session, lastObservedKwh, queryClient]);
-
-  const startMutation = useMutation({
-    mutationFn: () => {
-      if (!session) throw new Error('Session context unavailable.');
-      return api.sessions.start(session.connector.charger.id, session.connector.connectorId);
-    },
-    onMutate: () => setStartError(null),
-    onSuccess: async () => {
-      if (!session) return;
-      await queryClient.invalidateQueries({ queryKey: ['sessions'] });
-      await queryClient.invalidateQueries({ queryKey: ['charger', session.connector.charger.id] });
-      const startedAt = Date.now();
-      const timeoutMs = 45_000;
-      const poll = async () => {
-        try {
-          const res = await api.sessions.list(20, 0);
-          const active = res.sessions.find(
-            (s) =>
-              s.status === 'ACTIVE' &&
-              s.connector.charger.id === session.connector.charger.id &&
-              s.connector.connectorId === session.connector.connectorId,
-          );
-          if (active) {
-            router.replace(`/session/${active.id}` as any);
-            return;
-          }
-          if (Date.now() - startedAt < timeoutMs) {
-            setTimeout(poll, 1500);
-            return;
-          }
-          setStartError('Start command sent, but no active session was confirmed yet.');
-        } catch (err) {
-          if (Date.now() - startedAt < timeoutMs) {
-            setTimeout(poll, 1500);
-            return;
-          }
-          setStartError(err instanceof Error ? err.message : 'Unable to verify session start.');
-        }
-      };
-      setTimeout(poll, 1200);
-    },
-    onError: (err: Error) => {
-      setStartError(err.message);
-      Alert.alert('Start Failed', err.message);
-    },
-  });
 
   const stopMutation = useMutation({
     mutationFn: () => api.sessions.stop(id),
@@ -648,9 +583,6 @@ export default function SessionScreen() {
           <SessionSummary
             session={session}
             fallbackKwh={lastObservedKwh}
-            onStart={() => startMutation.mutate()}
-            startPending={startMutation.isPending}
-            startError={startError}
           />
         )}
       </ScrollView>
@@ -842,20 +774,6 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   metaText: { fontSize: 13, color: '#6b7280' },
-  restartWrap: {
-    width: '100%',
-    marginBottom: 16,
-    alignItems: 'center',
-  },
-  restartLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  startErrorText: {
-    fontSize: 12,
-    color: '#ef4444',
-    marginTop: 6,
-  },
   doneButton: {
     backgroundColor: '#10b981',
     borderRadius: 14,

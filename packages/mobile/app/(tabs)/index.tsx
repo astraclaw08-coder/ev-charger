@@ -864,6 +864,3 @@ const mapStyles = StyleSheet.create({
 });
 
 
-});
-
-
