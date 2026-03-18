@@ -69,11 +69,11 @@ function formatPhoneForDisplay(identifier: string) {
   return trimmed;
 }
 
-function BrandHeader() {
+function BrandHeader({ isDark }: { isDark: boolean }) {
   return (
     <View style={styles.brandWrap}>
       <Image
-        source={require('../../assets/branding/lumeo_logo_darktheme-aura.png')}
+        source={isDark ? require('../../assets/branding/lumeo_logo_darktheme.png') : require('../../assets/branding/lumeo_logo_transparent.png')}
         style={styles.brandLogo}
         resizeMode="contain"
       />
@@ -113,7 +113,7 @@ export default function SignInScreen() {
     return (
       <View style={[styles.container, { backgroundColor: isDark ? '#0b1220' : '#f3f4f6' }]}> 
         <View style={styles.card}>
-          <BrandHeader />
+          <BrandHeader isDark={isDark} />
           <Text style={[styles.devNote, { color: isDark ? '#cbd5e1' : '#334155' }]}>Dev Mode — No Clerk Key Set</Text>
           <TouchableOpacity
             style={styles.button}
@@ -194,7 +194,7 @@ function KeycloakSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onCo
         >
           <Ionicons name="arrow-back" size={18} color={isDark ? '#f8fafc' : '#111827'} />
         </TouchableOpacity>
-        <BrandHeader />
+        <BrandHeader isDark={isDark} />
         <Text style={[styles.helperText, styles.otpHelperText, { marginBottom: 12 }]}>Code was sent to {formatPhoneForDisplay(otpTarget)}</Text>
         <Pressable style={styles.codeDotsWrap} onPress={() => {}}>
           {Array.from({ length: 5 }).map((_, idx) => (
@@ -220,7 +220,7 @@ function KeycloakSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onCo
 
   return (
     <View style={styles.card}>
-      <BrandHeader />
+      <BrandHeader isDark={isDark} />
 
       <View style={styles.phoneInputWrap}>
         <Ionicons name="call-outline" size={18} color="#64748b" />
@@ -412,7 +412,7 @@ function ClerkSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onConti
         >
           <Ionicons name="arrow-back" size={18} color={isDark ? '#f8fafc' : '#111827'} />
         </TouchableOpacity>
-        <BrandHeader />
+        <BrandHeader isDark={isDark} />
         <Text style={[styles.helperText, styles.otpHelperText, { marginBottom: 12 }]}>Code was sent to {formatPhoneForDisplay(otpTarget)}</Text>
         <Pressable style={styles.codeDotsWrap}>
           {Array.from({ length: 5 }).map((_, idx) => (
@@ -439,7 +439,7 @@ function ClerkSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onConti
 
   return (
     <View style={styles.card}>
-      <BrandHeader />
+      <BrandHeader isDark={isDark} />
 
       <View style={styles.phoneInputWrap}>
         <Ionicons name="call-outline" size={18} color="#64748b" />
@@ -633,6 +633,9 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
     alignItems: 'center',
     backgroundColor: 'rgba(255,255,255,0.6)',
+  },
+  guestBtnText: { color: '#334155', fontWeight: '700', fontSize: 14 },
+});,
   },
   guestBtnText: { color: '#334155', fontWeight: '700', fontSize: 14 },
 });
