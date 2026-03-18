@@ -360,6 +360,24 @@ export default function ChargerDetailScreen() {
   const nowTou = currentTouWindow(touWindows);
   const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
+  // Collapse saved windows into one representative day-bar + applicable days list
+  const dayRows = Array.from({ length: 7 }, (_, day) => ({
+    day,
+    rows: touWindows.filter((w) => w.day === day).sort((a, b) => toMinutes(a.start) - toMinutes(b.start)),
+  })).filter((d) => d.rows.length > 0);
+
+  const signatureFor = (rows: TouWindowMobile[]) => rows.map((r) => `${r.start}-${r.end}-${r.pricePerKwhUsd.toFixed(4)}-${r.idleFeePerMinUsd.toFixed(4)}`).join('|');
+  const canonical = (() => {
+    if (dayRows.length === 0) return null as null | { rows: TouWindowMobile[]; days: number[] };
+    const bySig = new Map<string, { rows: TouWindowMobile[]; days: number[] }>();
+    for (const d of dayRows) {
+      const sig = signatureFor(d.rows);
+      if (!bySig.has(sig)) bySig.set(sig, { rows: d.rows, days: [] });
+      bySig.get(sig)!.days.push(d.day);
+    }
+    return Array.from(bySig.values()).sort((a, b) => b.days.length - a.days.length)[0] ?? null;
+  })();
+
 
   return (
     <>
@@ -413,9 +431,8 @@ export default function ChargerDetailScreen() {
                   </View>
                 ) : null}
 
-                {/* Visual legend by unique TOU tier */}
                 {(() => {
-                  const tierMap = new Map<string, { label: string; color: string; darkColor: string }>();
+                  const tierMap = new Map<string, { label: string; color: string; darkColor: string; energy: number; idle: number }>();
                   const colors = [
                     { color: '#10b981', darkColor: '#34d399' },
                     { color: '#f59e0b', darkColor: '#fbbf24' },
@@ -424,54 +441,64 @@ export default function ChargerDetailScreen() {
                     { color: '#06b6d4', darkColor: '#22d3ee' },
                   ];
                   const unique = Array.from(new Set(touWindows.map((w) => `${w.pricePerKwhUsd.toFixed(4)}|${w.idleFeePerMinUsd.toFixed(4)}`)));
-                  unique.forEach((k, i) => tierMap.set(k, { label: `Tier ${i + 1}`, ...colors[i % colors.length] }));
+                  unique.forEach((k, i) => {
+                    const [e, idl] = k.split('|').map(Number);
+                    tierMap.set(k, { label: `Tier ${i + 1}`, ...colors[i % colors.length], energy: e, idle: idl });
+                  });
+
+                  const rows = canonical?.rows ?? [];
+                  const days = canonical?.days ?? [];
 
                   return (
                     <>
+                      <Text style={[styles.touDaysMeta, { color: isDark ? '#93c5fd' : '#1d4ed8' }]}>Applies on: {days.map((d) => dayNames[d]).join(', ')}</Text>
+
+                      <View style={styles.touVisualDayRow}>
+                        <Text style={[styles.touDayName, { color: isDark ? '#93c5fd' : '#1d4ed8' }]}>Day</Text>
+                        <View style={[styles.touTrack, { backgroundColor: isDark ? '#1f2937' : '#e5e7eb' }]}>
+                          {rows.map((w, idx) => {
+                            const k = `${w.pricePerKwhUsd.toFixed(4)}|${w.idleFeePerMinUsd.toFixed(4)}`;
+                            const meta = tierMap.get(k)!;
+                            const start = toMinutes(w.start);
+                            const end = w.end === '23:59' ? 1440 : toMinutes(w.end);
+                            const leftPct = Math.max(0, Math.min(100, (start / 1440) * 100));
+                            const widthPct = Math.max(1, Math.min(100 - leftPct, ((end - start) / 1440) * 100));
+                            return (
+                              <View
+                                key={`canon-${idx}`}
+                                style={[
+                                  styles.touSegment,
+                                  {
+                                    left: `${leftPct}%`,
+                                    width: `${widthPct}%`,
+                                    backgroundColor: isDark ? meta.darkColor : meta.color,
+                                  },
+                                ]}
+                              />
+                            );
+                          })}
+                        </View>
+                      </View>
+
                       <View style={styles.touLegendRow}>
                         {unique.map((k) => {
                           const meta = tierMap.get(k)!;
                           return (
                             <View key={k} style={styles.touLegendItem}>
                               <View style={[styles.touLegendDot, { backgroundColor: isDark ? meta.darkColor : meta.color }]} />
-                              <Text style={[styles.touLegendText, { color: isDark ? '#cbd5e1' : '#334155' }]}>{meta.label}</Text>
+                              <Text style={[styles.touLegendText, { color: isDark ? '#cbd5e1' : '#334155' }]}>
+                                {meta.label}: ${meta.energy.toFixed(2)}/kWh · ${meta.idle.toFixed(2)}/min
+                              </Text>
                             </View>
                           );
                         })}
-                      </View>
-
-                      {Array.from({ length: 7 }, (_, day) => day).map((day) => {
-                        const rows = touWindows.filter((w) => w.day === day).sort((a, b) => toMinutes(a.start) - toMinutes(b.start));
-                        if (rows.length === 0) return null;
-                        return (
-                          <View key={day} style={styles.touVisualDayRow}>
-                            <Text style={[styles.touDayName, { color: isDark ? '#93c5fd' : '#1d4ed8' }]}>{dayNames[day]}</Text>
-                            <View style={[styles.touTrack, { backgroundColor: isDark ? '#1f2937' : '#e5e7eb' }]}>
-                              {rows.map((w, idx) => {
-                                const k = `${w.pricePerKwhUsd.toFixed(4)}|${w.idleFeePerMinUsd.toFixed(4)}`;
-                                const meta = tierMap.get(k)!;
-                                const start = toMinutes(w.start);
-                                const end = w.end === '23:59' ? 1440 : toMinutes(w.end);
-                                const leftPct = Math.max(0, Math.min(100, (start / 1440) * 100));
-                                const widthPct = Math.max(1, Math.min(100 - leftPct, ((end - start) / 1440) * 100));
-                                return (
-                                  <View
-                                    key={`${day}-${idx}`}
-                                    style={[
-                                      styles.touSegment,
-                                      {
-                                        left: `${leftPct}%`,
-                                        width: `${widthPct}%`,
-                                        backgroundColor: isDark ? meta.darkColor : meta.color,
-                                      },
-                                    ]}
-                                  />
-                                );
-                              })}
-                            </View>
+                        {activationFeeUsd > 0 && (
+                          <View style={styles.touLegendItem}>
+                            <View style={[styles.touLegendDot, { backgroundColor: isDark ? '#94a3b8' : '#64748b' }]} />
+                            <Text style={[styles.touLegendText, { color: isDark ? '#cbd5e1' : '#334155' }]}>Activation: ${activationFeeUsd.toFixed(2)}</Text>
                           </View>
-                        );
-                      })}
+                        )}
+                      </View>
                     </>
                   );
                 })()}
@@ -600,6 +627,7 @@ const styles = StyleSheet.create({
   touBlock: { marginTop: 10, borderWidth: 1, borderRadius: 12, padding: 10, gap: 10 },
   touNowPill: { borderRadius: 10, paddingVertical: 7, paddingHorizontal: 9 },
   touNowText: { fontSize: 12, fontWeight: '700', lineHeight: 17 },
+  touDaysMeta: { fontSize: 11, fontWeight: '700' },
   touLegendRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   touLegendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   touLegendDot: { width: 10, height: 10, borderRadius: 5 },
