@@ -159,6 +159,16 @@ function timeToMinutes(v: string): number {
   return h * 60 + m;
 }
 
+function formatHour12(h: number): string {
+  if (h === 0 || h === 24) return '12 AM';
+  if (h === 12) return '12 PM';
+  return h < 12 ? `${h} AM` : `${h - 12} PM`;
+}
+
+function formatRange12(startHour: number, endHour: number): string {
+  return `${formatHour12(startHour)}–${formatHour12(endHour)}`;
+}
+
 function validateTouWindows(windows: TouWindow[]): string | null {
   for (const w of windows) {
     const start = timeToMinutes(w.start);
@@ -209,7 +219,7 @@ function buildPricingSummary(config: TariffConfig): { lines: string[] } {
   for (const bucket of config.buckets) {
     const segs = profile.segments.filter(s => s.bucket === bucket.id).sort((a,b) => a.startHour - b.startHour);
     if (segs.length === 0) continue;
-    const ranges = segs.map(s => `${String(s.startHour).padStart(2,'0')}:00–${s.endHour >= 24 ? '24:00' : String(s.endHour).padStart(2,'0')+':00'}`).join(', ');
+    const ranges = segs.map(s => formatRange12(s.startHour, s.endHour)).join(', ');
     lines.push(`${bucket.label} tier (${ranges}): $${bucket.pricePerKwhUsd.toFixed(2)}/kWh · $${bucket.idleFeePerMinUsd.toFixed(2)}/min idle`);
   }
 
@@ -764,7 +774,7 @@ export default function SiteDetail() {
                           key={seg.id}
                           className={`absolute top-0 h-full rounded-sm ${style.bg}`}
                           style={{ left: `${left}%`, width: `${width}%` }}
-                          title={`${seg.bucket} | ${seg.startHour}:00–${seg.endHour}:00`}
+                          title={`${seg.bucket} | ${formatRange12(seg.startHour, seg.endHour)}`}
                         >
                           {/* Label — always white on solid bg */}
                           {durationH >= 2 && (
@@ -817,7 +827,7 @@ export default function SiteDetail() {
                     {/* Hour tick marks */}
                     {[0,3,6,9,12,15,18,21,24].map((h) => (
                       <div key={h} className="absolute top-0 h-full flex flex-col justify-end pointer-events-none" style={{ left: `${(h/24)*100}%` }}>
-                        <span className="absolute -bottom-5 text-[9px] text-gray-400 dark:text-slate-500 -translate-x-1/2 select-none">{String(h).padStart(2,'0')}</span>
+                        <span className="absolute -bottom-5 text-[9px] text-gray-400 dark:text-slate-500 -translate-x-1/2 select-none whitespace-nowrap">{formatHour12(h)}</span>
                         <div className="h-2 w-px bg-gray-300 dark:bg-slate-600" />
                       </div>
                     ))}
@@ -913,7 +923,7 @@ export default function SiteDetail() {
           <button
             type="button"
             disabled={!hasTariffEdits}
-            className={`rounded-md px-3 py-1.5 text-xs font-medium text-white ${hasTariffEdits ? 'bg-brand-600 hover:bg-brand-700' : 'bg-gray-300 dark:bg-slate-700 cursor-not-allowed text-gray-500 dark:text-slate-400'}`}
+            className={`rounded-md px-3 py-1.5 text-xs font-medium text-white ${hasTariffEdits ? 'bg-brand-600 hover:bg-brand-700' : 'bg-gray-200 dark:bg-slate-300 cursor-not-allowed text-white'}`}
             onClick={async () => {
               try {
                 const token = await getToken();
