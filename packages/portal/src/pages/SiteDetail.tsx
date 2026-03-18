@@ -296,14 +296,14 @@ export default function SiteDetail() {
           <select
             value={rangePreset}
             onChange={(e) => setRangePreset(e.target.value as RangePreset)}
-            className="rounded-md border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60"
+            className="rounded-md border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800/60 px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700"
           >
             <option value="7d">Last 7 days</option>
             <option value="30d">Last 30 days</option>
             <option value="60d">Last 60 days</option>
           </select>
-          <button onClick={() => setShowEditSite((v) => !v)} className="rounded-md border border-gray-300 dark:border-slate-700 px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60">Edit Site</button>
-          <Link to={`/sites/${site.id}/analytics`} className="rounded-md border border-gray-300 dark:border-slate-700 px-4 py-2 text-sm font-medium text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60">Analytics</Link>
+          <button onClick={() => setShowEditSite((v) => !v)} className="rounded-md border border-gray-300 dark:border-slate-700 px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-300 bg-white dark:bg-slate-800/60 hover:bg-gray-50 dark:hover:bg-slate-700">Edit Site</button>
+          <Link to={`/sites/${site.id}/analytics`} className="rounded-md border border-gray-300 dark:border-slate-700 px-4 py-2 text-sm font-medium text-gray-600 dark:text-slate-400 bg-white dark:bg-slate-800/60 hover:bg-gray-50 dark:hover:bg-slate-700">Analytics</Link>
           <button onClick={() => setShowAddCharger(true)} className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">+ Add Charger</button>
         </div>
       </div>
@@ -349,7 +349,7 @@ export default function SiteDetail() {
                 setShowEditSite(false);
                 await load();
               }}>Save site</button>
-            <button className="rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-1.5 text-xs text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60" onClick={() => setShowEditSite(false)}>Cancel</button>
+            <button className="rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800/60 px-3 py-1.5 text-xs text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700" onClick={() => setShowEditSite(false)}>Cancel</button>
           </div>
         </div>
       )}
@@ -373,7 +373,7 @@ export default function SiteDetail() {
                 <h3 className="text-sm font-semibold text-gray-900 dark:text-slate-100">Software Fee</h3>
                 <p className="mt-0.5 text-xs text-gray-500 dark:text-slate-400">Superadmin only — not visible to site operators</p>
               </div>
-              <button onClick={() => setShowFeeModal(false)} className="rounded-md p-1.5 text-gray-400 dark:text-slate-500 hover:bg-gray-100 dark:hover:bg-slate-800 dark:bg-slate-800 hover:text-gray-700 dark:hover:text-slate-200 dark:text-slate-300">
+              <button onClick={() => setShowFeeModal(false)} className="rounded-md p-1.5 text-gray-400 dark:text-slate-500 hover:bg-gray-100 dark:hover:bg-slate-700 bg-white dark:bg-slate-800 hover:text-gray-700 dark:hover:text-slate-200 dark:text-slate-300">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
               </button>
             </div>
@@ -403,7 +403,7 @@ export default function SiteDetail() {
               </label>
             </div>
             <div className="mt-5 flex justify-end gap-2">
-              <button onClick={() => setShowFeeModal(false)} className="rounded-md border border-gray-300 dark:border-slate-600 px-3 py-1.5 text-xs text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60">Cancel</button>
+              <button onClick={() => setShowFeeModal(false)} className="rounded-md border border-gray-300 dark:border-slate-600 px-3 py-1.5 text-xs text-gray-700 dark:text-slate-300 bg-white dark:bg-slate-800/60 hover:bg-gray-50 dark:hover:bg-slate-700">Cancel</button>
               <button
                 onClick={async () => {
                   try {
@@ -474,7 +474,7 @@ export default function SiteDetail() {
           <div className="mt-4 rounded-md border border-gray-300 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/60 p-3">
             <div className="mb-2 flex items-center justify-between">
               <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-slate-400">TOU windows</p>
-              <button type="button" className="rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-2 py-1 text-xs text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800 dark:bg-slate-800"
+              <button type="button" className="rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-2 py-1 text-xs text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700"
                 onClick={() => setTariff((prev) => ({ ...prev, windows: [...prev.windows, { id: crypto.randomUUID(), day: 1, start: '09:00', end: '17:00', pricePerKwhUsd: prev.pricePerKwhUsd, idleFeePerMinUsd: prev.idleFeePerMinUsd }] }))}>
                 + Add window
               </button>
@@ -698,7 +698,7 @@ function ChargerListRow({ charger, uptime }: { charger: SiteDetailType['chargers
       </div>
 
       <div className="md:text-right">
-        <Link to={`/chargers/${shortId(charger.id)}`} className="inline-block rounded-md border border-gray-300 dark:border-slate-700 px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60">View Detail →</Link>
+        <Link to={`/chargers/${shortId(charger.id)}`} className="inline-block rounded-md border border-gray-300 dark:border-slate-700 px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-slate-400 bg-white dark:bg-slate-800/60 hover:bg-gray-50 dark:hover:bg-slate-700">View Detail →</Link>
       </div>
     </div>
   );
@@ -741,7 +741,7 @@ function ChargerCard({ charger, uptime }: { charger: SiteDetailType['chargers'][
         </div>
       )}
 
-      <Link to={`/chargers/${shortId(charger.id)}`} className="mt-3 block rounded-md border border-gray-300 dark:border-slate-700 px-3 py-1.5 text-center text-xs font-medium text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60">View Detail →</Link>
+      <Link to={`/chargers/${shortId(charger.id)}`} className="mt-3 block rounded-md border border-gray-300 dark:border-slate-700 px-3 py-1.5 text-center text-xs font-medium text-gray-600 dark:text-slate-400 bg-white dark:bg-slate-800/60 hover:bg-gray-50 dark:hover:bg-slate-700">View Detail →</Link>
     </div>
   );
 }

@@ -305,7 +305,7 @@ function SiteCard({ site }: { site: SiteListItem }) {
         </Link>
         <Link
           to={`/sites/${shortId(site.id)}/analytics`}
-          className="flex-1 rounded-md border border-gray-300 dark:border-slate-700 px-3 py-1.5 text-center text-xs font-medium text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60"
+          className="flex-1 rounded-md border border-gray-300 dark:border-slate-700 px-3 py-1.5 text-center text-xs font-medium text-gray-600 dark:text-slate-400 bg-white dark:bg-slate-800/60 hover:bg-gray-50 dark:hover:bg-slate-700"
         >
           Analytics
         </Link>

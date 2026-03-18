@@ -282,7 +282,7 @@ export default function ChargerDetail() {
             <select
               value={rangePreset}
               onChange={(e) => setRangePreset(e.target.value as RangePreset)}
-              className="rounded-md border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60"
+              className="rounded-md border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800/60 px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700"
             >
               <option value="7d">Last 7 days</option>
               <option value="30d">Last 30 days</option>
@@ -290,13 +290,13 @@ export default function ChargerDetail() {
             </select>
             <button
               onClick={() => setShowEditCharger((v) => !v)}
-              className="rounded-md border border-gray-300 dark:border-slate-700 px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60"
+              className="rounded-md border border-gray-300 dark:border-slate-700 px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-300 bg-white dark:bg-slate-800/60 hover:bg-gray-50 dark:hover:bg-slate-700"
             >
               Edit Charger
             </button>
             <button
               onClick={() => setShowQrModal(true)}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-gray-300 dark:border-slate-700 text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-gray-300 dark:border-slate-700 text-gray-700 dark:text-slate-300 bg-white dark:bg-slate-800/60 hover:bg-gray-50 dark:hover:bg-slate-700"
               title="Smart QR deep link"
               aria-label="Open Smart QR deep link"
             >
@@ -364,7 +364,7 @@ export default function ChargerDetail() {
               <button
                 onClick={() => handleReset('Soft')}
                 disabled={resetLoading}
-                className="inline-flex h-10 w-full items-center justify-center whitespace-nowrap rounded-md border border-gray-300 dark:border-slate-700 px-3 text-sm font-medium text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60 disabled:opacity-50"
+                className="inline-flex h-10 w-full items-center justify-center whitespace-nowrap rounded-md border border-gray-300 dark:border-slate-700 px-3 text-sm font-medium text-gray-600 dark:text-slate-400 bg-white dark:bg-slate-800/60 hover:bg-gray-50 dark:hover:bg-slate-700 disabled:opacity-50"
               >
                 Soft Reset
               </button>
@@ -385,7 +385,7 @@ export default function ChargerDetail() {
               <button
                 onClick={handleGetConfiguration}
                 disabled={configLoading}
-                className="inline-flex h-10 w-full items-center justify-center whitespace-nowrap rounded-md border border-gray-300 dark:border-slate-600 px-3 text-sm font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60 disabled:opacity-50"
+                className="inline-flex h-10 w-full items-center justify-center whitespace-nowrap rounded-md border border-gray-300 dark:border-slate-600 px-3 text-sm font-medium text-gray-700 dark:text-slate-300 bg-white dark:bg-slate-800/60 hover:bg-gray-50 dark:hover:bg-slate-700 disabled:opacity-50"
               >
                 {configLoading ? 'Fetching…' : 'Get Configuration'}
               </button>
@@ -433,7 +433,7 @@ export default function ChargerDetail() {
           <div className="w-full max-w-2xl rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-sm font-semibold text-gray-800 dark:text-slate-200">Smart QR Deep Link</h2>
-              <button onClick={() => setShowQrModal(false)} className="rounded-md border border-gray-300 dark:border-slate-700 px-2 py-1 text-xs text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60">Close</button>
+              <button onClick={() => setShowQrModal(false)} className="rounded-md border border-gray-300 dark:border-slate-700 px-2 py-1 text-xs text-gray-600 dark:text-slate-400 bg-white dark:bg-slate-800/60 hover:bg-gray-50 dark:hover:bg-slate-700">Close</button>
             </div>
             <div className="grid gap-2 sm:grid-cols-3">
               <button
@@ -446,14 +446,14 @@ export default function ChargerDetail() {
               <button
                 onClick={handleCopyQrLink}
                 disabled={!qrLink}
-                className="inline-flex h-10 w-full items-center justify-center whitespace-nowrap rounded-md border border-gray-300 dark:border-slate-600 px-3 text-sm font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60 disabled:opacity-50"
+                className="inline-flex h-10 w-full items-center justify-center whitespace-nowrap rounded-md border border-gray-300 dark:border-slate-600 px-3 text-sm font-medium text-gray-700 dark:text-slate-300 bg-white dark:bg-slate-800/60 hover:bg-gray-50 dark:hover:bg-slate-700 disabled:opacity-50"
               >
                 Copy Link
               </button>
               <button
                 onClick={handleDownloadQr}
                 disabled={!qrDataUrl}
-                className="inline-flex h-10 w-full items-center justify-center whitespace-nowrap rounded-md border border-gray-300 dark:border-slate-600 px-3 text-sm font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60 disabled:opacity-50"
+                className="inline-flex h-10 w-full items-center justify-center whitespace-nowrap rounded-md border border-gray-300 dark:border-slate-600 px-3 text-sm font-medium text-gray-700 dark:text-slate-300 bg-white dark:bg-slate-800/60 hover:bg-gray-50 dark:hover:bg-slate-700 disabled:opacity-50"
               >
                 Download QR
               </button>
@@ -520,7 +520,7 @@ export default function ChargerDetail() {
               </thead>
               <tbody className="divide-y divide-gray-50 dark:divide-slate-800">
                 {sessions.map((s) => (
-                  <tr key={s.id} className="hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60">
+                  <tr key={s.id} className="bg-white dark:bg-slate-800/60 hover:bg-gray-50 dark:hover:bg-slate-700">
                     <td className="px-5 py-3 font-mono text-xs text-gray-700 dark:text-slate-300">
                       {s.transactionId ?? '—'}
                     </td>

@@ -169,7 +169,7 @@ export default function NetworkOps() {
                   <p className="mt-1 text-xs text-yellow-700">Confirmed unreachable after heartbeat timeout window.</p>
                 )}
                 <div className="mt-2 flex flex-wrap gap-2">
-                  <button className="rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-2 py-1 text-xs text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60" onClick={()=>{
+                  <button className="rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800/60 px-2 py-1 text-xs text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700" onClick={()=>{
                     if(!site) return;
                     const incident: Incident={id:crypto.randomUUID(), chargerId:c.id, title:`Offline triage opened for ${c.ocppId}`, severity:c.status==='FAULTED'?'high':'medium', createdAt:new Date().toISOString()};
                     const next=[incident,...incidents]; setIncidents(next); save(incidentsKey(site.id),next);
@@ -198,7 +198,7 @@ export default function NetworkOps() {
                 </select>
               </div>
               {(['RemoteStartTransaction','Reset','ChangeAvailability'] as const).map((cmd)=>(
-                <button key={cmd} className="w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-2 py-1.5 text-xs text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60" onClick={()=>{
+                <button key={cmd} className="w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800/60 px-2 py-1.5 text-xs text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700" onClick={()=>{
                   if(!site || !selectedChargerId) return;
 
                   if (cmd === 'Reset') {

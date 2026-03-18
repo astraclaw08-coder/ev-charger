@@ -399,7 +399,7 @@ export default function FleetAnalytics() {
                 const revenueUsd = a.revenueCents / 100;
                 const revPerKwh = a.kwhDelivered > 0 ? revenueUsd / a.kwhDelivered : 0;
                 return (
-                  <tr key={site.id} className="hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60">
+                  <tr key={site.id} className="bg-white dark:bg-slate-800/60 hover:bg-gray-50 dark:hover:bg-slate-700">
                     <td className="px-5 py-3 font-medium text-gray-800 dark:text-slate-200">{site.name}</td>
                     <td className="px-5 py-3 text-gray-600 dark:text-slate-400">{a.sessionsCount}</td>
                     <td className="px-5 py-3 text-gray-600 dark:text-slate-400">{a.kwhDelivered.toFixed(1)}</td>
