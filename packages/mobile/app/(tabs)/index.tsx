@@ -684,7 +684,8 @@ const styles = StyleSheet.create({
   zoomBtn: { width: 42, height: 42, backgroundColor: '#111827cc', borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   qrTile: {
     position: 'absolute',
-    right: 12,
+    left: '50%',
+    marginLeft: -29,
     borderRadius: 14,
     borderWidth: 1,
     width: 58,

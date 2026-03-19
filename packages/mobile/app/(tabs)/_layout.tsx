@@ -145,11 +145,15 @@ export default function TabsLayout() {
             alignItems: 'center',
             paddingVertical: 0,
           },
+          tabBarIconStyle: {
+            marginTop: 0,
+            marginBottom: 0,
+          },
           tabBarLabelStyle: {
-            marginTop: 1,
-            marginBottom: 1,
+            marginTop: 0,
+            marginBottom: 0,
             paddingTop: 0,
-            lineHeight: 13,
+            lineHeight: 12,
             fontWeight: '700',
             fontSize: 11,
             letterSpacing: 0.2,
