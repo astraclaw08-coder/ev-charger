@@ -1,6 +1,15 @@
 import React from 'react';
-import { View } from 'react-native';
+import { useFocusEffect, useRouter } from 'expo-router';
 
 export default function ScanPlaceholderScreen() {
-  return <View style={{ flex: 1, backgroundColor: 'transparent' }} />;
+  const router = useRouter();
+
+  useFocusEffect(
+    React.useCallback(() => {
+      router.replace('/(tabs)/index?openScanner=1' as any);
+      return undefined;
+    }, [router]),
+  );
+
+  return null;
 }
