@@ -19,6 +19,7 @@ export default function ScanScreen() {
   const [error, setError] = useState<string | null>(null);
   const [manualStationNumber, setManualStationNumber] = useState('');
   const [resolvingManual, setResolvingManual] = useState(false);
+  const [torchEnabled, setTorchEnabled] = useState(false);
 
   async function ensurePermission() {
     if (cameraPermission?.granted) return true;
@@ -94,10 +95,7 @@ export default function ScanScreen() {
       ]}
     >
       <View style={styles.header}>
-        <Text style={[styles.title, { color: isDark ? '#f9fafb' : '#111827' }]}>Scan Charger QR</Text>
-        <TouchableOpacity onPress={() => router.replace('/(tabs)/index' as any)} style={[styles.doneBtn, { backgroundColor: isDark ? '#1f2937' : '#e5e7eb' }]}>
-          <Text style={{ color: isDark ? '#f3f4f6' : '#111827', fontWeight: '700' }}>Done</Text>
-        </TouchableOpacity>
+        <Text style={[styles.subTitle, { color: isDark ? '#cbd5e1' : '#4b5563' }]}>Scan QR code on charger</Text>
       </View>
 
       {noPermission ? (
@@ -113,6 +111,7 @@ export default function ScanScreen() {
           <CameraView
             style={styles.camera}
             facing="back"
+            enableTorch={torchEnabled}
             barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
             onBarcodeScanned={scanLocked ? undefined : onScan}
           />
@@ -122,7 +121,6 @@ export default function ScanScreen() {
 
       {!noPermission ? (
         <View style={[styles.manualCard, { backgroundColor: isDark ? '#111827' : '#ffffff', borderColor: isDark ? '#374151' : '#d1d5db' }]}> 
-          <Text style={[styles.manualTitle, { color: isDark ? '#f9fafb' : '#111827' }]}>No QR code?</Text>
           <Text style={[styles.manualSub, { color: isDark ? '#9ca3af' : '#64748b' }]}>Enter charger station number manually.</Text>
           <View style={styles.manualRow}>
             <TextInput
@@ -142,6 +140,14 @@ export default function ScanScreen() {
               {resolvingManual ? <ActivityIndicator color="#ecfdf5" size="small" /> : <Text style={styles.manualBtnText}>Next</Text>}
             </TouchableOpacity>
           </View>
+          <TouchableOpacity
+            style={[styles.flashBtn, { backgroundColor: torchEnabled ? '#0f766e' : (isDark ? '#1f2937' : '#e5e7eb') }]}
+            onPress={() => setTorchEnabled((v) => !v)}
+          >
+            <Text style={[styles.flashBtnText, { color: torchEnabled ? '#ecfdf5' : (isDark ? '#f3f4f6' : '#111827') }]}>
+              {torchEnabled ? 'Flashlight On' : 'Flashlight Off'}
+            </Text>
+          </TouchableOpacity>
         </View>
       ) : null}
 
@@ -152,9 +158,8 @@ export default function ScanScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, paddingTop: 56, paddingHorizontal: 12 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
-  title: { fontSize: 22, fontWeight: '800' },
-  doneBtn: { borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 },
+  header: { alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
+  subTitle: { fontSize: 14, fontWeight: '700', textAlign: 'center' },
   cameraWrap: { height: '58%', minHeight: 320, borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: '#334155', position: 'relative' },
   camera: { flex: 1 },
   frame: { position: 'absolute', left: '14%', right: '14%', top: '24%', bottom: '24%', borderWidth: 2, borderColor: '#67e8f9', borderRadius: 14 },
@@ -162,11 +167,12 @@ const styles = StyleSheet.create({
   stateText: { fontSize: 14, textAlign: 'center' },
   retryBtn: { borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10 },
   manualCard: { borderRadius: 12, padding: 12, borderWidth: 1, gap: 8, marginTop: 10 },
-  manualTitle: { fontSize: 14, fontWeight: '800' },
   manualSub: { fontSize: 12 },
   manualRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
   manualInput: { flex: 1, borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 12, fontSize: 13, fontWeight: '700' },
   manualBtn: { backgroundColor: '#065f46', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 12, minWidth: 66, alignItems: 'center', justifyContent: 'center' },
   manualBtnText: { color: '#ecfdf5', fontSize: 13, fontWeight: '800' },
+  flashBtn: { marginTop: 2, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 11, alignItems: 'center' },
+  flashBtnText: { fontSize: 13, fontWeight: '800' },
   errorText: { marginTop: 10, fontSize: 13, fontWeight: '700' },
 });
