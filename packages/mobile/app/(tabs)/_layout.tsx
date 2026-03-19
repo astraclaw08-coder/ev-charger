@@ -90,7 +90,7 @@ export default function TabsLayout() {
           tabBarStyle: {
             borderTopColor: 'transparent',
             borderTopWidth: 0,
-            backgroundColor: isDark ? '#0b1220' : '#ffffff',
+            backgroundColor: 'transparent',
             position: 'absolute',
             alignSelf: 'center',
             width: Math.max(280, screenWidth - 24),
@@ -105,7 +105,19 @@ export default function TabsLayout() {
             shadowRadius: 12,
             shadowOffset: { width: 0, height: 6 },
             elevation: 10,
+            overflow: 'hidden',
           },
+          tabBarBackground: () => (
+            <View
+              style={{
+                flex: 1,
+                borderRadius: 20,
+                backgroundColor: isDark ? '#0b1220' : '#ffffff',
+                borderWidth: 1,
+                borderColor: isDark ? '#1f2937' : '#e5e7eb',
+              }}
+            />
+          ),
           tabBarItemStyle: {
             justifyContent: 'center',
             alignItems: 'center',
