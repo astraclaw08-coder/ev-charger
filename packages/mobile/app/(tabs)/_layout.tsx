@@ -1,6 +1,6 @@
 import React from 'react';
 import { Tabs, useRouter } from 'expo-router';
-import { TouchableOpacity, Text, View } from 'react-native';
+import { TouchableOpacity, Text, View, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '@/theme';
 import { useAppAuth } from '@/providers/AuthProvider';
@@ -73,6 +73,7 @@ export default function TabsLayout() {
   const { isGuest } = useAppAuth();
   const { activeSession: active, refetchSessions } = useChargingNotifications();
   const insets = useSafeAreaInsets();
+  const { width: screenWidth } = useWindowDimensions();
 
   React.useEffect(() => {
     if (!isGuest) refetchSessions();
@@ -91,8 +92,8 @@ export default function TabsLayout() {
             borderTopWidth: 0,
             backgroundColor: isDark ? '#0b1220' : '#ffffff',
             position: 'absolute',
-            left: 12,
-            right: 12,
+            alignSelf: 'center',
+            width: Math.max(280, screenWidth - 24),
             bottom: bannerVisible ? 72 + Math.max(insets.bottom, 8) : Math.max(insets.bottom, 8),
             borderRadius: 20,
             paddingBottom: Math.max(insets.bottom, 6),
