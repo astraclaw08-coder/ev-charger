@@ -1,5 +1,5 @@
 import React from 'react';
-import { Tabs, useRouter } from 'expo-router';
+import { Tabs } from 'expo-router';
 import { TouchableOpacity, Text, View } from 'react-native';
 import { BottomTabBar, type BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
@@ -159,33 +159,17 @@ export default function TabsLayout() {
         screenOptions={{
           tabBarActiveTintColor: '#0f172a',
           tabBarInactiveTintColor: '#6b7280',
-          tabBarButton: (props) => {
-            const selected = Boolean((props as any)?.accessibilityState?.selected);
-            return (
-              <TouchableOpacity
-                {...props}
-                style={[
-                  props.style,
-                  {
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    transform: [{ translateY: TAB_CONTENT_SHIFT_Y }],
-                    borderRadius: 22,
-                    marginHorizontal: 1,
-                    marginVertical: 1,
-                    paddingHorizontal: 6,
-                    paddingVertical: 6,
-                    backgroundColor: selected ? '#e5e7eb' : 'transparent',
-                  },
-                ]}
-              />
-            );
-          },
+          tabBarActiveBackgroundColor: '#e5e7eb',
           tabBarItemStyle: {
             justifyContent: 'center',
             alignItems: 'center',
             paddingTop: 0,
             paddingBottom: 0,
+            transform: [{ translateY: TAB_CONTENT_SHIFT_Y }],
+            borderRadius: 22,
+            marginHorizontal: 1,
+            marginVertical: 1,
+            overflow: 'hidden',
           },
           tabBarIconStyle: {
             marginTop: 0,
