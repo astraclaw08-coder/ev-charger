@@ -41,9 +41,9 @@ function ActiveSessionBanner({ active }: { active: Session }) {
           borderRadius: 16,
           paddingVertical: 10,
           paddingHorizontal: 12,
-          backgroundColor: isDark ? 'rgba(15, 23, 42, 0.74)' : 'rgba(255, 255, 255, 0.72)',
+          backgroundColor: isDark ? '#0f172a' : '#ffffff',
           borderWidth: 1,
-          borderColor: isDark ? '#334155cc' : '#cbd5e199',
+          borderColor: isDark ? '#334155' : '#cbd5e1',
           flexDirection: 'row',
           alignItems: 'center',
           justifyContent: 'space-between',
@@ -78,8 +78,6 @@ export default function TabsLayout() {
     if (!isGuest) refetchSessions();
   }, [isGuest, refetchSessions]);
   const bannerVisible = Boolean(active);
-  const tabIconGap = 6;
-  const tabBottomGap = Math.max(insets.bottom, 8);
 
   return (
     <>
@@ -91,15 +89,15 @@ export default function TabsLayout() {
           tabBarStyle: {
             borderTopColor: 'transparent',
             borderTopWidth: 0,
-            backgroundColor: isDark ? 'rgba(11, 18, 32, 0.80)' : 'rgba(255, 255, 255, 0.76)',
+            backgroundColor: isDark ? '#0b1220' : '#ffffff',
             position: 'absolute',
-            left: 12,
-            right: 12,
+            left: 16,
+            right: 16,
             bottom: bannerVisible ? 72 + Math.max(insets.bottom, 8) : Math.max(insets.bottom, 8),
             borderRadius: 20,
-            paddingBottom: tabBottomGap,
-            paddingTop: tabIconGap,
-            height: 62 + tabBottomGap,
+            paddingBottom: Math.max(insets.bottom, 6),
+            paddingTop: 2,
+            height: 52 + Math.max(insets.bottom, 6),
             marginBottom: 0,
             shadowColor: '#000',
             shadowOpacity: isDark ? 0.25 : 0.12,
