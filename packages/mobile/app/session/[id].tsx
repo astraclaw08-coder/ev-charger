@@ -243,8 +243,9 @@ function SessionSummary({
 
         <ReceiptRow
           isDark={isDark}
-          label="Energy"
+          label="Energy Subtotal"
           value={`$${displayEnergyUsd.toFixed(2)}`}
+          emphasizeValue
         />
 
         {idleSegments.map((segment, idx) => (
@@ -268,8 +269,16 @@ function SessionSummary({
 
         <ReceiptRow
           isDark={isDark}
+          label="Idle Subtotal"
+          value={`$${displayIdleUsd.toFixed(2)}`}
+          emphasizeValue
+        />
+
+        <ReceiptRow
+          isDark={isDark}
           label="Activation fee"
           value={`$${displayActivationUsd.toFixed(2)}`}
+          emphasizeValue
         />
         <ReceiptRow
           isDark={isDark}
@@ -331,12 +340,14 @@ function ReceiptRow({
   value,
   multilineLabel,
   emphasize,
+  emphasizeValue,
 }: {
   isDark: boolean;
   label: string;
   value: string;
   multilineLabel?: boolean;
   emphasize?: boolean;
+  emphasizeValue?: boolean;
 }) {
   return (
     <View style={[styles.receiptRow, { borderBottomColor: isDark ? '#334155' : '#d1d5db' }]}>
@@ -354,7 +365,7 @@ function ReceiptRow({
       <Text style={[
         styles.receiptValue,
         { color: isDark ? '#f8fafc' : '#111827' },
-        emphasize && styles.receiptValueEmphasis,
+        (emphasize || emphasizeValue) && styles.receiptValueEmphasis,
       ]}>
         {value}
       </Text>
@@ -884,7 +895,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   metaText: { fontSize: 13, color: '#6b7280' },
-  breakdownTitle: { fontSize: 14, fontWeight: '700', marginBottom: 4 },
+  breakdownTitle: { fontSize: 14, fontWeight: '700', marginBottom: 4, textAlign: 'center' },
   breakdownTotal: { marginTop: 6, fontWeight: '700' },
   receiptRow: {
     flexDirection: 'row',
