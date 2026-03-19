@@ -28,7 +28,7 @@ function estimateActiveCostUsd(active: Session): number {
   return 0;
 }
 
-const TAB_CONTENT_SHIFT_Y = 8;
+const TAB_CONTENT_SHIFT_Y = 13;
 
 function FloatingTabBar({
   isDark,
