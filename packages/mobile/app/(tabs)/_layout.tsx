@@ -1,5 +1,5 @@
 import React from 'react';
-import { Tabs } from 'expo-router';
+import { Tabs, useRouter } from 'expo-router';
 import { TouchableOpacity, Text, View } from 'react-native';
 import { BottomTabBar, type BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
@@ -134,7 +134,6 @@ function ActiveSessionBanner({ active }: { active: Session }) {
 }
 
 export default function TabsLayout() {
-  const router = useRouter();
   const { isDark } = useAppTheme();
   const { isGuest } = useAppAuth();
   const { activeSession: active, refetchSessions } = useChargingNotifications();
@@ -228,14 +227,6 @@ export default function TabsLayout() {
             title: 'Lumeo',
             tabBarLabel: 'Scan QR',
             tabBarIcon: ({ size, color }) => <TabIcon icon="qr-code-outline" size={size} color={color} />,
-            tabBarButton: (props) => (
-              <TouchableOpacity
-                {...props}
-                testID="tab-scan-qr"
-                accessibilityLabel="tab-scan-qr"
-                onPress={() => router.replace('/(tabs)/index?openScanner=1' as any)}
-              />
-            ),
           }}
         />
         <Tabs.Screen
