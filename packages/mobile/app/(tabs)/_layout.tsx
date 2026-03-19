@@ -50,9 +50,9 @@ function FloatingTabBar({
         style={{
           borderRadius: 20,
           overflow: 'hidden',
-          backgroundColor: '#fffffff2',
+          backgroundColor: isDark ? '#111827f2' : '#fffffff2',
           borderWidth: 1,
-          borderColor: '#d1d5db',
+          borderColor: isDark ? '#374151' : '#d1d5db',
           shadowColor: '#000',
           shadowOpacity: isDark ? 0.25 : 0.12,
           shadowRadius: 12,
@@ -64,7 +64,7 @@ function FloatingTabBar({
           {...tabProps}
           style={{
             borderTopWidth: 0,
-            backgroundColor: '#fffffff2',
+            backgroundColor: isDark ? '#111827f2' : '#fffffff2',
             paddingTop: 8,
             paddingBottom: Math.max(safeAreaBottom, 4),
             minHeight: 56 + Math.max(safeAreaBottom, 6),
@@ -157,9 +157,9 @@ export default function TabsLayout() {
           />
         )}
         screenOptions={{
-          tabBarActiveTintColor: '#0f172a',
-          tabBarInactiveTintColor: '#6b7280',
-          tabBarActiveBackgroundColor: '#e5e7eb',
+          tabBarActiveTintColor: isDark ? '#f8fafc' : '#0f172a',
+          tabBarInactiveTintColor: isDark ? '#94a3b8' : '#6b7280',
+          tabBarActiveBackgroundColor: isDark ? '#243447' : '#e5e7eb',
           tabBarItemStyle: {
             justifyContent: 'center',
             alignItems: 'center',
