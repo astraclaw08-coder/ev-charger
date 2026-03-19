@@ -151,7 +151,21 @@ export async function sessionRoutes(app: FastifyInstance) {
               charger: {
                 select: {
                   id: true, ocppId: true, model: true, vendor: true, status: true,
-                  site: { select: { name: true, address: true, softwareVendorFeeMode: true, softwareVendorFeeValue: true } },
+                  site: {
+                    select: {
+                      name: true,
+                      address: true,
+                      pricingMode: true,
+                      pricePerKwhUsd: true,
+                      idleFeePerMinUsd: true,
+                      activationFeeUsd: true,
+                      gracePeriodMin: true,
+                      touWindows: true,
+                      softwareVendorFeeMode: true,
+                      softwareVendorFeeValue: true,
+                      softwareFeeIncludesActivation: true,
+                    },
+                  },
                 },
               },
             },
@@ -185,7 +199,18 @@ export async function sessionRoutes(app: FastifyInstance) {
     }
 
     const sessionsForClient = sessions.map((s: any) => {
-      const amounts = computeSessionAmounts({ ...s, softwareVendorFeeMode: s.connector?.charger?.site?.softwareVendorFeeMode, softwareVendorFeeValue: s.connector?.charger?.site?.softwareVendorFeeValue });
+      const amounts = computeSessionAmounts({
+        ...s,
+        pricingMode: s.connector?.charger?.site?.pricingMode,
+        pricePerKwhUsd: s.connector?.charger?.site?.pricePerKwhUsd,
+        idleFeePerMinUsd: s.connector?.charger?.site?.idleFeePerMinUsd,
+        activationFeeUsd: s.connector?.charger?.site?.activationFeeUsd,
+        gracePeriodMin: s.connector?.charger?.site?.gracePeriodMin,
+        touWindows: s.connector?.charger?.site?.touWindows,
+        softwareVendorFeeMode: s.connector?.charger?.site?.softwareVendorFeeMode,
+        softwareVendorFeeValue: s.connector?.charger?.site?.softwareVendorFeeValue,
+        softwareFeeIncludesActivation: s.connector?.charger?.site?.softwareFeeIncludesActivation,
+      });
       let powerActiveImportW: number | null = null;
       if (s.status === 'ACTIVE') {
         const logs = logsByCharger.get(s.connector?.charger?.id) ?? [];
@@ -208,6 +233,7 @@ export async function sessionRoutes(app: FastifyInstance) {
         amountState: amounts.amountState,
         amountLabel: amounts.amountLabel,
         isAmountFinal: amounts.isAmountFinal,
+        billingBreakdown: amounts.billingBreakdown,
         powerActiveImportW,
       };
     });
@@ -229,7 +255,21 @@ export async function sessionRoutes(app: FastifyInstance) {
             charger: {
               select: {
                 id: true, ocppId: true, model: true, vendor: true, status: true,
-                site: { select: { name: true, address: true, softwareVendorFeeMode: true, softwareVendorFeeValue: true } },
+                site: {
+                  select: {
+                    name: true,
+                    address: true,
+                    pricingMode: true,
+                    pricePerKwhUsd: true,
+                    idleFeePerMinUsd: true,
+                    activationFeeUsd: true,
+                    gracePeriodMin: true,
+                    touWindows: true,
+                    softwareVendorFeeMode: true,
+                    softwareVendorFeeValue: true,
+                    softwareFeeIncludesActivation: true,
+                  },
+                },
               },
             },
           },
@@ -241,7 +281,18 @@ export async function sessionRoutes(app: FastifyInstance) {
     if (!session) return reply.status(404).send({ error: 'Session not found' });
     if (session.userId !== user.id) return reply.status(403).send({ error: 'Not your session' });
 
-    const amounts = computeSessionAmounts({ ...session, softwareVendorFeeMode: session.connector?.charger?.site?.softwareVendorFeeMode, softwareVendorFeeValue: session.connector?.charger?.site?.softwareVendorFeeValue });
+    const amounts = computeSessionAmounts({
+      ...session,
+      pricingMode: session.connector?.charger?.site?.pricingMode,
+      pricePerKwhUsd: session.connector?.charger?.site?.pricePerKwhUsd,
+      idleFeePerMinUsd: session.connector?.charger?.site?.idleFeePerMinUsd,
+      activationFeeUsd: session.connector?.charger?.site?.activationFeeUsd,
+      gracePeriodMin: session.connector?.charger?.site?.gracePeriodMin,
+      touWindows: session.connector?.charger?.site?.touWindows,
+      softwareVendorFeeMode: session.connector?.charger?.site?.softwareVendorFeeMode,
+      softwareVendorFeeValue: session.connector?.charger?.site?.softwareVendorFeeValue,
+      softwareFeeIncludesActivation: session.connector?.charger?.site?.softwareFeeIncludesActivation,
+    });
 
     let powerActiveImportW: number | null = null;
     if (session.status === 'ACTIVE') {
@@ -270,6 +321,7 @@ export async function sessionRoutes(app: FastifyInstance) {
       amountState: amounts.amountState,
       amountLabel: amounts.amountLabel,
       isAmountFinal: amounts.isAmountFinal,
+      billingBreakdown: amounts.billingBreakdown,
       powerActiveImportW,
     };
   });
@@ -320,7 +372,21 @@ export async function sessionRoutes(app: FastifyInstance) {
                   ocppId: true,
                   model: true,
                   vendor: true,
-                  site: { select: { id: true, name: true, softwareVendorFeeMode: true, softwareVendorFeeValue: true } },
+                  site: {
+                    select: {
+                      id: true,
+                      name: true,
+                      pricingMode: true,
+                      pricePerKwhUsd: true,
+                      idleFeePerMinUsd: true,
+                      activationFeeUsd: true,
+                      gracePeriodMin: true,
+                      touWindows: true,
+                      softwareVendorFeeMode: true,
+                      softwareVendorFeeValue: true,
+                      softwareFeeIncludesActivation: true,
+                    },
+                  },
                 },
               },
             },
@@ -335,7 +401,18 @@ export async function sessionRoutes(app: FastifyInstance) {
       limit,
       offset,
       transactions: rows.map((row: any) => {
-        const amounts = computeSessionAmounts({ ...row, softwareVendorFeeMode: row.connector?.charger?.site?.softwareVendorFeeMode, softwareVendorFeeValue: row.connector?.charger?.site?.softwareVendorFeeValue });
+        const amounts = computeSessionAmounts({
+          ...row,
+          pricingMode: row.connector?.charger?.site?.pricingMode,
+          pricePerKwhUsd: row.connector?.charger?.site?.pricePerKwhUsd,
+          idleFeePerMinUsd: row.connector?.charger?.site?.idleFeePerMinUsd,
+          activationFeeUsd: row.connector?.charger?.site?.activationFeeUsd,
+          gracePeriodMin: row.connector?.charger?.site?.gracePeriodMin,
+          touWindows: row.connector?.charger?.site?.touWindows,
+          softwareVendorFeeMode: row.connector?.charger?.site?.softwareVendorFeeMode,
+          softwareVendorFeeValue: row.connector?.charger?.site?.softwareVendorFeeValue,
+          softwareFeeIncludesActivation: row.connector?.charger?.site?.softwareFeeIncludesActivation,
+        });
         return {
           id: row.id,
           sessionId: row.id,
@@ -351,6 +428,7 @@ export async function sessionRoutes(app: FastifyInstance) {
           amountState: amounts.amountState,
           amountLabel: amounts.amountLabel,
           isAmountFinal: amounts.isAmountFinal,
+          billingBreakdown: amounts.billingBreakdown,
           meterStart: row.meterStart,
           meterStop: row.meterStop,
           site: row.connector.charger.site,

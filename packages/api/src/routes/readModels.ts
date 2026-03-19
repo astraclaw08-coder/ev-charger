@@ -246,7 +246,23 @@ export async function readModelRoutes(app: FastifyInstance) {
         take: limit,
         skip: offset,
         include: {
-          site: { select: { id: true, name: true, organizationName: true, portfolioName: true, softwareVendorFeeMode: true, softwareVendorFeeValue: true } },
+          site: {
+            select: {
+              id: true,
+              name: true,
+              organizationName: true,
+              portfolioName: true,
+              pricingMode: true,
+              pricePerKwhUsd: true,
+              idleFeePerMinUsd: true,
+              activationFeeUsd: true,
+              gracePeriodMin: true,
+              touWindows: true,
+              softwareVendorFeeMode: true,
+              softwareVendorFeeValue: true,
+              softwareFeeIncludesActivation: true,
+            },
+          },
           charger: { select: { id: true, ocppId: true, serialNumber: true, model: true, vendor: true } },
           session: {
             select: {
@@ -282,8 +298,15 @@ export async function readModelRoutes(app: FastifyInstance) {
           durationMinutes: row.durationMinutes,
           startedAt: row.startedAt,
           stoppedAt: row.stoppedAt,
+          pricingMode: row.site.pricingMode,
+          pricePerKwhUsd: row.site.pricePerKwhUsd,
+          idleFeePerMinUsd: row.site.idleFeePerMinUsd,
+          activationFeeUsd: row.site.activationFeeUsd,
+          gracePeriodMin: row.site.gracePeriodMin,
+          touWindows: row.site.touWindows,
           softwareVendorFeeMode: row.site.softwareVendorFeeMode,
           softwareVendorFeeValue: row.site.softwareVendorFeeValue,
+          softwareFeeIncludesActivation: row.site.softwareFeeIncludesActivation,
         });
 
         return {
@@ -305,6 +328,7 @@ export async function readModelRoutes(app: FastifyInstance) {
           amountState: amounts.amountState,
           amountLabel: amounts.amountLabel,
           isAmountFinal: amounts.isAmountFinal,
+          billingBreakdown: amounts.billingBreakdown,
           site: row.site,
           charger: row.charger,
           sourceVersion: row.sourceVersion,

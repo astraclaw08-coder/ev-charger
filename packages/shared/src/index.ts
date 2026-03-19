@@ -13,3 +13,4 @@ export * from './types/prisma-enums';
 export * from './types/rbac';
 
 export * from './smartCharging';
+export * from './touPricing';

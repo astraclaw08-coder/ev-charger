@@ -43,6 +43,13 @@ function formatDate(iso: string): string {
   });
 }
 
+function formatTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
 
 function formatKwh(value: number): string {
   // up to 4 decimal places, trimming trailing zeros
@@ -141,6 +148,11 @@ function SessionSummary({
     effectiveDerivedCost ??
     estimateDerivedCost ??
     (sessionDerivedKwh > 0 ? sessionDerivedKwh * ratePerKwh : meterDerivedKwh * ratePerKwh);
+  const breakdown = session.billingBreakdown;
+  const breakdownTotals = breakdown?.totals;
+  const displayEnergyUsd = breakdownTotals?.energyUsd ?? breakdown?.energy.totalUsd ?? 0;
+  const displayIdleUsd = breakdownTotals?.idleUsd ?? breakdown?.idle.totalUsd ?? 0;
+  const displayActivationUsd = breakdownTotals?.activationUsd ?? breakdown?.activation.totalUsd ?? 0;
 
   const finalKwh =
     meterDerivedKwh > 0
@@ -205,6 +217,26 @@ function SessionSummary({
         <Text style={[styles.metaText, { color: isDark ? '#cbd5e1' : '#6b7280' }]}>Rate: ${ratePerKwh.toFixed(2)}/kWh</Text>
         <Text style={[styles.metaText, { color: isDark ? '#cbd5e1' : '#6b7280' }]}>Payment Method: {paymentMethod}</Text>
       </View>
+
+      {breakdown && (
+        <View style={[styles.summaryMeta, { backgroundColor: isDark ? '#111827' : '#f3f4f6' }]}>
+          <Text style={[styles.breakdownTitle, { color: isDark ? '#e2e8f0' : '#111827' }]}>Receipt Breakdown</Text>
+          {breakdown.energy.segments.map((segment, idx) => (
+            <Text key={`${segment.startedAt}-${idx}`} style={[styles.metaText, { color: isDark ? '#cbd5e1' : '#4b5563' }]}>
+              {`${formatTime(segment.startedAt)}-${formatTime(segment.endedAt)} · ${segment.kwh.toFixed(3)} kWh × $${segment.pricePerKwhUsd.toFixed(2)} = $${segment.energyAmountUsd.toFixed(2)}`}
+            </Text>
+          ))}
+          <Text style={[styles.metaText, { color: isDark ? '#cbd5e1' : '#4b5563' }]}>
+            {`Idle (${Math.max(0, breakdown.idle.minutes).toFixed(1)} min, ${Math.max(0, breakdown.gracePeriodMin).toFixed(1)} min grace): $${displayIdleUsd.toFixed(2)}`}
+          </Text>
+          {displayActivationUsd > 0 && (
+            <Text style={[styles.metaText, { color: isDark ? '#cbd5e1' : '#4b5563' }]}>Activation fee: ${displayActivationUsd.toFixed(2)}</Text>
+          )}
+          <Text style={[styles.metaText, styles.breakdownTotal, { color: isDark ? '#f8fafc' : '#111827' }]}>
+            {`Energy $${displayEnergyUsd.toFixed(2)} + Idle $${displayIdleUsd.toFixed(2)} + Activation $${displayActivationUsd.toFixed(2)} = $${cost.toFixed(2)}`}
+          </Text>
+        </View>
+      )}
 
 
       <TouchableOpacity
@@ -774,6 +806,8 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   metaText: { fontSize: 13, color: '#6b7280' },
+  breakdownTitle: { fontSize: 14, fontWeight: '700', marginBottom: 4 },
+  breakdownTotal: { marginTop: 6, fontWeight: '700' },
   doneButton: {
     backgroundColor: '#10b981',
     borderRadius: 14,

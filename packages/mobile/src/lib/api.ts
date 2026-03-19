@@ -175,6 +175,49 @@ export interface Session {
   amountState?: 'FINAL' | 'PENDING' | 'ESTIMATED' | 'UNAVAILABLE';
   amountLabel?: string;
   isAmountFinal?: boolean;
+  billingBreakdown?: {
+    pricingMode: 'flat' | 'tou';
+    durationMinutes: number;
+    gracePeriodMin: number;
+    energy: {
+      kwhDelivered: number;
+      totalUsd: number;
+      segments: Array<{
+        startedAt: string;
+        endedAt: string;
+        minutes: number;
+        source: 'flat' | 'tou';
+        pricePerKwhUsd: number;
+        idleFeePerMinUsd: number;
+        kwh: number;
+        energyAmountUsd: number;
+        idleMinutes: number;
+        idleAmountUsd: number;
+      }>;
+    };
+    idle: {
+      minutes: number;
+      totalUsd: number;
+      segments: Array<{
+        startedAt: string;
+        endedAt: string;
+        minutes: number;
+        idleFeePerMinUsd: number;
+        amountUsd: number;
+        source: 'flat' | 'tou';
+      }>;
+    };
+    activation: { totalUsd: number };
+    grossTotalUsd: number;
+    totals?: {
+      energyUsd: number;
+      idleUsd: number;
+      activationUsd: number;
+      grossUsd: number;
+      vendorFeeUsd: number;
+      netUsd: number;
+    };
+  };
   connector: {
     connectorId: number;
     charger: {
@@ -270,6 +313,7 @@ export interface EnrichedTransaction {
   amountState?: 'FINAL' | 'PENDING' | 'ESTIMATED' | 'UNAVAILABLE';
   amountLabel?: string;
   isAmountFinal?: boolean;
+  billingBreakdown?: Session['billingBreakdown'];
   meterStart: number | null;
   meterStop: number | null;
   site: { id: string; name: string };

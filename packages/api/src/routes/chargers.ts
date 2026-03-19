@@ -193,7 +193,20 @@ export async function chargerRoutes(app: FastifyInstance) {
 
     const connectorIds = charger.connectors.map((c: { id: string }) => c.id);
     const limit = Math.min(parseInt(req.query.limit ?? '20', 10), 100);
-    const site = await prisma.site.findUnique({ where: { id: charger.siteId }, select: { softwareVendorFeeMode: true, softwareVendorFeeValue: true } });
+    const site = await prisma.site.findUnique({
+      where: { id: charger.siteId },
+      select: {
+        pricingMode: true,
+        pricePerKwhUsd: true,
+        idleFeePerMinUsd: true,
+        activationFeeUsd: true,
+        gracePeriodMin: true,
+        touWindows: true,
+        softwareVendorFeeMode: true,
+        softwareVendorFeeValue: true,
+        softwareFeeIncludesActivation: true,
+      },
+    });
 
     const sessions = await prisma.session.findMany({
       where: { connectorId: { in: connectorIds } },
@@ -209,8 +222,15 @@ export async function chargerRoutes(app: FastifyInstance) {
     return sessions.map((s: any) => {
       const amounts = computeSessionAmounts({
         ...s,
+        pricingMode: site?.pricingMode,
+        pricePerKwhUsd: site?.pricePerKwhUsd,
+        idleFeePerMinUsd: site?.idleFeePerMinUsd,
+        activationFeeUsd: site?.activationFeeUsd,
+        gracePeriodMin: site?.gracePeriodMin,
+        touWindows: site?.touWindows,
         softwareVendorFeeMode: site?.softwareVendorFeeMode,
         softwareVendorFeeValue: site?.softwareVendorFeeValue,
+        softwareFeeIncludesActivation: site?.softwareFeeIncludesActivation,
       });
       return {
         ...s,
@@ -220,6 +240,7 @@ export async function chargerRoutes(app: FastifyInstance) {
         amountState: amounts.amountState,
         amountLabel: amounts.amountLabel,
         isAmountFinal: amounts.isAmountFinal,
+        billingBreakdown: amounts.billingBreakdown,
       };
     });
   });

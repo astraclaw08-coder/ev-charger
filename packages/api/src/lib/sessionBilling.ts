@@ -1,3 +1,5 @@
+import { splitTouDuration } from '@ev-charger/shared';
+
 type PaymentLike = {
   status?: string | null;
   amountCents?: number | null;
@@ -5,6 +7,44 @@ type PaymentLike = {
 
 export type AmountState = 'FINAL' | 'PENDING' | 'ESTIMATED' | 'UNAVAILABLE';
 export type SoftwareVendorFeeMode = 'none' | 'percentage_total' | 'fixed_per_kwh' | 'fixed_per_minute';
+export type BillingSegment = {
+  startedAt: string;
+  endedAt: string;
+  minutes: number;
+  source: 'flat' | 'tou';
+  pricePerKwhUsd: number;
+  idleFeePerMinUsd: number;
+  kwh: number;
+  energyAmountUsd: number;
+  idleMinutes: number;
+  idleAmountUsd: number;
+};
+export type BillingBreakdown = {
+  pricingMode: 'flat' | 'tou';
+  durationMinutes: number;
+  gracePeriodMin: number;
+  energy: {
+    kwhDelivered: number;
+    totalUsd: number;
+    segments: BillingSegment[];
+  };
+  idle: {
+    minutes: number;
+    totalUsd: number;
+    segments: Array<{
+      startedAt: string;
+      endedAt: string;
+      minutes: number;
+      idleFeePerMinUsd: number;
+      amountUsd: number;
+      source: 'flat' | 'tou';
+    }>;
+  };
+  activation: {
+    totalUsd: number;
+  };
+  grossTotalUsd: number;
+};
 
 const FINAL_PAYMENT_STATUSES = new Set(['CAPTURED', 'REFUNDED']);
 const PENDING_PAYMENT_STATUSES = new Set(['PENDING', 'AUTHORIZED']);
@@ -94,17 +134,103 @@ export function computeSessionAmounts(session: {
   softwareVendorFeeMode?: string | null;
   softwareVendorFeeValue?: number | null;
   activationFeeUsd?: number | null;
+  pricingMode?: string | null;
+  pricePerKwhUsd?: number | null;
+  idleFeePerMinUsd?: number | null;
+  gracePeriodMin?: number | null;
+  touWindows?: unknown;
   softwareFeeIncludesActivation?: boolean;
 }) {
   const computedKwh = computeDeliveredKwh(session);
-  const grossAmountCents =
-    session.revenueUsd != null
-      ? Math.round(session.revenueUsd * 100)
-      : computedKwh != null && session.ratePerKwh != null
-        ? Math.round(computedKwh * session.ratePerKwh * 100)
-        : null;
-
   const durationMinutes = resolveDurationMinutes(session);
+  const pricingMode = session.pricingMode === 'tou' ? 'tou' : 'flat';
+  const pricePerKwhUsd = Math.max(0, toFiniteNumber(session.ratePerKwh) ?? toFiniteNumber(session.pricePerKwhUsd) ?? 0);
+  const idleFeePerMinUsd = Math.max(0, toFiniteNumber(session.idleFeePerMinUsd) ?? 0);
+  const gracePeriodMin = Math.max(0, toFiniteNumber(session.gracePeriodMin) ?? 0);
+  const deliveredKwh = Math.max(0, toFiniteNumber(computedKwh) ?? 0);
+  const durationForBreakdown = Math.max(0, toFiniteNumber(durationMinutes) ?? 0);
+
+  const rawSegments = durationMinutes != null && session.startedAt && session.stoppedAt
+    ? splitTouDuration({
+        startedAt: session.startedAt,
+        stoppedAt: session.stoppedAt,
+        pricingMode,
+        defaultPricePerKwhUsd: pricePerKwhUsd,
+        defaultIdleFeePerMinUsd: idleFeePerMinUsd,
+        touWindows: session.touWindows,
+      })
+    : [];
+
+  const fallbackSegment = rawSegments.length > 0
+    ? rawSegments
+    : [{
+        startedAt: session.startedAt ? new Date(session.startedAt).toISOString() : new Date(0).toISOString(),
+        endedAt: session.stoppedAt ? new Date(session.stoppedAt).toISOString() : (session.startedAt ? new Date(session.startedAt).toISOString() : new Date(0).toISOString()),
+        minutes: durationForBreakdown,
+        pricePerKwhUsd,
+        idleFeePerMinUsd,
+        source: 'flat' as const,
+      }];
+
+  const segmentMinutesTotal = fallbackSegment.reduce((sum, seg) => sum + seg.minutes, 0);
+  const billableIdleMinutes = Math.max(0, durationForBreakdown - gracePeriodMin);
+  const detailedSegments: BillingSegment[] = fallbackSegment.map((seg) => {
+    const ratio = segmentMinutesTotal > 0 ? seg.minutes / segmentMinutesTotal : (fallbackSegment.length > 0 ? 1 / fallbackSegment.length : 0);
+    const kwh = deliveredKwh * ratio;
+    const idleMinutes = billableIdleMinutes * ratio;
+    const energyAmountUsd = kwh * seg.pricePerKwhUsd;
+    const idleAmountUsd = idleMinutes * seg.idleFeePerMinUsd;
+    return {
+      ...seg,
+      kwh: Number(kwh.toFixed(6)),
+      energyAmountUsd: Number(energyAmountUsd.toFixed(6)),
+      idleMinutes: Number(idleMinutes.toFixed(6)),
+      idleAmountUsd: Number(idleAmountUsd.toFixed(6)),
+    };
+  });
+
+  const energyTotalUsd = detailedSegments.reduce((sum, seg) => sum + seg.energyAmountUsd, 0);
+  const idleTotalUsd = detailedSegments.reduce((sum, seg) => sum + seg.idleAmountUsd, 0);
+  const activationTotalUsd = Math.max(0, toFiniteNumber(session.activationFeeUsd) ?? 0);
+  const breakdownGrossUsd = energyTotalUsd + idleTotalUsd + activationTotalUsd;
+
+  const breakdown: BillingBreakdown = {
+    pricingMode,
+    durationMinutes: Number(durationForBreakdown.toFixed(6)),
+    gracePeriodMin: Number(gracePeriodMin.toFixed(6)),
+    energy: {
+      kwhDelivered: Number(deliveredKwh.toFixed(6)),
+      totalUsd: Number(energyTotalUsd.toFixed(6)),
+      segments: detailedSegments,
+    },
+    idle: {
+      minutes: Number(billableIdleMinutes.toFixed(6)),
+      totalUsd: Number(idleTotalUsd.toFixed(6)),
+      segments: detailedSegments.map((seg) => ({
+        startedAt: seg.startedAt,
+        endedAt: seg.endedAt,
+        minutes: seg.idleMinutes,
+        idleFeePerMinUsd: seg.idleFeePerMinUsd,
+        amountUsd: seg.idleAmountUsd,
+        source: seg.source,
+      })),
+    },
+    activation: {
+      totalUsd: Number(activationTotalUsd.toFixed(6)),
+    },
+    grossTotalUsd: Number(breakdownGrossUsd.toFixed(6)),
+  };
+
+  const hasBillableSignal = session.revenueUsd != null
+    || computedKwh != null
+    || durationMinutes != null
+    || (toFiniteNumber(session.activationFeeUsd) ?? 0) > 0;
+  const grossAmountCents = session.revenueUsd != null
+    ? Math.round(session.revenueUsd * 100)
+    : hasBillableSignal
+      ? Math.round(breakdown.grossTotalUsd * 100)
+      : null;
+
   const vendorFeeUsd = computeVendorFeeUsd({
     grossAmountUsd: (grossAmountCents ?? 0) / 100,
     kwhDelivered: computedKwh,
@@ -152,6 +278,17 @@ export function computeSessionAmounts(session: {
     grossAmountCents,
     vendorFeeCents,
     vendorFeeUsd,
+    billingBreakdown: {
+      ...breakdown,
+      totals: {
+        energyUsd: breakdown.energy.totalUsd,
+        idleUsd: breakdown.idle.totalUsd,
+        activationUsd: breakdown.activation.totalUsd,
+        grossUsd: Number((((grossAmountCents ?? 0)) / 100).toFixed(6)),
+        vendorFeeUsd: Number(vendorFeeUsd.toFixed(6)),
+        netUsd: Number(((effectiveAmountCents ?? 0) / 100).toFixed(6)),
+      },
+    },
     amountState,
     amountLabel,
     isAmountFinal: amountState === 'FINAL',
