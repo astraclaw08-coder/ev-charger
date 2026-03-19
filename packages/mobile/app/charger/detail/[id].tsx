@@ -465,6 +465,7 @@ export default function ChargerStartScreen() {
 
       const startedAt = Date.now();
       const timeoutMs = 120000;
+      const modalDisplayDelayMs = 2000;
 
       const pollForChargingTransition = async () => {
         try {
@@ -501,7 +502,7 @@ export default function ChargerStartScreen() {
           }
 
           if (isPreparingWithoutCharging) {
-            if (!activationModalDismissedRef.current) {
+            if (!activationModalDismissedRef.current && Date.now() - startedAt >= modalDisplayDelayMs) {
               setShowActivationModal(true);
             }
             setActivationDeadlineMs(startedAt + timeoutMs);
