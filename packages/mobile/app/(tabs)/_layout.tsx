@@ -160,6 +160,8 @@ export default function TabsLayout() {
           tabBarActiveTintColor: isDark ? '#f8fafc' : '#0f172a',
           tabBarInactiveTintColor: isDark ? '#94a3b8' : '#6b7280',
           tabBarActiveBackgroundColor: isDark ? '#243447' : '#e5e7eb',
+          tabBarStyle: { backgroundColor: 'transparent', borderTopWidth: 0, elevation: 0 },
+          tabBarBackground: () => <View style={{ flex: 1, backgroundColor: 'transparent' }} />,
           tabBarItemStyle: {
             justifyContent: 'center',
             alignItems: 'center',
