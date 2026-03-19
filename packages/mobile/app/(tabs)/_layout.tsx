@@ -1,5 +1,5 @@
 import React from 'react';
-import { Tabs, useRouter } from 'expo-router';
+import { Tabs } from 'expo-router';
 import { TouchableOpacity, Text, View } from 'react-native';
 import { BottomTabBar, type BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
@@ -231,6 +231,8 @@ export default function TabsLayout() {
             tabBarButton: (props) => (
               <TouchableOpacity
                 {...props}
+                testID="tab-scan-qr"
+                accessibilityLabel="tab-scan-qr"
                 onPress={() => router.replace('/(tabs)/index?openScanner=1' as any)}
               />
             ),
