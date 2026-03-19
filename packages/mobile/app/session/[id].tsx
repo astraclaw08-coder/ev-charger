@@ -16,7 +16,7 @@ import {
   PanResponder,
   Image,
 } from 'react-native';
-import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
+import { useLocalSearchParams, Stack } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, isDevMode, type Session } from '@/lib/api';
 import { useAppTheme } from '@/theme';
@@ -69,7 +69,7 @@ function hasLiveEnergySample(session: Session): boolean {
 }
 
 function formatPowerKw(value: number | null): string {
-  if (value == null || !Number.isFinite(value)) return '—';
+  if (value == null || !Number.isFinite(value)) return '-';
   return `${value.toFixed(1)} kW`;
 }
 
@@ -130,7 +130,6 @@ function SessionSummary({
   session: Session;
   fallbackKwh?: number;
 }) {
-  const router = useRouter();
   const { isDark } = useAppTheme();
   const ratePerKwh = session.ratePerKwh ?? RATE_PER_KWH;
   const meterDerivedKwh =
@@ -153,6 +152,9 @@ function SessionSummary({
   const displayEnergyUsd = breakdownTotals?.energyUsd ?? breakdown?.energy.totalUsd ?? 0;
   const displayIdleUsd = breakdownTotals?.idleUsd ?? breakdown?.idle.totalUsd ?? 0;
   const displayActivationUsd = breakdownTotals?.activationUsd ?? breakdown?.activation.totalUsd ?? 0;
+  const energySegments = breakdown?.energy.segments ?? [];
+  const idleSegments = breakdown?.idle.segments ?? [];
+  const gracePeriodMin = Math.max(0, breakdown?.gracePeriodMin ?? 0);
 
   const finalKwh =
     meterDerivedKwh > 0
@@ -172,10 +174,10 @@ function SessionSummary({
 
   return (
     <View style={styles.summaryContainer}>
-      <Text style={styles.summaryCheckmark}>✓</Text>
-      <Text style={[styles.summaryTitle, { color: isDark ? '#e2e8f0' : '#111827' }]}>Session Complete</Text>
-      <Text style={[styles.summarySubtitle, { color: isDark ? '#cbd5e1' : '#6b7280' }]}>{session.connector.charger.site.name}</Text>
+      <Text style={[styles.summarySubtitle, { color: isDark ? '#cbd5e1' : '#111827' }]}>{session.connector.charger.site.name}</Text>
       <Text style={[styles.summaryAddress, { color: isDark ? '#94a3b8' : '#6b7280' }]}>{session.connector.charger.site.address}</Text>
+      <Text style={[styles.summaryDetailLine, { color: isDark ? '#94a3b8' : '#6b7280' }]}>Charger S/N: {session.connector.charger.ocppId}</Text>
+      <Text style={[styles.summaryDetailLine, { color: isDark ? '#94a3b8' : '#6b7280' }]}>Transaction #: {session.transactionId ?? '-'}</Text>
 
       <View style={styles.summaryStats}>
         <SummaryStatCard label="ENERGY (kWh)" value={formatKwh(finalKwh)} icon="⚡" isDark={isDark} />
@@ -208,43 +210,39 @@ function SessionSummary({
       )}
 
       <View style={[styles.summaryMeta, { backgroundColor: isDark ? '#111827' : '#f3f4f6' }]}>
-        <Text style={[styles.metaText, { color: isDark ? '#cbd5e1' : '#6b7280' }]}>Started: {formatDate(session.startedAt)}</Text>
-        {session.endedAt && (
-          <Text style={[styles.metaText, { color: isDark ? '#cbd5e1' : '#6b7280' }]}>Ended: {formatDate(session.endedAt)}</Text>
+        <Text style={[styles.breakdownTitle, { color: isDark ? '#e2e8f0' : '#111827' }]}>Session Detail</Text>
+        <Text style={[styles.metaText, { color: isDark ? '#cbd5e1' : '#4b5563' }]}>Start: {formatDate(session.startedAt)}</Text>
+        <Text style={[styles.metaText, { color: isDark ? '#cbd5e1' : '#4b5563' }]}>End: {session.endedAt ? formatDate(session.endedAt) : '-'}</Text>
+
+        {energySegments.map((segment, idx) => (
+          <Text key={`${segment.startedAt}-${idx}`} style={[styles.metaText, { color: isDark ? '#cbd5e1' : '#4b5563' }]}>
+            {`${formatTime(segment.startedAt)} to ${formatTime(segment.endedAt)} @ $${segment.pricePerKwhUsd.toFixed(2)}/kWh * ${segment.kwh.toFixed(3)} kWh = $${segment.energyAmountUsd.toFixed(2)}`}
+          </Text>
+        ))}
+
+        {energySegments.length === 0 && (
+          <Text style={[styles.metaText, { color: isDark ? '#cbd5e1' : '#4b5563' }]}>-</Text>
         )}
-        <Text style={[styles.metaText, { color: isDark ? '#cbd5e1' : '#6b7280' }]}>Transaction #: {session.transactionId ?? '-'}</Text>
-        <Text style={[styles.metaText, { color: isDark ? '#cbd5e1' : '#6b7280' }]}>Charger Serial/Name: {session.connector.charger.ocppId}</Text>
-        <Text style={[styles.metaText, { color: isDark ? '#cbd5e1' : '#6b7280' }]}>Rate: ${ratePerKwh.toFixed(2)}/kWh</Text>
-        <Text style={[styles.metaText, { color: isDark ? '#cbd5e1' : '#6b7280' }]}>Payment Method: {paymentMethod}</Text>
-      </View>
 
-      {breakdown && (
-        <View style={[styles.summaryMeta, { backgroundColor: isDark ? '#111827' : '#f3f4f6' }]}>
-          <Text style={[styles.breakdownTitle, { color: isDark ? '#e2e8f0' : '#111827' }]}>Receipt Breakdown</Text>
-          {breakdown.energy.segments.map((segment, idx) => (
-            <Text key={`${segment.startedAt}-${idx}`} style={[styles.metaText, { color: isDark ? '#cbd5e1' : '#4b5563' }]}>
-              {`${formatTime(segment.startedAt)}-${formatTime(segment.endedAt)} · ${segment.kwh.toFixed(3)} kWh × $${segment.pricePerKwhUsd.toFixed(2)} = $${segment.energyAmountUsd.toFixed(2)}`}
-            </Text>
-          ))}
+        <Text style={[styles.metaText, { color: isDark ? '#cbd5e1' : '#4b5563' }]}>Energy = ${displayEnergyUsd.toFixed(2)}</Text>
+
+        {idleSegments.map((segment, idx) => (
+          <Text key={`${segment.startedAt}-${segment.endedAt}-${idx}`} style={[styles.metaText, { color: isDark ? '#cbd5e1' : '#4b5563' }]}>
+            {`${formatTime(segment.startedAt)} to ${formatTime(segment.endedAt)} * $${segment.idleFeePerMinUsd.toFixed(2)}/min = $${segment.amountUsd.toFixed(2)} (excludes grace period of ${gracePeriodMin.toFixed(1)} min)`}
+          </Text>
+        ))}
+
+        {idleSegments.length === 0 && (
           <Text style={[styles.metaText, { color: isDark ? '#cbd5e1' : '#4b5563' }]}>
-            {`Idle (${Math.max(0, breakdown.idle.minutes).toFixed(1)} min, ${Math.max(0, breakdown.gracePeriodMin).toFixed(1)} min grace): $${displayIdleUsd.toFixed(2)}`}
+            {`Idle = $${displayIdleUsd.toFixed(2)} (excludes grace period of ${gracePeriodMin.toFixed(1)} min)`}
           </Text>
-          {displayActivationUsd > 0 && (
-            <Text style={[styles.metaText, { color: isDark ? '#cbd5e1' : '#4b5563' }]}>Activation fee: ${displayActivationUsd.toFixed(2)}</Text>
-          )}
-          <Text style={[styles.metaText, styles.breakdownTotal, { color: isDark ? '#f8fafc' : '#111827' }]}>
-            {`Energy $${displayEnergyUsd.toFixed(2)} + Idle $${displayIdleUsd.toFixed(2)} + Activation $${displayActivationUsd.toFixed(2)} = $${cost.toFixed(2)}`}
-          </Text>
-        </View>
-      )}
+        )}
 
-
-      <TouchableOpacity
-        style={styles.doneButton}
-        onPress={() => router.replace('/(tabs)/sessions')}
-      >
-        <Text style={styles.doneButtonText}>View All Sessions</Text>
-      </TouchableOpacity>
+        <Text style={[styles.metaText, { color: isDark ? '#cbd5e1' : '#4b5563' }]}>Activation fee = ${displayActivationUsd.toFixed(2)}</Text>
+        <Text style={[styles.metaText, styles.breakdownTotal, { color: isDark ? '#f8fafc' : '#111827' }]}>Total = ${cost.toFixed(2)}</Text>
+        <Text style={[styles.metaText, { color: isDark ? '#cbd5e1' : '#4b5563' }]}>Payment card used: {paymentMethod}</Text>
+        <Text style={[styles.metaText, { color: isDark ? '#cbd5e1' : '#4b5563' }]}>Thank you for charging with us!</Text>
+      </View>
     </View>
   );
 }
@@ -344,9 +342,9 @@ function SlideAction({
   );
 
   return (
-    <View style={[styles.slideTrack, { backgroundColor: isDark ? '#1f2937' : '#e5e7eb', opacity: disabled ? 0.45 : 1, width: trackWidth }]}> 
+    <View style={[styles.slideTrack, { backgroundColor: isDark ? '#1f2937' : '#e5e7eb', opacity: disabled ? 0.45 : 1, width: trackWidth }]}>
       <Text style={[styles.slideLabel, { color: isDark ? '#d1d5db' : '#374151' }]}>{label}</Text>
-      <Animated.View {...pan.panHandlers} style={[styles.slideKnob, { transform: [{ translateX: x }] }]}> 
+      <Animated.View {...pan.panHandlers} style={[styles.slideKnob, { transform: [{ translateX: x }] }]}>
         <Image source={require('../../assets/branding/lumeo_logo_swirl_only.png')} style={styles.slideKnobLogo} resizeMode="contain" />
       </Animated.View>
     </View>
@@ -459,11 +457,11 @@ function LiveSessionView({
 
       {/* Site name */}
       <Text style={[styles.liveSiteName, { color: isDark ? '#f9fafb' : '#111827' }]}>{session.connector.charger.site.name}</Text>
-      <Text style={[styles.liveChargerSerial, { color: isDark ? '#94a3b8' : '#6b7280' }]}> 
+      <Text style={[styles.liveChargerSerial, { color: isDark ? '#94a3b8' : '#6b7280' }]}>
         Charger Serial/Name: {session.connector.charger.ocppId}
       </Text>
       {showConnectorLabel ? (
-        <Text style={[styles.liveConnector, { color: isDark ? '#9ca3af' : '#6b7280' }]}> 
+        <Text style={[styles.liveConnector, { color: isDark ? '#9ca3af' : '#6b7280' }]}>
           Connector {session.connector.connectorId}
         </Text>
       ) : null}
@@ -729,12 +727,11 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 24,
     alignItems: 'center',
-    paddingTop: 40,
+    paddingTop: 12,
   },
-  summaryCheckmark: { fontSize: 56, marginBottom: 12 },
-  summaryTitle: { fontSize: 24, fontWeight: '800', color: '#111827', marginBottom: 4 },
-  summarySubtitle: { fontSize: 14, color: '#6b7280', marginBottom: 4 },
-  summaryAddress: { fontSize: 13, marginBottom: 24, textAlign: 'center' },
+  summarySubtitle: { fontSize: 18, fontWeight: '700', color: '#6b7280', marginBottom: 4, textAlign: 'center' },
+  summaryAddress: { fontSize: 13, marginBottom: 4, textAlign: 'center' },
+  summaryDetailLine: { fontSize: 12, marginBottom: 2, textAlign: 'center' },
   summaryStats: {
     flexDirection: 'row',
     gap: 12,
