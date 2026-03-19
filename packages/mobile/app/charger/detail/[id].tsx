@@ -724,8 +724,8 @@ export default function ChargerStartScreen() {
             ) : null}
 
             {pricingMode === 'tou' && touWindows.length > 0 ? (
-              <View style={[styles.touCompact, { backgroundColor: isDark ? '#1e293b' : '#eff6ff', borderColor: isDark ? '#334155' : '#bfdbfe' }]}>
-                <Text style={[styles.touCompactTitle, { color: isDark ? '#bfdbfe' : '#1e40af' }]}>TOU pricing</Text>
+              <View style={[styles.touCompact, { backgroundColor: isDark ? '#1e293b' : '#f3f4f6', borderColor: isDark ? '#334155' : '#d1d5db' }]}>
+                <Text style={[styles.touCompactTitle, { color: isDark ? '#bfdbfe' : '#000000' }]}>TOU pricing</Text>
 
                 <View style={styles.priceTilesRow}>
                   <View style={[styles.priceTile, { backgroundColor: isDark ? '#0f172a' : '#ffffff' }]}>
