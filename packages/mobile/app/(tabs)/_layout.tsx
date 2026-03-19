@@ -115,6 +115,7 @@ function ActiveSessionBanner({ active }: { active: Session }) {
 }
 
 export default function TabsLayout() {
+  const router = useRouter();
   const { isDark } = useAppTheme();
   const { isGuest } = useAppAuth();
   const { activeSession: active, refetchSessions } = useChargingNotifications();
@@ -143,7 +144,8 @@ export default function TabsLayout() {
           tabBarItemStyle: {
             justifyContent: 'center',
             alignItems: 'center',
-            paddingVertical: 0,
+            paddingTop: 1,
+            paddingBottom: 1,
           },
           tabBarIconStyle: {
             marginTop: 0,
@@ -191,6 +193,20 @@ export default function TabsLayout() {
             tabBarLabel: 'Favorites',
             tabBarIcon: ({ size, color }) => <TabIcon icon="heart-outline" size={size} color={color} />,
             href: isGuest ? null : undefined,
+          }}
+        />
+        <Tabs.Screen
+          name="scan"
+          options={{
+            title: 'Lumeo',
+            tabBarLabel: 'Scan QR',
+            tabBarIcon: ({ size, color }) => <TabIcon icon="qr-code-outline" size={size} color={color} />,
+            tabBarButton: (props) => (
+              <TouchableOpacity
+                {...props}
+                onPress={() => router.push('/(tabs)/index?openScanner=1' as any)}
+              />
+            ),
           }}
         />
         <Tabs.Screen

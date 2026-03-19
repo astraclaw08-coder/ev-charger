@@ -12,7 +12,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useQuery } from '@tanstack/react-query';
@@ -77,6 +77,7 @@ function statusLabelFromStatuses(statuses: string[], chargerStatuses: string[]):
 
 export default function MapScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ openScanner?: string }>();
   const mapRef = useRef<MapView | null>(null);
   const searchInputRef = useRef<TextInput | null>(null);
   const regionRef = useRef<Region | null>(null);
@@ -97,6 +98,12 @@ export default function MapScreen() {
   const [torchEnabled, setTorchEnabled] = useState(false);
   const [manualStationNumber, setManualStationNumber] = useState('');
   const [selectedSite, setSelectedSite] = useState<SiteAggregate | null>(null);
+
+  useEffect(() => {
+    if (params.openScanner !== '1') return;
+    void openScanner();
+    router.setParams({ openScanner: undefined });
+  }, [params.openScanner]);
 
   const { data: chargers = [], refetch } = useQuery({
     queryKey: ['chargers'],
@@ -426,23 +433,6 @@ export default function MapScreen() {
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity
-          testID="map-qr-scan-tile"
-          accessibilityRole="button"
-          accessibilityLabel="Scan charger QR"
-          style={[
-            styles.qrTile,
-            {
-              bottom: controlsBottom + 64,
-              backgroundColor: isDark ? '#111827e8' : '#fffffff2',
-              borderColor: isDark ? '#374151' : '#d1d5db',
-            },
-          ]}
-          onPress={openScanner}
-        >
-          <Ionicons name="qr-code" size={30} color={isDark ? '#34d399' : '#065f46'} />
-        </TouchableOpacity>
-
         <View
           style={[
             styles.searchWrap,
@@ -682,17 +672,6 @@ const styles = StyleSheet.create({
   mapControls: { position: 'absolute', right: 12, gap: 8 },
   locateBtn: { width: 42, height: 42, backgroundColor: '#111827cc', borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
   zoomBtn: { width: 42, height: 42, backgroundColor: '#111827cc', borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  qrTile: {
-    position: 'absolute',
-    left: '50%',
-    marginLeft: -29,
-    borderRadius: 14,
-    borderWidth: 1,
-    width: 58,
-    height: 58,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   searchWrap: {
     position: 'absolute',
     left: 12,
