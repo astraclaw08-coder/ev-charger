@@ -260,7 +260,7 @@ export default function ProfileScreen() {
       <TouchableOpacity
         style={[
           styles.logoutBtn,
-          { backgroundColor: isDark ? '#374151' : '#4b5563' },
+          { backgroundColor: isDark ? '#6b7280' : '#4b5563' },
         ]}
         onPress={() => setShowLogoutConfirm(true)}
       >

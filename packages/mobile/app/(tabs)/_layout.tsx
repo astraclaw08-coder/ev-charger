@@ -134,6 +134,7 @@ function ActiveSessionBanner({ active }: { active: Session }) {
 }
 
 export default function TabsLayout() {
+  const router = useRouter();
   const { isDark } = useAppTheme();
   const { isGuest } = useAppAuth();
   const { activeSession: active, refetchSessions } = useChargingNotifications();
@@ -157,9 +158,9 @@ export default function TabsLayout() {
           />
         )}
         screenOptions={{
-          tabBarActiveTintColor: isDark ? '#f8fafc' : '#0f172a',
+          tabBarActiveTintColor: isDark ? '#ffffff' : '#000000',
           tabBarInactiveTintColor: isDark ? '#94a3b8' : '#6b7280',
-          tabBarActiveBackgroundColor: isDark ? '#243447' : '#e5e7eb',
+          tabBarActiveBackgroundColor: 'transparent',
           tabBarStyle: { backgroundColor: 'transparent', borderTopWidth: 0, elevation: 0 },
           tabBarBackground: () => <View style={{ flex: 1, backgroundColor: 'transparent' }} />,
           tabBarItemStyle: {
@@ -227,6 +228,12 @@ export default function TabsLayout() {
             title: 'Lumeo',
             tabBarLabel: 'Scan QR',
             tabBarIcon: ({ size, color }) => <TabIcon icon="qr-code-outline" size={size} color={color} />,
+            tabBarButton: (props) => (
+              <TouchableOpacity
+                {...props}
+                onPress={() => router.replace('/(tabs)/index?openScanner=1' as any)}
+              />
+            ),
           }}
         />
         <Tabs.Screen

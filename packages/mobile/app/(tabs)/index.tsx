@@ -451,6 +451,12 @@ export default function MapScreen() {
             },
           ]}
         >
+          <Ionicons
+            name="search"
+            size={16}
+            color={isDark ? '#9ca3af' : '#6b7280'}
+            style={styles.searchIcon}
+          />
           <TextInput
             ref={searchInputRef}
             testID="map-search-input"
@@ -692,6 +698,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#ffffff33',
   },
+  searchIcon: { marginRight: 8 },
   searchInput: { fontSize: 14, fontWeight: '600', flex: 1, paddingRight: 40 },
   clearBtn: {
     position: 'absolute',
