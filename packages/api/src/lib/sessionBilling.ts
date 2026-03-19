@@ -140,6 +140,8 @@ export function computeSessionAmounts(session: {
   gracePeriodMin?: number | null;
   touWindows?: unknown;
   softwareFeeIncludesActivation?: boolean;
+  idleStartedAt?: Date | string | null;
+  idleStoppedAt?: Date | string | null;
 }) {
   const computedKwh = computeDeliveredKwh(session);
   const durationMinutes = resolveDurationMinutes(session);
@@ -173,24 +175,64 @@ export function computeSessionAmounts(session: {
       }];
 
   const segmentMinutesTotal = fallbackSegment.reduce((sum, seg) => sum + seg.minutes, 0);
-  const billableIdleMinutes = Math.max(0, durationForBreakdown - gracePeriodMin);
+
+  const idleWindowMinutes = resolveDurationMinutes({
+    startedAt: session.idleStartedAt,
+    stoppedAt: session.idleStoppedAt,
+  }) ?? 0;
+  const billableIdleMinutes = Math.max(0, idleWindowMinutes - gracePeriodMin);
+
+  const idleRawSegments = idleWindowMinutes > 0 && session.idleStartedAt && session.idleStoppedAt
+    ? splitTouDuration({
+        startedAt: session.idleStartedAt,
+        stoppedAt: session.idleStoppedAt,
+        pricingMode,
+        defaultPricePerKwhUsd: pricePerKwhUsd,
+        defaultIdleFeePerMinUsd: idleFeePerMinUsd,
+        touWindows: session.touWindows,
+      })
+    : [];
+  const idleSegmentsBase = idleRawSegments.length > 0
+    ? idleRawSegments
+    : [{
+        startedAt: session.idleStartedAt ? new Date(session.idleStartedAt).toISOString() : (session.startedAt ? new Date(session.startedAt).toISOString() : new Date(0).toISOString()),
+        endedAt: session.idleStoppedAt ? new Date(session.idleStoppedAt).toISOString() : (session.startedAt ? new Date(session.startedAt).toISOString() : new Date(0).toISOString()),
+        minutes: idleWindowMinutes,
+        pricePerKwhUsd,
+        idleFeePerMinUsd,
+        source: 'flat' as const,
+      }];
+  const idleSegmentMinutesTotal = idleSegmentsBase.reduce((sum, seg) => sum + seg.minutes, 0);
+
   const detailedSegments: BillingSegment[] = fallbackSegment.map((seg) => {
     const ratio = segmentMinutesTotal > 0 ? seg.minutes / segmentMinutesTotal : (fallbackSegment.length > 0 ? 1 / fallbackSegment.length : 0);
     const kwh = deliveredKwh * ratio;
-    const idleMinutes = billableIdleMinutes * ratio;
     const energyAmountUsd = kwh * seg.pricePerKwhUsd;
-    const idleAmountUsd = idleMinutes * seg.idleFeePerMinUsd;
     return {
       ...seg,
       kwh: Number(kwh.toFixed(6)),
       energyAmountUsd: Number(energyAmountUsd.toFixed(6)),
-      idleMinutes: Number(idleMinutes.toFixed(6)),
-      idleAmountUsd: Number(idleAmountUsd.toFixed(6)),
+      idleMinutes: 0,
+      idleAmountUsd: 0,
+    };
+  });
+
+  const idleBreakdownSegments = idleSegmentsBase.map((seg) => {
+    const ratio = idleSegmentMinutesTotal > 0 ? seg.minutes / idleSegmentMinutesTotal : (idleSegmentsBase.length > 0 ? 1 / idleSegmentsBase.length : 0);
+    const minutes = billableIdleMinutes * ratio;
+    const amountUsd = minutes * seg.idleFeePerMinUsd;
+    return {
+      startedAt: seg.startedAt,
+      endedAt: seg.endedAt,
+      minutes: Number(minutes.toFixed(6)),
+      idleFeePerMinUsd: seg.idleFeePerMinUsd,
+      amountUsd: Number(amountUsd.toFixed(6)),
+      source: seg.source,
     };
   });
 
   const energyTotalUsd = detailedSegments.reduce((sum, seg) => sum + seg.energyAmountUsd, 0);
-  const idleTotalUsd = detailedSegments.reduce((sum, seg) => sum + seg.idleAmountUsd, 0);
+  const idleTotalUsd = idleBreakdownSegments.reduce((sum, seg) => sum + seg.amountUsd, 0);
   const activationTotalUsd = Math.max(0, toFiniteNumber(session.activationFeeUsd) ?? 0);
   const breakdownGrossUsd = energyTotalUsd + idleTotalUsd + activationTotalUsd;
 
@@ -206,14 +248,7 @@ export function computeSessionAmounts(session: {
     idle: {
       minutes: Number(billableIdleMinutes.toFixed(6)),
       totalUsd: Number(idleTotalUsd.toFixed(6)),
-      segments: detailedSegments.map((seg) => ({
-        startedAt: seg.startedAt,
-        endedAt: seg.endedAt,
-        minutes: seg.idleMinutes,
-        idleFeePerMinUsd: seg.idleFeePerMinUsd,
-        amountUsd: seg.idleAmountUsd,
-        source: seg.source,
-      })),
+      segments: idleBreakdownSegments,
     },
     activation: {
       totalUsd: Number(activationTotalUsd.toFixed(6)),
