@@ -31,19 +31,19 @@ function ActiveSessionBanner({ active }: { active: Session }) {
       right: 0,
       bottom: 0,
       zIndex: 1,
-      backgroundColor: isDark ? '#030712' : '#f9fafb',
+      backgroundColor: 'transparent',
       paddingHorizontal: 12,
       paddingBottom: Math.max(insets.bottom, 8),
       paddingTop: 4,
     }}>
       <TouchableOpacity
         style={{
-          borderRadius: 12,
+          borderRadius: 16,
           paddingVertical: 10,
           paddingHorizontal: 12,
-          backgroundColor: isDark ? '#0f172a' : '#ecfeff',
+          backgroundColor: isDark ? 'rgba(15, 23, 42, 0.74)' : 'rgba(255, 255, 255, 0.72)',
           borderWidth: 1,
-          borderColor: isDark ? '#334155' : '#bae6fd',
+          borderColor: isDark ? '#334155cc' : '#cbd5e199',
           flexDirection: 'row',
           alignItems: 'center',
           justifyContent: 'space-between',
@@ -52,17 +52,17 @@ function ActiveSessionBanner({ active }: { active: Session }) {
         activeOpacity={0.85}
       >
         <View style={{ flex: 1, paddingRight: 8 }}>
-          <Text style={{ color: isDark ? '#bae6fd' : '#0369a1', fontWeight: '800', fontSize: 12 }}>
+          <Text style={{ color: isDark ? '#dbeafe' : '#374151', fontWeight: '800', fontSize: 12 }}>
             ⚡ Active charging session
           </Text>
-          <Text numberOfLines={1} style={{ color: isDark ? '#f8fafc' : '#0f172a', fontWeight: '700', fontSize: 13, marginTop: 2 }}>
+          <Text numberOfLines={1} style={{ color: isDark ? '#f8fafc' : '#111827', fontWeight: '700', fontSize: 13, marginTop: 2 }}>
             {siteName}
           </Text>
-          <Text style={{ color: isDark ? '#cbd5e1' : '#334155', fontSize: 12, marginTop: 1 }}>
+          <Text style={{ color: isDark ? '#cbd5e1' : '#4b5563', fontSize: 12, marginTop: 1 }}>
             {kwh.toFixed(2)} kWh · {formatElapsed(active.startedAt)} · Tap to return
           </Text>
         </View>
-        <Text style={{ color: isDark ? '#93c5fd' : '#0284c7', fontWeight: '800' }}>Open</Text>
+        <Text style={{ color: isDark ? '#e2e8f0' : '#111827', fontWeight: '800' }}>Open</Text>
       </TouchableOpacity>
     </View>
   );
@@ -79,7 +79,7 @@ export default function TabsLayout() {
   }, [isGuest, refetchSessions]);
   const bannerVisible = Boolean(active);
   const tabIconGap = 6;
-  const tabBottomGap = bannerVisible ? tabIconGap : Math.max(insets.bottom, 8);
+  const tabBottomGap = Math.max(insets.bottom, 8);
 
   return (
     <>
@@ -89,13 +89,23 @@ export default function TabsLayout() {
           tabBarActiveTintColor: isDark ? '#67e8f9' : '#0f766e',
           tabBarInactiveTintColor: isDark ? '#64748b' : '#94a3b8',
           tabBarStyle: {
-            borderTopColor: isDark ? '#1f293766' : '#e5e7ebaa',
-            backgroundColor: isDark ? '#0b1220cc' : '#ffffffcc',
+            borderTopColor: 'transparent',
+            borderTopWidth: 0,
+            backgroundColor: isDark ? 'rgba(11, 18, 32, 0.80)' : 'rgba(255, 255, 255, 0.76)',
             position: 'absolute',
+            left: 12,
+            right: 12,
+            bottom: bannerVisible ? 72 + Math.max(insets.bottom, 8) : Math.max(insets.bottom, 8),
+            borderRadius: 20,
             paddingBottom: tabBottomGap,
             paddingTop: tabIconGap,
             height: 62 + tabBottomGap,
-            marginBottom: bannerVisible ? 72 + Math.max(insets.bottom, 8) : 0,
+            marginBottom: 0,
+            shadowColor: '#000',
+            shadowOpacity: isDark ? 0.25 : 0.12,
+            shadowRadius: 12,
+            shadowOffset: { width: 0, height: 6 },
+            elevation: 10,
           },
           tabBarItemStyle: {
             justifyContent: 'center',
@@ -110,7 +120,7 @@ export default function TabsLayout() {
             fontSize: 11,
             letterSpacing: 0.2,
           },
-          sceneStyle: { backgroundColor: isDark ? '#030712' : '#f9fafb' },
+          sceneStyle: { backgroundColor: bannerVisible ? 'transparent' : (isDark ? '#030712' : '#f9fafb') },
           headerStyle: { backgroundColor: isDark ? '#0b1220' : '#fff' },
           headerTitle: 'Lumeo',
           headerTitleStyle: {
