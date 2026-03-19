@@ -113,6 +113,20 @@ function currentTouWindow(windows: TouWindowMobile[]): TouWindowMobile | null {
   }) ?? null;
 }
 
+function nextTouWindow(windows: TouWindowMobile[]): TouWindowMobile | null {
+  if (!windows.length) return null;
+  const now = new Date();
+  const nowDay = now.getDay();
+  const nowMins = now.getHours() * 60 + now.getMinutes();
+
+  for (let offset = 0; offset < 7; offset += 1) {
+    const day = (nowDay + offset) % 7;
+    const candidate = windows.find((w) => w.day === day && (offset > 0 || toMinutes(w.start) > nowMins));
+    if (candidate) return candidate;
+  }
+  return null;
+}
+
 function SlideToStart({
   disabled,
   isDark,
@@ -640,6 +654,9 @@ export default function ChargerStartScreen() {
   const pricingMode = String((charger.site as any).pricingMode ?? 'flat');
   const touWindows = parseTouWindows((charger.site as any).touWindows);
   const nowTou = currentTouWindow(touWindows);
+  const upcomingTou = nextTouWindow(touWindows);
+  const displayedEnergyRate = pricingMode === 'tou' && nowTou ? nowTou.pricePerKwhUsd : pricePerKwhUsd;
+  const displayedIdleRate = pricingMode === 'tou' && nowTou ? nowTou.idleFeePerMinUsd : idleFeePerMinUsd;
 
   const liveKwh = activeSession ? getLiveKwh(activeSession) : 0;
   const liveRate = Number(activeSession?.ratePerKwh ?? pricePerKwhUsd);
@@ -733,31 +750,50 @@ export default function ChargerStartScreen() {
               </>
             ) : null}
 
-            {pricingMode === 'tou' && touWindows.length > 0 && (
-              <View style={[styles.touCompact, { backgroundColor: isDark ? '#1e293b' : '#eff6ff', borderColor: isDark ? '#334155' : '#bfdbfe' }]}>
-                <Text style={[styles.touCompactTitle, { color: isDark ? '#bfdbfe' : '#1e40af' }]}>Dynamic TOU pricing active</Text>
+            {pricingMode === 'tou' && touWindows.length > 0 ? (
+              <View style={[styles.touCompact, { backgroundColor: isDark ? '#1e293b' : '#eff6ff', borderColor: isDark ? '#334155' : '#bfdbfe' }]}> 
+                <Text style={[styles.touCompactTitle, { color: isDark ? '#bfdbfe' : '#1e40af' }]}>TOU pricing</Text>
                 {nowTou ? (
-                  <Text style={[styles.touCompactBody, { color: isDark ? '#dbeafe' : '#1e3a8a' }]}>Now: {range12(nowTou.start, nowTou.end)} · ${nowTou.pricePerKwhUsd.toFixed(2)}/kWh · ${nowTou.idleFeePerMinUsd.toFixed(2)}/min idle</Text>
+                  <Text style={[styles.touCompactBody, { color: isDark ? '#dbeafe' : '#1e3a8a' }]}>Now: {range12(nowTou.start, nowTou.end)}</Text>
                 ) : (
-                  <Text style={[styles.touCompactBody, { color: isDark ? '#dbeafe' : '#1e3a8a' }]}>Rates vary by time of day. See site detail for full schedule.</Text>
+                  <Text style={[styles.touCompactBody, { color: isDark ? '#dbeafe' : '#1e3a8a' }]}>TOU schedule active — next rate window shown below.</Text>
                 )}
+                {upcomingTou ? (
+                  <Text style={[styles.touCompactSubtext, { color: isDark ? '#93c5fd' : '#1d4ed8' }]}>Next: {range12(upcomingTou.start, upcomingTou.end)}</Text>
+                ) : null}
+
+                <View style={styles.priceTilesRow}>
+                  <View style={[styles.priceTile, { backgroundColor: isDark ? '#0f172a' : '#ffffff' }]}> 
+                    <Text style={[styles.priceTileLabel, { color: isDark ? '#9ca3af' : '#64748b' }]}>Energy (now)</Text>
+                    <Text style={[styles.priceTileValue, { color: isDark ? '#f9fafb' : '#0f172a' }]}>${displayedEnergyRate.toFixed(2)}/kWh</Text>
+                  </View>
+                  <View style={[styles.priceTile, { backgroundColor: isDark ? '#0f172a' : '#ffffff' }]}> 
+                    <Text style={[styles.priceTileLabel, { color: isDark ? '#9ca3af' : '#64748b' }]}>Idle (now)</Text>
+                    <Text style={[styles.priceTileValue, { color: isDark ? '#f9fafb' : '#0f172a' }]}>${displayedIdleRate.toFixed(2)}/min</Text>
+                  </View>
+                </View>
+
+                <View style={[styles.activationInline, { backgroundColor: isDark ? '#0f172a' : '#dbeafe' }]}> 
+                  <Text style={[styles.activationInlineLabel, { color: isDark ? '#cbd5e1' : '#1e3a8a' }]}>Activation fee (once per session)</Text>
+                  <Text style={[styles.activationInlineValue, { color: isDark ? '#f8fafc' : '#0f172a' }]}>${activationFeeUsd.toFixed(2)}</Text>
+                </View>
+              </View>
+            ) : (
+              <View style={styles.priceTilesRow}>
+                <View style={[styles.priceTile, { backgroundColor: isDark ? '#0f172a' : '#f1f5f9' }]}> 
+                  <Text style={[styles.priceTileLabel, { color: isDark ? '#9ca3af' : '#64748b' }]}>Energy</Text>
+                  <Text style={[styles.priceTileValue, { color: isDark ? '#f9fafb' : '#0f172a' }]}>${displayedEnergyRate.toFixed(2)}/kWh</Text>
+                </View>
+                <View style={[styles.priceTile, { backgroundColor: isDark ? '#0f172a' : '#f1f5f9' }]}> 
+                  <Text style={[styles.priceTileLabel, { color: isDark ? '#9ca3af' : '#64748b' }]}>Idle</Text>
+                  <Text style={[styles.priceTileValue, { color: isDark ? '#f9fafb' : '#0f172a' }]}>${displayedIdleRate.toFixed(2)}/min</Text>
+                </View>
+                <View style={[styles.priceTile, { backgroundColor: isDark ? '#0f172a' : '#f1f5f9' }]}> 
+                  <Text style={[styles.priceTileLabel, { color: isDark ? '#9ca3af' : '#64748b' }]}>Activation</Text>
+                  <Text style={[styles.priceTileValue, { color: isDark ? '#f9fafb' : '#0f172a' }]}>${activationFeeUsd.toFixed(2)}</Text>
+                </View>
               </View>
             )}
-
-            <View style={styles.priceTilesRow}>
-              <View style={[styles.priceTile, { backgroundColor: isDark ? '#0f172a' : '#f1f5f9' }]}>
-                <Text style={[styles.priceTileLabel, { color: isDark ? '#9ca3af' : '#64748b' }]}>Energy</Text>
-                <Text style={[styles.priceTileValue, { color: isDark ? '#f9fafb' : '#0f172a' }]}>${pricePerKwhUsd.toFixed(2)}/kWh</Text>
-              </View>
-              <View style={[styles.priceTile, { backgroundColor: isDark ? '#0f172a' : '#f1f5f9' }]}>
-                <Text style={[styles.priceTileLabel, { color: isDark ? '#9ca3af' : '#64748b' }]}>Idle</Text>
-                <Text style={[styles.priceTileValue, { color: isDark ? '#f9fafb' : '#0f172a' }]}>${idleFeePerMinUsd.toFixed(2)}/min</Text>
-              </View>
-              <View style={[styles.priceTile, { backgroundColor: isDark ? '#0f172a' : '#f1f5f9' }]}>
-                <Text style={[styles.priceTileLabel, { color: isDark ? '#9ca3af' : '#64748b' }]}>Activation</Text>
-                <Text style={[styles.priceTileValue, { color: isDark ? '#f9fafb' : '#0f172a' }]}>${activationFeeUsd.toFixed(2)}</Text>
-              </View>
-            </View>
 
 
           </View>
@@ -773,7 +809,7 @@ export default function ChargerStartScreen() {
                 <Text style={[styles.paymentCardBody, { color: isDark ? '#cbd5e1' : '#334155' }]}>
                   {hasPaymentMethod ? paymentLabel : 'No payment method added yet'}
                 </Text>
-                <Text style={[styles.paymentCardHint, { color: isDark ? '#93c5fd' : '#1d4ed8' }]}> 
+                <Text style={[styles.paymentCardHint, { color: isDark ? '#93c5fd' : '#1d4ed8' }]}>
                   {hasPaymentMethod ? 'Tap to change card or add a new card' : 'Tap to add a payment card'}
                 </Text>
               </TouchableOpacity>
@@ -1043,11 +1079,23 @@ const styles = StyleSheet.create({
   heroTitle: { fontSize: 18, fontWeight: '800', textAlign: 'center' },
   heroSubtitle: { fontSize: 13, marginTop: 2, textAlign: 'center' },
 
-  touCompact: { borderWidth: 1, borderRadius: 12, paddingVertical: 9, paddingHorizontal: 10, marginBottom: 8 },
-  touCompactTitle: { fontSize: 11, fontWeight: '800', marginBottom: 2 },
-  touCompactBody: { fontSize: 11, lineHeight: 16, fontWeight: '600' },
+  touCompact: { borderWidth: 1, borderRadius: 12, paddingVertical: 10, paddingHorizontal: 10, marginBottom: 8, gap: 8 },
+  touCompactTitle: { fontSize: 12, fontWeight: '900' },
+  touCompactBody: { fontSize: 12, lineHeight: 17, fontWeight: '700' },
+  touCompactSubtext: { fontSize: 11, fontWeight: '700' },
 
   priceTilesRow: { flexDirection: 'row', gap: 8 },
+  activationInline: {
+    marginTop: 2,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  activationInlineLabel: { fontSize: 11, fontWeight: '700' },
+  activationInlineValue: { fontSize: 15, fontWeight: '900' },
   priceTile: { flex: 1, borderRadius: 12, paddingVertical: 9, paddingHorizontal: 8, alignItems: 'center' },
   priceTileLabel: { fontSize: 11, fontWeight: '700', textAlign: 'center' },
   priceTileValue: { fontSize: 14, fontWeight: '800', marginTop: 3, textAlign: 'center' },
