@@ -6,10 +6,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '@/theme';
 import { parseChargerQrPayload } from '@/lib/chargerQr';
 import { api } from '@/lib/api';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function ScanScreen() {
   const router = useRouter();
   const { isDark } = useAppTheme();
+  const tabBarHeight = useBottomTabBarHeight();
+  const insets = useSafeAreaInsets();
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [scanLocked, setScanLocked] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -80,7 +84,15 @@ export default function ScanScreen() {
   const noPermission = cameraPermission && !cameraPermission.granted;
 
   return (
-    <View style={[styles.container, { backgroundColor: isDark ? '#020617' : '#f8fafc' }]}>
+    <View
+      style={[
+        styles.container,
+        {
+          backgroundColor: isDark ? '#020617' : '#f8fafc',
+          paddingBottom: Math.max(tabBarHeight + 14, insets.bottom + 90),
+        },
+      ]}
+    >
       <View style={styles.header}>
         <Text style={[styles.title, { color: isDark ? '#f9fafb' : '#111827' }]}>Scan Charger QR</Text>
         <TouchableOpacity onPress={() => router.replace('/(tabs)/index' as any)} style={[styles.doneBtn, { backgroundColor: isDark ? '#1f2937' : '#e5e7eb' }]}>
@@ -143,7 +155,7 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
   title: { fontSize: 22, fontWeight: '800' },
   doneBtn: { borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 },
-  cameraWrap: { flex: 1, borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: '#334155', position: 'relative' },
+  cameraWrap: { height: '58%', minHeight: 320, borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: '#334155', position: 'relative' },
   camera: { flex: 1 },
   frame: { position: 'absolute', left: '14%', right: '14%', top: '24%', bottom: '24%', borderWidth: 2, borderColor: '#67e8f9', borderRadius: 14 },
   centerState: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, paddingHorizontal: 20 },
