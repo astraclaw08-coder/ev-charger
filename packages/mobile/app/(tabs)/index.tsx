@@ -112,8 +112,8 @@ export default function MapScreen() {
     placeholderData: (prev) => prev,
   });
 
-  const activeBannerOffset = activeSession ? 72 + Math.max(insets.bottom, 8) : 0;
-  const controlsBottom = tabBarHeight + activeBannerOffset + 8;
+  const activeBannerOffset = activeSession ? 58 + Math.max(insets.bottom, 8) : 0;
+  const controlsBottom = tabBarHeight + activeBannerOffset - 14;
 
   useEffect(() => {
     (async () => {
@@ -427,7 +427,7 @@ export default function MapScreen() {
           })}
         </MapView>
 
-        <View pointerEvents="box-none" style={[styles.mapControls, { bottom: controlsBottom + 72 }]}> 
+        <View pointerEvents="box-none" style={[styles.mapControls, { bottom: controlsBottom + 58 }]}> 
           <TouchableOpacity style={styles.locateBtn} onPress={recenterToUser}>
             <Ionicons name="locate" size={20} color="#ffffff" />
           </TouchableOpacity>

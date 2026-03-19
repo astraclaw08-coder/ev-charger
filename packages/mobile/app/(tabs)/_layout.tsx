@@ -28,7 +28,7 @@ function estimateActiveCostUsd(active: Session): number {
   return 0;
 }
 
-const TAB_CONTENT_SHIFT_Y = 14;
+const TAB_CONTENT_SHIFT_Y = 8;
 
 function FloatingTabBar({
   isDark,
@@ -43,7 +43,7 @@ function FloatingTabBar({
         position: 'absolute',
         left: 12,
         right: 12,
-        bottom: bannerVisible ? 72 + Math.max(safeAreaBottom, 8) : Math.max(safeAreaBottom, 8),
+        bottom: bannerVisible ? 58 + Math.max(safeAreaBottom, 8) : Math.max(safeAreaBottom, 8),
       }}
     >
       <View
@@ -167,9 +167,10 @@ export default function TabsLayout() {
             paddingTop: 2,
             paddingBottom: 0,
             transform: [{ translateY: TAB_CONTENT_SHIFT_Y }],
-            borderRadius: 12,
-            marginHorizontal: 4,
-            marginVertical: 4,
+            borderRadius: 18,
+            marginHorizontal: 2,
+            marginVertical: 2,
+            overflow: 'hidden',
           },
           tabBarIconStyle: {
             marginTop: 0,
