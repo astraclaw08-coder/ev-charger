@@ -18,6 +18,16 @@ function formatElapsed(startedAt: string): string {
   return `${h}h ${m}m`;
 }
 
+function estimateActiveCostUsd(active: Session): number {
+  const cents = active.effectiveAmountCents ?? active.estimatedAmountCents ?? active.costEstimateCents;
+  if (cents != null && Number.isFinite(Number(cents))) return Math.max(0, Number(cents) / 100);
+
+  const kwh = Number(active.kwhDelivered ?? 0);
+  const rate = Number(active.ratePerKwh ?? 0);
+  if (kwh > 0 && rate > 0) return kwh * rate;
+  return 0;
+}
+
 function FloatingTabBar({
   isDark,
   safeAreaBottom,
@@ -53,8 +63,8 @@ function FloatingTabBar({
           style={{
             borderTopWidth: 0,
             backgroundColor: isDark ? '#0b1220' : '#ffffff',
-            paddingTop: 6,
-            paddingBottom: Math.max(safeAreaBottom, 6),
+            paddingTop: 8,
+            paddingBottom: Math.max(safeAreaBottom, 4),
             minHeight: 56 + Math.max(safeAreaBottom, 6),
           }}
         />
@@ -68,6 +78,7 @@ function ActiveSessionBanner({ active }: { active: Session }) {
   const { isDark } = useAppTheme();
   const insets = useSafeAreaInsets();
   const kwh = active.kwhDelivered ?? 0;
+  const costUsd = estimateActiveCostUsd(active);
   const siteName = active.connector.charger.site.name;
 
   return (
@@ -97,18 +108,22 @@ function ActiveSessionBanner({ active }: { active: Session }) {
         onPress={() => router.push(`/charger/detail/${active.connector.charger.id}`)}
         activeOpacity={0.85}
       >
-        <View style={{ flex: 1, paddingRight: 8 }}>
-          <Text style={{ color: isDark ? '#dbeafe' : '#374151', fontWeight: '800', fontSize: 12 }}>
-            ⚡ Active charging session
-          </Text>
+        <View style={{ flex: 1 }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6 }}>
+            <Text style={{ color: isDark ? '#9ca3af' : '#6b7280', fontWeight: '800', fontSize: 12 }}>
+              ⚡
+            </Text>
+            <Text style={{ color: isDark ? '#9ca3af' : '#6b7280', fontWeight: '800', fontSize: 12 }}>
+              Active charging session
+            </Text>
+          </View>
           <Text numberOfLines={1} style={{ color: isDark ? '#f8fafc' : '#111827', fontWeight: '700', fontSize: 13, marginTop: 2 }}>
             {siteName}
           </Text>
           <Text style={{ color: isDark ? '#cbd5e1' : '#4b5563', fontSize: 12, marginTop: 1 }}>
-            {kwh.toFixed(2)} kWh · {formatElapsed(active.startedAt)} · Tap to return
+            {kwh.toFixed(2)} kWh · ${costUsd.toFixed(2)} · {formatElapsed(active.startedAt)}
           </Text>
         </View>
-        <Text style={{ color: isDark ? '#e2e8f0' : '#111827', fontWeight: '800' }}>Open</Text>
       </TouchableOpacity>
     </View>
   );
@@ -144,8 +159,8 @@ export default function TabsLayout() {
           tabBarItemStyle: {
             justifyContent: 'center',
             alignItems: 'center',
-            paddingTop: 1,
-            paddingBottom: 1,
+            paddingTop: 2,
+            paddingBottom: 0,
           },
           tabBarIconStyle: {
             marginTop: 0,
@@ -182,7 +197,7 @@ export default function TabsLayout() {
             headerStyle: { backgroundColor: 'transparent' },
             headerShadowVisible: false,
             headerTitleAlign: 'center',
-            tabBarLabel: 'Find Charger',
+            tabBarLabel: 'Map',
             tabBarIcon: ({ size, color }) => <TabIcon icon="map-outline" size={size} color={color} />,
           }}
         />
