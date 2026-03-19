@@ -113,7 +113,7 @@ export default function MapScreen() {
   });
 
   const activeBannerOffset = activeSession ? 58 + Math.max(insets.bottom, 8) : 0;
-  const controlsBottom = tabBarHeight + activeBannerOffset - 14;
+  const controlsBottom = tabBarHeight + activeBannerOffset + 6;
 
   useEffect(() => {
     (async () => {
@@ -428,8 +428,17 @@ export default function MapScreen() {
         </MapView>
 
         <View pointerEvents="box-none" style={[styles.mapControls, { bottom: controlsBottom + 58 }]}> 
-          <TouchableOpacity style={styles.locateBtn} onPress={recenterToUser}>
-            <Ionicons name="locate" size={20} color="#ffffff" />
+          <TouchableOpacity
+            style={[
+              styles.locateBtn,
+              {
+                backgroundColor: isDark ? '#111827e6' : '#fffffff0',
+                borderColor: isDark ? '#374151' : '#d1d5db',
+              },
+            ]}
+            onPress={recenterToUser}
+          >
+            <Ionicons name="locate" size={20} color={isDark ? '#f9fafb' : '#0f172a'} />
           </TouchableOpacity>
         </View>
 
@@ -670,7 +679,7 @@ const styles = StyleSheet.create({
   mapSection: { flex: 1, position: 'relative' },
   map: { flex: 1 },
   mapControls: { position: 'absolute', right: 12, gap: 8 },
-  locateBtn: { width: 42, height: 42, backgroundColor: '#111827cc', borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
+  locateBtn: { width: 42, height: 42, borderRadius: 21, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   zoomBtn: { width: 42, height: 42, backgroundColor: '#111827cc', borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   searchWrap: {
     position: 'absolute',

@@ -50,9 +50,9 @@ function FloatingTabBar({
         style={{
           borderRadius: 20,
           overflow: 'hidden',
-          backgroundColor: isDark ? '#0b1220' : '#ffffff',
+          backgroundColor: isDark ? '#111827f2' : '#fffffff2',
           borderWidth: 1,
-          borderColor: isDark ? '#1f2937' : '#e5e7eb',
+          borderColor: isDark ? '#374151' : '#d1d5db',
           shadowColor: '#000',
           shadowOpacity: isDark ? 0.25 : 0.12,
           shadowRadius: 12,
@@ -64,7 +64,7 @@ function FloatingTabBar({
           {...tabProps}
           style={{
             borderTopWidth: 0,
-            backgroundColor: isDark ? '#0b1220' : '#ffffff',
+            backgroundColor: isDark ? '#111827f2' : '#fffffff2',
             paddingTop: 8,
             paddingBottom: Math.max(safeAreaBottom, 4),
             minHeight: 56 + Math.max(safeAreaBottom, 6),
@@ -160,17 +160,33 @@ export default function TabsLayout() {
         screenOptions={{
           tabBarActiveTintColor: isDark ? '#e2e8f0' : '#0f172a',
           tabBarInactiveTintColor: isDark ? '#64748b' : '#94a3b8',
-          tabBarActiveBackgroundColor: isDark ? '#1e293b' : '#e2e8f0',
+          tabBarButton: (props) => {
+            const selected = Boolean((props as any)?.accessibilityState?.selected);
+            return (
+              <TouchableOpacity
+                {...props}
+                style={[
+                  props.style,
+                  {
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    transform: [{ translateY: TAB_CONTENT_SHIFT_Y }],
+                    borderRadius: 22,
+                    marginHorizontal: 1,
+                    marginVertical: 1,
+                    paddingHorizontal: 6,
+                    paddingVertical: 6,
+                    backgroundColor: selected ? (isDark ? '#243447' : '#e2e8f0') : 'transparent',
+                  },
+                ]}
+              />
+            );
+          },
           tabBarItemStyle: {
             justifyContent: 'center',
             alignItems: 'center',
-            paddingTop: 2,
+            paddingTop: 0,
             paddingBottom: 0,
-            transform: [{ translateY: TAB_CONTENT_SHIFT_Y }],
-            borderRadius: 18,
-            marginHorizontal: 2,
-            marginVertical: 2,
-            overflow: 'hidden',
           },
           tabBarIconStyle: {
             marginTop: 0,
@@ -226,12 +242,29 @@ export default function TabsLayout() {
             title: 'Lumeo',
             tabBarLabel: 'Scan QR',
             tabBarIcon: ({ size, color }) => <TabIcon icon="qr-code-outline" size={size} color={color} />,
-            tabBarButton: (props) => (
-              <TouchableOpacity
-                {...props}
-                onPress={() => router.push('/(tabs)/index?openScanner=1' as any)}
-              />
-            ),
+            tabBarButton: (props) => {
+              const selected = Boolean((props as any)?.accessibilityState?.selected);
+              return (
+                <TouchableOpacity
+                  {...props}
+                  onPress={() => router.push('/(tabs)/index?openScanner=1' as any)}
+                  style={[
+                    props.style,
+                    {
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                      transform: [{ translateY: TAB_CONTENT_SHIFT_Y }],
+                      borderRadius: 22,
+                      marginHorizontal: 1,
+                      marginVertical: 1,
+                      paddingHorizontal: 6,
+                      paddingVertical: 6,
+                      backgroundColor: selected ? (isDark ? '#243447' : '#e2e8f0') : 'transparent',
+                    },
+                  ]}
+                />
+              );
+            },
           }}
         />
         <Tabs.Screen
