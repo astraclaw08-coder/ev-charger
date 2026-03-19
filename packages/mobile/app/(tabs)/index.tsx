@@ -113,7 +113,7 @@ export default function MapScreen() {
   });
 
   const activeBannerOffset = activeSession ? 58 + Math.max(insets.bottom, 8) : 0;
-  const controlsBottom = tabBarHeight + activeBannerOffset + 28;
+  const controlsBottom = tabBarHeight + activeBannerOffset + 44;
 
   useEffect(() => {
     (async () => {
@@ -427,7 +427,7 @@ export default function MapScreen() {
           })}
         </MapView>
 
-        <View pointerEvents="box-none" style={[styles.mapControls, { bottom: controlsBottom + 58 }]}> 
+        <View pointerEvents="box-none" style={[styles.mapControls, { bottom: controlsBottom + 72 }]}> 
           <TouchableOpacity
             style={[
               styles.locateBtn,
@@ -697,6 +697,8 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
     borderWidth: 1,
     borderColor: '#ffffff33',
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   searchIcon: { marginRight: 8 },
   searchInput: { fontSize: 14, fontWeight: '600', flex: 1, paddingRight: 40 },

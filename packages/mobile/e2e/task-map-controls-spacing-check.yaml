@@ -1,0 +1,8 @@
+appId: dev.evcharger.app.lumeodev
+---
+- launchApp:
+    clearState: false
+- tapOn:
+    text: "Continue as Guest"
+    optional: true
+- takeScreenshot: "task-map-controls-spacing-check"
