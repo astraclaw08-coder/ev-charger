@@ -92,15 +92,18 @@ function resolveIdleWindowForSession(
 
   if (events.length === 0) return {};
 
-  const c6Start = events.find((e) => e.status === 'FINISHING' || e.status === 'SUSPENDED_EV' || e.status === 'SUSPENDED_EVSE');
-  if (!c6Start) return {};
+  // Idle billing starts only when connector enters IEC 61851 C6/D6-equivalent
+  // states and ends when connector reaches F1-equivalent (Available).
+  const idleStartStatuses = new Set(['FINISHING', 'SUSPENDED_EV', 'SUSPENDED_EVSE']);
+  const c6OrD6Start = events.find((e) => idleStartStatuses.has(e.status));
+  if (!c6OrD6Start) return {};
 
-  const f1End = events.find((e) => e.at.getTime() >= c6Start.at.getTime() && e.status === 'AVAILABLE');
+  const f1End = events.find((e) => e.at.getTime() >= c6OrD6Start.at.getTime() && e.status === 'AVAILABLE');
   const end = f1End?.at ?? sessionStop ?? null;
-  if (!end || end.getTime() <= c6Start.at.getTime()) return {};
+  if (!end || end.getTime() <= c6OrD6Start.at.getTime()) return {};
 
   return {
-    idleStartedAt: c6Start.at.toISOString(),
+    idleStartedAt: c6OrD6Start.at.toISOString(),
     idleStoppedAt: end.toISOString(),
   };
 }
