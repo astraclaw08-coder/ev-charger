@@ -77,7 +77,7 @@ function statusLabelFromStatuses(statuses: string[], chargerStatuses: string[]):
 
 export default function MapScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ openScanner?: string }>();
+  const params = useLocalSearchParams<{ openScanner?: string; scanNonce?: string }>();
   const mapRef = useRef<MapView | null>(null);
   const searchInputRef = useRef<TextInput | null>(null);
   const regionRef = useRef<Region | null>(null);
@@ -102,8 +102,8 @@ export default function MapScreen() {
   useEffect(() => {
     if (params.openScanner !== '1') return;
     void openScanner();
-    router.setParams({ openScanner: undefined });
-  }, [params.openScanner]);
+    router.setParams({ openScanner: undefined, scanNonce: undefined });
+  }, [params.openScanner, params.scanNonce]);
 
   const { data: chargers = [], refetch } = useQuery({
     queryKey: ['chargers'],
@@ -113,7 +113,7 @@ export default function MapScreen() {
   });
 
   const activeBannerOffset = activeSession ? 58 + Math.max(insets.bottom, 8) : 0;
-  const controlsBottom = tabBarHeight + activeBannerOffset + 6;
+  const controlsBottom = tabBarHeight + activeBannerOffset + 28;
 
   useEffect(() => {
     (async () => {
