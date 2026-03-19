@@ -20,10 +20,10 @@ function formatElapsed(startedAt: string): string {
 
 function FloatingTabBar({
   isDark,
-  insets,
+  safeAreaBottom,
   bannerVisible,
   ...tabProps
-}: BottomTabBarProps & { isDark: boolean; insets: { bottom: number }; bannerVisible: boolean }) {
+}: BottomTabBarProps & { isDark: boolean; safeAreaBottom: number; bannerVisible: boolean }) {
   return (
     <View
       pointerEvents="box-none"
@@ -31,7 +31,7 @@ function FloatingTabBar({
         position: 'absolute',
         left: 12,
         right: 12,
-        bottom: bannerVisible ? 72 + Math.max(insets.bottom, 8) : Math.max(insets.bottom, 8),
+        bottom: bannerVisible ? 72 + Math.max(safeAreaBottom, 8) : Math.max(safeAreaBottom, 8),
       }}
     >
       <View
@@ -54,8 +54,8 @@ function FloatingTabBar({
             borderTopWidth: 0,
             backgroundColor: isDark ? '#0b1220' : '#ffffff',
             paddingTop: 6,
-            paddingBottom: Math.max(insets.bottom, 6),
-            minHeight: 56 + Math.max(insets.bottom, 6),
+            paddingBottom: Math.max(safeAreaBottom, 6),
+            minHeight: 56 + Math.max(safeAreaBottom, 6),
           }}
         />
       </View>
@@ -133,7 +133,7 @@ export default function TabsLayout() {
           <FloatingTabBar
             {...props}
             isDark={isDark}
-            insets={{ bottom: insets.bottom }}
+            safeAreaBottom={insets.bottom}
             bannerVisible={bannerVisible}
           />
         )}
