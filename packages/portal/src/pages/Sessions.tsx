@@ -13,6 +13,7 @@ export default function Sessions() {
   const [error, setError] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [query, setQuery] = useState('');
+  const [selectedReceipt, setSelectedReceipt] = useState<EnrichedTransaction | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -76,6 +77,7 @@ export default function Sessions() {
                   amountState: session.amountState,
                   amountLabel: session.amountLabel,
                   isAmountFinal: session.isAmountFinal,
+                  billingBreakdown: session.billingBreakdown,
                   meterStart: null,
                   meterStop: null,
                   site: {
@@ -211,6 +213,7 @@ export default function Sessions() {
                 <th className="pb-2">Energy</th>
                 <th className="pb-2">Revenue</th>
                 <th className="pb-2">Payment</th>
+                <th className="pb-2 text-right">Receipt</th>
               </tr>
             </thead>
             <tbody>
@@ -224,14 +227,102 @@ export default function Sessions() {
                   <td className="py-2 text-gray-700 dark:text-slate-300">{row.energyKwh.toFixed(2)} kWh</td>
                   <td className="py-2 text-gray-700 dark:text-slate-300">${row.revenueUsd.toFixed(2)}</td>
                   <td className="py-2 text-gray-500 dark:text-slate-400">{row.payment?.status ?? '—'}</td>
+                  <td className="py-2 text-right">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedReceipt(row)}
+                      className="inline-flex items-center gap-1 rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1 text-xs text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-800"
+                      title="View receipt"
+                    >
+                      <span aria-hidden>🧾</span>
+                      Receipt
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       </div>
+
+      <ReceiptModal row={selectedReceipt} onClose={() => setSelectedReceipt(null)} />
     </div>
   );
+}
+
+function ReceiptModal({ row, onClose }: { row: EnrichedTransaction | null; onClose: () => void }) {
+  if (!row) return null;
+
+  const breakdown = row.billingBreakdown;
+  const energySegments = breakdown?.energy.segments ?? [];
+  const idleSegments = breakdown?.idle.segments ?? [];
+  const totals = breakdown?.totals;
+  const energySubtotal = totals?.energyUsd ?? breakdown?.energy.totalUsd ?? 0;
+  const idleSubtotal = totals?.idleUsd ?? breakdown?.idle.totalUsd ?? 0;
+  const activationFee = totals?.activationUsd ?? breakdown?.activation.totalUsd ?? 0;
+  const total = row.revenueUsd ?? totals?.netUsd ?? breakdown?.grossTotalUsd ?? 0;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4" onClick={onClose}>
+      <div className="max-h-[90vh] w-full max-w-2xl overflow-auto rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-5" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">Session Receipt</h3>
+          <button type="button" onClick={onClose} className="rounded-md px-2 py-1 text-sm text-gray-500 hover:bg-gray-100 dark:text-slate-400 dark:hover:bg-slate-800">✕</button>
+        </div>
+
+        <div className="mb-4 space-y-1 text-sm text-gray-600 dark:text-slate-300">
+          <p className="text-base font-semibold text-gray-900 dark:text-slate-100">{row.site.name}</p>
+          <p>Charger S/N: {row.charger.serialNumber || row.charger.ocppId}</p>
+          <p>Transaction #: {row.transactionId ?? '—'}</p>
+        </div>
+
+        <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-slate-700">
+          <div className="border-b border-gray-200 dark:border-slate-700 px-4 py-2 text-center text-sm font-semibold text-gray-800 dark:text-slate-100">Session Detail</div>
+          <div className="px-4 py-2 text-sm">
+            <ReceiptLine label="Start" value={new Date(row.startedAt).toLocaleString()} />
+            <ReceiptLine label="End" value={row.stoppedAt ? new Date(row.stoppedAt).toLocaleString() : '—'} />
+
+            {energySegments.map((seg, idx) => (
+              <ReceiptLine
+                key={`${seg.startedAt}-${idx}`}
+                label={`${toTime(seg.startedAt)} to ${toTime(seg.endedAt)} @ $${seg.pricePerKwhUsd.toFixed(2)}/kWh * ${seg.kwh.toFixed(3)} kWh`}
+                value={`$${seg.energyAmountUsd.toFixed(2)}`}
+              />
+            ))}
+
+            <ReceiptLine label="Energy Subtotal" value={`$${energySubtotal.toFixed(2)}`} emphasizeValue />
+
+            {idleSegments.map((seg, idx) => (
+              <ReceiptLine
+                key={`${seg.startedAt}-${seg.endedAt}-${idx}`}
+                label={`${toTime(seg.startedAt)} to ${toTime(seg.endedAt)} * $${seg.idleFeePerMinUsd.toFixed(2)}/min (excludes grace period of ${(breakdown?.gracePeriodMin ?? 0).toFixed(1)} min)`}
+                value={`$${seg.amountUsd.toFixed(2)}`}
+              />
+            ))}
+
+            <ReceiptLine label="Idle Subtotal" value={`$${idleSubtotal.toFixed(2)}`} emphasizeValue />
+            <ReceiptLine label="Activation fee" value={`$${activationFee.toFixed(2)}`} emphasizeValue />
+            <ReceiptLine label="Total" value={`$${total.toFixed(2)}`} emphasize />
+            <ReceiptLine label="Payment card used" value={row.payment?.status ? `${row.payment.status}` : '—'} />
+            <div className="pt-3 text-center text-sm font-medium text-gray-600 dark:text-slate-300">Thank you for charging with us!</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ReceiptLine({ label, value, emphasize, emphasizeValue }: { label: string; value: string; emphasize?: boolean; emphasizeValue?: boolean }) {
+  return (
+    <div className="flex items-start justify-between gap-3 border-b border-gray-200 dark:border-slate-700 py-2 text-xs">
+      <span className={`text-gray-700 dark:text-slate-300 ${emphasize ? 'font-semibold text-sm' : ''}`}>{label}</span>
+      <span className={`text-right text-gray-900 dark:text-slate-100 ${emphasize || emphasizeValue ? 'font-bold text-sm' : 'font-medium'} min-w-[88px]`}>{value}</span>
+    </div>
+  );
+}
+
+function toTime(iso: string) {
+  return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
 
 function Tile({ label, value }: { label: string; value: string }) {

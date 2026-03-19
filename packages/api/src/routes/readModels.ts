@@ -38,6 +38,83 @@ function hasSiteAccess(siteId: string, siteIds: string[] | undefined) {
   return siteIds.includes(siteId);
 }
 
+type StatusLogLike = {
+  chargerId: string;
+  createdAt: Date;
+  payload: unknown;
+};
+
+function parseConnectorStatus(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().replace(/[-\s]/g, '_').toUpperCase();
+  const map: Record<string, string> = {
+    AVAILABLE: 'AVAILABLE',
+    PREPARING: 'PREPARING',
+    CHARGING: 'CHARGING',
+    FINISHING: 'FINISHING',
+    SUSPENDEDEV: 'SUSPENDED_EV',
+    SUSPENDED_EV: 'SUSPENDED_EV',
+    SUSPENDEDEVSE: 'SUSPENDED_EVSE',
+    SUSPENDED_EVSE: 'SUSPENDED_EVSE',
+    RESERVED: 'RESERVED',
+    UNAVAILABLE: 'UNAVAILABLE',
+    FAULTED: 'FAULTED',
+  };
+  return map[normalized] ?? null;
+}
+
+function extractStatusEvent(log: StatusLogLike): { connectorId: number; status: string; at: Date } | null {
+  if (!log.payload || typeof log.payload !== 'object') return null;
+  const payload = log.payload as { connectorId?: number | string; status?: string; timestamp?: string };
+  const connectorId = Number(payload.connectorId);
+  const status = parseConnectorStatus(payload.status);
+  if (!Number.isInteger(connectorId) || connectorId <= 0 || !status) return null;
+  const timestamp = payload.timestamp ? new Date(payload.timestamp) : null;
+  const at = timestamp && Number.isFinite(timestamp.getTime()) ? timestamp : log.createdAt;
+  return { connectorId, status, at };
+}
+
+function resolveIdleWindowForSession(input: {
+  startedAt?: Date | string | null;
+  stoppedAt?: Date | string | null;
+  connectorId?: number | null;
+  statusLogs: StatusLogLike[];
+}): { idleStartedAt?: string; idleStoppedAt?: string } {
+  if (!input.startedAt || !input.connectorId) return {};
+  const sessionStart = new Date(input.startedAt);
+  if (!Number.isFinite(sessionStart.getTime())) return {};
+
+  const sessionStop = input.stoppedAt ? new Date(input.stoppedAt) : null;
+  const hardEndMs = sessionStop && Number.isFinite(sessionStop.getTime())
+    ? sessionStop.getTime() + (2 * 60 * 60 * 1000)
+    : Date.now() + (2 * 60 * 60 * 1000);
+
+  const events = input.statusLogs
+    .map(extractStatusEvent)
+    .filter((e): e is { connectorId: number; status: string; at: Date } => Boolean(e))
+    .filter((e) => e.connectorId === input.connectorId)
+    .filter((e) => {
+      const atMs = e.at.getTime();
+      return atMs >= sessionStart.getTime() && atMs <= hardEndMs;
+    })
+    .sort((a, b) => a.at.getTime() - b.at.getTime());
+
+  if (events.length === 0) return {};
+
+  const idleStartStatuses = new Set(['FINISHING', 'SUSPENDED_EV', 'SUSPENDED_EVSE']);
+  const start = events.find((e) => idleStartStatuses.has(e.status));
+  if (!start) return {};
+
+  const end = events.find((e) => e.at.getTime() >= start.at.getTime() && e.status === 'AVAILABLE');
+  const resolvedEnd = end?.at ?? sessionStop ?? null;
+  if (!resolvedEnd || resolvedEnd.getTime() <= start.at.getTime()) return {};
+
+  return {
+    idleStartedAt: start.at.toISOString(),
+    idleStoppedAt: resolvedEnd.toISOString(),
+  };
+}
+
 export async function readModelRoutes(app: FastifyInstance) {
   // GET /analytics/portfolio-summary — org/portfolio/site rollups from SiteDailyFact
   app.get<{
@@ -273,6 +350,7 @@ export async function readModelRoutes(app: FastifyInstance) {
               meterStop: true,
               kwhDelivered: true,
               ratePerKwh: true,
+              connector: { select: { connectorId: true } },
               payment: { select: { status: true, amountCents: true } },
             },
           },
@@ -281,6 +359,21 @@ export async function readModelRoutes(app: FastifyInstance) {
       prisma.sessionFact.count({ where }),
     ]);
 
+    const chargerIds = Array.from(new Set(rows.map((row: any) => row.charger?.id).filter(Boolean)));
+    const statusLogs = chargerIds.length > 0
+      ? await prisma.ocppLog.findMany({
+          where: { chargerId: { in: chargerIds }, action: 'StatusNotification' },
+          orderBy: { createdAt: 'asc' },
+          take: 5000,
+        })
+      : [];
+    const statusLogsByCharger = new Map<string, StatusLogLike[]>();
+    for (const log of statusLogs) {
+      const arr = statusLogsByCharger.get(log.chargerId) ?? [];
+      arr.push({ chargerId: log.chargerId, createdAt: log.createdAt, payload: log.payload });
+      statusLogsByCharger.set(log.chargerId, arr);
+    }
+
     return {
       total,
       limit,
@@ -288,6 +381,12 @@ export async function readModelRoutes(app: FastifyInstance) {
       transactions: rows.map((row: any) => {
         const energyKwh = Number(toNumber(row.energyKwh).toFixed(6));
         const revenueUsd = Number(toNumber(row.revenueUsd).toFixed(6));
+        const idleWindow = resolveIdleWindowForSession({
+          startedAt: row.startedAt,
+          stoppedAt: row.stoppedAt,
+          connectorId: row.session?.connector?.connectorId,
+          statusLogs: statusLogsByCharger.get(row.charger?.id) ?? [],
+        });
         const amounts = computeSessionAmounts({
           meterStart: row.session.meterStart,
           meterStop: row.session.meterStop,
@@ -307,6 +406,8 @@ export async function readModelRoutes(app: FastifyInstance) {
           softwareVendorFeeMode: row.site.softwareVendorFeeMode,
           softwareVendorFeeValue: row.site.softwareVendorFeeValue,
           softwareFeeIncludesActivation: row.site.softwareFeeIncludesActivation,
+          idleStartedAt: idleWindow.idleStartedAt,
+          idleStoppedAt: idleWindow.idleStoppedAt,
         });
 
         return {
