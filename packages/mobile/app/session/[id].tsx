@@ -211,37 +211,81 @@ function SessionSummary({
 
       <View style={[styles.summaryMeta, { backgroundColor: isDark ? '#111827' : '#f3f4f6' }]}>
         <Text style={[styles.breakdownTitle, { color: isDark ? '#e2e8f0' : '#111827' }]}>Session Detail</Text>
-        <Text style={[styles.metaText, { color: isDark ? '#cbd5e1' : '#4b5563' }]}>Start: {formatDate(session.startedAt)}</Text>
-        <Text style={[styles.metaText, { color: isDark ? '#cbd5e1' : '#4b5563' }]}>End: {session.endedAt ? formatDate(session.endedAt) : '-'}</Text>
+
+        <ReceiptRow
+          isDark={isDark}
+          label="Start"
+          value={formatDate(session.startedAt)}
+        />
+        <ReceiptRow
+          isDark={isDark}
+          label="End"
+          value={session.endedAt ? formatDate(session.endedAt) : '-'}
+        />
 
         {energySegments.map((segment, idx) => (
-          <Text key={`${segment.startedAt}-${idx}`} style={[styles.metaText, { color: isDark ? '#cbd5e1' : '#4b5563' }]}>
-            {`${formatTime(segment.startedAt)} to ${formatTime(segment.endedAt)} @ $${segment.pricePerKwhUsd.toFixed(2)}/kWh * ${segment.kwh.toFixed(3)} kWh = $${segment.energyAmountUsd.toFixed(2)}`}
-          </Text>
+          <ReceiptRow
+            key={`${segment.startedAt}-${idx}`}
+            isDark={isDark}
+            label={`${formatTime(segment.startedAt)} to ${formatTime(segment.endedAt)} @ $${segment.pricePerKwhUsd.toFixed(2)}/kWh * ${segment.kwh.toFixed(3)} kWh`}
+            value={`$${segment.energyAmountUsd.toFixed(2)}`}
+            multilineLabel
+          />
         ))}
 
         {energySegments.length === 0 && (
-          <Text style={[styles.metaText, { color: isDark ? '#cbd5e1' : '#4b5563' }]}>-</Text>
+          <ReceiptRow
+            isDark={isDark}
+            label="Energy segment"
+            value="-"
+          />
         )}
 
-        <Text style={[styles.metaText, { color: isDark ? '#cbd5e1' : '#4b5563' }]}>Energy = ${displayEnergyUsd.toFixed(2)}</Text>
+        <ReceiptRow
+          isDark={isDark}
+          label="Energy"
+          value={`$${displayEnergyUsd.toFixed(2)}`}
+        />
 
         {idleSegments.map((segment, idx) => (
-          <Text key={`${segment.startedAt}-${segment.endedAt}-${idx}`} style={[styles.metaText, { color: isDark ? '#cbd5e1' : '#4b5563' }]}>
-            {`${formatTime(segment.startedAt)} to ${formatTime(segment.endedAt)} * $${segment.idleFeePerMinUsd.toFixed(2)}/min = $${segment.amountUsd.toFixed(2)} (excludes grace period of ${gracePeriodMin.toFixed(1)} min)`}
-          </Text>
+          <ReceiptRow
+            key={`${segment.startedAt}-${segment.endedAt}-${idx}`}
+            isDark={isDark}
+            label={`${formatTime(segment.startedAt)} to ${formatTime(segment.endedAt)} * $${segment.idleFeePerMinUsd.toFixed(2)}/min (excludes grace period of ${gracePeriodMin.toFixed(1)} min)`}
+            value={`$${segment.amountUsd.toFixed(2)}`}
+            multilineLabel
+          />
         ))}
 
         {idleSegments.length === 0 && (
-          <Text style={[styles.metaText, { color: isDark ? '#cbd5e1' : '#4b5563' }]}>
-            {`Idle = $${displayIdleUsd.toFixed(2)} (excludes grace period of ${gracePeriodMin.toFixed(1)} min)`}
-          </Text>
+          <ReceiptRow
+            isDark={isDark}
+            label={`Idle (excludes grace period of ${gracePeriodMin.toFixed(1)} min)`}
+            value={`$${displayIdleUsd.toFixed(2)}`}
+            multilineLabel
+          />
         )}
 
-        <Text style={[styles.metaText, { color: isDark ? '#cbd5e1' : '#4b5563' }]}>Activation fee = ${displayActivationUsd.toFixed(2)}</Text>
-        <Text style={[styles.metaText, styles.breakdownTotal, { color: isDark ? '#f8fafc' : '#111827' }]}>Total = ${cost.toFixed(2)}</Text>
-        <Text style={[styles.metaText, { color: isDark ? '#cbd5e1' : '#4b5563' }]}>Payment card used: {paymentMethod}</Text>
-        <Text style={[styles.metaText, { color: isDark ? '#cbd5e1' : '#4b5563' }]}>Thank you for charging with us!</Text>
+        <ReceiptRow
+          isDark={isDark}
+          label="Activation fee"
+          value={`$${displayActivationUsd.toFixed(2)}`}
+        />
+        <ReceiptRow
+          isDark={isDark}
+          label="Total"
+          value={`$${cost.toFixed(2)}`}
+          emphasize
+        />
+        <ReceiptRow
+          isDark={isDark}
+          label="Payment card used"
+          value={paymentMethod}
+        />
+
+        <View style={[styles.receiptRow, styles.receiptRowNoBorder]}>
+          <Text style={[styles.receiptThanks, { color: isDark ? '#cbd5e1' : '#374151' }]}>Thank you for charging with us!</Text>
+        </View>
       </View>
     </View>
   );
@@ -277,6 +321,43 @@ function SummaryStatCard({
       </View>
       <Text numberOfLines={1} style={[styles.statValue, { color: isDark ? '#f8fafc' : '#111827' }, highlight && styles.statValueHighlight]}>{value}</Text>
       <Text numberOfLines={1} style={[styles.statLabel, { color: isDark ? '#94a3b8' : '#9ca3af' }]}>{label}</Text>
+    </View>
+  );
+}
+
+function ReceiptRow({
+  isDark,
+  label,
+  value,
+  multilineLabel,
+  emphasize,
+}: {
+  isDark: boolean;
+  label: string;
+  value: string;
+  multilineLabel?: boolean;
+  emphasize?: boolean;
+}) {
+  return (
+    <View style={[styles.receiptRow, { borderBottomColor: isDark ? '#334155' : '#d1d5db' }]}>
+      <Text
+        numberOfLines={multilineLabel ? 3 : 1}
+        style={[
+          styles.receiptLabel,
+          { color: isDark ? '#cbd5e1' : '#374151' },
+          multilineLabel && styles.receiptLabelMulti,
+          emphasize && styles.receiptLabelEmphasis,
+        ]}
+      >
+        {label}
+      </Text>
+      <Text style={[
+        styles.receiptValue,
+        { color: isDark ? '#f8fafc' : '#111827' },
+        emphasize && styles.receiptValueEmphasis,
+      ]}>
+        {value}
+      </Text>
     </View>
   );
 }
@@ -797,14 +878,30 @@ const styles = StyleSheet.create({
   summaryMeta: {
     backgroundColor: '#f3f4f6',
     borderRadius: 12,
-    padding: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     width: '100%',
-    gap: 4,
     marginBottom: 24,
   },
   metaText: { fontSize: 13, color: '#6b7280' },
   breakdownTitle: { fontSize: 14, fontWeight: '700', marginBottom: 4 },
   breakdownTotal: { marginTop: 6, fontWeight: '700' },
+  receiptRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#d1d5db',
+    gap: 10,
+  },
+  receiptRowNoBorder: { borderBottomWidth: 0, justifyContent: 'center', paddingTop: 10, paddingBottom: 2 },
+  receiptLabel: { flex: 1, fontSize: 12, lineHeight: 16 },
+  receiptLabelMulti: { paddingRight: 8 },
+  receiptLabelEmphasis: { fontWeight: '700', fontSize: 13 },
+  receiptValue: { fontSize: 12, fontWeight: '600', textAlign: 'right', minWidth: 88 },
+  receiptValueEmphasis: { fontSize: 15, fontWeight: '800' },
+  receiptThanks: { fontSize: 12, fontWeight: '600', textAlign: 'center' },
   doneButton: {
     backgroundColor: '#10b981',
     borderRadius: 14,
