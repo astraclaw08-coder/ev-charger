@@ -28,6 +28,8 @@ function estimateActiveCostUsd(active: Session): number {
   return 0;
 }
 
+const TAB_CONTENT_SHIFT_Y = 14;
+
 function FloatingTabBar({
   isDark,
   safeAreaBottom,
@@ -117,12 +119,14 @@ function ActiveSessionBanner({ active }: { active: Session }) {
               Active charging session
             </Text>
           </View>
-          <Text numberOfLines={1} style={{ color: isDark ? '#f8fafc' : '#111827', fontWeight: '700', fontSize: 13, marginTop: 2 }}>
-            {siteName}
-          </Text>
-          <Text style={{ color: isDark ? '#cbd5e1' : '#4b5563', fontSize: 12, marginTop: 1 }}>
-            {kwh.toFixed(2)} kWh · ${costUsd.toFixed(2)} · {formatElapsed(active.startedAt)}
-          </Text>
+          <View style={{ marginTop: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+            <Text numberOfLines={1} style={{ flex: 1, color: isDark ? '#f8fafc' : '#111827', fontWeight: '700', fontSize: 13 }}>
+              {siteName}
+            </Text>
+            <Text style={{ color: isDark ? '#cbd5e1' : '#4b5563', fontSize: 12, fontWeight: '700' }}>
+              {kwh.toFixed(2)} kWh · ${costUsd.toFixed(2)} · {formatElapsed(active.startedAt)}
+            </Text>
+          </View>
         </View>
       </TouchableOpacity>
     </View>
@@ -154,13 +158,18 @@ export default function TabsLayout() {
           />
         )}
         screenOptions={{
-          tabBarActiveTintColor: isDark ? '#67e8f9' : '#0f766e',
+          tabBarActiveTintColor: isDark ? '#e2e8f0' : '#0f172a',
           tabBarInactiveTintColor: isDark ? '#64748b' : '#94a3b8',
+          tabBarActiveBackgroundColor: isDark ? '#1e293b' : '#e2e8f0',
           tabBarItemStyle: {
             justifyContent: 'center',
             alignItems: 'center',
             paddingTop: 2,
             paddingBottom: 0,
+            transform: [{ translateY: TAB_CONTENT_SHIFT_Y }],
+            borderRadius: 12,
+            marginHorizontal: 4,
+            marginVertical: 4,
           },
           tabBarIconStyle: {
             marginTop: 0,
