@@ -64,7 +64,7 @@ function FloatingTabBar({
           {...tabProps}
           style={{
             borderTopWidth: 0,
-            backgroundColor: isDark ? '#111827f2' : '#fffffff2',
+            backgroundColor: 'transparent',
             paddingTop: 8,
             paddingBottom: Math.max(safeAreaBottom, 4),
             minHeight: 56 + Math.max(safeAreaBottom, 6),
