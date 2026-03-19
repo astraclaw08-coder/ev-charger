@@ -1,6 +1,7 @@
 import React from 'react';
 import { Tabs, useRouter } from 'expo-router';
-import { TouchableOpacity, Text, View, useWindowDimensions } from 'react-native';
+import { TouchableOpacity, Text, View } from 'react-native';
+import { BottomTabBar, type BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '@/theme';
 import { useAppAuth } from '@/providers/AuthProvider';
@@ -15,6 +16,51 @@ function formatElapsed(startedAt: string): string {
   const h = Math.floor(mins / 60);
   const m = mins % 60;
   return `${h}h ${m}m`;
+}
+
+function FloatingTabBar({
+  isDark,
+  insets,
+  bannerVisible,
+  ...tabProps
+}: BottomTabBarProps & { isDark: boolean; insets: { bottom: number }; bannerVisible: boolean }) {
+  return (
+    <View
+      pointerEvents="box-none"
+      style={{
+        position: 'absolute',
+        left: 12,
+        right: 12,
+        bottom: bannerVisible ? 72 + Math.max(insets.bottom, 8) : Math.max(insets.bottom, 8),
+      }}
+    >
+      <View
+        style={{
+          borderRadius: 20,
+          overflow: 'hidden',
+          backgroundColor: isDark ? '#0b1220' : '#ffffff',
+          borderWidth: 1,
+          borderColor: isDark ? '#1f2937' : '#e5e7eb',
+          shadowColor: '#000',
+          shadowOpacity: isDark ? 0.25 : 0.12,
+          shadowRadius: 12,
+          shadowOffset: { width: 0, height: 6 },
+          elevation: 10,
+        }}
+      >
+        <BottomTabBar
+          {...tabProps}
+          style={{
+            borderTopWidth: 0,
+            backgroundColor: isDark ? '#0b1220' : '#ffffff',
+            paddingTop: 6,
+            paddingBottom: Math.max(insets.bottom, 6),
+            minHeight: 56 + Math.max(insets.bottom, 6),
+          }}
+        />
+      </View>
+    </View>
+  );
 }
 
 function ActiveSessionBanner({ active }: { active: Session }) {
@@ -73,7 +119,6 @@ export default function TabsLayout() {
   const { isGuest } = useAppAuth();
   const { activeSession: active, refetchSessions } = useChargingNotifications();
   const insets = useSafeAreaInsets();
-  const { width: screenWidth } = useWindowDimensions();
 
   React.useEffect(() => {
     if (!isGuest) refetchSessions();
@@ -84,40 +129,17 @@ export default function TabsLayout() {
     <>
       {active && bannerVisible ? <ActiveSessionBanner active={active} /> : null}
       <Tabs
+        tabBar={(props) => (
+          <FloatingTabBar
+            {...props}
+            isDark={isDark}
+            insets={{ bottom: insets.bottom }}
+            bannerVisible={bannerVisible}
+          />
+        )}
         screenOptions={{
           tabBarActiveTintColor: isDark ? '#67e8f9' : '#0f766e',
           tabBarInactiveTintColor: isDark ? '#64748b' : '#94a3b8',
-          tabBarStyle: {
-            borderTopColor: 'transparent',
-            borderTopWidth: 0,
-            backgroundColor: 'transparent',
-            position: 'absolute',
-            alignSelf: 'center',
-            width: Math.max(280, screenWidth - 24),
-            bottom: bannerVisible ? 72 + Math.max(insets.bottom, 8) : Math.max(insets.bottom, 8),
-            borderRadius: 20,
-            paddingBottom: Math.max(insets.bottom, 6),
-            paddingTop: 6,
-            minHeight: 56 + Math.max(insets.bottom, 6),
-            marginBottom: 0,
-            shadowColor: '#000',
-            shadowOpacity: isDark ? 0.25 : 0.12,
-            shadowRadius: 12,
-            shadowOffset: { width: 0, height: 6 },
-            elevation: 10,
-            overflow: 'hidden',
-          },
-          tabBarBackground: () => (
-            <View
-              style={{
-                flex: 1,
-                borderRadius: 20,
-                backgroundColor: isDark ? '#0b1220' : '#ffffff',
-                borderWidth: 1,
-                borderColor: isDark ? '#1f2937' : '#e5e7eb',
-              }}
-            />
-          ),
           tabBarItemStyle: {
             justifyContent: 'center',
             alignItems: 'center',
