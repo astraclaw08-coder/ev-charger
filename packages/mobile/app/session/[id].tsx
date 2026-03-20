@@ -153,10 +153,11 @@ function SessionSummary({
   const displayIdleUsd = breakdownTotals?.idleUsd ?? breakdown?.idle.totalUsd ?? 0;
   const displayActivationUsd = breakdownTotals?.activationUsd ?? breakdown?.activation.totalUsd ?? 0;
   const energySegments = breakdown?.energy.segments ?? [];
-  const idleSegments = (breakdown?.idle.segments ?? []).filter((segment) => (segment.minutes ?? 0) > 0);
+  const rawIdleSegments = breakdown?.idle.segments ?? [];
+  const idleSegments = rawIdleSegments.filter((segment) => (segment.minutes ?? 0) > 0);
   const gracePeriodMin = Math.max(0, breakdown?.gracePeriodMin ?? 0);
-  const idleStartLabel = idleSegments.length > 0 ? formatTime(idleSegments[0].startedAt) : null;
-  const idleEndLabel = idleSegments.length > 0 ? formatTime(idleSegments[idleSegments.length - 1].endedAt) : null;
+  const idleStartLabel = rawIdleSegments.length > 0 ? formatTime(rawIdleSegments[0].startedAt) : null;
+  const idleEndLabel = rawIdleSegments.length > 0 ? formatTime(rawIdleSegments[rawIdleSegments.length - 1].endedAt) : null;
   const idleSubtotalLabel = idleStartLabel && idleEndLabel
     ? `${idleStartLabel} to ${idleEndLabel} Subtotal`
     : 'Idle Subtotal';

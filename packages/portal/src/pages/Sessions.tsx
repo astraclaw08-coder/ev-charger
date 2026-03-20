@@ -255,14 +255,15 @@ function ReceiptModal({ row, onClose }: { row: EnrichedTransaction | null; onClo
 
   const breakdown = row.billingBreakdown;
   const energySegments = breakdown?.energy.segments ?? [];
-  const idleSegments = (breakdown?.idle.segments ?? []).filter((seg) => (seg.minutes ?? 0) > 0);
+  const rawIdleSegments = breakdown?.idle.segments ?? [];
+  const idleSegments = rawIdleSegments.filter((seg) => (seg.minutes ?? 0) > 0);
   const totals = breakdown?.totals;
   const energySubtotal = totals?.energyUsd ?? breakdown?.energy.totalUsd ?? 0;
   const idleSubtotal = totals?.idleUsd ?? breakdown?.idle.totalUsd ?? 0;
   const activationFee = totals?.activationUsd ?? breakdown?.activation.totalUsd ?? 0;
   const total = row.revenueUsd ?? totals?.netUsd ?? breakdown?.grossTotalUsd ?? 0;
-  const idleStartLabel = idleSegments.length > 0 ? toTime(idleSegments[0].startedAt) : null;
-  const idleEndLabel = idleSegments.length > 0 ? toTime(idleSegments[idleSegments.length - 1].endedAt) : null;
+  const idleStartLabel = rawIdleSegments.length > 0 ? toTime(rawIdleSegments[0].startedAt) : null;
+  const idleEndLabel = rawIdleSegments.length > 0 ? toTime(rawIdleSegments[rawIdleSegments.length - 1].endedAt) : null;
   const idleSubtotalLabel = idleStartLabel && idleEndLabel
     ? `${idleStartLabel} to ${idleEndLabel} Subtotal`
     : 'Idle Subtotal';
