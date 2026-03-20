@@ -421,8 +421,8 @@ export async function readModelRoutes(app: FastifyInstance) {
     const statusLogs = chargerIds.length > 0
       ? await prisma.ocppLog.findMany({
           where: { chargerId: { in: chargerIds }, action: 'StatusNotification' },
-          orderBy: { createdAt: 'asc' },
-          take: 5000,
+          orderBy: { createdAt: 'desc' },
+          take: 10000,
         })
       : [];
     const statusLogsByCharger = new Map<string, StatusLogLike[]>();

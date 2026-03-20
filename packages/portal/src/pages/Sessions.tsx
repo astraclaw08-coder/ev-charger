@@ -261,7 +261,8 @@ function ReceiptModal({ row, onClose }: { row: EnrichedTransaction | null; onClo
   const energySubtotal = totals?.energyUsd ?? breakdown?.energy.totalUsd ?? 0;
   const idleSubtotal = totals?.idleUsd ?? breakdown?.idle.totalUsd ?? 0;
   const activationFee = totals?.activationUsd ?? breakdown?.activation.totalUsd ?? 0;
-  const total = row.revenueUsd ?? totals?.netUsd ?? breakdown?.grossTotalUsd ?? 0;
+  const displayTotal = Number(energySubtotal.toFixed(2)) + Number(idleSubtotal.toFixed(2)) + Number(activationFee.toFixed(2));
+  const total = breakdown ? displayTotal : (totals?.grossUsd ?? breakdown?.grossTotalUsd ?? row.revenueUsd ?? totals?.netUsd ?? 0);
   const idleStartLabel = rawIdleSegments.length > 0 ? toTime(rawIdleSegments[0].startedAt) : null;
   const idleEndLabel = rawIdleSegments.length > 0 ? toTime(rawIdleSegments[rawIdleSegments.length - 1].endedAt) : null;
   const idleSubtotalLabel = idleStartLabel && idleEndLabel

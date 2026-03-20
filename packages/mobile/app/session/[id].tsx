@@ -148,7 +148,7 @@ function SessionSummary({
   const displayEnergyUsd = breakdownTotals?.energyUsd ?? breakdown?.energy.totalUsd ?? 0;
   const displayIdleUsd = breakdownTotals?.idleUsd ?? breakdown?.idle.totalUsd ?? 0;
   const displayActivationUsd = breakdownTotals?.activationUsd ?? breakdown?.activation.totalUsd ?? 0;
-  const grossSubtotalTotal = displayEnergyUsd + displayIdleUsd + displayActivationUsd;
+  const grossSubtotalTotal = Number(displayEnergyUsd.toFixed(2)) + Number(displayIdleUsd.toFixed(2)) + Number(displayActivationUsd.toFixed(2));
   const cost =
     breakdown
       ? grossSubtotalTotal

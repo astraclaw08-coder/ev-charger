@@ -345,8 +345,8 @@ export async function sessionRoutes(app: FastifyInstance) {
       chargerIds.length > 0
         ? prisma.ocppLog.findMany({
             where: { chargerId: { in: chargerIds }, action: 'StatusNotification' },
-            orderBy: { createdAt: 'asc' },
-            take: 3000,
+            orderBy: { createdAt: 'desc' },
+            take: 10000,
           })
         : Promise.resolve([]),
     ]);
@@ -468,12 +468,12 @@ export async function sessionRoutes(app: FastifyInstance) {
         chargerId: session.connector.charger.id,
         action: 'StatusNotification',
         createdAt: {
-          gte: new Date(sessionStartForLogs.getTime() - (15 * 60 * 1000)),
+          gte: new Date(sessionStartForLogs.getTime() - (24 * 60 * 60 * 1000)),
           lte: new Date((sessionStopForLogs?.getTime() ?? Date.now()) + (2 * 60 * 60 * 1000)),
         },
       },
-      orderBy: { createdAt: 'asc' },
-      take: 5000,
+      orderBy: { createdAt: 'desc' },
+      take: 10000,
     });
     const sessionTimings = resolveSessionStatusTimings(
       session,
@@ -609,8 +609,8 @@ export async function sessionRoutes(app: FastifyInstance) {
     const txStatusLogs = txChargerIds.length > 0
       ? await prisma.ocppLog.findMany({
           where: { chargerId: { in: txChargerIds }, action: 'StatusNotification' },
-          orderBy: { createdAt: 'asc' },
-          take: 3000,
+          orderBy: { createdAt: 'desc' },
+          take: 10000,
         })
       : [];
     const txStatusLogsByCharger = new Map<string, StatusLogLike[]>();
