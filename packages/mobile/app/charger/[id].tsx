@@ -421,8 +421,11 @@ export default function ChargerDetailScreen() {
           <Text style={[styles.siteName, { color: isDark ? '#f9fafb' : '#111827' }]}>{charger.site.name}</Text>
           <Text style={[styles.siteAddress, { color: isDark ? '#9ca3af' : '#6b7280' }]}>{charger.site.address}</Text>
 
-          <View style={[styles.pricingWrap, { borderTopColor: isDark ? '#1f2937' : '#e5e7eb' }]}> 
+          <View style={[styles.pricingWrap, { borderTopColor: isDark ? '#1f2937' : '#e5e7eb' }]}>
             <Text style={[styles.pricingTitle, { color: isDark ? '#e5e7eb' : '#111827' }]}>Price</Text>
+            {pricingMode === 'tou' && nowTou ? (
+              <Text style={[styles.pricingSubtitle, { color: isDark ? '#93c5fd' : '#1d4ed8' }]}>TOU {windowLabel12(nowTou.start, nowTou.end)}</Text>
+            ) : null}
 
             <View style={styles.priceTilesRow}>
               <View style={[styles.priceTile, { backgroundColor: isDark ? '#0f172a' : '#f3f4f6' }]}>
@@ -446,20 +449,13 @@ export default function ChargerDetailScreen() {
                   onPress={() => setShowTouDetails((v) => !v)}
                   activeOpacity={0.85}
                 >
+                  <View style={styles.touDetailsIconSpacer} />
                   <Text style={[styles.touDetailsToggleText, { color: isDark ? '#bfdbfe' : '#1d4ed8' }]}>TOU details</Text>
                   <Ionicons name={showTouDetails ? 'chevron-up' : 'chevron-down'} size={18} color={isDark ? '#bfdbfe' : '#1d4ed8'} />
                 </TouchableOpacity>
 
                 {showTouDetails ? (
-                  <View style={[styles.touBlock, { borderColor: isDark ? '#334155' : '#dbeafe', backgroundColor: isDark ? '#0b1220' : '#f8fafc' }]}>
-                    {nowTou ? (
-                      <View style={[styles.touNowPill, { backgroundColor: isDark ? '#1e3a8a33' : '#dbeafe' }]}>
-                        <Text style={[styles.touNowText, { color: isDark ? '#bfdbfe' : '#1e40af' }]}> 
-                          Now · {dayNames[nowTou.day]} {windowLabel12(nowTou.start, nowTou.end)}
-                        </Text>
-                      </View>
-                    ) : null}
-
+                  <View style={[styles.touBlock, { borderColor: isDark ? '#334155' : '#dbeafe', backgroundColor: isDark ? '#0b1220' : '#f8fafc' }]}> 
                     {(() => {
                       const tierMap = new Map<string, { label: string; color: string; darkColor: string; energy: number; idle: number }>();
                       const colors = [
@@ -528,7 +524,7 @@ export default function ChargerDetailScreen() {
                               return (
                                 <View key={k} style={styles.touLegendItem}>
                                   <View style={[styles.touLegendDot, { backgroundColor: isDark ? meta.darkColor : meta.color }]} />
-                                  <Text style={[styles.touLegendText, { color: isDark ? '#cbd5e1' : '#334155' }]}> 
+                                  <Text style={[styles.touLegendText, { color: isDark ? '#cbd5e1' : '#334155' }]}>
                                     {meta.label}: ${meta.energy.toFixed(2)}/kWh · ${meta.idle.toFixed(2)}/min
                                   </Text>
                                 </View>
@@ -642,6 +638,7 @@ const styles = StyleSheet.create({
   siteAddress: { fontSize: 13, color: '#6b7280', textAlign: 'center' },
   pricingWrap: { marginTop: 12, borderTopWidth: 1, paddingTop: 10, gap: 10 },
   pricingTitle: { fontSize: 13, fontWeight: '700', textAlign: 'center' },
+  pricingSubtitle: { fontSize: 11, fontWeight: '700', textAlign: 'center', marginTop: -4 },
   priceTilesRow: { flexDirection: 'row', gap: 8 },
   touDetailsWrap: { gap: 8, marginTop: 2 },
   touDetailsToggle: {
@@ -651,9 +648,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
   },
-  touDetailsToggleText: { fontSize: 12, fontWeight: '800' },
+  touDetailsIconSpacer: { width: 18, height: 18 },
+  touDetailsToggleText: { flex: 1, fontSize: 12, fontWeight: '800', textAlign: 'center' },
   priceTile: { flex: 1, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 8, alignItems: 'center' },
   priceTileLabel: { fontSize: 11, fontWeight: '600', textAlign: 'center' },
   priceTileValue: { fontSize: 14, fontWeight: '700', marginTop: 4, textAlign: 'center' },
