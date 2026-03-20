@@ -163,6 +163,8 @@ export interface SessionRecord {
   transactionId: number | null;
   startedAt: string;
   stoppedAt: string | null;
+  plugInAt?: string | null;
+  plugOutAt?: string | null;
   status: string;
   kwhDelivered: number | null;
   ratePerKwh: number | null;

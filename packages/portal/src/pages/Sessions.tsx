@@ -68,6 +68,8 @@ export default function Sessions() {
                   status: session.status,
                   startedAt: session.startedAt,
                   stoppedAt: session.stoppedAt,
+                  plugInAt: session.plugInAt ?? session.startedAt,
+                  plugOutAt: session.plugOutAt ?? session.stoppedAt,
                   durationMinutes,
                   energyKwh: session.kwhDelivered ?? 0,
                   revenueUsd: fallbackAmountCents / 100,
