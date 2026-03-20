@@ -46,7 +46,8 @@ const EMPTY: DriverProfile = {
 };
 
 const expoVersion = Constants.expoConfig?.version || '1.0.0';
-const mobileVersion = `${expoVersion} (${envLabel.toLowerCase()})`;
+const safeEnvLabel = typeof envLabel === 'string' && envLabel.trim().length > 0 ? envLabel : 'DEV';
+const mobileVersion = `${expoVersion} (${safeEnvLabel.toLowerCase()})`;
 
 export default function ProfileScreen() {
   const { isDark, setMode } = useAppTheme();
