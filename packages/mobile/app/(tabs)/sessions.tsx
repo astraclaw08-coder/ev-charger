@@ -141,7 +141,9 @@ function SessionCard({ session, onPress, isDark }: { session: Session; onPress: 
           session.status === 'FAILED' && styles.statusFailed,
         ]}
       >
-        {isActive ? 'Charging in progress →' : session.status === 'COMPLETED' ? 'Completed' : 'Failed'}
+        {isActive ? 'Charging in progress →' : session.status === 'COMPLETED'
+          ? (session.transactionId != null ? `Transaction #${session.transactionId}` : 'Completed')
+          : 'Failed'}
       </Text>
       {session.amountState === 'PENDING' && (
         <Text style={styles.pendingHint}>Payment pending · total shown is estimated</Text>

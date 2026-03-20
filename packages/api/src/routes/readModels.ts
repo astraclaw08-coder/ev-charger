@@ -469,6 +469,10 @@ export async function readModelRoutes(app: FastifyInstance) {
           idleStoppedAt: sessionTimings.idleStoppedAt,
         });
 
+        const snapshot = row.session?.billingSnapshot;
+        const snapshotGrossUsd = snapshot?.grossAmountUsd != null ? Number(snapshot.grossAmountUsd) : null;
+        const snapshotGrossCents = snapshotGrossUsd != null ? Math.round(snapshotGrossUsd * 100) : null;
+
         return {
           id: row.id,
           sessionId: row.sessionId,
@@ -480,17 +484,17 @@ export async function readModelRoutes(app: FastifyInstance) {
           plugInAt: sessionTimings.plugInAt ? new Date(sessionTimings.plugInAt) : undefined,
           plugOutAt: sessionTimings.plugOutAt ? new Date(sessionTimings.plugOutAt) : undefined,
           durationMinutes: row.durationMinutes,
-          energyKwh,
-          revenueUsd,
+          energyKwh: snapshot?.kwhDelivered ?? energyKwh,
+          revenueUsd: snapshotGrossUsd ?? revenueUsd,
           payment: row.session.payment,
           meterStart: row.session.meterStart,
           meterStop: row.session.meterStop,
-          effectiveAmountCents: amounts.effectiveAmountCents,
-          estimatedAmountCents: amounts.estimatedAmountCents,
-          amountState: amounts.amountState,
-          amountLabel: amounts.amountLabel,
-          isAmountFinal: amounts.isAmountFinal,
-          billingBreakdown: row.session?.billingSnapshot?.billingBreakdownJson ?? amounts.billingBreakdown,
+          effectiveAmountCents: snapshotGrossCents ?? amounts.effectiveAmountCents,
+          estimatedAmountCents: snapshotGrossCents ?? amounts.estimatedAmountCents,
+          amountState: snapshot ? 'FINAL' : amounts.amountState,
+          amountLabel: snapshot ? 'Final' : amounts.amountLabel,
+          isAmountFinal: snapshot ? true : amounts.isAmountFinal,
+          billingBreakdown: snapshot?.billingBreakdownJson ?? amounts.billingBreakdown,
           site: row.site,
           charger: row.charger,
           sourceVersion: row.sourceVersion,
