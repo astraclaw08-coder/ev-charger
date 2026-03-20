@@ -169,6 +169,8 @@ export interface Session {
   ratePerKwh: number | null;
   startedAt: string;
   endedAt: string | null;
+  plugInAt?: string | null;
+  plugOutAt?: string | null;
   costEstimateCents?: number | null;
   estimatedAmountCents?: number | null;
   effectiveAmountCents?: number | null;

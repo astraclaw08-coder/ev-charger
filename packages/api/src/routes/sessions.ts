@@ -375,7 +375,7 @@ export async function sessionRoutes(app: FastifyInstance) {
 
       const amounts = computeSessionAmounts({
         ...s,
-        startedAt: sessionTimings.plugInAt ? new Date(sessionTimings.plugInAt) : s.startedAt,
+        startedAt: s.startedAt,
         stoppedAt: billingStoppedAt,
         pricingMode: s.connector?.charger?.site?.pricingMode,
         pricePerKwhUsd: s.connector?.charger?.site?.pricePerKwhUsd,
@@ -402,8 +402,10 @@ export async function sessionRoutes(app: FastifyInstance) {
       }
       return {
         ...s,
-        startedAt: sessionTimings.plugInAt ? new Date(sessionTimings.plugInAt) : s.startedAt,
+        startedAt: s.startedAt,
         stoppedAt: sessionTimings.plugOutAt ? new Date(sessionTimings.plugOutAt) : s.stoppedAt,
+        plugInAt: sessionTimings.plugInAt ? new Date(sessionTimings.plugInAt) : undefined,
+        plugOutAt: sessionTimings.plugOutAt ? new Date(sessionTimings.plugOutAt) : undefined,
         ocppTransactionId: s.transactionId,
         kwhDelivered: amounts.kwhDelivered,
         endedAt: sessionTimings.plugOutAt ? new Date(sessionTimings.plugOutAt) : s.stoppedAt,
@@ -486,7 +488,7 @@ export async function sessionRoutes(app: FastifyInstance) {
 
     const amounts = computeSessionAmounts({
       ...session,
-      startedAt: sessionTimings.plugInAt ? new Date(sessionTimings.plugInAt) : session.startedAt,
+      startedAt: session.startedAt,
       stoppedAt: billingStoppedAt,
       pricingMode: session.connector?.charger?.site?.pricingMode,
       pricePerKwhUsd: session.connector?.charger?.site?.pricePerKwhUsd,
@@ -519,8 +521,10 @@ export async function sessionRoutes(app: FastifyInstance) {
 
     return {
       ...session,
-      startedAt: sessionTimings.plugInAt ? new Date(sessionTimings.plugInAt) : session.startedAt,
+      startedAt: session.startedAt,
       stoppedAt: sessionTimings.plugOutAt ? new Date(sessionTimings.plugOutAt) : session.stoppedAt,
+      plugInAt: sessionTimings.plugInAt ? new Date(sessionTimings.plugInAt) : undefined,
+      plugOutAt: sessionTimings.plugOutAt ? new Date(sessionTimings.plugOutAt) : undefined,
       ocppTransactionId: session.transactionId,
       kwhDelivered: amounts.kwhDelivered,
       endedAt: sessionTimings.plugOutAt ? new Date(sessionTimings.plugOutAt) : session.stoppedAt,
@@ -635,7 +639,7 @@ export async function sessionRoutes(app: FastifyInstance) {
 
         const amounts = computeSessionAmounts({
           ...row,
-          startedAt: sessionTimings.plugInAt ? new Date(sessionTimings.plugInAt) : row.startedAt,
+          startedAt: row.startedAt,
           stoppedAt: billingStoppedAt,
           pricingMode: row.connector?.charger?.site?.pricingMode,
           pricePerKwhUsd: row.connector?.charger?.site?.pricePerKwhUsd,
@@ -654,8 +658,10 @@ export async function sessionRoutes(app: FastifyInstance) {
           sessionId: row.id,
           transactionId: row.transactionId,
           status: row.status,
-          startedAt: sessionTimings.plugInAt ? new Date(sessionTimings.plugInAt) : row.startedAt,
+          startedAt: row.startedAt,
           stoppedAt: sessionTimings.plugOutAt ? new Date(sessionTimings.plugOutAt) : row.stoppedAt,
+          plugInAt: sessionTimings.plugInAt ? new Date(sessionTimings.plugInAt) : undefined,
+          plugOutAt: sessionTimings.plugOutAt ? new Date(sessionTimings.plugOutAt) : undefined,
           energyKwh: amounts.kwhDelivered,
           revenueUsd: ((amounts.effectiveAmountCents ?? amounts.estimatedAmountCents ?? row.payment?.amountCents ?? 0) / 100),
           payment: row.payment,

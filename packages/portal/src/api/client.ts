@@ -231,6 +231,8 @@ export interface EnrichedTransaction {
   status: string;
   startedAt: string;
   stoppedAt: string | null;
+  plugInAt?: string | null;
+  plugOutAt?: string | null;
   durationMinutes: number | null;
   energyKwh: number;
   revenueUsd: number;

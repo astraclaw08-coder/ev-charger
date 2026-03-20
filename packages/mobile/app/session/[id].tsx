@@ -227,12 +227,12 @@ function SessionSummary({
         <ReceiptRow
           isDark={isDark}
           label="Plug in"
-          value={formatDate(session.startedAt)}
+          value={formatDate(session.plugInAt ?? session.startedAt)}
         />
         <ReceiptRow
           isDark={isDark}
           label="Plug out"
-          value={session.endedAt ? formatDate(session.endedAt) : '-'}
+          value={(session.plugOutAt ?? session.endedAt) ? formatDate((session.plugOutAt ?? session.endedAt) as string) : '-'}
         />
 
         {energySegments.map((segment, idx) => (

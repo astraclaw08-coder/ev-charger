@@ -286,8 +286,8 @@ function ReceiptModal({ row, onClose }: { row: EnrichedTransaction | null; onClo
         <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-slate-700">
           <div className="border-b border-gray-200 dark:border-slate-700 px-4 py-2 text-center text-sm font-semibold text-gray-800 dark:text-slate-100">Session Detail</div>
           <div className="px-4 py-2 text-sm">
-            <ReceiptLine label="Plug in" value={new Date(row.startedAt).toLocaleString()} />
-            <ReceiptLine label="Plug out" value={row.stoppedAt ? new Date(row.stoppedAt).toLocaleString() : '—'} />
+            <ReceiptLine label="Plug in" value={new Date(row.plugInAt ?? row.startedAt).toLocaleString()} />
+            <ReceiptLine label="Plug out" value={(row.plugOutAt ?? row.stoppedAt) ? new Date((row.plugOutAt ?? row.stoppedAt) as string).toLocaleString() : '—'} />
 
             {energySegments.map((seg, idx) => (
               <ReceiptLine
