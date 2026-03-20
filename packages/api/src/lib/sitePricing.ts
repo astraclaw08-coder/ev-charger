@@ -1,5 +1,15 @@
+/**
+ * Server-side TOU window validation for the sites API.
+ *
+ * Rules:
+ *  - end "00:00" = end-of-day (canonical). end "23:59" is accepted as legacy alias.
+ *  - Windows must not overlap on the same day.
+ *  - Overnight windows (end < start numerically) are NOT stored; the portal splits them
+ *    into two adjacent same-day windows (e.g. Thu 21:00–00:00 + Fri 00:00–03:00).
+ *  - Unknown fields (e.g. portal-generated `id`) are stripped on write.
+ */
+
 export type TouWindow = {
-  id?: string;
   day: number;
   start: string;
   end: string;
@@ -10,9 +20,14 @@ export type TouWindow = {
 const HHMM_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
 function hhmmToMinutes(value: string): number {
+  if (value === '00:00') return 1440; // end-of-day sentinel
   const match = HHMM_RE.exec(value);
   if (!match) return -1;
   return Number(match[1]) * 60 + Number(match[2]);
+}
+
+function normaliseEnd(end: string): string {
+  return end === '23:59' ? '00:00' : end;
 }
 
 export function validateTouWindows(raw: unknown): { ok: true; windows: TouWindow[] } | { ok: false; error: string } {
@@ -30,18 +45,20 @@ export function validateTouWindows(raw: unknown): { ok: true; windows: TouWindow
     const candidate = entry as Record<string, unknown>;
     const day = Number(candidate.day);
     const start = String(candidate.start ?? '');
-    const end = String(candidate.end ?? '');
+    const end = normaliseEnd(String(candidate.end ?? ''));
     const pricePerKwhUsd = Number(candidate.pricePerKwhUsd);
     const idleFeePerMinUsd = Number(candidate.idleFeePerMinUsd);
 
     if (!Number.isInteger(day) || day < 0 || day > 6) {
-      return { ok: false, error: `touWindows[${i}].day must be an integer between 0 and 6` };
+      return { ok: false, error: `touWindows[${i}].day must be an integer 0–6` };
     }
-    if (hhmmToMinutes(start) < 0 || hhmmToMinutes(end) < 0) {
-      return { ok: false, error: `touWindows[${i}] start/end must use HH:mm format` };
+    const startMin = hhmmToMinutes(start);
+    const endMin   = hhmmToMinutes(end);
+    if (startMin < 0 || endMin < 0) {
+      return { ok: false, error: `touWindows[${i}] start/end must use HH:mm format (end may be 00:00 for end-of-day)` };
     }
-    if (hhmmToMinutes(end) <= hhmmToMinutes(start)) {
-      return { ok: false, error: `touWindows[${i}] end must be after start` };
+    if (endMin <= startMin) {
+      return { ok: false, error: `touWindows[${i}] end must be after start (use 00:00 for end-of-day)` };
     }
     if (!Number.isFinite(pricePerKwhUsd) || pricePerKwhUsd < 0) {
       return { ok: false, error: `touWindows[${i}].pricePerKwhUsd must be >= 0` };
@@ -50,29 +67,27 @@ export function validateTouWindows(raw: unknown): { ok: true; windows: TouWindow
       return { ok: false, error: `touWindows[${i}].idleFeePerMinUsd must be >= 0` };
     }
 
-    windows.push({
-      id: typeof candidate.id === 'string' && candidate.id.length > 0 ? candidate.id : undefined,
-      day,
-      start,
-      end,
-      pricePerKwhUsd,
-      idleFeePerMinUsd,
-    });
+    // Strip id and any unknown fields — only store canonical fields
+    windows.push({ day, start, end, pricePerKwhUsd, idleFeePerMinUsd });
   }
 
+  // Check for overlaps per day
   for (let day = 0; day < 7; day += 1) {
     const dayWindows = windows
       .filter((w) => w.day === day)
       .sort((a, b) => hhmmToMinutes(a.start) - hhmmToMinutes(b.start));
+
     for (let i = 1; i < dayWindows.length; i += 1) {
       const prev = dayWindows[i - 1];
       const curr = dayWindows[i];
       if (hhmmToMinutes(curr.start) < hhmmToMinutes(prev.end)) {
-        return { ok: false, error: `touWindows overlap on day ${day}` };
+        return { ok: false, error: `touWindows overlap on day ${day}: ${prev.start}–${prev.end} and ${curr.start}–${curr.end}` };
       }
     }
   }
 
-  const normalized = windows.sort((a, b) => a.day - b.day || hhmmToMinutes(a.start) - hhmmToMinutes(b.start));
-  return { ok: true, windows: normalized };
+  return {
+    ok: true,
+    windows: windows.sort((a, b) => a.day - b.day || hhmmToMinutes(a.start) - hhmmToMinutes(b.start)),
+  };
 }

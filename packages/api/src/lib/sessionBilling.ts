@@ -54,41 +54,6 @@ function toFiniteNumber(value: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-function mergeAdjacentTouSegments<T extends {
-  startedAt: string;
-  endedAt: string;
-  minutes: number;
-  pricePerKwhUsd: number;
-  idleFeePerMinUsd: number;
-  source: 'flat' | 'tou';
-}>(segments: T[]): T[] {
-  if (segments.length <= 1) return segments;
-
-  const merged: T[] = [];
-  for (const seg of segments) {
-    const prev = merged[merged.length - 1];
-    if (!prev) {
-      merged.push({ ...seg });
-      continue;
-    }
-
-    const isContiguous = new Date(prev.endedAt).getTime() === new Date(seg.startedAt).getTime();
-    const sameRate =
-      prev.source === seg.source
-      && prev.pricePerKwhUsd === seg.pricePerKwhUsd
-      && prev.idleFeePerMinUsd === seg.idleFeePerMinUsd;
-
-    if (isContiguous && sameRate) {
-      prev.endedAt = seg.endedAt;
-      prev.minutes = Number((prev.minutes + seg.minutes).toFixed(6));
-    } else {
-      merged.push({ ...seg });
-    }
-  }
-
-  return merged;
-}
-
 function resolveDurationMinutes(input: {
   durationMinutes?: number | null;
   startedAt?: Date | string | null;
@@ -201,10 +166,8 @@ export function computeSessionAmounts(session: {
         timeZone: billingTimeZone,
       })
     : [];
-  const compactedEnergySegments = mergeAdjacentTouSegments(rawSegments);
-
-  const fallbackSegment = compactedEnergySegments.length > 0
-    ? compactedEnergySegments
+  const fallbackSegment = rawSegments.length > 0
+    ? rawSegments
     : [{
         startedAt: session.startedAt ? new Date(session.startedAt).toISOString() : new Date(0).toISOString(),
         endedAt: session.stoppedAt ? new Date(session.stoppedAt).toISOString() : (session.startedAt ? new Date(session.startedAt).toISOString() : new Date(0).toISOString()),
@@ -233,9 +196,8 @@ export function computeSessionAmounts(session: {
         timeZone: billingTimeZone,
       })
     : [];
-  const compactedIdleSegments = mergeAdjacentTouSegments(idleRawSegments);
-  const idleSegmentsBase = compactedIdleSegments.length > 0
-    ? compactedIdleSegments
+  const idleSegmentsBase = idleRawSegments.length > 0
+    ? idleRawSegments
     : [{
         startedAt: session.idleStartedAt ? new Date(session.idleStartedAt).toISOString() : (session.startedAt ? new Date(session.startedAt).toISOString() : new Date(0).toISOString()),
         endedAt: session.idleStoppedAt ? new Date(session.idleStoppedAt).toISOString() : (session.startedAt ? new Date(session.startedAt).toISOString() : new Date(0).toISOString()),

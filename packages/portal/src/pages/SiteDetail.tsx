@@ -134,7 +134,7 @@ function profilesToWindows(profiles: TouDailyProfile[], buckets: PriceBucket[]):
           id: crypto.randomUUID(),
           day,
           start: `${String(seg.startHour).padStart(2,'0')}:00`,
-          end: seg.endHour >= 24 ? '23:59' : `${String(seg.endHour).padStart(2,'0')}:00`,
+          end: seg.endHour >= 24 ? '00:00' : `${String(seg.endHour).padStart(2,'0')}:00`,
           pricePerKwhUsd: b.pricePerKwhUsd,
           idleFeePerMinUsd: b.idleFeePerMinUsd,
         });
@@ -191,7 +191,7 @@ function windowsToProfileFromMostCommonSchedule(windows: TouWindow[], buckets: P
     const segs: TouTierSegment[] = dWins.map((w) => {
       const start = Math.max(0, Math.min(23, Math.floor(timeToMinutes(String(w.start)) / 60)));
       const endMins = timeToMinutes(String(w.end));
-      const end = String(w.end) === '23:59' ? 24 : Math.max(start + 1, Math.min(24, Math.ceil(endMins / 60)));
+      const end = (String(w.end) === '23:59' || String(w.end) === '00:00') ? 24 : Math.max(start + 1, Math.min(24, Math.ceil(endMins / 60)));
       return {
         id: crypto.randomUUID(),
         bucket: bucketForWindow(w),
@@ -234,6 +234,8 @@ function loadAudit(siteId: string): SiteAuditEvent[] {
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 function timeToMinutes(v: string): number {
+  // '00:00' and '23:59' are canonical end-of-day — treat as 1440 for comparison purposes
+  if (v === '00:00' || v === '23:59') return 1440;
   const [h, m] = v.split(':').map(Number);
   if (Number.isNaN(h) || Number.isNaN(m)) return -1;
   return h * 60 + m;

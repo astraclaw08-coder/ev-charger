@@ -74,19 +74,23 @@ assert.equal(touDetailed.billingBreakdown.energy.totalUsd, 4.2);
 assert.equal(touDetailed.billingBreakdown.idle.totalUsd, 2.4);
 assert.equal(touDetailed.grossAmountCents, 760);
 
+// Overnight session spanning midnight: windows stored as two adjacent same-rate split-at-midnight windows
+// Mon 22:00 PT (05:00 UTC Mar 17) → Tue 01:00 PT (08:00 UTC Mar 17) — entirely within the $0.50 window
 const overnightTou = computeSessionAmounts({
   kwhDelivered: 10,
   pricingMode: 'tou',
   pricePerKwhUsd: 0.3,
   idleFeePerMinUsd: 0.02,
-  startedAt: '2026-03-17T05:00:00.000Z', // 22:00 America/Los_Angeles (Mon)
-  stoppedAt: '2026-03-17T08:00:00.000Z',  // 01:00 America/Los_Angeles (Tue)
+  startedAt: '2026-03-17T05:00:00.000Z', // Mon 22:00 LA
+  stoppedAt: '2026-03-17T08:00:00.000Z', // Tue 01:00 LA
   siteTimeZone: 'America/Los_Angeles',
   touWindows: [
-    { day: 1, start: '21:00', end: '07:00', pricePerKwhUsd: 0.5, idleFeePerMinUsd: 0.07 },
+    { day: 1, start: '21:00', end: '00:00', pricePerKwhUsd: 0.5, idleFeePerMinUsd: 0.07 }, // Mon 21:00–midnight
+    { day: 2, start: '00:00', end: '07:00', pricePerKwhUsd: 0.5, idleFeePerMinUsd: 0.07 }, // Tue midnight–07:00
   ],
 });
-assert.equal(overnightTou.billingBreakdown.energy.segments.length, 1);
+// Should merge into 1 segment (both halves same rate)
+assert.equal(overnightTou.billingBreakdown.energy.segments.length, 1, 'overnight same-rate windows should merge to 1 segment');
 assert.equal(overnightTou.billingBreakdown.energy.segments[0].pricePerKwhUsd, 0.5);
 assert.equal(overnightTou.billingBreakdown.energy.totalUsd, 5);
 
