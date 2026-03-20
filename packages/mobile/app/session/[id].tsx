@@ -700,7 +700,10 @@ export default function SessionScreen() {
           headerTintColor: isDark ? '#f9fafb' : '#111827',
           headerBackButtonDisplayMode: 'minimal',
           headerTitleStyle: {
-            color: isDark ? '#f9fafb' : '#111827',
+            color: isDark ? '#ffffff' : '#000000',
+            fontWeight: '300',
+            letterSpacing: 1.5,
+            fontSize: 22,
           },
           headerShadowVisible: false,
         }}
