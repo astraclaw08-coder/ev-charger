@@ -10,51 +10,9 @@
  */
 import { prisma } from '../db';
 import { computeSessionAmounts } from './sessionBilling';
-
-type StatusLogLike = { chargerId: string; createdAt: Date; payload: unknown };
+import { resolveSessionStatusTimings } from './sessionTimings';
 
 const FINAL_STATUSES = new Set(['CAPTURED', 'REFUNDED']);
-
-/**
- * Inline idle/plugOut resolver — mirrors the logic in API routes.
- * Scoped to the session's connector and time window.
- */
-function resolveSessionTimings(
-  session: { startedAt: Date; stoppedAt: Date | null; connector?: { connectorId?: number | null } | null },
-  statusLogs: StatusLogLike[],
-): { plugOutAt: string | null; idleStartedAt: string | null; idleStoppedAt: string | null } {
-  const connectorId = session.connector?.connectorId ?? null;
-  const start = session.startedAt.getTime();
-  const stop = session.stoppedAt?.getTime() ?? Date.now();
-
-  const relevant = statusLogs
-    .filter(l => {
-      const p = l.payload as any;
-      if (connectorId != null && p?.connectorId != null && Number(p.connectorId) !== Number(connectorId)) return false;
-      const t = l.createdAt.getTime();
-      return t >= start - 5 * 60_000 && t <= stop + 2 * 60 * 60_000;
-    })
-    .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
-
-  let plugOutAt: string | null = null;
-  let idleStartedAt: string | null = null;
-  let idleStoppedAt: string | null = null;
-
-  for (const log of relevant) {
-    const p = log.payload as any;
-    const status = String(p?.status ?? '').toUpperCase();
-    const t = log.createdAt.toISOString();
-    if ((status === 'FINISHING' || status === 'SUSPENDEDEV' || status === 'SUSPENDEDEVSE') && !idleStartedAt) {
-      idleStartedAt = t;
-    }
-    if (status === 'AVAILABLE' && log.createdAt.getTime() > start) {
-      plugOutAt = t;
-      idleStoppedAt = t;
-    }
-  }
-
-  return { plugOutAt, idleStartedAt, idleStoppedAt };
-}
 
 /**
  * Capture or refresh a billing snapshot for a session.
@@ -120,7 +78,7 @@ export async function captureSessionBillingSnapshot(sessionId: string): Promise<
     take: 10_000,
   });
 
-  const timings = resolveSessionTimings(
+  const timings = resolveSessionStatusTimings(
     session,
     statusLogs.map(l => ({ chargerId: l.chargerId, createdAt: l.createdAt, payload: l.payload })),
   );
@@ -190,17 +148,23 @@ export async function captureSessionBillingSnapshot(sessionId: string): Promise<
  * Backfill billing snapshots for all completed sessions that don't have one yet.
  * Safe to run multiple times — skips sessions that already have a snapshot.
  */
-export async function backfillBillingSnapshots(opts?: { dryRun?: boolean }): Promise<{ processed: number; errors: number }> {
+export async function backfillBillingSnapshots(opts?: { dryRun?: boolean; force?: boolean }): Promise<{ processed: number; errors: number }> {
   const dryRun = opts?.dryRun ?? true;
-  console.log(`[BillingSnapshot] Backfill starting (${dryRun ? 'DRY RUN' : 'WRITE'})...`);
+  const force = opts?.force ?? false;
+  console.log(`[BillingSnapshot] Backfill starting (${dryRun ? 'DRY RUN' : 'WRITE'}${force ? ', FORCE recapture' : ''})...`);
 
   const sessions = await prisma.session.findMany({
-    where: { status: 'COMPLETED', billingSnapshot: null },
+    where: {
+      status: 'COMPLETED',
+      // force=true: recapture all non-final sessions; false: only sessions without a snapshot
+      ...(force ? {} : { billingSnapshot: null }),
+      NOT: { payment: { status: { in: ['CAPTURED', 'REFUNDED'] } } },
+    },
     select: { id: true, transactionId: true },
     orderBy: { createdAt: 'asc' },
   });
 
-  console.log(`Found ${sessions.length} completed sessions without a snapshot.`);
+  console.log(`Found ${sessions.length} completed sessions to process.`);
   let processed = 0;
   let errors = 0;
 
