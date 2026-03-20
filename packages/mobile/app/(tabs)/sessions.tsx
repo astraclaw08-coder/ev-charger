@@ -108,9 +108,9 @@ function SessionCard({ session, onPress, isDark }: { session: Session; onPress: 
   const isActive = session.status === 'ACTIVE';
   const charger = session.connector.charger;
   const kwh = session.kwhDelivered ?? 0;
-  const costCents = session.effectiveAmountCents ?? session.estimatedAmountCents ?? session.costEstimateCents ?? session.payment?.amountCents ?? null;
+  const costCents = session.effectiveAmountCents ?? session.payment?.amountCents ?? session.estimatedAmountCents ?? session.costEstimateCents ?? null;
   const cost = costCents != null ? `$${(costCents / 100).toFixed(2)}` : null;
-  const costLabel = session.amountState === 'FINAL' ? 'Cost' : 'Est. Cost';
+  const costLabel = 'Cost';
 
   return (
     <TouchableOpacity style={[styles.card, { backgroundColor: isDark ? '#111827' : '#fff' }]} onPress={onPress} activeOpacity={0.7}>
