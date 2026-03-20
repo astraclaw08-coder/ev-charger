@@ -85,6 +85,8 @@ function resolveSessionStatusTimings(input: {
   if (!Number.isFinite(sessionStart.getTime())) return {};
 
   const sessionStop = input.stoppedAt ? new Date(input.stoppedAt) : null;
+  const lookbackMs = 24 * 60 * 60 * 1000;
+  const hardStartMs = sessionStart.getTime() - lookbackMs;
   const hardEndMs = sessionStop && Number.isFinite(sessionStop.getTime())
     ? sessionStop.getTime() + (2 * 60 * 60 * 1000)
     : Date.now() + (2 * 60 * 60 * 1000);
@@ -95,27 +97,54 @@ function resolveSessionStatusTimings(input: {
     .filter((e) => e.connectorId === input.connectorId)
     .filter((e) => {
       const atMs = e.at.getTime();
-      return atMs >= sessionStart.getTime() && atMs <= hardEndMs;
+      return atMs >= hardStartMs && atMs <= hardEndMs;
     })
     .sort((a, b) => a.at.getTime() - b.at.getTime());
 
-  if (baseEvents.length === 0) return {};
+  if (baseEvents.length === 0) {
+    return { plugInAt: sessionStart.toISOString() };
+  }
 
   const events = baseEvents.map((e, idx) => ({
     ...e,
     prevStatus: idx > 0 ? baseEvents[idx - 1].status : null as string | null,
   }));
 
-  const plugIn = events.find((e) => e.prevStatus === 'AVAILABLE' && e.status === 'PREPARING');
-  const plugOut = events.find((e) =>
+  const plugInCandidates = events.filter((e) =>
+    e.prevStatus === 'AVAILABLE'
+    && e.status === 'PREPARING'
+    && e.at.getTime() <= sessionStart.getTime(),
+  );
+  const preparingCandidates = events.filter((e) =>
+    e.status === 'PREPARING'
+    && e.at.getTime() <= sessionStart.getTime(),
+  );
+  const plugIn = plugInCandidates.length > 0
+    ? plugInCandidates[plugInCandidates.length - 1]
+    : (preparingCandidates.length > 0 ? preparingCandidates[preparingCandidates.length - 1] : null);
+
+  const plugOutCandidates = events.filter((e) =>
     e.status === 'AVAILABLE'
     && !!e.prevStatus
-    && new Set(['FINISHING', 'SUSPENDED_EV', 'SUSPENDED_EVSE']).has(e.prevStatus),
+    && new Set(['FINISHING', 'SUSPENDED_EV', 'SUSPENDED_EVSE']).has(e.prevStatus)
+    && (!sessionStop || e.at.getTime() >= sessionStop.getTime()),
   );
+  const plugOut = plugOutCandidates.length > 0
+    ? plugOutCandidates[0]
+    : events.find((e) =>
+      e.status === 'AVAILABLE'
+      && !!e.prevStatus
+      && new Set(['FINISHING', 'SUSPENDED_EV', 'SUSPENDED_EVSE']).has(e.prevStatus),
+    );
 
   const idleStart = events.find((e) =>
-    e.prevStatus === 'CHARGING'
+    e.at.getTime() >= sessionStart.getTime()
+    && e.prevStatus === 'CHARGING'
     && (e.status === 'SUSPENDED_EV' || e.status === 'SUSPENDED_EVSE'),
+  ) ?? events.find((e) =>
+    e.at.getTime() >= sessionStart.getTime()
+    && e.prevStatus === 'CHARGING'
+    && e.status === 'FINISHING',
   );
 
   const idleEnd = idleStart
@@ -130,7 +159,7 @@ function resolveSessionStatusTimings(input: {
     )
     : null;
 
-  const resolvedIdleEnd = idleEnd?.at ?? sessionStop ?? null;
+  const resolvedIdleEnd = idleEnd?.at ?? plugOut?.at ?? sessionStop ?? null;
 
   return {
     idleStartedAt: idleStart?.at && resolvedIdleEnd && resolvedIdleEnd.getTime() > idleStart.at.getTime()
@@ -139,7 +168,7 @@ function resolveSessionStatusTimings(input: {
     idleStoppedAt: idleStart?.at && resolvedIdleEnd && resolvedIdleEnd.getTime() > idleStart.at.getTime()
       ? resolvedIdleEnd.toISOString()
       : undefined,
-    plugInAt: plugIn?.at?.toISOString(),
+    plugInAt: plugIn?.at?.toISOString() ?? sessionStart.toISOString(),
     plugOutAt: plugOut?.at?.toISOString(),
   };
 }
