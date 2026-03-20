@@ -340,8 +340,14 @@ export async function sessionRoutes(app: FastifyInstance) {
         s,
         statusLogsByCharger.get(s.connector?.charger?.id) ?? [],
       );
+      const billingStoppedAt = sessionTimings.idleStartedAt
+        ? new Date(sessionTimings.idleStartedAt)
+        : (sessionTimings.plugOutAt ? new Date(sessionTimings.plugOutAt) : s.stoppedAt);
+
       const amounts = computeSessionAmounts({
         ...s,
+        startedAt: sessionTimings.plugInAt ? new Date(sessionTimings.plugInAt) : s.startedAt,
+        stoppedAt: billingStoppedAt,
         pricingMode: s.connector?.charger?.site?.pricingMode,
         pricePerKwhUsd: s.connector?.charger?.site?.pricePerKwhUsd,
         idleFeePerMinUsd: s.connector?.charger?.site?.idleFeePerMinUsd,
@@ -426,18 +432,33 @@ export async function sessionRoutes(app: FastifyInstance) {
     if (!session) return reply.status(404).send({ error: 'Session not found' });
     if (session.userId !== user.id) return reply.status(403).send({ error: 'Not your session' });
 
+    const sessionStartForLogs = new Date(session.startedAt);
+    const sessionStopForLogs = session.stoppedAt ? new Date(session.stoppedAt) : null;
     const statusLogs = await prisma.ocppLog.findMany({
-      where: { chargerId: session.connector.charger.id, action: 'StatusNotification' },
+      where: {
+        chargerId: session.connector.charger.id,
+        action: 'StatusNotification',
+        createdAt: {
+          gte: new Date(sessionStartForLogs.getTime() - (15 * 60 * 1000)),
+          lte: new Date((sessionStopForLogs?.getTime() ?? Date.now()) + (2 * 60 * 60 * 1000)),
+        },
+      },
       orderBy: { createdAt: 'asc' },
-      take: 300,
+      take: 5000,
     });
     const sessionTimings = resolveSessionStatusTimings(
       session,
       statusLogs.map((row) => ({ chargerId: row.chargerId, createdAt: row.createdAt, payload: row.payload })),
     );
 
+    const billingStoppedAt = sessionTimings.idleStartedAt
+      ? new Date(sessionTimings.idleStartedAt)
+      : (sessionTimings.plugOutAt ? new Date(sessionTimings.plugOutAt) : session.stoppedAt);
+
     const amounts = computeSessionAmounts({
       ...session,
+      startedAt: sessionTimings.plugInAt ? new Date(sessionTimings.plugInAt) : session.startedAt,
+      stoppedAt: billingStoppedAt,
       pricingMode: session.connector?.charger?.site?.pricingMode,
       pricePerKwhUsd: session.connector?.charger?.site?.pricePerKwhUsd,
       idleFeePerMinUsd: session.connector?.charger?.site?.idleFeePerMinUsd,
@@ -579,8 +600,14 @@ export async function sessionRoutes(app: FastifyInstance) {
           row,
           txStatusLogsByCharger.get(row.connector?.charger?.id) ?? [],
         );
+        const billingStoppedAt = sessionTimings.idleStartedAt
+          ? new Date(sessionTimings.idleStartedAt)
+          : (sessionTimings.plugOutAt ? new Date(sessionTimings.plugOutAt) : row.stoppedAt);
+
         const amounts = computeSessionAmounts({
           ...row,
+          startedAt: sessionTimings.plugInAt ? new Date(sessionTimings.plugInAt) : row.startedAt,
+          stoppedAt: billingStoppedAt,
           pricingMode: row.connector?.charger?.site?.pricingMode,
           pricePerKwhUsd: row.connector?.charger?.site?.pricePerKwhUsd,
           idleFeePerMinUsd: row.connector?.charger?.site?.idleFeePerMinUsd,
