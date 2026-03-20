@@ -114,6 +114,7 @@ model Charger {
   status          ChargerStatus       @default(OFFLINE)
   lastHeartbeat   DateTime?
   connectors      Connector[]
+  stateTransitions ConnectorStateTransition[]
   ocppLogs        OcppLog[]
   uptimeEvents    UptimeEvent[]
   outboxEvents    OcppEventOutbox[]
@@ -196,17 +197,36 @@ model SmartChargingState {
 }
 
 model Connector {
-  id          String          @id @default(uuid())
-  chargerId   String
-  charger     Charger         @relation(fields: [chargerId], references: [id], onDelete: Cascade)
-  connectorId Int // OCPP connector number (1-indexed per charger)
-  status      ConnectorStatus @default(UNAVAILABLE)
-  sessions    Session[]
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
+  id                String                     @id @default(uuid())
+  chargerId         String
+  charger           Charger                    @relation(fields: [chargerId], references: [id], onDelete: Cascade)
+  connectorId       Int // OCPP connector number (1-indexed per charger)
+  status            ConnectorStatus            @default(UNAVAILABLE)
+  sessions          Session[]
+  stateTransitions  ConnectorStateTransition[]
+  createdAt         DateTime                   @default(now())
+  updatedAt         DateTime                   @updatedAt
 
   @@unique([chargerId, connectorId])
   @@index([status])
+}
+
+model ConnectorStateTransition {
+  id             String          @id @default(uuid())
+  chargerId      String
+  charger        Charger         @relation(fields: [chargerId], references: [id], onDelete: Cascade)
+  connectorRefId String
+  connector      Connector       @relation(fields: [connectorRefId], references: [id], onDelete: Cascade)
+  connectorId    Int
+  fromStatus     ConnectorStatus
+  toStatus       ConnectorStatus
+  transitionType String
+  occurredAt     DateTime
+  payloadTs      DateTime?
+  createdAt      DateTime        @default(now())
+
+  @@index([chargerId, connectorId, occurredAt])
+  @@index([transitionType, occurredAt])
 }
 
 model Session {

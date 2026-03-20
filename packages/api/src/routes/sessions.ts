@@ -64,10 +64,10 @@ function extractStatusEvent(log: StatusLogLike): { connectorId: number; status: 
   return { connectorId, status, at };
 }
 
-function resolveIdleWindowForSession(
+function resolveSessionStatusTimings(
   session: SessionLikeForIdle,
   statusLogsForCharger: StatusLogLike[],
-): { idleStartedAt?: string; idleStoppedAt?: string } {
+): { idleStartedAt?: string; idleStoppedAt?: string; plugInAt?: string; plugOutAt?: string } {
   const chargerId = session.connector?.charger?.id;
   const connectorId = session.connector?.connectorId;
   if (!chargerId || !connectorId || !session.startedAt) return {};
@@ -80,7 +80,7 @@ function resolveIdleWindowForSession(
     ? sessionStop.getTime() + (2 * 60 * 60 * 1000)
     : Date.now() + (2 * 60 * 60 * 1000);
 
-  const events = statusLogsForCharger
+  const baseEvents = statusLogsForCharger
     .map(extractStatusEvent)
     .filter((e): e is { connectorId: number; status: string; at: Date } => Boolean(e))
     .filter((e) => e.connectorId === connectorId)
@@ -90,21 +90,51 @@ function resolveIdleWindowForSession(
     })
     .sort((a, b) => a.at.getTime() - b.at.getTime());
 
-  if (events.length === 0) return {};
+  if (baseEvents.length === 0) return {};
 
-  // Idle billing starts only when connector enters IEC 61851 C6/D6-equivalent
-  // states and ends when connector reaches F1-equivalent (Available).
-  const idleStartStatuses = new Set(['FINISHING', 'SUSPENDED_EV', 'SUSPENDED_EVSE']);
-  const c6OrD6Start = events.find((e) => idleStartStatuses.has(e.status));
-  if (!c6OrD6Start) return {};
+  const events = baseEvents.map((e, idx) => ({
+    ...e,
+    prevStatus: idx > 0 ? baseEvents[idx - 1].status : null as string | null,
+  }));
 
-  const f1End = events.find((e) => e.at.getTime() >= c6OrD6Start.at.getTime() && e.status === 'AVAILABLE');
-  const end = f1End?.at ?? sessionStop ?? null;
-  if (!end || end.getTime() <= c6OrD6Start.at.getTime()) return {};
+  const plugIn = events.find((e) => e.prevStatus === 'AVAILABLE' && e.status === 'PREPARING');
+  const plugOut = events.find((e) =>
+    e.status === 'AVAILABLE'
+    && !!e.prevStatus
+    && new Set(['FINISHING', 'SUSPENDED_EV', 'SUSPENDED_EVSE']).has(e.prevStatus),
+  );
+
+  // New idle logic:
+  // start at CHARGING -> SUSPENDED_EV/SUSPENDED_EVSE,
+  // end at FINISHING -> AVAILABLE or SUSPENDED_EV/SUSPENDED_EVSE -> AVAILABLE.
+  const idleStart = events.find((e) =>
+    e.prevStatus === 'CHARGING'
+    && (e.status === 'SUSPENDED_EV' || e.status === 'SUSPENDED_EVSE'),
+  );
+
+  const idleEnd = idleStart
+    ? events.find((e) =>
+      e.at.getTime() >= idleStart.at.getTime()
+      && e.status === 'AVAILABLE'
+      && (
+        e.prevStatus === 'FINISHING'
+        || e.prevStatus === 'SUSPENDED_EV'
+        || e.prevStatus === 'SUSPENDED_EVSE'
+      ),
+    )
+    : null;
+
+  const resolvedIdleEnd = idleEnd?.at ?? sessionStop ?? null;
 
   return {
-    idleStartedAt: c6OrD6Start.at.toISOString(),
-    idleStoppedAt: end.toISOString(),
+    idleStartedAt: idleStart?.at && resolvedIdleEnd && resolvedIdleEnd.getTime() > idleStart.at.getTime()
+      ? idleStart.at.toISOString()
+      : undefined,
+    idleStoppedAt: idleStart?.at && resolvedIdleEnd && resolvedIdleEnd.getTime() > idleStart.at.getTime()
+      ? resolvedIdleEnd.toISOString()
+      : undefined,
+    plugInAt: plugIn?.at?.toISOString(),
+    plugOutAt: plugOut?.at?.toISOString(),
   };
 }
 
@@ -306,7 +336,7 @@ export async function sessionRoutes(app: FastifyInstance) {
     }
 
     const sessionsForClient = sessions.map((s: any) => {
-      const idleWindow = resolveIdleWindowForSession(
+      const sessionTimings = resolveSessionStatusTimings(
         s,
         statusLogsByCharger.get(s.connector?.charger?.id) ?? [],
       );
@@ -321,8 +351,8 @@ export async function sessionRoutes(app: FastifyInstance) {
         softwareVendorFeeMode: s.connector?.charger?.site?.softwareVendorFeeMode,
         softwareVendorFeeValue: s.connector?.charger?.site?.softwareVendorFeeValue,
         softwareFeeIncludesActivation: s.connector?.charger?.site?.softwareFeeIncludesActivation,
-        idleStartedAt: idleWindow.idleStartedAt,
-        idleStoppedAt: idleWindow.idleStoppedAt,
+        idleStartedAt: sessionTimings.idleStartedAt,
+        idleStoppedAt: sessionTimings.idleStoppedAt,
       });
       let powerActiveImportW: number | null = null;
       if (s.status === 'ACTIVE') {
@@ -337,9 +367,11 @@ export async function sessionRoutes(app: FastifyInstance) {
       }
       return {
         ...s,
+        startedAt: sessionTimings.plugInAt ? new Date(sessionTimings.plugInAt) : s.startedAt,
+        stoppedAt: sessionTimings.plugOutAt ? new Date(sessionTimings.plugOutAt) : s.stoppedAt,
         ocppTransactionId: s.transactionId,
         kwhDelivered: amounts.kwhDelivered,
-        endedAt: s.stoppedAt,
+        endedAt: sessionTimings.plugOutAt ? new Date(sessionTimings.plugOutAt) : s.stoppedAt,
         effectiveAmountCents: amounts.effectiveAmountCents,
         costEstimateCents: amounts.costEstimateCents,
         estimatedAmountCents: amounts.estimatedAmountCents,
@@ -399,7 +431,7 @@ export async function sessionRoutes(app: FastifyInstance) {
       orderBy: { createdAt: 'asc' },
       take: 300,
     });
-    const idleWindow = resolveIdleWindowForSession(
+    const sessionTimings = resolveSessionStatusTimings(
       session,
       statusLogs.map((row) => ({ chargerId: row.chargerId, createdAt: row.createdAt, payload: row.payload })),
     );
@@ -415,8 +447,8 @@ export async function sessionRoutes(app: FastifyInstance) {
       softwareVendorFeeMode: session.connector?.charger?.site?.softwareVendorFeeMode,
       softwareVendorFeeValue: session.connector?.charger?.site?.softwareVendorFeeValue,
       softwareFeeIncludesActivation: session.connector?.charger?.site?.softwareFeeIncludesActivation,
-      idleStartedAt: idleWindow.idleStartedAt,
-      idleStoppedAt: idleWindow.idleStoppedAt,
+      idleStartedAt: sessionTimings.idleStartedAt,
+      idleStoppedAt: sessionTimings.idleStoppedAt,
     });
 
     let powerActiveImportW: number | null = null;
@@ -437,9 +469,11 @@ export async function sessionRoutes(app: FastifyInstance) {
 
     return {
       ...session,
+      startedAt: sessionTimings.plugInAt ? new Date(sessionTimings.plugInAt) : session.startedAt,
+      stoppedAt: sessionTimings.plugOutAt ? new Date(sessionTimings.plugOutAt) : session.stoppedAt,
       ocppTransactionId: session.transactionId,
       kwhDelivered: amounts.kwhDelivered,
-      endedAt: session.stoppedAt,
+      endedAt: sessionTimings.plugOutAt ? new Date(sessionTimings.plugOutAt) : session.stoppedAt,
       costEstimateCents: amounts.costEstimateCents,
       estimatedAmountCents: amounts.estimatedAmountCents,
       effectiveAmountCents: amounts.effectiveAmountCents,
@@ -541,7 +575,7 @@ export async function sessionRoutes(app: FastifyInstance) {
       limit,
       offset,
       transactions: rows.map((row: any) => {
-        const idleWindow = resolveIdleWindowForSession(
+        const sessionTimings = resolveSessionStatusTimings(
           row,
           txStatusLogsByCharger.get(row.connector?.charger?.id) ?? [],
         );
@@ -556,16 +590,16 @@ export async function sessionRoutes(app: FastifyInstance) {
           softwareVendorFeeMode: row.connector?.charger?.site?.softwareVendorFeeMode,
           softwareVendorFeeValue: row.connector?.charger?.site?.softwareVendorFeeValue,
           softwareFeeIncludesActivation: row.connector?.charger?.site?.softwareFeeIncludesActivation,
-          idleStartedAt: idleWindow.idleStartedAt,
-          idleStoppedAt: idleWindow.idleStoppedAt,
+          idleStartedAt: sessionTimings.idleStartedAt,
+          idleStoppedAt: sessionTimings.idleStoppedAt,
         });
         return {
           id: row.id,
           sessionId: row.id,
           transactionId: row.transactionId,
           status: row.status,
-          startedAt: row.startedAt,
-          stoppedAt: row.stoppedAt,
+          startedAt: sessionTimings.plugInAt ? new Date(sessionTimings.plugInAt) : row.startedAt,
+          stoppedAt: sessionTimings.plugOutAt ? new Date(sessionTimings.plugOutAt) : row.stoppedAt,
           energyKwh: amounts.kwhDelivered,
           revenueUsd: ((amounts.effectiveAmountCents ?? amounts.estimatedAmountCents ?? row.payment?.amountCents ?? 0) / 100),
           payment: row.payment,

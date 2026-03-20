@@ -74,12 +74,12 @@ function extractStatusEvent(log: StatusLogLike): { connectorId: number; status: 
   return { connectorId, status, at };
 }
 
-function resolveIdleWindowForSession(input: {
+function resolveSessionStatusTimings(input: {
   startedAt?: Date | string | null;
   stoppedAt?: Date | string | null;
   connectorId?: number | null;
   statusLogs: StatusLogLike[];
-}): { idleStartedAt?: string; idleStoppedAt?: string } {
+}): { idleStartedAt?: string; idleStoppedAt?: string; plugInAt?: string; plugOutAt?: string } {
   if (!input.startedAt || !input.connectorId) return {};
   const sessionStart = new Date(input.startedAt);
   if (!Number.isFinite(sessionStart.getTime())) return {};
@@ -89,7 +89,7 @@ function resolveIdleWindowForSession(input: {
     ? sessionStop.getTime() + (2 * 60 * 60 * 1000)
     : Date.now() + (2 * 60 * 60 * 1000);
 
-  const events = input.statusLogs
+  const baseEvents = input.statusLogs
     .map(extractStatusEvent)
     .filter((e): e is { connectorId: number; status: string; at: Date } => Boolean(e))
     .filter((e) => e.connectorId === input.connectorId)
@@ -99,19 +99,48 @@ function resolveIdleWindowForSession(input: {
     })
     .sort((a, b) => a.at.getTime() - b.at.getTime());
 
-  if (events.length === 0) return {};
+  if (baseEvents.length === 0) return {};
 
-  const idleStartStatuses = new Set(['FINISHING', 'SUSPENDED_EV', 'SUSPENDED_EVSE']);
-  const start = events.find((e) => idleStartStatuses.has(e.status));
-  if (!start) return {};
+  const events = baseEvents.map((e, idx) => ({
+    ...e,
+    prevStatus: idx > 0 ? baseEvents[idx - 1].status : null as string | null,
+  }));
 
-  const end = events.find((e) => e.at.getTime() >= start.at.getTime() && e.status === 'AVAILABLE');
-  const resolvedEnd = end?.at ?? sessionStop ?? null;
-  if (!resolvedEnd || resolvedEnd.getTime() <= start.at.getTime()) return {};
+  const plugIn = events.find((e) => e.prevStatus === 'AVAILABLE' && e.status === 'PREPARING');
+  const plugOut = events.find((e) =>
+    e.status === 'AVAILABLE'
+    && !!e.prevStatus
+    && new Set(['FINISHING', 'SUSPENDED_EV', 'SUSPENDED_EVSE']).has(e.prevStatus),
+  );
+
+  const idleStart = events.find((e) =>
+    e.prevStatus === 'CHARGING'
+    && (e.status === 'SUSPENDED_EV' || e.status === 'SUSPENDED_EVSE'),
+  );
+
+  const idleEnd = idleStart
+    ? events.find((e) =>
+      e.at.getTime() >= idleStart.at.getTime()
+      && e.status === 'AVAILABLE'
+      && (
+        e.prevStatus === 'FINISHING'
+        || e.prevStatus === 'SUSPENDED_EV'
+        || e.prevStatus === 'SUSPENDED_EVSE'
+      ),
+    )
+    : null;
+
+  const resolvedIdleEnd = idleEnd?.at ?? sessionStop ?? null;
 
   return {
-    idleStartedAt: start.at.toISOString(),
-    idleStoppedAt: resolvedEnd.toISOString(),
+    idleStartedAt: idleStart?.at && resolvedIdleEnd && resolvedIdleEnd.getTime() > idleStart.at.getTime()
+      ? idleStart.at.toISOString()
+      : undefined,
+    idleStoppedAt: idleStart?.at && resolvedIdleEnd && resolvedIdleEnd.getTime() > idleStart.at.getTime()
+      ? resolvedIdleEnd.toISOString()
+      : undefined,
+    plugInAt: plugIn?.at?.toISOString(),
+    plugOutAt: plugOut?.at?.toISOString(),
   };
 }
 
@@ -381,7 +410,7 @@ export async function readModelRoutes(app: FastifyInstance) {
       transactions: rows.map((row: any) => {
         const energyKwh = Number(toNumber(row.energyKwh).toFixed(6));
         const revenueUsd = Number(toNumber(row.revenueUsd).toFixed(6));
-        const idleWindow = resolveIdleWindowForSession({
+        const sessionTimings = resolveSessionStatusTimings({
           startedAt: row.startedAt,
           stoppedAt: row.stoppedAt,
           connectorId: row.session?.connector?.connectorId,
@@ -406,8 +435,8 @@ export async function readModelRoutes(app: FastifyInstance) {
           softwareVendorFeeMode: row.site.softwareVendorFeeMode,
           softwareVendorFeeValue: row.site.softwareVendorFeeValue,
           softwareFeeIncludesActivation: row.site.softwareFeeIncludesActivation,
-          idleStartedAt: idleWindow.idleStartedAt,
-          idleStoppedAt: idleWindow.idleStoppedAt,
+          idleStartedAt: sessionTimings.idleStartedAt,
+          idleStoppedAt: sessionTimings.idleStoppedAt,
         });
 
         return {
@@ -416,8 +445,8 @@ export async function readModelRoutes(app: FastifyInstance) {
           transactionId: row.session.transactionId,
           idTag: row.session.idTag,
           status: row.status,
-          startedAt: row.startedAt,
-          stoppedAt: row.stoppedAt,
+          startedAt: sessionTimings.plugInAt ? new Date(sessionTimings.plugInAt) : row.startedAt,
+          stoppedAt: sessionTimings.plugOutAt ? new Date(sessionTimings.plugOutAt) : row.stoppedAt,
           durationMinutes: row.durationMinutes,
           energyKwh,
           revenueUsd,

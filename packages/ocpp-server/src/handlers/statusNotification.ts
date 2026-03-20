@@ -43,18 +43,57 @@ export async function handleStatusNotification(
         data: { status: mapped },
       });
     } else {
-      // Upsert connector status (create if missing, update if exists)
-      await tx.connector.upsert({
+      const nextStatus = toConnectorStatus(status);
+      const previous = await tx.connector.findUnique({
+        where: { chargerId_connectorId: { chargerId, connectorId } },
+        select: { id: true, status: true },
+      });
+
+      const connector = await tx.connector.upsert({
         where: {
           chargerId_connectorId: { chargerId, connectorId },
         },
-        update: { status: toConnectorStatus(status) },
+        update: { status: nextStatus },
         create: {
           chargerId,
           connectorId,
-          status: toConnectorStatus(status),
+          status: nextStatus,
         },
+        select: { id: true },
       });
+
+      const prevStatus = previous?.status;
+      if (prevStatus && prevStatus !== nextStatus) {
+        const transitionType = (() => {
+          if (prevStatus === 'AVAILABLE' && nextStatus === 'PREPARING') return 'PLUG_IN';
+          if (
+            (prevStatus === 'FINISHING' || prevStatus === 'SUSPENDED_EV' || prevStatus === 'SUSPENDED_EVSE')
+            && nextStatus === 'AVAILABLE'
+          ) return 'PLUG_OUT';
+          if (prevStatus === 'CHARGING' && (nextStatus === 'SUSPENDED_EV' || nextStatus === 'SUSPENDED_EVSE')) return 'IDLE_START';
+          if (
+            (prevStatus === 'FINISHING' || prevStatus === 'SUSPENDED_EV' || prevStatus === 'SUSPENDED_EVSE')
+            && nextStatus === 'AVAILABLE'
+          ) return 'IDLE_END';
+          return 'STATUS_CHANGE';
+        })();
+
+        const payloadTs = params.timestamp ? new Date(params.timestamp) : null;
+        const occurredAt = payloadTs && Number.isFinite(payloadTs.getTime()) ? payloadTs : new Date();
+
+        await tx.connectorStateTransition.create({
+          data: {
+            chargerId,
+            connectorRefId: connector.id,
+            connectorId,
+            fromStatus: prevStatus,
+            toStatus: nextStatus,
+            transitionType,
+            occurredAt,
+            payloadTs: payloadTs && Number.isFinite(payloadTs.getTime()) ? payloadTs : null,
+          },
+        });
+      }
     }
 
     await enqueueOcppEvent(tx, {
