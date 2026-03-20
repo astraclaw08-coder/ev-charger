@@ -638,7 +638,7 @@ const styles = StyleSheet.create({
   pricingWrap: { marginTop: 12, borderTopWidth: 1, paddingTop: 10, gap: 10 },
   pricingTitle: { fontSize: 13, fontWeight: '700', textAlign: 'center' },
   pricingSubtitle: { fontSize: 11, fontWeight: '700', textAlign: 'center', marginTop: -4 },
-  priceTilesRow: { flexDirection: 'row', gap: 8, alignItems: 'stretch' },
+  priceTilesRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'stretch' },
   touDetailsWrap: { gap: 8, marginTop: 2 },
   touDetailsToggle: {
     borderWidth: 1,
@@ -650,9 +650,9 @@ const styles = StyleSheet.create({
   },
   touDetailsIconSpacer: { width: 18, height: 18 },
   touDetailsToggleText: { flex: 1, fontSize: 12, fontWeight: '800', textAlign: 'center' },
-  priceTile: { flex: 1, flexBasis: 0, minWidth: 0, minHeight: 76, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 8, alignItems: 'center', justifyContent: 'center' },
-  priceTileLabel: { fontSize: 12, fontWeight: '600', textAlign: 'center', lineHeight: 16 },
-  priceTileValue: { fontSize: 13, fontWeight: '700', marginTop: 6, textAlign: 'center' },
+  priceTile: { width: '31.5%', minWidth: 0, minHeight: 82, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 6, alignItems: 'center', justifyContent: 'center' },
+  priceTileLabel: { width: '100%', fontSize: 12, fontWeight: '600', textAlign: 'center', lineHeight: 16 },
+  priceTileValue: { width: '100%', fontSize: 13, fontWeight: '700', marginTop: 6, textAlign: 'center' },
 
   touBlock: { marginTop: 10, borderWidth: 1, borderRadius: 12, padding: 10, gap: 10 },
   touNowPill: { borderRadius: 10, paddingVertical: 7, paddingHorizontal: 9 },
