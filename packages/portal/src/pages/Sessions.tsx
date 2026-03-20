@@ -255,7 +255,7 @@ function ReceiptModal({ row, onClose }: { row: EnrichedTransaction | null; onClo
 
   const breakdown = row.billingBreakdown;
   const energySegments = breakdown?.energy.segments ?? [];
-  const idleSegments = breakdown?.idle.segments ?? [];
+  const idleSegments = (breakdown?.idle.segments ?? []).filter((seg) => (seg.minutes ?? 0) > 0);
   const totals = breakdown?.totals;
   const energySubtotal = totals?.energyUsd ?? breakdown?.energy.totalUsd ?? 0;
   const idleSubtotal = totals?.idleUsd ?? breakdown?.idle.totalUsd ?? 0;
@@ -279,8 +279,8 @@ function ReceiptModal({ row, onClose }: { row: EnrichedTransaction | null; onClo
         <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-slate-700">
           <div className="border-b border-gray-200 dark:border-slate-700 px-4 py-2 text-center text-sm font-semibold text-gray-800 dark:text-slate-100">Session Detail</div>
           <div className="px-4 py-2 text-sm">
-            <ReceiptLine label="Start" value={new Date(row.startedAt).toLocaleString()} />
-            <ReceiptLine label="End" value={row.stoppedAt ? new Date(row.stoppedAt).toLocaleString() : '—'} />
+            <ReceiptLine label="Plug in" value={new Date(row.startedAt).toLocaleString()} />
+            <ReceiptLine label="Plug out" value={row.stoppedAt ? new Date(row.stoppedAt).toLocaleString() : '—'} />
 
             {energySegments.map((seg, idx) => (
               <ReceiptLine

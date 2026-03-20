@@ -153,7 +153,7 @@ function SessionSummary({
   const displayIdleUsd = breakdownTotals?.idleUsd ?? breakdown?.idle.totalUsd ?? 0;
   const displayActivationUsd = breakdownTotals?.activationUsd ?? breakdown?.activation.totalUsd ?? 0;
   const energySegments = breakdown?.energy.segments ?? [];
-  const idleSegments = breakdown?.idle.segments ?? [];
+  const idleSegments = (breakdown?.idle.segments ?? []).filter((segment) => (segment.minutes ?? 0) > 0);
   const gracePeriodMin = Math.max(0, breakdown?.gracePeriodMin ?? 0);
 
   const finalKwh =
@@ -214,12 +214,12 @@ function SessionSummary({
 
         <ReceiptRow
           isDark={isDark}
-          label="Start"
+          label="Plug in"
           value={formatDate(session.startedAt)}
         />
         <ReceiptRow
           isDark={isDark}
-          label="End"
+          label="Plug out"
           value={session.endedAt ? formatDate(session.endedAt) : '-'}
         />
 
