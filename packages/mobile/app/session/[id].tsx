@@ -143,15 +143,20 @@ function SessionSummary({
         ? session.costEstimateCents / 100
         : null;
 
-  const cost =
-    effectiveDerivedCost ??
-    estimateDerivedCost ??
-    (sessionDerivedKwh > 0 ? sessionDerivedKwh * ratePerKwh : meterDerivedKwh * ratePerKwh);
   const breakdown = session.billingBreakdown;
   const breakdownTotals = breakdown?.totals;
   const displayEnergyUsd = breakdownTotals?.energyUsd ?? breakdown?.energy.totalUsd ?? 0;
   const displayIdleUsd = breakdownTotals?.idleUsd ?? breakdown?.idle.totalUsd ?? 0;
   const displayActivationUsd = breakdownTotals?.activationUsd ?? breakdown?.activation.totalUsd ?? 0;
+  const grossSubtotalTotal = displayEnergyUsd + displayIdleUsd + displayActivationUsd;
+  const cost =
+    breakdown
+      ? grossSubtotalTotal
+      : (
+        effectiveDerivedCost ??
+        estimateDerivedCost ??
+        (sessionDerivedKwh > 0 ? sessionDerivedKwh * ratePerKwh : meterDerivedKwh * ratePerKwh)
+      );
   const energySegments = breakdown?.energy.segments ?? [];
   const rawIdleSegments = breakdown?.idle.segments ?? [];
   const idleSegments = rawIdleSegments.filter((segment) => (segment.minutes ?? 0) > 0);
