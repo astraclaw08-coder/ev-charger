@@ -57,8 +57,14 @@ function time12(v: string): string {
   return `${h12}:${mm} ${suffix}`;
 }
 
+function normalizedTouEnd(start: string, end: string): string {
+  if (end === '23:59') return '24:00';
+  if (end === '00:00' && toMinutes(start) > 0) return '24:00';
+  return end;
+}
+
 function windowLabel12(start: string, end: string): string {
-  const normalizedEnd = end === '23:59' ? '24:00' : end;
+  const normalizedEnd = normalizedTouEnd(start, end);
   if (normalizedEnd === '24:00') return `${time12(start)}-12 AM`;
   return `${time12(start)}-${time12(normalizedEnd)}`;
 }
@@ -73,7 +79,12 @@ function parseTouWindows(raw: unknown): TouWindowMobile[] {
       pricePerKwhUsd: Number(w?.pricePerKwhUsd ?? 0),
       idleFeePerMinUsd: Number(w?.idleFeePerMinUsd ?? 0),
     }))
-    .filter((w) => w.day >= 0 && w.day <= 6 && toMinutes(w.start) >= 0 && (toMinutes(w.end) > toMinutes(w.start) || w.end === '23:59'))
+    .filter((w) => {
+      if (w.day < 0 || w.day > 6) return false;
+      const startMin = toMinutes(w.start);
+      const endMin = toMinutes(normalizedTouEnd(w.start, w.end));
+      return startMin >= 0 && endMin > startMin;
+    })
     .sort((a, b) => a.day - b.day || toMinutes(a.start) - toMinutes(b.start));
 }
 
@@ -84,7 +95,7 @@ function currentTouWindow(windows: TouWindowMobile[]): TouWindowMobile | null {
   return windows.find((w) => {
     if (w.day !== day) return false;
     const s = toMinutes(w.start);
-    const e = w.end === '23:59' ? 24 * 60 : toMinutes(w.end);
+    const e = toMinutes(normalizedTouEnd(w.start, w.end));
     return mins >= s && mins < e;
   }) ?? null;
 }
@@ -491,7 +502,7 @@ export default function ChargerDetailScreen() {
                                 const k = `${w.pricePerKwhUsd.toFixed(4)}|${w.idleFeePerMinUsd.toFixed(4)}`;
                                 const meta = tierMap.get(k)!;
                                 const start = toMinutes(w.start);
-                                const end = w.end === '23:59' ? 1440 : toMinutes(w.end);
+                                const end = toMinutes(normalizedTouEnd(w.start, w.end));
                                 const leftPct = Math.max(0, Math.min(100, (start / 1440) * 100));
                                 const widthPct = Math.max(1, Math.min(100 - leftPct, ((end - start) / 1440) * 100));
                                 return (
