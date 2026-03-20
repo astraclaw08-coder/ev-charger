@@ -216,6 +216,13 @@ export async function chargerRoutes(app: FastifyInstance) {
         connector: { select: { connectorId: true } },
         user: { select: { name: true, email: true } },
         payment: { select: { status: true, amountCents: true } },
+        billingSnapshot: {
+          select: {
+            kwhDelivered: true,
+            grossAmountUsd: true,
+            billingBreakdownJson: true,
+          },
+        },
       },
     });
 
@@ -232,15 +239,17 @@ export async function chargerRoutes(app: FastifyInstance) {
         softwareVendorFeeValue: site?.softwareVendorFeeValue,
         softwareFeeIncludesActivation: site?.softwareFeeIncludesActivation,
       });
+      const snapshot = s.billingSnapshot;
+      const snapshotGrossCents = snapshot?.grossAmountUsd != null ? Math.round(Number(snapshot.grossAmountUsd) * 100) : null;
       return {
         ...s,
-        kwhDelivered: amounts.kwhDelivered,
-        effectiveAmountCents: amounts.effectiveAmountCents,
-        estimatedAmountCents: amounts.estimatedAmountCents,
-        amountState: amounts.amountState,
-        amountLabel: amounts.amountLabel,
-        isAmountFinal: amounts.isAmountFinal,
-        billingBreakdown: amounts.billingBreakdown,
+        kwhDelivered: snapshot?.kwhDelivered ?? amounts.kwhDelivered,
+        effectiveAmountCents: snapshotGrossCents ?? amounts.effectiveAmountCents,
+        estimatedAmountCents: snapshotGrossCents ?? amounts.estimatedAmountCents,
+        amountState: snapshot ? 'FINAL' : amounts.amountState,
+        amountLabel: snapshot ? 'Final' : amounts.amountLabel,
+        isAmountFinal: snapshot ? true : amounts.isAmountFinal,
+        billingBreakdown: snapshot?.billingBreakdownJson ?? amounts.billingBreakdown,
       };
     });
   });
