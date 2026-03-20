@@ -261,6 +261,11 @@ function ReceiptModal({ row, onClose }: { row: EnrichedTransaction | null; onClo
   const idleSubtotal = totals?.idleUsd ?? breakdown?.idle.totalUsd ?? 0;
   const activationFee = totals?.activationUsd ?? breakdown?.activation.totalUsd ?? 0;
   const total = row.revenueUsd ?? totals?.netUsd ?? breakdown?.grossTotalUsd ?? 0;
+  const idleStartLabel = idleSegments.length > 0 ? toTime(idleSegments[0].startedAt) : null;
+  const idleEndLabel = idleSegments.length > 0 ? toTime(idleSegments[idleSegments.length - 1].endedAt) : null;
+  const idleSubtotalLabel = idleStartLabel && idleEndLabel
+    ? `${idleStartLabel} to ${idleEndLabel} Subtotal`
+    : 'Idle Subtotal';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4" onClick={onClose}>
@@ -300,7 +305,7 @@ function ReceiptModal({ row, onClose }: { row: EnrichedTransaction | null; onClo
               />
             ))}
 
-            <ReceiptLine label="Idle Subtotal" value={`$${idleSubtotal.toFixed(2)}`} emphasizeValue />
+            <ReceiptLine label={idleSubtotalLabel} value={`$${idleSubtotal.toFixed(2)}`} emphasizeValue />
             <ReceiptLine label="Activation fee" value={`$${activationFee.toFixed(2)}`} emphasizeValue />
             <ReceiptLine label="Total" value={`$${total.toFixed(2)}`} emphasize />
             <ReceiptLine label="Payment card used" value={row.payment?.status ? `${row.payment.status}` : '—'} />

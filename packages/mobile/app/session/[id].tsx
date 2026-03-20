@@ -155,6 +155,11 @@ function SessionSummary({
   const energySegments = breakdown?.energy.segments ?? [];
   const idleSegments = (breakdown?.idle.segments ?? []).filter((segment) => (segment.minutes ?? 0) > 0);
   const gracePeriodMin = Math.max(0, breakdown?.gracePeriodMin ?? 0);
+  const idleStartLabel = idleSegments.length > 0 ? formatTime(idleSegments[0].startedAt) : null;
+  const idleEndLabel = idleSegments.length > 0 ? formatTime(idleSegments[idleSegments.length - 1].endedAt) : null;
+  const idleSubtotalLabel = idleStartLabel && idleEndLabel
+    ? `${idleStartLabel} to ${idleEndLabel} Subtotal`
+    : 'Idle Subtotal';
 
   const finalKwh =
     meterDerivedKwh > 0
@@ -269,7 +274,7 @@ function SessionSummary({
 
         <ReceiptRow
           isDark={isDark}
-          label="Idle Subtotal"
+          label={idleSubtotalLabel}
           value={`$${displayIdleUsd.toFixed(2)}`}
           emphasizeValue
         />
