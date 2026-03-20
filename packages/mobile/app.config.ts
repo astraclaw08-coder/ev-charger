@@ -14,7 +14,7 @@ const scheme = isProd ? 'evcharger' : 'evcharger-dev';
 const bundleIdentifier = isProd ? 'app.evcharger.app' : 'dev.evcharger.app';
 const androidPackage = isProd ? 'app.evcharger.app' : 'dev.evcharger.app';
 
-const devApiUrl = process.env.EXPO_PUBLIC_API_URL_DEV || process.env.EXPO_PUBLIC_API_URL || 'http://127.0.0.1:3001';
+const devApiUrl = process.env.EXPO_PUBLIC_API_URL_DEV || 'http://127.0.0.1:3001';
 const prodApiUrl = process.env.EXPO_PUBLIC_API_URL_PROD || 'https://api-production-26cf.up.railway.app';
 const authMode = 'keycloak';
 const googleMapsApiKey = isProd

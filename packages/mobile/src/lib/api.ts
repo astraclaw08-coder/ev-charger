@@ -3,8 +3,8 @@ import { Buffer } from 'buffer';
 
 const API_URL =
   (Constants.expoConfig?.extra?.apiUrl as string | undefined) ||
-  process.env.EXPO_PUBLIC_API_URL ||
-  'http://localhost:3001';
+  process.env.EXPO_PUBLIC_API_URL_DEV ||
+  'http://127.0.0.1:3001';
 
 export const appEnv =
   ((Constants.expoConfig?.extra?.appEnv as string | undefined) || process.env.APP_ENV || 'dev').toLowerCase();
