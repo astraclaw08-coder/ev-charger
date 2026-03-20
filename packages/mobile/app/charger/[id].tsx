@@ -424,21 +424,21 @@ export default function ChargerDetailScreen() {
           <View style={[styles.pricingWrap, { borderTopColor: isDark ? '#1f2937' : '#e5e7eb' }]}>
             <Text style={[styles.pricingTitle, { color: isDark ? '#e5e7eb' : '#111827' }]}>Price</Text>
             {pricingMode === 'tou' && nowTou ? (
-              <Text style={[styles.pricingSubtitle, { color: isDark ? '#93c5fd' : '#1d4ed8' }]}>TOU {windowLabel12(nowTou.start, nowTou.end)}</Text>
+              <Text style={[styles.pricingSubtitle, { color: isDark ? '#cbd5e1' : '#94a3b8' }]}>TOU {windowLabel12(nowTou.start, nowTou.end)}</Text>
             ) : null}
 
             <View style={styles.priceTilesRow}>
               <View style={[styles.priceTile, { backgroundColor: isDark ? '#0f172a' : '#f3f4f6' }]}>
-                <Text style={[styles.priceTileLabel, { color: isDark ? '#9ca3af' : '#6b7280' }]}>Activation</Text>
-                <Text numberOfLines={1} style={[styles.priceTileValue, { color: isDark ? '#f9fafb' : '#111827' }]}>${activationFeeUsd.toFixed(2)}</Text>
+                <Text numberOfLines={1} style={[styles.priceTileLabel, { color: isDark ? '#9ca3af' : '#6b7280' }]}>Activation</Text>
+                <Text style={[styles.priceTileValue, { color: isDark ? '#f9fafb' : '#111827' }]}>${activationFeeUsd.toFixed(2)}</Text>
               </View>
               <View style={[styles.priceTile, { backgroundColor: isDark ? '#0f172a' : '#f3f4f6' }]}>
-                <Text style={[styles.priceTileLabel, { color: isDark ? '#9ca3af' : '#6b7280' }]}>Energy</Text>
-                <Text numberOfLines={1} style={[styles.priceTileValue, { color: isDark ? '#f9fafb' : '#111827' }]}>${displayedEnergyRate.toFixed(2)}/kWh</Text>
+                <Text numberOfLines={1} style={[styles.priceTileLabel, { color: isDark ? '#9ca3af' : '#6b7280' }]}>Energy</Text>
+                <Text style={[styles.priceTileValue, { color: isDark ? '#f9fafb' : '#111827' }]}>${displayedEnergyRate.toFixed(2)}/kWh</Text>
               </View>
               <View style={[styles.priceTile, { backgroundColor: isDark ? '#0f172a' : '#f3f4f6' }]}>
-                <Text style={[styles.priceTileLabel, { color: isDark ? '#9ca3af' : '#6b7280' }]}>Idle</Text>
-                <Text numberOfLines={1} style={[styles.priceTileValue, { color: isDark ? '#f9fafb' : '#111827' }]}>${displayedIdleRate.toFixed(2)}/min</Text>
+                <Text numberOfLines={1} style={[styles.priceTileLabel, { color: isDark ? '#9ca3af' : '#6b7280' }]}>Idle</Text>
+                <Text style={[styles.priceTileValue, { color: isDark ? '#f9fafb' : '#111827' }]}>${displayedIdleRate.toFixed(2)}/min</Text>
               </View>
             </View>
 
@@ -450,8 +450,8 @@ export default function ChargerDetailScreen() {
                   activeOpacity={0.85}
                 >
                   <View style={styles.touDetailsIconSpacer} />
-                  <Text style={[styles.touDetailsToggleText, { color: isDark ? '#bfdbfe' : '#1d4ed8' }]}>TOU details</Text>
-                  <Ionicons name={showTouDetails ? 'chevron-up' : 'chevron-down'} size={18} color={isDark ? '#bfdbfe' : '#1d4ed8'} />
+                  <Text style={[styles.touDetailsToggleText, { color: isDark ? '#cbd5e1' : '#94a3b8' }]}>TOU details</Text>
+                  <Ionicons name={showTouDetails ? 'chevron-up' : 'chevron-down'} size={18} color={isDark ? '#cbd5e1' : '#94a3b8'} />
                 </TouchableOpacity>
 
                 {showTouDetails ? (
@@ -482,10 +482,9 @@ export default function ChargerDetailScreen() {
 
                       return (
                         <>
-                          <Text style={[styles.touDaysMeta, { color: isDark ? '#93c5fd' : '#1d4ed8' }]}>Applies on: {days.map((d) => dayNames[d]).join(', ')}</Text>
+                          <Text style={[styles.touDaysMeta, { color: isDark ? '#cbd5e1' : '#94a3b8' }]}>Applies on: {days.map((d) => dayNames[d]).join(', ')}</Text>
 
                           <View style={styles.touVisualDayRow}>
-                            <Text style={[styles.touDayName, { color: isDark ? '#93c5fd' : '#1d4ed8' }]}>Day</Text>
                             <View style={styles.touTrackWrap}>
                               <View style={[styles.touTrack, { backgroundColor: isDark ? '#1f2937' : '#e5e7eb' }]}>
                               {rows.map((w, idx) => {
@@ -639,7 +638,7 @@ const styles = StyleSheet.create({
   pricingWrap: { marginTop: 12, borderTopWidth: 1, paddingTop: 10, gap: 10 },
   pricingTitle: { fontSize: 13, fontWeight: '700', textAlign: 'center' },
   pricingSubtitle: { fontSize: 11, fontWeight: '700', textAlign: 'center', marginTop: -4 },
-  priceTilesRow: { flexDirection: 'row', gap: 8 },
+  priceTilesRow: { flexDirection: 'row', gap: 8, alignItems: 'stretch' },
   touDetailsWrap: { gap: 8, marginTop: 2 },
   touDetailsToggle: {
     borderWidth: 1,
@@ -651,21 +650,20 @@ const styles = StyleSheet.create({
   },
   touDetailsIconSpacer: { width: 18, height: 18 },
   touDetailsToggleText: { flex: 1, fontSize: 12, fontWeight: '800', textAlign: 'center' },
-  priceTile: { flex: 1, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 8, alignItems: 'center' },
-  priceTileLabel: { fontSize: 11, fontWeight: '600', textAlign: 'center' },
-  priceTileValue: { fontSize: 14, fontWeight: '700', marginTop: 4, textAlign: 'center' },
+  priceTile: { flex: 1, flexBasis: 0, minWidth: 0, minHeight: 76, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 8, alignItems: 'center', justifyContent: 'center' },
+  priceTileLabel: { fontSize: 12, fontWeight: '600', textAlign: 'center', lineHeight: 16 },
+  priceTileValue: { fontSize: 13, fontWeight: '700', marginTop: 6, textAlign: 'center' },
 
   touBlock: { marginTop: 10, borderWidth: 1, borderRadius: 12, padding: 10, gap: 10 },
   touNowPill: { borderRadius: 10, paddingVertical: 7, paddingHorizontal: 9 },
   touNowText: { fontSize: 12, fontWeight: '700', lineHeight: 17 },
-  touDaysMeta: { fontSize: 11, fontWeight: '700' },
+  touDaysMeta: { fontSize: 11, fontWeight: '700', textAlign: 'center' },
   touLegendRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   touLegendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   touLegendDot: { width: 10, height: 10, borderRadius: 5 },
   touLegendText: { fontSize: 11, fontWeight: '700' },
-  touVisualDayRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
-  touDayName: { width: 34, fontSize: 11, fontWeight: '800', marginTop: 2 },
-  touTrackWrap: { flex: 1, gap: 4 },
+  touVisualDayRow: { width: '100%' },
+  touTrackWrap: { width: '100%', gap: 4 },
   touTrack: { height: 18, borderRadius: 9, position: 'relative', overflow: 'hidden' },
   touAxisRow: { flexDirection: 'row', justifyContent: 'space-between' },
   touAxisText: { fontSize: 10, fontWeight: '700' },
