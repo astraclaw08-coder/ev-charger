@@ -35,7 +35,7 @@ function formatDuration(startedAt: string, endedAt?: string | null): string {
 }
 
 function formatDate(iso: string): string {
-  return new Date(iso).toLocaleString('en-US', {
+  return new Date(iso).toLocaleString(undefined, {
     month: 'short',
     day: 'numeric',
     hour: 'numeric',
@@ -44,7 +44,7 @@ function formatDate(iso: string): string {
 }
 
 function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString('en-US', {
+  return new Date(iso).toLocaleTimeString(undefined, {
     hour: 'numeric',
     minute: '2-digit',
   });

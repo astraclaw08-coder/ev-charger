@@ -139,6 +139,7 @@ export function computeSessionAmounts(session: {
   idleFeePerMinUsd?: number | null;
   gracePeriodMin?: number | null;
   touWindows?: unknown;
+  siteTimeZone?: string | null;
   softwareFeeIncludesActivation?: boolean;
   idleStartedAt?: Date | string | null;
   idleStoppedAt?: Date | string | null;
@@ -152,6 +153,8 @@ export function computeSessionAmounts(session: {
   const deliveredKwh = Math.max(0, toFiniteNumber(computedKwh) ?? 0);
   const durationForBreakdown = Math.max(0, toFiniteNumber(durationMinutes) ?? 0);
 
+  const billingTimeZone = session.siteTimeZone ?? process.env.EV_TOU_TIMEZONE ?? 'America/Los_Angeles';
+
   const rawSegments = durationMinutes != null && session.startedAt && session.stoppedAt
     ? splitTouDuration({
         startedAt: session.startedAt,
@@ -160,6 +163,7 @@ export function computeSessionAmounts(session: {
         defaultPricePerKwhUsd: pricePerKwhUsd,
         defaultIdleFeePerMinUsd: idleFeePerMinUsd,
         touWindows: session.touWindows,
+        timeZone: billingTimeZone,
       })
     : [];
 
@@ -190,6 +194,7 @@ export function computeSessionAmounts(session: {
         defaultPricePerKwhUsd: pricePerKwhUsd,
         defaultIdleFeePerMinUsd: idleFeePerMinUsd,
         touWindows: session.touWindows,
+        timeZone: billingTimeZone,
       })
     : [];
   const idleSegmentsBase = idleRawSegments.length > 0

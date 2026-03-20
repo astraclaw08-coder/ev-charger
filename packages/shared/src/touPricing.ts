@@ -15,7 +15,51 @@ export type ResolvedTouRate = {
 
 const HHMM_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
 const MINUTE_MS = 60 * 1000;
-const DAY_MS = 24 * 60 * MINUTE_MS;
+const WEEKDAY_TO_NUM: Record<string, number> = {
+  sun: 0,
+  mon: 1,
+  tue: 2,
+  wed: 3,
+  thu: 4,
+  fri: 5,
+  sat: 6,
+};
+
+const dtfCache = new Map<string, Intl.DateTimeFormat>();
+
+function getFormatter(timeZone?: string | null): Intl.DateTimeFormat | null {
+  if (!timeZone) return null;
+  const key = timeZone.trim();
+  if (!key) return null;
+  if (dtfCache.has(key)) return dtfCache.get(key)!;
+  try {
+    const fmt = new Intl.DateTimeFormat('en-US', {
+      timeZone: key,
+      weekday: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    });
+    dtfCache.set(key, fmt);
+    return fmt;
+  } catch {
+    return null;
+  }
+}
+
+function localDayMinute(at: Date, timeZone?: string | null): { day: number; minuteOfDay: number } {
+  const fmt = getFormatter(timeZone);
+  if (!fmt) {
+    return { day: at.getUTCDay(), minuteOfDay: at.getUTCHours() * 60 + at.getUTCMinutes() };
+  }
+  const parts = fmt.formatToParts(at);
+  const wk = parts.find((p) => p.type === 'weekday')?.value?.slice(0, 3).toLowerCase() ?? '';
+  const hh = Number(parts.find((p) => p.type === 'hour')?.value ?? '0');
+  const mm = Number(parts.find((p) => p.type === 'minute')?.value ?? '0');
+  const day = WEEKDAY_TO_NUM[wk] ?? at.getUTCDay();
+  const minuteOfDay = Math.max(0, Math.min(1439, hh * 60 + mm));
+  return { day, minuteOfDay };
+}
 
 function hhmmToMinuteOfDay(hhmm: string): number | null {
   const match = HHMM_RE.exec(hhmm);
@@ -52,6 +96,7 @@ export function resolveTouRateAt(input: {
   defaultPricePerKwhUsd?: number | null;
   defaultIdleFeePerMinUsd?: number | null;
   touWindows?: unknown;
+  timeZone?: string | null;
 }): ResolvedTouRate {
   const defaultPricePerKwhUsd = Math.max(0, Number(input.defaultPricePerKwhUsd ?? 0) || 0);
   const defaultIdleFeePerMinUsd = Math.max(0, Number(input.defaultIdleFeePerMinUsd ?? 0) || 0);
@@ -65,8 +110,7 @@ export function resolveTouRateAt(input: {
     };
   }
 
-  const day = at.getUTCDay();
-  const minuteOfDay = at.getUTCHours() * 60 + at.getUTCMinutes();
+  const { day, minuteOfDay } = localDayMinute(at, input.timeZone);
   const windows = normalizeTouWindows(input.touWindows);
   const matched = windows.find((w) => {
     if (w.day !== day) return false;
@@ -109,67 +153,59 @@ export function splitTouDuration(input: {
   defaultPricePerKwhUsd?: number | null;
   defaultIdleFeePerMinUsd?: number | null;
   touWindows?: unknown;
+  timeZone?: string | null;
 }): TouDurationSegment[] {
   const start = new Date(input.startedAt);
   const stop = new Date(input.stoppedAt);
   if (Number.isNaN(start.getTime()) || Number.isNaN(stop.getTime()) || stop <= start) return [];
 
-  const windows = normalizeTouWindows(input.touWindows);
-  const boundaries = new Set<number>([start.getTime(), stop.getTime()]);
-  const firstDayMs = Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate());
-  const lastDayMs = Date.UTC(stop.getUTCFullYear(), stop.getUTCMonth(), stop.getUTCDate());
-  for (let dayStartMs = firstDayMs - DAY_MS; dayStartMs <= lastDayMs + DAY_MS; dayStartMs += DAY_MS) {
-    const day = new Date(dayStartMs).getUTCDay();
-    for (const w of windows) {
-      if (w.day !== day) continue;
-      const startMinute = hhmmToMinuteOfDay(w.start);
-      const endMinute = hhmmToMinuteOfDay(w.end);
-      if (startMinute == null || endMinute == null) continue;
-      boundaries.add(dayStartMs + startMinute * MINUTE_MS);
-      boundaries.add(dayStartMs + endMinute * MINUTE_MS);
-    }
-  }
-
-  const ordered = Array.from(boundaries)
-    .filter((ms) => ms > start.getTime() && ms < stop.getTime() || ms === start.getTime() || ms === stop.getTime())
-    .sort((a, b) => a - b);
-
   const segments: TouDurationSegment[] = [];
-  for (let i = 0; i < ordered.length - 1; i += 1) {
-    const segStartMs = ordered[i];
-    const segEndMs = ordered[i + 1];
-    if (segEndMs <= segStartMs) continue;
-    const midpoint = new Date(segStartMs + Math.floor((segEndMs - segStartMs) / 2));
-    const resolved = resolveTouRateAt({
-      at: midpoint,
+  let cursorMs = start.getTime();
+  const stopMs = stop.getTime();
+
+  while (cursorMs < stopMs) {
+    const currentRate = resolveTouRateAt({
+      at: new Date(cursorMs),
       pricingMode: input.pricingMode,
       defaultPricePerKwhUsd: input.defaultPricePerKwhUsd,
       defaultIdleFeePerMinUsd: input.defaultIdleFeePerMinUsd,
       touWindows: input.touWindows,
+      timeZone: input.timeZone,
     });
-    const minutes = (segEndMs - segStartMs) / MINUTE_MS;
-    if (minutes <= 0) continue;
 
-    const prev = segments[segments.length - 1];
-    if (
-      prev
-      && prev.source === resolved.source
-      && prev.pricePerKwhUsd === resolved.pricePerKwhUsd
-      && prev.idleFeePerMinUsd === resolved.idleFeePerMinUsd
-      && new Date(prev.endedAt).getTime() === segStartMs
-    ) {
-      prev.endedAt = new Date(segEndMs).toISOString();
-      prev.minutes = Number((prev.minutes + minutes).toFixed(6));
-    } else {
+    let endMs = Math.min(stopMs, cursorMs + MINUTE_MS);
+    while (endMs < stopMs) {
+      const probeRate = resolveTouRateAt({
+        at: new Date(endMs),
+        pricingMode: input.pricingMode,
+        defaultPricePerKwhUsd: input.defaultPricePerKwhUsd,
+        defaultIdleFeePerMinUsd: input.defaultIdleFeePerMinUsd,
+        touWindows: input.touWindows,
+        timeZone: input.timeZone,
+      });
+      if (
+        probeRate.source !== currentRate.source
+        || probeRate.pricePerKwhUsd !== currentRate.pricePerKwhUsd
+        || probeRate.idleFeePerMinUsd !== currentRate.idleFeePerMinUsd
+      ) {
+        break;
+      }
+      endMs = Math.min(stopMs, endMs + MINUTE_MS);
+    }
+
+    const minutes = (endMs - cursorMs) / MINUTE_MS;
+    if (minutes > 0) {
       segments.push({
-        startedAt: new Date(segStartMs).toISOString(),
-        endedAt: new Date(segEndMs).toISOString(),
+        startedAt: new Date(cursorMs).toISOString(),
+        endedAt: new Date(endMs).toISOString(),
         minutes: Number(minutes.toFixed(6)),
-        pricePerKwhUsd: resolved.pricePerKwhUsd,
-        idleFeePerMinUsd: resolved.idleFeePerMinUsd,
-        source: resolved.source,
+        pricePerKwhUsd: currentRate.pricePerKwhUsd,
+        idleFeePerMinUsd: currentRate.idleFeePerMinUsd,
+        source: currentRate.source,
       });
     }
+
+    cursorMs = endMs;
   }
 
   return segments;
