@@ -161,6 +161,9 @@ function SessionSummary({
   const idleSubtotalLabel = idleStartLabel && idleEndLabel
     ? `${idleStartLabel} to ${idleEndLabel} Subtotal`
     : 'Idle Subtotal';
+  const idleGraceLabel = idleStartLabel && idleEndLabel
+    ? `${idleStartLabel} to ${idleEndLabel} (grace period is 10 mins)`
+    : 'Idle (grace period is 10 mins)';
 
   const finalKwh =
     meterDerivedKwh > 0
@@ -267,7 +270,7 @@ function SessionSummary({
         {idleSegments.length === 0 && (
           <ReceiptRow
             isDark={isDark}
-            label={`Idle (grace period is 10 mins)`}
+            label={idleGraceLabel}
             value={`$${displayIdleUsd.toFixed(2)}`}
             multilineLabel
           />
