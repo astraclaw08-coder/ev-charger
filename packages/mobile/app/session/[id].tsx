@@ -692,7 +692,7 @@ export default function SessionScreen() {
     <>
       <Stack.Screen
         options={{
-          title: session.status === 'ACTIVE' ? '' : 'Session Details',
+          title: 'Lumeo',
           headerShown: true,
           headerStyle: {
             backgroundColor: isDark ? '#0b1220' : '#fff',
@@ -839,6 +839,7 @@ const styles = StyleSheet.create({
   summaryStats: {
     flexDirection: 'row',
     gap: 12,
+    marginTop: 14,
     marginBottom: 20,
     width: '100%',
   },
@@ -846,10 +847,11 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#fff',
     borderRadius: 14,
-    padding: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     alignItems: 'center',
     justifyContent: 'flex-start',
-    minHeight: 112,
+    minHeight: 96,
     shadowColor: '#000',
     shadowOpacity: 0.06,
     shadowRadius: 6,
@@ -858,10 +860,10 @@ const styles = StyleSheet.create({
   statCardHighlight: { backgroundColor: '#ecfdf5' },
   statCardHighlightDark: { backgroundColor: '#052e2b', borderWidth: 1, borderColor: '#065f46' },
   statIconSlot: {
-    height: 26,
+    height: 22,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 6,
+    marginBottom: 4,
   },
   statIcon: { fontSize: 24, marginBottom: 0 },
   moneyIconCircle: {
@@ -879,9 +881,9 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     lineHeight: 14,
   },
-  statValue: { fontSize: 18, fontWeight: '700', color: '#111827', textAlign: 'center', minHeight: 22 },
+  statValue: { fontSize: 18, fontWeight: '700', color: '#111827', textAlign: 'center', minHeight: 20 },
   statValueHighlight: { color: '#10b981' },
-  statLabel: { fontSize: 10, color: '#9ca3af', marginTop: 2, textTransform: 'none' },
+  statLabel: { fontSize: 10, color: '#9ca3af', marginTop: 1, textTransform: 'none' },
   paymentSuccess: {
     backgroundColor: '#d1fae5',
     borderRadius: 10,
