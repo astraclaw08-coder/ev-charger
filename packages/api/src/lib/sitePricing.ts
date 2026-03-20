@@ -20,10 +20,13 @@ export type TouWindow = {
 const HHMM_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
 function hhmmToMinutes(value: string): number {
-  if (value === '00:00') return 1440; // end-of-day sentinel
   const match = HHMM_RE.exec(value);
   if (!match) return -1;
   return Number(match[1]) * 60 + Number(match[2]);
+}
+
+function endToMinutes(value: string): number {
+  return value === '00:00' ? 1440 : hhmmToMinutes(value);
 }
 
 function normaliseEnd(end: string): string {
@@ -53,7 +56,7 @@ export function validateTouWindows(raw: unknown): { ok: true; windows: TouWindow
       return { ok: false, error: `touWindows[${i}].day must be an integer 0–6` };
     }
     const startMin = hhmmToMinutes(start);
-    const endMin   = hhmmToMinutes(end);
+    const endMin   = endToMinutes(end);
     if (startMin < 0 || endMin < 0) {
       return { ok: false, error: `touWindows[${i}] start/end must use HH:mm format (end may be 00:00 for end-of-day)` };
     }
@@ -80,7 +83,7 @@ export function validateTouWindows(raw: unknown): { ok: true; windows: TouWindow
     for (let i = 1; i < dayWindows.length; i += 1) {
       const prev = dayWindows[i - 1];
       const curr = dayWindows[i];
-      if (hhmmToMinutes(curr.start) < hhmmToMinutes(prev.end)) {
+      if (hhmmToMinutes(curr.start) < endToMinutes(prev.end)) {
         return { ok: false, error: `touWindows overlap on day ${day}: ${prev.start}–${prev.end} and ${curr.start}–${curr.end}` };
       }
     }
