@@ -457,6 +457,7 @@ export async function sessionRoutes(app: FastifyInstance) {
           },
         },
         payment: true,
+        billingSnapshot: { select: { billingBreakdownJson: true, grossAmountUsd: true, netAmountUsd: true, vendorFeeUsd: true, kwhDelivered: true, capturedAt: true } },
       },
     });
 
@@ -534,7 +535,9 @@ export async function sessionRoutes(app: FastifyInstance) {
       amountState: amounts.amountState,
       amountLabel: amounts.amountLabel,
       isAmountFinal: amounts.isAmountFinal,
-      billingBreakdown: amounts.billingBreakdown,
+      // Use persisted snapshot when available (immutable — not affected by future pricing changes)
+      // Fall back to compute-on-read for active sessions or sessions without a snapshot
+      billingBreakdown: (session as any).billingSnapshot?.billingBreakdownJson ?? amounts.billingBreakdown,
       powerActiveImportW,
     };
   });
@@ -577,6 +580,7 @@ export async function sessionRoutes(app: FastifyInstance) {
         skip: offset,
         include: {
           payment: { select: { status: true, amountCents: true } },
+          billingSnapshot: { select: { billingBreakdownJson: true, grossAmountUsd: true, netAmountUsd: true, vendorFeeUsd: true, kwhDelivered: true, capturedAt: true } },
           connector: {
             include: {
               charger: {
@@ -670,7 +674,7 @@ export async function sessionRoutes(app: FastifyInstance) {
           amountState: amounts.amountState,
           amountLabel: amounts.amountLabel,
           isAmountFinal: amounts.isAmountFinal,
-          billingBreakdown: amounts.billingBreakdown,
+          billingBreakdown: row.billingSnapshot?.billingBreakdownJson ?? amounts.billingBreakdown,
           meterStart: row.meterStart,
           meterStop: row.meterStop,
           site: row.connector.charger.site,

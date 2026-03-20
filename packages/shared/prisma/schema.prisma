@@ -246,6 +246,7 @@ model Session {
   status          SessionStatus       @default(ACTIVE)
   payment         Payment?
   sessionFact     SessionFact?
+  billingSnapshot SessionBillingSnapshot?
   rebateIntervals RebateInterval15m[]
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
@@ -303,6 +304,50 @@ model Payment {
 
   @@index([userId])
   @@index([status])
+}
+
+/// Immutable billing record captured at session completion.
+/// Locks the pricing inputs (rates, TOU windows, timezone) that were active
+/// at the time of the transaction so future config changes never alter history.
+/// Exception: may be overwritten programmatically for error corrections,
+/// but NEVER when payment status is CAPTURED or REFUNDED.
+model SessionBillingSnapshot {
+  id                   String    @id @default(uuid())
+  sessionId            String    @unique
+  session              Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  // ── Pricing inputs locked at capture time ──────────────────────────────
+  pricingMode          String                    // 'flat' | 'tou'
+  pricePerKwhUsd       Float
+  idleFeePerMinUsd     Float
+  activationFeeUsd     Float
+  gracePeriodMin       Int
+  touWindowsJson       Json?                     // exact touWindows array used for billing
+  siteTimeZone         String?                   // IANA tz string, null = America/Los_Angeles default
+
+  // ── Billing outputs ─────────────────────────────────────────────────────
+  kwhDelivered         Float?
+  durationMinutes      Float?
+  energyAmountUsd      Float?
+  idleAmountUsd        Float?
+  activationAmountUsd  Float?
+  grossAmountUsd       Float?
+  vendorFeeUsd         Float?
+  netAmountUsd         Float?
+  billingBreakdownJson Json?                     // full BillingBreakdown from computeSessionAmounts
+
+  // ── Timing locked at capture time ───────────────────────────────────────
+  chargingStartedAt    DateTime?                 // session.startedAt
+  chargingStoppedAt    DateTime?                 // idleStartedAt if idle present, else plugOutAt
+  idleStartedAt        DateTime?
+  idleStoppedAt        DateTime?
+  plugOutAt            DateTime?
+
+  snapshotVersion      String    @default("v1")
+  capturedAt           DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@index([sessionId])
 }
 
 model SessionFact {

@@ -1,4 +1,4 @@
-import { prisma, splitTouDuration } from '@ev-charger/shared';
+import { prisma, splitTouDuration, captureSessionBillingSnapshot } from '@ev-charger/shared';
 import { enqueueOcppEvent } from '../outbox';
 import type { StopTransactionRequest, StopTransactionResponse } from '@ev-charger/shared';
 
@@ -140,6 +140,13 @@ export async function handleStopTransaction(
 
   if (weightedRatePerKwh > 0 || estimatedEnergyAmountUsd > 0) {
     await triggerBillingHook(session.id, kwhDelivered, weightedRatePerKwh, estimatedEnergyAmountUsd);
+  }
+
+  // Capture immutable billing snapshot — non-blocking, failure must not fail StopTransaction
+  try {
+    await captureSessionBillingSnapshot(session.id);
+  } catch (snapErr) {
+    console.error('[BillingSnapshot] Failed to capture snapshot on StopTransaction:', snapErr);
   }
 
   const response: StopTransactionResponse = {};

@@ -1,0 +1,13 @@
+appId: dev.evcharger.app.lumeodev
+---
+- launchApp
+- waitForAnimationToEnd:
+    timeout: 3000
+- openLink: "evcharger-dev://session/eb09aa6c-0b8c-4465-92ad-1b3793f85677"
+- tapOn:
+    text: "Open"
+    optional: true
+- waitForAnimationToEnd:
+    timeout: 7000
+- assertVisible: "Session Complete"
+- assertVisible: "Receipt Breakdown"

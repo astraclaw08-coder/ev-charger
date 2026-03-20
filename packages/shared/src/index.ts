@@ -14,3 +14,5 @@ export * from './types/rbac';
 
 export * from './smartCharging';
 export * from './touPricing';
+export * from './billing/sessionBilling';
+export { captureSessionBillingSnapshot, backfillBillingSnapshots } from './billing/snapshotBilling';

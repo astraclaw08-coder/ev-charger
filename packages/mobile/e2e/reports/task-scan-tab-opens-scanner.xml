@@ -1,0 +1,6 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="iPhone 17 Pro - iOS 26.2 - 3D00C844-48CC-4CC9-A7FE-13D7AE1D8B98" tests="1" failures="0" time="8.0">
+    <testcase id="task-scan-tab-opens-scanner" name="task-scan-tab-opens-scanner" classname="task-scan-tab-opens-scanner" time="8.0" status="SUCCESS"/>
+  </testsuite>
+</testsuites>
