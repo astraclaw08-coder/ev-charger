@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import crypto from 'crypto';
-import { prisma } from '@ev-charger/shared';
+import { prisma, resolveSessionStatusTimings } from '@ev-charger/shared';
 import { requireOperator } from '../plugins/auth';
 import { requirePolicy } from '../plugins/authorization';
 import { remoteReset, remoteStart, triggerHeartbeat, getConfiguration } from '../lib/ocppClient';
@@ -213,7 +213,12 @@ export async function chargerRoutes(app: FastifyInstance) {
       orderBy: { startedAt: 'desc' },
       take: limit,
       include: {
-        connector: { select: { connectorId: true } },
+        connector: {
+          select: {
+            connectorId: true,
+            charger: { select: { id: true } },
+          },
+        },
         user: { select: { name: true, email: true } },
         payment: { select: { status: true, amountCents: true } },
         billingSnapshot: {
@@ -226,9 +231,22 @@ export async function chargerRoutes(app: FastifyInstance) {
       },
     });
 
+    const chargerStatusLogs = await prisma.ocppLog.findMany({
+      where: {
+        chargerId: charger.id,
+        action: 'StatusNotification',
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 10000,
+    });
+
     return sessions.map((s: any) => {
+      const sessionTimings = resolveSessionStatusTimings(s, chargerStatusLogs);
       const amounts = computeSessionAmounts({
         ...s,
+        startedAt: sessionTimings.plugOutAt ? s.startedAt : s.startedAt,
+        stoppedAt: sessionTimings.plugOutAt ? new Date(sessionTimings.plugOutAt) : s.stoppedAt,
+        plugOutAt: sessionTimings.plugOutAt ? new Date(sessionTimings.plugOutAt) : undefined,
         pricingMode: site?.pricingMode,
         pricePerKwhUsd: site?.pricePerKwhUsd,
         idleFeePerMinUsd: site?.idleFeePerMinUsd,
@@ -243,6 +261,8 @@ export async function chargerRoutes(app: FastifyInstance) {
       const snapshotGrossCents = snapshot?.grossAmountUsd != null ? Math.round(Number(snapshot.grossAmountUsd) * 100) : null;
       return {
         ...s,
+        plugInAt: sessionTimings.plugInAt ?? s.startedAt,
+        plugOutAt: sessionTimings.plugOutAt ?? s.stoppedAt,
         kwhDelivered: snapshot?.kwhDelivered ?? amounts.kwhDelivered,
         effectiveAmountCents: snapshotGrossCents ?? amounts.effectiveAmountCents,
         estimatedAmountCents: snapshotGrossCents ?? amounts.estimatedAmountCents,
