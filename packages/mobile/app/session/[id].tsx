@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  AppState,
   Modal,
   ScrollView,
   Animated,
@@ -621,10 +622,12 @@ export default function SessionScreen() {
   const queryClient = useQueryClient();
   const [lastObservedKwh, setLastObservedKwh] = useState(0);
 
-  const { data: session, isLoading } = useQuery({
+  const { data: session, isLoading, refetch } = useQuery({
     queryKey: ['session', id],
     queryFn: () => api.sessions.get(id),
     staleTime: 0,
+    refetchOnMount: true,
+    refetchOnReconnect: true,
     refetchInterval: (query) => {
       // Poll aggressively while active for low-latency kWh updates.
       return query.state.data?.status === 'ACTIVE' ? 1_500 : false;
@@ -640,6 +643,17 @@ export default function SessionScreen() {
   });
 
   const showConnectorLabel = (chargerDetails?.connectors?.length ?? 1) > 1;
+  const isLiveSession = session?.status === 'ACTIVE' && !session?.endedAt;
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        void refetch();
+        queryClient.invalidateQueries({ queryKey: ['sessions'] });
+      }
+    });
+    return () => sub.remove();
+  }, [queryClient, refetch]);
 
   useEffect(() => {
     if (!session) return;
@@ -711,7 +725,7 @@ export default function SessionScreen() {
         }}
       />
       <ScrollView contentContainerStyle={[styles.scrollContent, { backgroundColor: isDark ? '#030712' : '#f9fafb' }]}>
-        {session.status === 'ACTIVE' ? (
+        {isLiveSession ? (
           <LiveSessionView
             session={session}
             onStop={() => stopMutation.mutate()}
