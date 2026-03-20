@@ -67,6 +67,16 @@ function hhmmToMinuteOfDay(hhmm: string): number | null {
   return Number(match[1]) * 60 + Number(match[2]);
 }
 
+/**
+ * Normalise end time for TOU window range checks.
+ * "23:59" is treated as end-of-day (1440) so there is no 1-minute gap
+ * at 11:59 PM between an evening window and the next day's 00:00 window.
+ */
+function normalizeEndMinute(end: string): number | null {
+  if (end === '23:59') return 1440;
+  return hhmmToMinuteOfDay(end);
+}
+
 export function normalizeTouWindows(raw: unknown): TouWindow[] {
   if (!Array.isArray(raw)) return [];
   const rows: TouWindow[] = [];
@@ -79,7 +89,7 @@ export function normalizeTouWindows(raw: unknown): TouWindow[] {
     const pricePerKwhUsd = Number(candidate.pricePerKwhUsd);
     const idleFeePerMinUsd = Number(candidate.idleFeePerMinUsd);
     const startMinute = hhmmToMinuteOfDay(start);
-    const endMinute = hhmmToMinuteOfDay(end);
+    const endMinute = normalizeEndMinute(end);
     if (!Number.isInteger(day) || day < 0 || day > 6) continue;
     if (startMinute == null || endMinute == null || endMinute === startMinute) continue;
     if (!Number.isFinite(pricePerKwhUsd) || pricePerKwhUsd < 0) continue;
@@ -114,11 +124,13 @@ export function resolveTouRateAt(input: {
   const windows = normalizeTouWindows(input.touWindows);
   const matched = windows.find((w) => {
     const startMinute = hhmmToMinuteOfDay(w.start);
-    const endMinute = hhmmToMinuteOfDay(w.end);
+    const endMinute = normalizeEndMinute(w.end);
     if (startMinute == null || endMinute == null) return false;
 
     if (endMinute > startMinute) {
-      return w.day === day && minuteOfDay >= startMinute && minuteOfDay < endMinute;
+      // Normal same-day window. endMinute may be 1440 (23:59 normalised) — treat as inclusive end-of-day.
+      const effectiveEnd = endMinute === 1440 ? 1440 : endMinute;
+      return w.day === day && minuteOfDay >= startMinute && minuteOfDay < effectiveEnd;
     }
 
     // Overnight window, e.g. 21:00 -> 07:00

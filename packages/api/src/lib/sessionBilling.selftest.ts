@@ -106,6 +106,26 @@ const adjacentSameRate = computeSessionAmounts({
 assert.equal(adjacentSameRate.billingBreakdown.energy.segments.length, 1);
 assert.equal(adjacentSameRate.billingBreakdown.energy.segments[0].pricePerKwhUsd, 0.4);
 
+// Regression: 23:59 end-of-day window must not leave a 1-min gap at 11:59 PM
+const gap2359 = computeSessionAmounts({
+  kwhDelivered: 10,
+  pricingMode: 'tou',
+  pricePerKwhUsd: 0.4,
+  idleFeePerMinUsd: 0.08,
+  startedAt: '2026-03-20T04:09:00.000Z',  // 9:09 PM Thu LA
+  stoppedAt: '2026-03-20T11:40:00.000Z',  // 4:40 AM Fri LA
+  siteTimeZone: 'America/Los_Angeles',
+  touWindows: [
+    { day: 4, start: '21:00', end: '23:59', pricePerKwhUsd: 0.15, idleFeePerMinUsd: 0.02 },
+    { day: 5, start: '00:00', end: '03:00', pricePerKwhUsd: 0.15, idleFeePerMinUsd: 0.02 },
+    { day: 5, start: '03:00', end: '06:00', pricePerKwhUsd: 0.3,  idleFeePerMinUsd: 0.05 },
+  ],
+});
+// Should be exactly 2 segments (0.15 and 0.30), no flat $0.40 spike
+assert.equal(gap2359.billingBreakdown.energy.segments.length, 2, '23:59 gap must produce exactly 2 segments');
+assert.equal(gap2359.billingBreakdown.energy.segments[0].pricePerKwhUsd, 0.15, 'first segment must be 0.15');
+assert.equal(gap2359.billingBreakdown.energy.segments[1].pricePerKwhUsd, 0.3,  'second segment must be 0.30');
+
 assert.equal(
   computeVendorFeeUsd({ grossAmountUsd: 5, softwareVendorFeeMode: 'percentage_total', softwareVendorFeeValue: 200 }),
   5,
