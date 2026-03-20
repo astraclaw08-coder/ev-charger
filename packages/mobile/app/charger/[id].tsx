@@ -456,11 +456,10 @@ export default function ChargerDetailScreen() {
             {pricingMode === 'tou' && touWindows.length > 0 ? (
               <View style={styles.touDetailsWrap}>
                 <TouchableOpacity
-                  style={[styles.touDetailsToggle, { backgroundColor: isDark ? '#0b1220' : '#f8fafc', borderColor: isDark ? '#334155' : '#dbeafe' }]}
+                  style={styles.touDetailsToggle}
                   onPress={() => setShowTouDetails((v) => !v)}
                   activeOpacity={0.85}
                 >
-                  <View style={styles.touDetailsIconSpacer} />
                   <Text style={[styles.touDetailsToggleText, { color: isDark ? '#cbd5e1' : '#94a3b8' }]}>TOU details</Text>
                   <Ionicons name={showTouDetails ? 'chevron-up' : 'chevron-down'} size={18} color={isDark ? '#cbd5e1' : '#94a3b8'} />
                 </TouchableOpacity>
@@ -652,15 +651,15 @@ const styles = StyleSheet.create({
   priceTilesRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'stretch' },
   touDetailsWrap: { gap: 8, marginTop: 2 },
   touDetailsToggle: {
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+    paddingVertical: 4,
+    paddingHorizontal: 0,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    alignSelf: 'center',
   },
-  touDetailsIconSpacer: { width: 18, height: 18 },
-  touDetailsToggleText: { flex: 1, fontSize: 12, fontWeight: '800', textAlign: 'center' },
+  touDetailsToggleText: { fontSize: 12, fontWeight: '800', textAlign: 'center' },
   priceTile: { width: '31.5%', minWidth: 0, minHeight: 82, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 6, alignItems: 'center', justifyContent: 'center' },
   priceTileLabel: { width: '100%', fontSize: 12, fontWeight: '600', textAlign: 'center', lineHeight: 16 },
   priceTileValue: { width: '100%', fontSize: 13, fontWeight: '700', marginTop: 6, textAlign: 'center' },
