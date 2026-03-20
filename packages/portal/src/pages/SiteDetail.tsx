@@ -190,8 +190,8 @@ function windowsToProfileFromMostCommonSchedule(windows: TouWindow[], buckets: P
 
     const segs: TouTierSegment[] = dWins.map((w) => {
       const start = Math.max(0, Math.min(23, Math.floor(timeToMinutes(String(w.start)) / 60)));
-      const endMins = timeToMinutes(String(w.end));
-      const end = (String(w.end) === '23:59' || String(w.end) === '00:00') ? 24 : Math.max(start + 1, Math.min(24, Math.ceil(endMins / 60)));
+      const endMins = endTimeToMinutes(String(w.end));
+      const end = endMins >= 1440 ? 24 : Math.max(start + 1, Math.min(24, Math.ceil(endMins / 60)));
       return {
         id: crypto.randomUUID(),
         bucket: bucketForWindow(w),
@@ -234,11 +234,21 @@ function loadAudit(siteId: string): SiteAuditEvent[] {
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 function timeToMinutes(v: string): number {
-  // '00:00' and '23:59' are canonical end-of-day — treat as 1440 for comparison purposes
-  if (v === '00:00' || v === '23:59') return 1440;
+  // '23:59' is legacy end-of-day alias — treat as 1440
+  if (v === '23:59') return 1440;
+  // '00:00' means either midnight-start (0) or end-of-day (1440); callers must interpret by context
   const [h, m] = v.split(':').map(Number);
   if (Number.isNaN(h) || Number.isNaN(m)) return -1;
   return h * 60 + m;
+}
+
+/**
+ * Like timeToMinutes but treats '00:00' as end-of-day (1440) when used as a window end value.
+ * Use this when comparing end times, not start times.
+ */
+function endTimeToMinutes(v: string): number {
+  if (v === '00:00' || v === '23:59') return 1440;
+  return timeToMinutes(v);
 }
 
 function formatHour12(h: number): string {
@@ -254,7 +264,7 @@ function formatRange12(startHour: number, endHour: number): string {
 function validateTouWindows(windows: TouWindow[]): string | null {
   for (const w of windows) {
     const start = timeToMinutes(w.start);
-    const end = timeToMinutes(w.end);
+    const end = endTimeToMinutes(w.end);
     if (start < 0 || end < 0 || end <= start) {
       return `Invalid time range in ${DAY_NAMES[w.day]} (${w.start} - ${w.end})`;
     }
@@ -265,7 +275,7 @@ function validateTouWindows(windows: TouWindow[]): string | null {
     for (let i = 1; i < dayWindows.length; i += 1) {
       const prev = dayWindows[i - 1];
       const curr = dayWindows[i];
-      if (timeToMinutes(curr.start) < timeToMinutes(prev.end)) {
+      if (timeToMinutes(curr.start) < endTimeToMinutes(prev.end)) {
         return `Overlapping windows on ${DAY_NAMES[day]} (${prev.start}-${prev.end} and ${curr.start}-${curr.end})`;
       }
     }
