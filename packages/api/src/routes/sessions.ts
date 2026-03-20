@@ -317,6 +317,7 @@ export async function sessionRoutes(app: FastifyInstance) {
             },
           },
           payment: true,
+          billingSnapshot: { select: { billingBreakdownJson: true, grossAmountUsd: true, kwhDelivered: true, capturedAt: true } },
         },
       }),
       prisma.session.count({ where: { userId: user.id } }),
@@ -400,6 +401,9 @@ export async function sessionRoutes(app: FastifyInstance) {
           }
         }
       }
+      const snapshot = (s as any).billingSnapshot;
+      const snapshotGrossUsd = snapshot?.grossAmountUsd != null ? Number(snapshot.grossAmountUsd) : null;
+      const snapshotGrossCents = snapshotGrossUsd != null ? Math.round(snapshotGrossUsd * 100) : null;
       return {
         ...s,
         startedAt: s.startedAt,
@@ -407,15 +411,15 @@ export async function sessionRoutes(app: FastifyInstance) {
         plugInAt: sessionTimings.plugInAt ? new Date(sessionTimings.plugInAt) : undefined,
         plugOutAt: sessionTimings.plugOutAt ? new Date(sessionTimings.plugOutAt) : undefined,
         ocppTransactionId: s.transactionId,
-        kwhDelivered: amounts.kwhDelivered,
+        kwhDelivered: snapshot?.kwhDelivered ?? amounts.kwhDelivered,
         endedAt: sessionTimings.plugOutAt ? new Date(sessionTimings.plugOutAt) : s.stoppedAt,
-        effectiveAmountCents: amounts.effectiveAmountCents,
-        costEstimateCents: amounts.costEstimateCents,
-        estimatedAmountCents: amounts.estimatedAmountCents,
-        amountState: amounts.amountState,
-        amountLabel: amounts.amountLabel,
-        isAmountFinal: amounts.isAmountFinal,
-        billingBreakdown: amounts.billingBreakdown,
+        effectiveAmountCents: snapshotGrossCents ?? amounts.effectiveAmountCents,
+        costEstimateCents: snapshotGrossCents ?? amounts.costEstimateCents,
+        estimatedAmountCents: snapshotGrossCents ?? amounts.estimatedAmountCents,
+        amountState: snapshot ? 'FINAL' : amounts.amountState,
+        amountLabel: snapshot ? 'Final' : amounts.amountLabel,
+        isAmountFinal: snapshot ? true : amounts.isAmountFinal,
+        billingBreakdown: snapshot?.billingBreakdownJson ?? amounts.billingBreakdown,
         powerActiveImportW,
       };
     });
