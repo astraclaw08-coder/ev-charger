@@ -252,7 +252,7 @@ function SessionSummary({
           <ReceiptRow
             key={`${segment.startedAt}-${segment.endedAt}-${idx}`}
             isDark={isDark}
-            label={`${formatTime(segment.startedAt)} to ${formatTime(segment.endedAt)} * $${segment.idleFeePerMinUsd.toFixed(2)}/min (excludes grace period of ${gracePeriodMin.toFixed(1)} min)`}
+            label={`${formatTime(segment.startedAt)} to ${formatTime(segment.endedAt)} * $${segment.idleFeePerMinUsd.toFixed(2)}/min (grace period is 10 mins)`}
             value={`$${segment.amountUsd.toFixed(2)}`}
             multilineLabel
           />
@@ -261,7 +261,7 @@ function SessionSummary({
         {idleSegments.length === 0 && (
           <ReceiptRow
             isDark={isDark}
-            label={`Idle (excludes grace period of ${gracePeriodMin.toFixed(1)} min)`}
+            label={`Idle (grace period is 10 mins)`}
             value={`$${displayIdleUsd.toFixed(2)}`}
             multilineLabel
           />

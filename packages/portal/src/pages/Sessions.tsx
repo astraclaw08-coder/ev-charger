@@ -295,7 +295,7 @@ function ReceiptModal({ row, onClose }: { row: EnrichedTransaction | null; onClo
             {idleSegments.map((seg, idx) => (
               <ReceiptLine
                 key={`${seg.startedAt}-${seg.endedAt}-${idx}`}
-                label={`${toTime(seg.startedAt)} to ${toTime(seg.endedAt)} * $${seg.idleFeePerMinUsd.toFixed(2)}/min (excludes grace period of ${(breakdown?.gracePeriodMin ?? 0).toFixed(1)} min)`}
+                label={`${toTime(seg.startedAt)} to ${toTime(seg.endedAt)} * $${seg.idleFeePerMinUsd.toFixed(2)}/min (grace period is 10 mins)`}
                 value={`$${seg.amountUsd.toFixed(2)}`}
               />
             ))}
