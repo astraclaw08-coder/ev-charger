@@ -461,7 +461,7 @@ export default function ChargerDetailScreen() {
                   activeOpacity={0.85}
                 >
                   <Text style={[styles.touDetailsToggleText, { color: isDark ? '#cbd5e1' : '#94a3b8' }]}>TOU details</Text>
-                  <Ionicons name={showTouDetails ? 'chevron-up' : 'chevron-down'} size={18} color={isDark ? '#cbd5e1' : '#94a3b8'} />
+                  <Ionicons name={showTouDetails ? 'chevron-down' : 'chevron-up'} size={18} color={isDark ? '#cbd5e1' : '#94a3b8'} />
                 </TouchableOpacity>
 
                 {showTouDetails ? (
