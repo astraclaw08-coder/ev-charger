@@ -158,9 +158,7 @@ function SessionSummary({
   const gracePeriodMin = Math.max(0, breakdown?.gracePeriodMin ?? 0);
   const idleStartLabel = rawIdleSegments.length > 0 ? formatTime(rawIdleSegments[0].startedAt) : null;
   const idleEndLabel = rawIdleSegments.length > 0 ? formatTime(rawIdleSegments[rawIdleSegments.length - 1].endedAt) : null;
-  const idleSubtotalLabel = idleStartLabel && idleEndLabel
-    ? `${idleStartLabel} to ${idleEndLabel} Subtotal`
-    : 'Idle Subtotal';
+  const idleSubtotalLabel = 'Idle Subtotal';
   const idleGraceLabel = idleStartLabel && idleEndLabel
     ? `${idleStartLabel} to ${idleEndLabel} (grace period is 10 mins)`
     : 'Idle (grace period is 10 mins)';
