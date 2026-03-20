@@ -81,7 +81,7 @@ export function normalizeTouWindows(raw: unknown): TouWindow[] {
     const startMinute = hhmmToMinuteOfDay(start);
     const endMinute = hhmmToMinuteOfDay(end);
     if (!Number.isInteger(day) || day < 0 || day > 6) continue;
-    if (startMinute == null || endMinute == null || endMinute <= startMinute) continue;
+    if (startMinute == null || endMinute == null || endMinute === startMinute) continue;
     if (!Number.isFinite(pricePerKwhUsd) || pricePerKwhUsd < 0) continue;
     if (!Number.isFinite(idleFeePerMinUsd) || idleFeePerMinUsd < 0) continue;
     rows.push({ day, start, end, pricePerKwhUsd, idleFeePerMinUsd });
@@ -113,11 +113,19 @@ export function resolveTouRateAt(input: {
   const { day, minuteOfDay } = localDayMinute(at, input.timeZone);
   const windows = normalizeTouWindows(input.touWindows);
   const matched = windows.find((w) => {
-    if (w.day !== day) return false;
     const startMinute = hhmmToMinuteOfDay(w.start);
     const endMinute = hhmmToMinuteOfDay(w.end);
     if (startMinute == null || endMinute == null) return false;
-    return minuteOfDay >= startMinute && minuteOfDay < endMinute;
+
+    if (endMinute > startMinute) {
+      return w.day === day && minuteOfDay >= startMinute && minuteOfDay < endMinute;
+    }
+
+    // Overnight window, e.g. 21:00 -> 07:00
+    const nextDay = (w.day + 1) % 7;
+    const onStartDay = w.day === day && minuteOfDay >= startMinute;
+    const onNextDay = nextDay === day && minuteOfDay < endMinute;
+    return onStartDay || onNextDay;
   }) ?? null;
 
   if (!matched) {

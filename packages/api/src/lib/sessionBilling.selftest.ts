@@ -61,6 +61,7 @@ const touDetailed = computeSessionAmounts({
   stoppedAt: '2026-03-16T11:00:00.000Z',
   idleStartedAt: '2026-03-16T10:20:00.000Z',
   idleStoppedAt: '2026-03-16T11:00:00.000Z',
+  siteTimeZone: 'UTC',
   touWindows: [
     { day: 1, start: '09:00', end: '10:00', pricePerKwhUsd: 0.2, idleFeePerMinUsd: 0.02 },
     { day: 1, start: '10:00', end: '11:00', pricePerKwhUsd: 0.5, idleFeePerMinUsd: 0.08 },
@@ -72,6 +73,38 @@ assert.equal(touDetailed.billingBreakdown.energy.segments[1].kwh, 6);
 assert.equal(touDetailed.billingBreakdown.energy.totalUsd, 4.2);
 assert.equal(touDetailed.billingBreakdown.idle.totalUsd, 2.4);
 assert.equal(touDetailed.grossAmountCents, 760);
+
+const overnightTou = computeSessionAmounts({
+  kwhDelivered: 10,
+  pricingMode: 'tou',
+  pricePerKwhUsd: 0.3,
+  idleFeePerMinUsd: 0.02,
+  startedAt: '2026-03-17T05:00:00.000Z', // 22:00 America/Los_Angeles (Mon)
+  stoppedAt: '2026-03-17T08:00:00.000Z',  // 01:00 America/Los_Angeles (Tue)
+  siteTimeZone: 'America/Los_Angeles',
+  touWindows: [
+    { day: 1, start: '21:00', end: '07:00', pricePerKwhUsd: 0.5, idleFeePerMinUsd: 0.07 },
+  ],
+});
+assert.equal(overnightTou.billingBreakdown.energy.segments.length, 1);
+assert.equal(overnightTou.billingBreakdown.energy.segments[0].pricePerKwhUsd, 0.5);
+assert.equal(overnightTou.billingBreakdown.energy.totalUsd, 5);
+
+const adjacentSameRate = computeSessionAmounts({
+  kwhDelivered: 8,
+  pricingMode: 'tou',
+  pricePerKwhUsd: 0.2,
+  idleFeePerMinUsd: 0.01,
+  startedAt: '2026-03-16T09:00:00.000Z',
+  stoppedAt: '2026-03-16T11:00:00.000Z',
+  siteTimeZone: 'UTC',
+  touWindows: [
+    { day: 1, start: '09:00', end: '10:00', pricePerKwhUsd: 0.4, idleFeePerMinUsd: 0.02 },
+    { day: 1, start: '10:00', end: '11:00', pricePerKwhUsd: 0.4, idleFeePerMinUsd: 0.02 },
+  ],
+});
+assert.equal(adjacentSameRate.billingBreakdown.energy.segments.length, 1);
+assert.equal(adjacentSameRate.billingBreakdown.energy.segments[0].pricePerKwhUsd, 0.4);
 
 assert.equal(
   computeVendorFeeUsd({ grossAmountUsd: 5, softwareVendorFeeMode: 'percentage_total', softwareVendorFeeValue: 200 }),
