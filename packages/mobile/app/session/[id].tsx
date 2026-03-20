@@ -331,17 +331,19 @@ function SummaryStatCard({
       { backgroundColor: isDark ? '#111827' : '#fff' },
       highlight && (isDark ? styles.statCardHighlightDark : styles.statCardHighlight),
     ]}>
-      <View style={styles.statIconSlot}>
-        {icon === 'money-outline' ? (
-          <View style={[styles.moneyIconCircle, { borderColor: isDark ? '#94a3b8' : '#6b7280' }]}>
-            <Text style={[styles.moneyIconText, { color: isDark ? '#e2e8f0' : '#374151' }]}>$</Text>
-          </View>
-        ) : (
-          <Text style={styles.statIcon}>{icon}</Text>
-        )}
+      <View style={styles.statCardContent}>
+        <View style={styles.statIconSlot}>
+          {icon === 'money-outline' ? (
+            <View style={[styles.moneyIconCircle, { borderColor: isDark ? '#94a3b8' : '#6b7280' }]}>
+              <Text style={[styles.moneyIconText, { color: isDark ? '#e2e8f0' : '#374151' }]}>$</Text>
+            </View>
+          ) : (
+            <Text style={styles.statIcon}>{icon}</Text>
+          )}
+        </View>
+        <Text numberOfLines={1} style={[styles.statValue, { color: isDark ? '#f8fafc' : '#111827' }, highlight && styles.statValueHighlight]}>{value}</Text>
+        <Text numberOfLines={1} style={[styles.statLabel, { color: isDark ? '#94a3b8' : '#9ca3af' }]}>{label}</Text>
       </View>
-      <Text numberOfLines={1} style={[styles.statValue, { color: isDark ? '#f8fafc' : '#111827' }, highlight && styles.statValueHighlight]}>{value}</Text>
-      <Text numberOfLines={1} style={[styles.statLabel, { color: isDark ? '#94a3b8' : '#9ca3af' }]}>{label}</Text>
     </View>
   );
 }
@@ -859,6 +861,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.06,
     shadowRadius: 6,
     elevation: 2,
+  },
+  statCardContent: {
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    paddingTop: 7,
   },
   statCardHighlight: { backgroundColor: '#ecfdf5' },
   statCardHighlightDark: { backgroundColor: '#052e2b', borderWidth: 1, borderColor: '#065f46' },
