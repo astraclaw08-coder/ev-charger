@@ -15,7 +15,7 @@ export async function handleHeartbeat(
   const current = await prisma.charger.findUnique({ where: { id: chargerId }, select: { status: true } });
   const shouldRecover = current?.status === 'DEGRADED' || current?.status === 'OFFLINE';
 
-  await prisma.$transaction(async (tx) => {
+  await prisma.$transaction(async (tx: any) => {
     await tx.charger.update({
       where: { id: chargerId },
       data: { lastHeartbeat: now, status: shouldRecover ? 'ONLINE' : undefined },

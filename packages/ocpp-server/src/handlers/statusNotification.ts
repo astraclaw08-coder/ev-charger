@@ -34,7 +34,7 @@ export async function handleStatusNotification(
   const { connectorId, status, errorCode } = params;
   console.log(`[StatusNotification] chargerId=${chargerId} connector=${connectorId} status=${status} error=${errorCode}`);
 
-  await prisma.$transaction(async (tx) => {
+  await prisma.$transaction(async (tx: any) => {
     if (connectorId === 0) {
       // ConnectorId 0 = the charger itself
       const mapped = toChargerStatus(status);

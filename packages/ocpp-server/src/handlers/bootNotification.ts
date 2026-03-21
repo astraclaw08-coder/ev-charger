@@ -10,7 +10,7 @@ export async function handleBootNotification(
 ): Promise<BootNotificationResponse> {
   console.log(`[BootNotification] chargerId=${chargerId} vendor=${params.chargePointVendor} model=${params.chargePointModel}`);
 
-  await prisma.$transaction(async (tx) => {
+  await prisma.$transaction(async (tx: any) => {
     await tx.charger.update({
       where: { id: chargerId },
       data: {
