@@ -9,6 +9,15 @@
         "EXPO_PUBLIC_ENV_LABEL": "DEV"
       }
     },
+    "rc": {
+      "distribution": "internal",
+      "ios": { "resourceClass": "m-medium" },
+      "env": {
+        "APP_ENV": "rc",
+        "EXPO_PUBLIC_ENV_LABEL": "RC",
+        "EXPO_PUBLIC_API_URL": "https://api-production-26cf.up.railway.app"
+      }
+    },
     "production": {
       "ios": { "resourceClass": "m-medium" },
       "env": {
