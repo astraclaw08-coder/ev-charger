@@ -1,0 +1,6 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="iPhone 17 Pro - iOS 26.2 - 3D00C844-48CC-4CC9-A7FE-13D7AE1D8B98" tests="1" failures="0" time="3.0">
+    <testcase id="task-0063-capture-app-error" name="task-0063-capture-app-error" classname="task-0063-capture-app-error" time="3.0" status="SUCCESS"/>
+  </testsuite>
+</testsuites>

@@ -1,0 +1,24 @@
+appId: dev.evcharger.app
+---
+- launchApp
+- waitForAnimationToEnd:
+    timeout: 5000
+- openLink: "evcharger-dev://session/b3d4fe87-f3c6-4359-b55a-c45a902de493"
+- tapOn:
+    text: "Open"
+    optional: true
+- waitForAnimationToEnd:
+    timeout: 8000
+- assertVisible: "Session Details"
+- assertVisible: "Transaction #: 81475"
+- assertVisible: "Plug in"
+- assertVisible: "Plug out"
+- scrollUntilVisible:
+    element:
+      text: "Idle Subtotal"
+    direction: DOWN
+    timeout: 12000
+- assertVisible:
+    text: "grace period is 10 mins"
+- assertVisible: "Idle Subtotal"
+- takeScreenshot: "task-81475-receipt-verify"

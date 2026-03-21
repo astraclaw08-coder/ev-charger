@@ -27,7 +27,8 @@
     "watchdog:prod": "node scripts/prod-health-monitor.js",
     "watchdog:prod:dry-run": "WATCHDOG_DRY_RUN=true node scripts/prod-health-monitor.js",
     "gitflow:verify": "node scripts/verify-branch-policy.cjs",
-    "gitflow:harden": "bash scripts/harden-branch-protections.sh"
+    "gitflow:harden": "bash scripts/harden-branch-protections.sh",
+    "security:secrets": "bash scripts/security-scan-secrets.sh"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

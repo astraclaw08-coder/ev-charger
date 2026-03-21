@@ -70,6 +70,11 @@ export function evaluatePolicy(args: {
   resourceSiteId?: string;
   resourceOrgId?: string;
 }): { allowed: true } | { allowed: false; code: AuthorizationFailureCode; reason: string } {
+  // super_admin bypasses ALL scope, site, org, and permission checks
+  if (args.claims.roles.includes('super_admin')) {
+    return { allowed: true };
+  }
+
   const policy = POLICY_MATRIX[args.key];
 
   if (policy.minScope && !hasDataScope(args.claims, policy.minScope)) {

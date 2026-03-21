@@ -21,6 +21,152 @@ function extractPowerActiveImportW(payload: unknown, transactionId?: number | nu
   return null;
 }
 
+type StatusLogLike = {
+  chargerId: string;
+  createdAt: Date;
+  payload: unknown;
+};
+
+type SessionLikeForIdle = {
+  startedAt?: Date | string | null;
+  stoppedAt?: Date | string | null;
+  connector?: { connectorId?: number | null; charger?: { id?: string | null } } | null;
+};
+
+function parseConnectorStatus(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().replace(/[-\s]/g, '_').toUpperCase();
+  const map: Record<string, string> = {
+    AVAILABLE: 'AVAILABLE',
+    PREPARING: 'PREPARING',
+    CHARGING: 'CHARGING',
+    FINISHING: 'FINISHING',
+    SUSPENDEDEV: 'SUSPENDED_EV',
+    SUSPENDED_EV: 'SUSPENDED_EV',
+    SUSPENDEDEVSE: 'SUSPENDED_EVSE',
+    SUSPENDED_EVSE: 'SUSPENDED_EVSE',
+    RESERVED: 'RESERVED',
+    UNAVAILABLE: 'UNAVAILABLE',
+    FAULTED: 'FAULTED',
+  };
+  return map[normalized] ?? null;
+}
+
+function extractStatusEvent(log: StatusLogLike): { connectorId: number; status: string; at: Date } | null {
+  if (!log.payload || typeof log.payload !== 'object') return null;
+  const payload = log.payload as { connectorId?: number | string; status?: string; timestamp?: string };
+  const connectorId = Number(payload.connectorId);
+  const status = parseConnectorStatus(payload.status);
+  if (!Number.isInteger(connectorId) || connectorId <= 0 || !status) return null;
+
+  const timestamp = payload.timestamp ? new Date(payload.timestamp) : null;
+  const at = timestamp && Number.isFinite(timestamp.getTime()) ? timestamp : log.createdAt;
+  return { connectorId, status, at };
+}
+
+function resolveSessionStatusTimings(
+  session: SessionLikeForIdle,
+  statusLogsForCharger: StatusLogLike[],
+): { idleStartedAt?: string; idleStoppedAt?: string; plugInAt?: string; plugOutAt?: string } {
+  const chargerId = session.connector?.charger?.id;
+  const connectorId = session.connector?.connectorId;
+  if (!chargerId || !connectorId || !session.startedAt) return {};
+
+  const sessionStart = new Date(session.startedAt);
+  if (!Number.isFinite(sessionStart.getTime())) return {};
+
+  const sessionStop = session.stoppedAt ? new Date(session.stoppedAt) : null;
+  const lookbackMs = 24 * 60 * 60 * 1000;
+  const hardStartMs = sessionStart.getTime() - lookbackMs;
+  const hardEndMs = sessionStop && Number.isFinite(sessionStop.getTime())
+    ? sessionStop.getTime() + (2 * 60 * 60 * 1000)
+    : Date.now() + (2 * 60 * 60 * 1000);
+
+  const baseEvents = statusLogsForCharger
+    .map(extractStatusEvent)
+    .filter((e): e is { connectorId: number; status: string; at: Date } => Boolean(e))
+    .filter((e) => e.connectorId === connectorId)
+    .filter((e) => {
+      const atMs = e.at.getTime();
+      return atMs >= hardStartMs && atMs <= hardEndMs;
+    })
+    .sort((a, b) => a.at.getTime() - b.at.getTime());
+
+  if (baseEvents.length === 0) {
+    return { plugInAt: sessionStart.toISOString() };
+  }
+
+  const events = baseEvents.map((e, idx) => ({
+    ...e,
+    prevStatus: idx > 0 ? baseEvents[idx - 1].status : null as string | null,
+  }));
+
+  const plugInCandidates = events.filter((e) =>
+    e.prevStatus === 'AVAILABLE'
+    && e.status === 'PREPARING'
+    && e.at.getTime() <= sessionStart.getTime(),
+  );
+  const preparingCandidates = events.filter((e) =>
+    e.status === 'PREPARING'
+    && e.at.getTime() <= sessionStart.getTime(),
+  );
+  const plugIn = plugInCandidates.length > 0
+    ? plugInCandidates[plugInCandidates.length - 1]
+    : (preparingCandidates.length > 0 ? preparingCandidates[preparingCandidates.length - 1] : null);
+
+  const plugOutCandidates = events.filter((e) =>
+    e.status === 'AVAILABLE'
+    && !!e.prevStatus
+    && new Set(['FINISHING', 'SUSPENDED_EV', 'SUSPENDED_EVSE']).has(e.prevStatus)
+    && (!sessionStop || e.at.getTime() >= sessionStop.getTime()),
+  );
+  const plugOut = plugOutCandidates.length > 0
+    ? plugOutCandidates[0]
+    : events.find((e) =>
+      e.status === 'AVAILABLE'
+      && !!e.prevStatus
+      && new Set(['FINISHING', 'SUSPENDED_EV', 'SUSPENDED_EVSE']).has(e.prevStatus),
+    );
+
+  // Idle start priority:
+  // 1) CHARGING -> SUSPENDED_EV/SUSPENDED_EVSE
+  // 2) fallback CHARGING -> FINISHING
+  const idleStart = events.find((e) =>
+    e.at.getTime() >= sessionStart.getTime()
+    && e.prevStatus === 'CHARGING'
+    && (e.status === 'SUSPENDED_EV' || e.status === 'SUSPENDED_EVSE'),
+  ) ?? events.find((e) =>
+    e.at.getTime() >= sessionStart.getTime()
+    && e.prevStatus === 'CHARGING'
+    && e.status === 'FINISHING',
+  );
+
+  const idleEnd = idleStart
+    ? events.find((e) =>
+      e.at.getTime() >= idleStart.at.getTime()
+      && e.status === 'AVAILABLE'
+      && (
+        e.prevStatus === 'FINISHING'
+        || e.prevStatus === 'SUSPENDED_EV'
+        || e.prevStatus === 'SUSPENDED_EVSE'
+      ),
+    )
+    : null;
+
+  const resolvedIdleEnd = idleEnd?.at ?? plugOut?.at ?? sessionStop ?? null;
+
+  return {
+    idleStartedAt: idleStart?.at && resolvedIdleEnd && resolvedIdleEnd.getTime() > idleStart.at.getTime()
+      ? idleStart.at.toISOString()
+      : undefined,
+    idleStoppedAt: idleStart?.at && resolvedIdleEnd && resolvedIdleEnd.getTime() > idleStart.at.getTime()
+      ? resolvedIdleEnd.toISOString()
+      : undefined,
+    plugInAt: plugIn?.at?.toISOString() ?? sessionStart.toISOString(),
+    plugOutAt: plugOut?.at?.toISOString(),
+  };
+}
+
 function parseHistoryRange(query: { startDate?: string; endDate?: string }, fallbackDays = 30) {
   const hasCustomRange = Boolean(query.startDate || query.endDate);
   if (hasCustomRange && (!query.startDate || !query.endDate)) {
@@ -151,17 +297,37 @@ export async function sessionRoutes(app: FastifyInstance) {
               charger: {
                 select: {
                   id: true, ocppId: true, model: true, vendor: true, status: true,
-                  site: { select: { name: true, address: true, softwareVendorFeeMode: true, softwareVendorFeeValue: true } },
+                  site: {
+                    select: {
+                      name: true,
+                      address: true,
+                      pricingMode: true,
+                      pricePerKwhUsd: true,
+                      idleFeePerMinUsd: true,
+                      activationFeeUsd: true,
+                      gracePeriodMin: true,
+                      touWindows: true,
+                      softwareVendorFeeMode: true,
+                      softwareVendorFeeValue: true,
+                      softwareFeeIncludesActivation: true,
+                    },
+                  },
                 },
               },
             },
           },
           payment: true,
+          billingSnapshot: { select: { billingBreakdownJson: true, grossAmountUsd: true, kwhDelivered: true, capturedAt: true } },
         },
       }),
       prisma.session.count({ where: { userId: user.id } }),
     ]);
 
+    const chargerIds = Array.from(new Set(
+      sessions
+        .map((s: any) => s.connector?.charger?.id)
+        .filter(Boolean),
+    ));
     const activeChargerIds = Array.from(new Set(
       sessions
         .filter((s: any) => s.status === 'ACTIVE')
@@ -169,26 +335,64 @@ export async function sessionRoutes(app: FastifyInstance) {
         .filter(Boolean),
     ));
 
-    const recentLogs = activeChargerIds.length > 0
-      ? await prisma.ocppLog.findMany({
-          where: { chargerId: { in: activeChargerIds }, action: 'MeterValues' },
-          orderBy: { createdAt: 'desc' },
-          take: 300,
-        })
-      : [];
+    const [recentMeterLogs, recentStatusLogs] = await Promise.all([
+      activeChargerIds.length > 0
+        ? prisma.ocppLog.findMany({
+            where: { chargerId: { in: activeChargerIds }, action: 'MeterValues' },
+            orderBy: { createdAt: 'desc' },
+            take: 300,
+          })
+        : Promise.resolve([]),
+      chargerIds.length > 0
+        ? prisma.ocppLog.findMany({
+            where: { chargerId: { in: chargerIds }, action: 'StatusNotification' },
+            orderBy: { createdAt: 'desc' },
+            take: 10000,
+          })
+        : Promise.resolve([]),
+    ]);
 
-    const logsByCharger = new Map<string, any[]>();
-    for (const row of recentLogs) {
-      const arr = logsByCharger.get(row.chargerId) ?? [];
+    const meterLogsByCharger = new Map<string, any[]>();
+    for (const row of recentMeterLogs) {
+      const arr = meterLogsByCharger.get(row.chargerId) ?? [];
       arr.push(row);
-      logsByCharger.set(row.chargerId, arr);
+      meterLogsByCharger.set(row.chargerId, arr);
+    }
+    const statusLogsByCharger = new Map<string, StatusLogLike[]>();
+    for (const row of recentStatusLogs) {
+      const arr = statusLogsByCharger.get(row.chargerId) ?? [];
+      arr.push({ chargerId: row.chargerId, createdAt: row.createdAt, payload: row.payload });
+      statusLogsByCharger.set(row.chargerId, arr);
     }
 
     const sessionsForClient = sessions.map((s: any) => {
-      const amounts = computeSessionAmounts({ ...s, softwareVendorFeeMode: s.connector?.charger?.site?.softwareVendorFeeMode, softwareVendorFeeValue: s.connector?.charger?.site?.softwareVendorFeeValue });
+      const sessionTimings = resolveSessionStatusTimings(
+        s,
+        statusLogsByCharger.get(s.connector?.charger?.id) ?? [],
+      );
+      const billingStoppedAt = sessionTimings.idleStartedAt
+        ? new Date(sessionTimings.idleStartedAt)
+        : (sessionTimings.plugOutAt ? new Date(sessionTimings.plugOutAt) : s.stoppedAt);
+
+      const amounts = computeSessionAmounts({
+        ...s,
+        startedAt: s.startedAt,
+        stoppedAt: billingStoppedAt,
+        pricingMode: s.connector?.charger?.site?.pricingMode,
+        pricePerKwhUsd: s.connector?.charger?.site?.pricePerKwhUsd,
+        idleFeePerMinUsd: s.connector?.charger?.site?.idleFeePerMinUsd,
+        activationFeeUsd: s.connector?.charger?.site?.activationFeeUsd,
+        gracePeriodMin: s.connector?.charger?.site?.gracePeriodMin,
+        touWindows: s.connector?.charger?.site?.touWindows,
+        softwareVendorFeeMode: s.connector?.charger?.site?.softwareVendorFeeMode,
+        softwareVendorFeeValue: s.connector?.charger?.site?.softwareVendorFeeValue,
+        softwareFeeIncludesActivation: s.connector?.charger?.site?.softwareFeeIncludesActivation,
+        idleStartedAt: sessionTimings.idleStartedAt,
+        idleStoppedAt: sessionTimings.idleStoppedAt,
+      });
       let powerActiveImportW: number | null = null;
       if (s.status === 'ACTIVE') {
-        const logs = logsByCharger.get(s.connector?.charger?.id) ?? [];
+        const logs = meterLogsByCharger.get(s.connector?.charger?.id) ?? [];
         for (const log of logs) {
           const w = extractPowerActiveImportW(log.payload, s.transactionId, s.connector?.connectorId);
           if (w != null) {
@@ -197,17 +401,25 @@ export async function sessionRoutes(app: FastifyInstance) {
           }
         }
       }
+      const snapshot = (s as any).billingSnapshot;
+      const snapshotGrossUsd = snapshot?.grossAmountUsd != null ? Number(snapshot.grossAmountUsd) : null;
+      const snapshotGrossCents = snapshotGrossUsd != null ? Math.round(snapshotGrossUsd * 100) : null;
       return {
         ...s,
+        startedAt: s.startedAt,
+        stoppedAt: sessionTimings.plugOutAt ? new Date(sessionTimings.plugOutAt) : s.stoppedAt,
+        plugInAt: sessionTimings.plugInAt ? new Date(sessionTimings.plugInAt) : undefined,
+        plugOutAt: sessionTimings.plugOutAt ? new Date(sessionTimings.plugOutAt) : undefined,
         ocppTransactionId: s.transactionId,
-        kwhDelivered: amounts.kwhDelivered,
-        endedAt: s.stoppedAt,
-        effectiveAmountCents: amounts.effectiveAmountCents,
-        costEstimateCents: amounts.costEstimateCents,
-        estimatedAmountCents: amounts.estimatedAmountCents,
-        amountState: amounts.amountState,
-        amountLabel: amounts.amountLabel,
-        isAmountFinal: amounts.isAmountFinal,
+        kwhDelivered: snapshot?.kwhDelivered ?? amounts.kwhDelivered,
+        endedAt: sessionTimings.plugOutAt ? new Date(sessionTimings.plugOutAt) : s.stoppedAt,
+        effectiveAmountCents: snapshotGrossCents ?? amounts.effectiveAmountCents,
+        costEstimateCents: snapshotGrossCents ?? amounts.costEstimateCents,
+        estimatedAmountCents: snapshotGrossCents ?? amounts.estimatedAmountCents,
+        amountState: snapshot ? 'FINAL' : amounts.amountState,
+        amountLabel: snapshot ? 'Final' : amounts.amountLabel,
+        isAmountFinal: snapshot ? true : amounts.isAmountFinal,
+        billingBreakdown: snapshot?.billingBreakdownJson ?? amounts.billingBreakdown,
         powerActiveImportW,
       };
     });
@@ -229,19 +441,72 @@ export async function sessionRoutes(app: FastifyInstance) {
             charger: {
               select: {
                 id: true, ocppId: true, model: true, vendor: true, status: true,
-                site: { select: { name: true, address: true, softwareVendorFeeMode: true, softwareVendorFeeValue: true } },
+                site: {
+                  select: {
+                    name: true,
+                    address: true,
+                    pricingMode: true,
+                    pricePerKwhUsd: true,
+                    idleFeePerMinUsd: true,
+                    activationFeeUsd: true,
+                    gracePeriodMin: true,
+                    touWindows: true,
+                    softwareVendorFeeMode: true,
+                    softwareVendorFeeValue: true,
+                    softwareFeeIncludesActivation: true,
+                  },
+                },
               },
             },
           },
         },
         payment: true,
+        billingSnapshot: { select: { billingBreakdownJson: true, grossAmountUsd: true, netAmountUsd: true, vendorFeeUsd: true, kwhDelivered: true, capturedAt: true } },
       },
     });
 
     if (!session) return reply.status(404).send({ error: 'Session not found' });
     if (session.userId !== user.id) return reply.status(403).send({ error: 'Not your session' });
 
-    const amounts = computeSessionAmounts({ ...session, softwareVendorFeeMode: session.connector?.charger?.site?.softwareVendorFeeMode, softwareVendorFeeValue: session.connector?.charger?.site?.softwareVendorFeeValue });
+    const sessionStartForLogs = new Date(session.startedAt);
+    const sessionStopForLogs = session.stoppedAt ? new Date(session.stoppedAt) : null;
+    const statusLogs = await prisma.ocppLog.findMany({
+      where: {
+        chargerId: session.connector.charger.id,
+        action: 'StatusNotification',
+        createdAt: {
+          gte: new Date(sessionStartForLogs.getTime() - (24 * 60 * 60 * 1000)),
+          lte: new Date((sessionStopForLogs?.getTime() ?? Date.now()) + (2 * 60 * 60 * 1000)),
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 10000,
+    });
+    const sessionTimings = resolveSessionStatusTimings(
+      session,
+      statusLogs.map((row) => ({ chargerId: row.chargerId, createdAt: row.createdAt, payload: row.payload })),
+    );
+
+    const billingStoppedAt = sessionTimings.idleStartedAt
+      ? new Date(sessionTimings.idleStartedAt)
+      : (sessionTimings.plugOutAt ? new Date(sessionTimings.plugOutAt) : session.stoppedAt);
+
+    const amounts = computeSessionAmounts({
+      ...session,
+      startedAt: session.startedAt,
+      stoppedAt: billingStoppedAt,
+      pricingMode: session.connector?.charger?.site?.pricingMode,
+      pricePerKwhUsd: session.connector?.charger?.site?.pricePerKwhUsd,
+      idleFeePerMinUsd: session.connector?.charger?.site?.idleFeePerMinUsd,
+      activationFeeUsd: session.connector?.charger?.site?.activationFeeUsd,
+      gracePeriodMin: session.connector?.charger?.site?.gracePeriodMin,
+      touWindows: session.connector?.charger?.site?.touWindows,
+      softwareVendorFeeMode: session.connector?.charger?.site?.softwareVendorFeeMode,
+      softwareVendorFeeValue: session.connector?.charger?.site?.softwareVendorFeeValue,
+      softwareFeeIncludesActivation: session.connector?.charger?.site?.softwareFeeIncludesActivation,
+      idleStartedAt: sessionTimings.idleStartedAt,
+      idleStoppedAt: sessionTimings.idleStoppedAt,
+    });
 
     let powerActiveImportW: number | null = null;
     if (session.status === 'ACTIVE') {
@@ -261,15 +526,22 @@ export async function sessionRoutes(app: FastifyInstance) {
 
     return {
       ...session,
+      startedAt: session.startedAt,
+      stoppedAt: sessionTimings.plugOutAt ? new Date(sessionTimings.plugOutAt) : session.stoppedAt,
+      plugInAt: sessionTimings.plugInAt ? new Date(sessionTimings.plugInAt) : undefined,
+      plugOutAt: sessionTimings.plugOutAt ? new Date(sessionTimings.plugOutAt) : undefined,
       ocppTransactionId: session.transactionId,
       kwhDelivered: amounts.kwhDelivered,
-      endedAt: session.stoppedAt,
+      endedAt: sessionTimings.plugOutAt ? new Date(sessionTimings.plugOutAt) : session.stoppedAt,
       costEstimateCents: amounts.costEstimateCents,
       estimatedAmountCents: amounts.estimatedAmountCents,
       effectiveAmountCents: amounts.effectiveAmountCents,
       amountState: amounts.amountState,
       amountLabel: amounts.amountLabel,
       isAmountFinal: amounts.isAmountFinal,
+      // Use persisted snapshot when available (immutable — not affected by future pricing changes)
+      // Fall back to compute-on-read for active sessions or sessions without a snapshot
+      billingBreakdown: (session as any).billingSnapshot?.billingBreakdownJson ?? amounts.billingBreakdown,
       powerActiveImportW,
     };
   });
@@ -312,6 +584,7 @@ export async function sessionRoutes(app: FastifyInstance) {
         skip: offset,
         include: {
           payment: { select: { status: true, amountCents: true } },
+          billingSnapshot: { select: { billingBreakdownJson: true, grossAmountUsd: true, netAmountUsd: true, vendorFeeUsd: true, kwhDelivered: true, capturedAt: true } },
           connector: {
             include: {
               charger: {
@@ -320,7 +593,21 @@ export async function sessionRoutes(app: FastifyInstance) {
                   ocppId: true,
                   model: true,
                   vendor: true,
-                  site: { select: { id: true, name: true, softwareVendorFeeMode: true, softwareVendorFeeValue: true } },
+                  site: {
+                    select: {
+                      id: true,
+                      name: true,
+                      pricingMode: true,
+                      pricePerKwhUsd: true,
+                      idleFeePerMinUsd: true,
+                      activationFeeUsd: true,
+                      gracePeriodMin: true,
+                      touWindows: true,
+                      softwareVendorFeeMode: true,
+                      softwareVendorFeeValue: true,
+                      softwareFeeIncludesActivation: true,
+                    },
+                  },
                 },
               },
             },
@@ -330,19 +617,59 @@ export async function sessionRoutes(app: FastifyInstance) {
       prisma.session.count({ where }),
     ]);
 
+    const txChargerIds = Array.from(new Set(rows.map((row: any) => row.connector?.charger?.id).filter(Boolean)));
+    const txStatusLogs = txChargerIds.length > 0
+      ? await prisma.ocppLog.findMany({
+          where: { chargerId: { in: txChargerIds }, action: 'StatusNotification' },
+          orderBy: { createdAt: 'desc' },
+          take: 10000,
+        })
+      : [];
+    const txStatusLogsByCharger = new Map<string, StatusLogLike[]>();
+    for (const row of txStatusLogs) {
+      const arr = txStatusLogsByCharger.get(row.chargerId) ?? [];
+      arr.push({ chargerId: row.chargerId, createdAt: row.createdAt, payload: row.payload });
+      txStatusLogsByCharger.set(row.chargerId, arr);
+    }
+
     return {
       total,
       limit,
       offset,
       transactions: rows.map((row: any) => {
-        const amounts = computeSessionAmounts({ ...row, softwareVendorFeeMode: row.connector?.charger?.site?.softwareVendorFeeMode, softwareVendorFeeValue: row.connector?.charger?.site?.softwareVendorFeeValue });
+        const sessionTimings = resolveSessionStatusTimings(
+          row,
+          txStatusLogsByCharger.get(row.connector?.charger?.id) ?? [],
+        );
+        const billingStoppedAt = sessionTimings.idleStartedAt
+          ? new Date(sessionTimings.idleStartedAt)
+          : (sessionTimings.plugOutAt ? new Date(sessionTimings.plugOutAt) : row.stoppedAt);
+
+        const amounts = computeSessionAmounts({
+          ...row,
+          startedAt: row.startedAt,
+          stoppedAt: billingStoppedAt,
+          pricingMode: row.connector?.charger?.site?.pricingMode,
+          pricePerKwhUsd: row.connector?.charger?.site?.pricePerKwhUsd,
+          idleFeePerMinUsd: row.connector?.charger?.site?.idleFeePerMinUsd,
+          activationFeeUsd: row.connector?.charger?.site?.activationFeeUsd,
+          gracePeriodMin: row.connector?.charger?.site?.gracePeriodMin,
+          touWindows: row.connector?.charger?.site?.touWindows,
+          softwareVendorFeeMode: row.connector?.charger?.site?.softwareVendorFeeMode,
+          softwareVendorFeeValue: row.connector?.charger?.site?.softwareVendorFeeValue,
+          softwareFeeIncludesActivation: row.connector?.charger?.site?.softwareFeeIncludesActivation,
+          idleStartedAt: sessionTimings.idleStartedAt,
+          idleStoppedAt: sessionTimings.idleStoppedAt,
+        });
         return {
           id: row.id,
           sessionId: row.id,
           transactionId: row.transactionId,
           status: row.status,
           startedAt: row.startedAt,
-          stoppedAt: row.stoppedAt,
+          stoppedAt: sessionTimings.plugOutAt ? new Date(sessionTimings.plugOutAt) : row.stoppedAt,
+          plugInAt: sessionTimings.plugInAt ? new Date(sessionTimings.plugInAt) : undefined,
+          plugOutAt: sessionTimings.plugOutAt ? new Date(sessionTimings.plugOutAt) : undefined,
           energyKwh: amounts.kwhDelivered,
           revenueUsd: ((amounts.effectiveAmountCents ?? amounts.estimatedAmountCents ?? row.payment?.amountCents ?? 0) / 100),
           payment: row.payment,
@@ -351,6 +678,7 @@ export async function sessionRoutes(app: FastifyInstance) {
           amountState: amounts.amountState,
           amountLabel: amounts.amountLabel,
           isAmountFinal: amounts.isAmountFinal,
+          billingBreakdown: row.billingSnapshot?.billingBreakdownJson ?? amounts.billingBreakdown,
           meterStart: row.meterStart,
           meterStop: row.meterStop,
           site: row.connector.charger.site,

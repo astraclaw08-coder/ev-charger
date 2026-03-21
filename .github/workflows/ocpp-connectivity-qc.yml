@@ -1,0 +1,121 @@
+name: OCPP Connectivity QC
+
+on:
+  pull_request:
+    paths:
+      - 'packages/ocpp-server/src/**'
+      - 'packages/shared/prisma/schema.prisma'
+      - 'packages/shared/src/**'
+  push:
+    branches: [main, dev]
+    paths:
+      - 'packages/ocpp-server/src/**'
+
+jobs:
+  ocpp-build-check:
+    name: OCPP Build + Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci
+      - name: Build shared
+        run: npm run build --workspace=packages/shared
+      - name: Type-check ocpp-server (skipLibCheck for pre-existing remote/index issues)
+        run: cd packages/ocpp-server && npx tsc --noEmit --skipLibCheck
+        continue-on-error: false
+
+  ocpp-handler-checklist:
+    name: OCPP Handler Safety Checklist
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify BootNotification resets smartChargingState
+        run: |
+          grep -n "PENDING_OFFLINE" packages/ocpp-server/src/handlers/bootNotification.ts
+          echo "✅ BootNotification resets state to PENDING_OFFLINE"
+      - name: Verify no applySmartChargingForCharger in BootNotification
+        run: |
+          if grep -n "applySmartChargingForCharger" packages/ocpp-server/src/handlers/bootNotification.ts; then
+            echo "❌ FAIL: applySmartChargingForCharger must not be called in BootNotification handler"
+            exit 1
+          fi
+          echo "✅ No direct smart charging apply in BootNotification"
+      - name: Verify heartbeat gate exists in smartCharging
+        run: |
+          grep -n "connectionReadyForSmartCharging" packages/ocpp-server/src/smartCharging.ts
+          echo "✅ Boot+heartbeat gate present"
+      - name: Verify no-profile skip exists
+        run: |
+          grep -n "sourceProfile" packages/ocpp-server/src/smartCharging.ts | grep -i "skip\|null\|undefined\|!sourceProfile\|no.*profile\|FALLBACK"
+          echo "✅ No-profile skip path present"
+      - name: Verify idempotency check exists
+        run: |
+          grep -n "alreadyAppliedEquivalent" packages/ocpp-server/src/smartCharging.ts
+          echo "✅ Idempotency check present"
+      - name: Verify catch-all handler returns empty object
+        run: |
+          grep -A 3 "Unhandled action" packages/ocpp-server/src/server.ts | grep "return {}"
+          echo "✅ Catch-all returns {} (prevents CALLERROR disconnects)"
+
+  ocpp-smart-charging-gate-test:
+    name: Smart Charging Gate Test (simulator)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: ev
+          POSTGRES_PASSWORD: ev
+          POSTGRES_DB: evcharger
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+        ports:
+          - 5432:5432
+    env:
+      DATABASE_URL: postgresql://ev:ev@localhost:5432/evcharger
+      OCPP_PORT: 9000
+      SMART_CHARGING_MIN_HEARTBEATS_AFTER_BOOT: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci
+      - name: Generate Prisma client
+        run: npx prisma generate --schema=packages/shared/prisma/schema.prisma
+      - name: Apply DB migrations
+        run: npx prisma migrate deploy --schema=packages/shared/prisma/schema.prisma
+      - name: Seed test charger (TEST-ASTRA-001)
+        run: |
+          node -e "
+          const { PrismaClient } = require('./node_modules/.prisma/client');
+          const p = new PrismaClient();
+          p.site.upsert({ where: { id: 'test-site-001' }, create: { id: 'test-site-001', name: 'QC Test Site', address: '1 Test St', latitude: 0, longitude: 0 }, update: {} })
+            .then(() => p.charger.upsert({ where: { ocppId: 'TEST-ASTRA-001' }, create: { id: 'test-charger-001', ocppId: 'TEST-ASTRA-001', name: 'QC Charger', siteId: 'test-site-001', status: 'OFFLINE' }, update: {} }))
+            .then(() => console.log('Seeded'))
+            .catch(e => { console.error(e); process.exit(1); })
+            .finally(() => p.\$disconnect());
+          "
+      - name: Start OCPP server (background)
+        run: |
+          cd packages/ocpp-server
+          node dist/index.js &
+          echo $! > /tmp/ocpp.pid
+          sleep 5
+          curl -sf http://localhost:9000/health || (echo "OCPP failed to start" && exit 1)
+      - name: Run smart charging gate test — no profile (zero commands expected)
+        run: |
+          cd packages/ocpp-server
+          CHARGER_ID=TEST-ASTRA-001 OCPP_SIM_SERVER=ws://localhost:9000 \
+            npx ts-node src/scripts/test-smart-charging-gate.ts
+      - name: Stop OCPP server
+        if: always()
+        run: kill $(cat /tmp/ocpp.pid) 2>/dev/null || true

@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import crypto from 'crypto';
-import { prisma } from '@ev-charger/shared';
+import { prisma, resolveSessionStatusTimings } from '@ev-charger/shared';
 import { requireOperator } from '../plugins/auth';
 import { requirePolicy } from '../plugins/authorization';
 import { remoteReset, remoteStart, triggerHeartbeat, getConfiguration } from '../lib/ocppClient';
@@ -193,33 +193,83 @@ export async function chargerRoutes(app: FastifyInstance) {
 
     const connectorIds = charger.connectors.map((c: { id: string }) => c.id);
     const limit = Math.min(parseInt(req.query.limit ?? '20', 10), 100);
-    const site = await prisma.site.findUnique({ where: { id: charger.siteId }, select: { softwareVendorFeeMode: true, softwareVendorFeeValue: true } });
+    const site = await prisma.site.findUnique({
+      where: { id: charger.siteId },
+      select: {
+        pricingMode: true,
+        pricePerKwhUsd: true,
+        idleFeePerMinUsd: true,
+        activationFeeUsd: true,
+        gracePeriodMin: true,
+        touWindows: true,
+        softwareVendorFeeMode: true,
+        softwareVendorFeeValue: true,
+        softwareFeeIncludesActivation: true,
+      },
+    });
 
     const sessions = await prisma.session.findMany({
       where: { connectorId: { in: connectorIds } },
       orderBy: { startedAt: 'desc' },
       take: limit,
       include: {
-        connector: { select: { connectorId: true } },
+        connector: {
+          select: {
+            connectorId: true,
+            charger: { select: { id: true } },
+          },
+        },
         user: { select: { name: true, email: true } },
         payment: { select: { status: true, amountCents: true } },
+        billingSnapshot: {
+          select: {
+            kwhDelivered: true,
+            grossAmountUsd: true,
+            billingBreakdownJson: true,
+          },
+        },
       },
     });
 
+    const chargerStatusLogs = await prisma.ocppLog.findMany({
+      where: {
+        chargerId: charger.id,
+        action: 'StatusNotification',
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 10000,
+    });
+
     return sessions.map((s: any) => {
+      const sessionTimings = resolveSessionStatusTimings(s, chargerStatusLogs);
       const amounts = computeSessionAmounts({
         ...s,
+        startedAt: sessionTimings.plugOutAt ? s.startedAt : s.startedAt,
+        stoppedAt: sessionTimings.plugOutAt ? new Date(sessionTimings.plugOutAt) : s.stoppedAt,
+        plugOutAt: sessionTimings.plugOutAt ? new Date(sessionTimings.plugOutAt) : undefined,
+        pricingMode: site?.pricingMode,
+        pricePerKwhUsd: site?.pricePerKwhUsd,
+        idleFeePerMinUsd: site?.idleFeePerMinUsd,
+        activationFeeUsd: site?.activationFeeUsd,
+        gracePeriodMin: site?.gracePeriodMin,
+        touWindows: site?.touWindows,
         softwareVendorFeeMode: site?.softwareVendorFeeMode,
         softwareVendorFeeValue: site?.softwareVendorFeeValue,
+        softwareFeeIncludesActivation: site?.softwareFeeIncludesActivation,
       });
+      const snapshot = s.billingSnapshot;
+      const snapshotGrossCents = snapshot?.grossAmountUsd != null ? Math.round(Number(snapshot.grossAmountUsd) * 100) : null;
       return {
         ...s,
-        kwhDelivered: amounts.kwhDelivered,
-        effectiveAmountCents: amounts.effectiveAmountCents,
-        estimatedAmountCents: amounts.estimatedAmountCents,
-        amountState: amounts.amountState,
-        amountLabel: amounts.amountLabel,
-        isAmountFinal: amounts.isAmountFinal,
+        plugInAt: sessionTimings.plugInAt ?? s.startedAt,
+        plugOutAt: sessionTimings.plugOutAt ?? s.stoppedAt,
+        kwhDelivered: snapshot?.kwhDelivered ?? amounts.kwhDelivered,
+        effectiveAmountCents: snapshotGrossCents ?? amounts.effectiveAmountCents,
+        estimatedAmountCents: snapshotGrossCents ?? amounts.estimatedAmountCents,
+        amountState: snapshot ? 'FINAL' : amounts.amountState,
+        amountLabel: snapshot ? 'Final' : amounts.amountLabel,
+        isAmountFinal: snapshot ? true : amounts.isAmountFinal,
+        billingBreakdown: snapshot?.billingBreakdownJson ?? amounts.billingBreakdown,
       };
     });
   });

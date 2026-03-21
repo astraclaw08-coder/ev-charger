@@ -1,0 +1,10 @@
+appId: dev.evcharger.app.lumeodev
+---
+- launchApp
+- waitForAnimationToEnd:
+    timeout: 10000
+- assertVisible:
+    text: "Continue as Guest"
+- assertVisible:
+    text: "A code will be sent to your phone for verification"
+- takeScreenshot: "0064-dark-login-confirmed"

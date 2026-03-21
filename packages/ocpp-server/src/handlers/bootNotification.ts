@@ -1,7 +1,6 @@
 import { prisma } from '@ev-charger/shared';
 import { recordUptimeEvent } from '../uptimeEvents';
 import { enqueueOcppEvent } from '../outbox';
-import { applySmartChargingForCharger } from '../smartCharging';
 import type { BootNotificationRequest, BootNotificationResponse } from '@ev-charger/shared';
 
 export async function handleBootNotification(
@@ -30,7 +29,15 @@ export async function handleBootNotification(
   });
 
   await recordUptimeEvent(chargerId, 'ONLINE', { reason: 'BootNotification accepted' });
-  await applySmartChargingForCharger(chargerId, 'boot_notification');
+
+  // Reset smart charging state to PENDING_OFFLINE on boot so the heartbeat gate
+  // forces a fresh GetConfiguration-style re-apply cycle after the charger reboots.
+  // Without this, the idempotency check sees status=APPLIED from the prior session
+  // and skips re-applying — even though the charger's in-memory profile was wiped on reboot.
+  await prisma.smartChargingState.updateMany({
+    where: { chargerId },
+    data: { status: 'PENDING_OFFLINE' },
+  });
 
   return {
     currentTime: new Date().toISOString(),
