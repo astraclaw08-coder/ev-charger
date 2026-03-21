@@ -8,38 +8,19 @@ const appEnv = ((process.env.APP_ENV || process.env.EAS_BUILD_PROFILE || 'dev').
 
 const isProd = appEnv === 'prod';
 
-const name = 'Lumeo';
+const name = isProd ? 'EV Charger' : 'EV Charger Dev';
 const slug = isProd ? 'ev-charger' : 'ev-charger-dev';
 const scheme = isProd ? 'evcharger' : 'evcharger-dev';
 const bundleIdentifier = isProd ? 'app.evcharger.app' : 'dev.evcharger.app';
 const androidPackage = isProd ? 'app.evcharger.app' : 'dev.evcharger.app';
 
-const devApiUrl = process.env.EXPO_PUBLIC_API_URL_DEV || 'http://127.0.0.1:3001';
+const devApiUrl = process.env.EXPO_PUBLIC_API_URL_DEV || process.env.EXPO_PUBLIC_API_URL || 'http://127.0.0.1:3001';
 const prodApiUrl = process.env.EXPO_PUBLIC_API_URL_PROD || 'https://api-production-26cf.up.railway.app';
 const authMode = 'keycloak';
-const googleMapsApiKey = isProd
-  ? (
-    process.env.GOOGLE_MAPS_API_KEY_PROD
-    || process.env.GOOGLE_MAPS_API_KEY
-    || process.env.GOOGLE_MAPS_API_KEY_IOS_PROD
-    || process.env.GOOGLE_MAPS_API_KEY_ANDROID_PROD
-    || ''
-  )
-  : (
-    process.env.GOOGLE_MAPS_API_KEY_DEV
-    || process.env.GOOGLE_MAPS_API_KEY
-    || process.env.GOOGLE_MAPS_API_KEY_IOS_DEV
-    || process.env.GOOGLE_MAPS_API_KEY_ANDROID_DEV
-    || ''
-  );
-
-const iosGoogleMapsApiKey = isProd
-  ? (process.env.GOOGLE_MAPS_API_KEY_IOS_PROD || process.env.GOOGLE_MAPS_API_KEY_IOS || googleMapsApiKey)
-  : (process.env.GOOGLE_MAPS_API_KEY_IOS_DEV || process.env.GOOGLE_MAPS_API_KEY_IOS || googleMapsApiKey);
-
-const androidGoogleMapsApiKey = isProd
-  ? (process.env.GOOGLE_MAPS_API_KEY_ANDROID_PROD || process.env.GOOGLE_MAPS_API_KEY_ANDROID || googleMapsApiKey)
-  : (process.env.GOOGLE_MAPS_API_KEY_ANDROID_DEV || process.env.GOOGLE_MAPS_API_KEY_ANDROID || googleMapsApiKey);
+const googleMapsApiKey = process.env.GOOGLE_MAPS_API_KEY
+  || process.env.GOOGLE_MAPS_API_KEY_IOS
+  || process.env.GOOGLE_MAPS_API_KEY_ANDROID
+  || '';
 
 const config: ExpoConfig = {
   name,
@@ -58,7 +39,7 @@ const config: ExpoConfig = {
     supportsTablet: true,
     bundleIdentifier,
     config: {
-      googleMapsApiKey: iosGoogleMapsApiKey,
+      googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY_IOS || googleMapsApiKey,
     },
     infoPlist: {
       NSLocationWhenInUseUsageDescription: 'We use your location to show nearby chargers.',
@@ -75,7 +56,7 @@ const config: ExpoConfig = {
     package: androidPackage,
     config: {
       googleMaps: {
-        apiKey: androidGoogleMapsApiKey,
+        apiKey: process.env.GOOGLE_MAPS_API_KEY_ANDROID || googleMapsApiKey,
       },
     },
     permissions: [

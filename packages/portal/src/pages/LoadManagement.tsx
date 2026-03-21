@@ -430,9 +430,9 @@ export default function LoadManagement() {
         <p className="text-sm text-gray-500 dark:text-slate-400">Control power limits per charger, group, or site using OCPP smart charging profiles.</p>
       </div>
 
-      <div className="rounded-xl border border-brand-200 bg-brand-50 px-5 py-4 dark:border-brand-500/30 dark:bg-brand-500/10">
-        <h2 className="text-sm font-semibold text-brand-800 dark:text-brand-200">Recommended flow</h2>
-        <ol className="mt-2 list-decimal space-y-1 pl-5 text-xs text-brand-800 dark:text-brand-100/90">
+      <div className="rounded-xl border border-brand-100 bg-brand-50/40 px-5 py-4 dark:border-brand-500/30 dark:bg-brand-500/10">
+        <h2 className="text-sm font-semibold text-brand-900 dark:text-brand-200">Recommended flow</h2>
+        <ol className="mt-2 list-decimal space-y-1 pl-5 text-xs text-brand-900/90 dark:text-brand-100/90">
           <li>Create a <strong>charger group</strong> for a site and assign chargers to it.</li>
           <li>Create one <strong>group-scoped load profile</strong> with default cap + optional time window cap.</li>
           <li>Use <strong>Re-push</strong> to apply immediately, then verify in Active Limits.</li>
@@ -441,8 +441,8 @@ export default function LoadManagement() {
 
       {/* Active limit states overview */}
       {states.filter((s) => Boolean(s.sourceProfileId) && (s.status === 'APPLIED' || s.status === 'FALLBACK_APPLIED')).length > 0 && (
-        <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm">
-          <div className="border-b border-gray-300 dark:border-slate-700 px-5 py-4">
+        <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm">
+          <div className="border-b border-gray-200 dark:border-slate-700 px-5 py-4">
             <h2 className="text-sm font-semibold text-gray-700 dark:text-slate-300">Active Limits</h2>
             <p className="mt-0.5 text-xs text-gray-500 dark:text-slate-400">Only currently active profile-driven limits.</p>
           </div>
@@ -461,7 +461,7 @@ export default function LoadManagement() {
                 {states
                   .filter((s) => Boolean(s.sourceProfileId) && (s.status === 'APPLIED' || s.status === 'FALLBACK_APPLIED'))
                   .map((s) => (
-                  <tr key={s.id} className="bg-white dark:bg-slate-800/60 hover:bg-gray-50 dark:hover:bg-slate-700">
+                  <tr key={s.id} className="hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60">
                     <td className="px-5 py-3">
                       <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">{appliedToDisplay(s).title}</p>
                       {appliedToDisplay(s).detail && <p className="text-xs text-gray-500 dark:text-slate-400">{appliedToDisplay(s).detail}</p>}
@@ -493,8 +493,8 @@ export default function LoadManagement() {
       <div className="grid gap-6 lg:grid-cols-2">
 
         {/* Load profiles */}
-        <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm">
-          <div className="flex items-center justify-between border-b border-gray-300 dark:border-slate-700 px-5 py-4">
+        <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm">
+          <div className="flex items-center justify-between border-b border-gray-200 dark:border-slate-700 px-5 py-4">
             <div>
               <h2 className="text-sm font-semibold text-gray-700 dark:text-slate-300">Load Profiles</h2>
               <p className="mt-0.5 text-xs text-gray-500 dark:text-slate-400">Set kW limits scoped to a charger, group, or entire site.</p>
@@ -606,7 +606,7 @@ export default function LoadManagement() {
                 <button onClick={handleSaveProfile} disabled={saving || !form.name.trim()} className="rounded-md bg-brand-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50 hover:bg-brand-700">
                   {saving ? 'Saving…' : 'Create Profile'}
                 </button>
-                <button onClick={() => setShowCreate(false)} className="rounded-md border border-gray-300 dark:border-slate-600 px-3 py-1.5 text-xs text-gray-600 dark:text-slate-400 bg-white dark:bg-slate-800/60 hover:bg-gray-50 dark:hover:bg-slate-700">Cancel</button>
+                <button onClick={() => setShowCreate(false)} className="rounded-md border border-gray-300 dark:border-slate-600 px-3 py-1.5 text-xs text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60">Cancel</button>
               </div>
               {saveMsg && <p className="mt-2 text-xs text-gray-600 dark:text-slate-400">{saveMsg}</p>}
             </div>
@@ -622,7 +622,7 @@ export default function LoadManagement() {
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-medium text-gray-900 dark:text-slate-100 text-sm truncate">{p.name}</span>
                     <ScopePill scope={p.scope} />
-                    {!p.enabled && <span className="rounded-full border border-gray-300 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/60 px-2 py-0.5 text-[11px] text-gray-500 dark:text-slate-400">disabled</span>}
+                    {!p.enabled && <span className="rounded-full border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/60 px-2 py-0.5 text-[11px] text-gray-500 dark:text-slate-400">disabled</span>}
                   </div>
                   <p className="mt-0.5 text-xs text-gray-500 dark:text-slate-400">
                     {p.defaultLimitKw != null ? `${p.defaultLimitKw} kW` : 'no limit set'}
@@ -642,13 +642,13 @@ export default function LoadManagement() {
         </div>
 
         {/* Charger groups */}
-        <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm">
-          <div className="flex items-center justify-between border-b border-gray-300 dark:border-slate-700 px-5 py-4">
+        <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm">
+          <div className="flex items-center justify-between border-b border-gray-200 dark:border-slate-700 px-5 py-4">
             <div>
               <h2 className="text-sm font-semibold text-gray-700 dark:text-slate-300">Charger Groups</h2>
               <p className="mt-0.5 text-xs text-gray-500 dark:text-slate-400">Assign chargers to groups for shared load budgets.</p>
             </div>
-            <button onClick={() => setShowCreateGroup((v) => !v)} className="rounded-md border border-gray-300 dark:border-slate-700 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-slate-300 bg-white dark:bg-slate-800/60 hover:bg-gray-50 dark:hover:bg-slate-700">
+            <button onClick={() => setShowCreateGroup((v) => !v)} className="rounded-md border border-gray-200 dark:border-slate-700 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60">
               + New Group
             </button>
           </div>
@@ -668,7 +668,7 @@ export default function LoadManagement() {
               </div>
               <div className="mt-3 flex gap-2">
                 <button onClick={handleCreateGroup} disabled={!groupForm.name.trim()} className="rounded-md bg-brand-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50 hover:bg-brand-700">Create Group</button>
-                <button onClick={() => setShowCreateGroup(false)} className="rounded-md border border-gray-300 dark:border-slate-600 px-3 py-1.5 text-xs text-gray-600 dark:text-slate-400 bg-white dark:bg-slate-800/60 hover:bg-gray-50 dark:hover:bg-slate-700">Cancel</button>
+                <button onClick={() => setShowCreateGroup(false)} className="rounded-md border border-gray-300 dark:border-slate-600 px-3 py-1.5 text-xs text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60">Cancel</button>
               </div>
               {groupMsg && <p className="mt-2 text-xs text-gray-600 dark:text-slate-400">{groupMsg}</p>}
             </div>
@@ -701,13 +701,13 @@ export default function LoadManagement() {
       </div>
 
       {/* Optional detailed matrix */}
-      <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm">
-        <div className="flex items-center justify-between border-b border-gray-300 dark:border-slate-700 px-5 py-4">
+      <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm">
+        <div className="flex items-center justify-between border-b border-gray-200 dark:border-slate-700 px-5 py-4">
           <div>
             <h2 className="text-sm font-semibold text-gray-700 dark:text-slate-300">Detailed Charger Matrix</h2>
             <p className="mt-0.5 text-xs text-gray-500 dark:text-slate-400">Optional deep view of per-charger resolution details.</p>
           </div>
-          <button onClick={() => setShowDetailedMatrix((v) => !v)} className="rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1 text-xs text-gray-700 dark:text-slate-300 bg-white dark:bg-slate-800/60 hover:bg-gray-50 dark:hover:bg-slate-700">
+          <button onClick={() => setShowDetailedMatrix((v) => !v)} className="rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1 text-xs text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60">
             {showDetailedMatrix ? 'Hide details' : 'Show details'}
           </button>
         </div>
@@ -728,7 +728,7 @@ export default function LoadManagement() {
               {chargers.map((c) => {
                 const state = stateByChargerId[c.id];
                 return (
-                  <tr key={c.id} className="bg-white dark:bg-slate-800/60 hover:bg-gray-50 dark:hover:bg-slate-700">
+                  <tr key={c.id} className="hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60">
                     <td className="px-5 py-3 font-mono text-xs font-semibold text-gray-800 dark:text-slate-200">{c.ocppId}</td>
                     <td className="px-5 py-3 text-xs text-gray-500 dark:text-slate-400">{c.site.name}</td>
                     <td className="px-5 py-3"><StatusBadge status={c.status} type="charger" /></td>
@@ -772,8 +772,8 @@ export default function LoadManagement() {
     {/* Edit Group Modal */}
     {editingGroup && (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={(e) => { if (e.target === e.currentTarget) setEditingGroup(null); }}>
-        <div className="w-full max-w-lg rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl">
-          <div className="flex items-center justify-between border-b border-gray-300 dark:border-slate-700 px-5 py-4">
+        <div className="w-full max-w-lg rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl">
+          <div className="flex items-center justify-between border-b border-gray-200 dark:border-slate-700 px-5 py-4">
             <div>
               <h2 className="text-sm font-semibold text-gray-900 dark:text-slate-100">Edit Group</h2>
               <p className="mt-0.5 text-xs text-gray-500 dark:text-slate-400">{editingGroup.name}</p>
@@ -816,8 +816,8 @@ export default function LoadManagement() {
                 ))}
             </div>
           </div>
-          <div className="flex justify-end border-t border-gray-300 dark:border-slate-700 px-5 py-3">
-            <button onClick={() => setEditingGroup(null)} className="rounded-md border border-gray-300 dark:border-slate-600 px-3 py-1.5 text-xs text-gray-600 dark:text-slate-400 bg-white dark:bg-slate-800/60 hover:bg-gray-50 dark:hover:bg-slate-700">Done</button>
+          <div className="flex justify-end border-t border-gray-200 dark:border-slate-700 px-5 py-3">
+            <button onClick={() => setEditingGroup(null)} className="rounded-md border border-gray-300 dark:border-slate-600 px-3 py-1.5 text-xs text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60">Done</button>
           </div>
         </div>
       </div>
@@ -826,8 +826,8 @@ export default function LoadManagement() {
     {/* Edit Profile Modal */}
     {editingProfile && editForm && (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={(e) => { if (e.target === e.currentTarget) { setEditingProfile(null); setEditForm(null); } }}>
-        <div className="w-full max-w-lg rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl">
-          <div className="flex items-center justify-between border-b border-gray-300 dark:border-slate-700 px-5 py-4">
+        <div className="w-full max-w-lg rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl">
+          <div className="flex items-center justify-between border-b border-gray-200 dark:border-slate-700 px-5 py-4">
             <div>
               <h2 className="text-sm font-semibold text-gray-900 dark:text-slate-100">Edit Load Profile</h2>
               <p className="mt-0.5 text-xs text-gray-500 dark:text-slate-400 font-mono truncate">{editingProfile.name}</p>
@@ -948,8 +948,8 @@ export default function LoadManagement() {
             {editMsg && <p className="mt-2 text-xs text-red-600">{editMsg}</p>}
           </div>
 
-          <div className="flex items-center justify-end gap-2 border-t border-gray-300 dark:border-slate-700 px-5 py-3">
-            <button onClick={() => { setEditingProfile(null); setEditForm(null); }} className="rounded-md border border-gray-300 dark:border-slate-600 px-3 py-1.5 text-xs text-gray-600 dark:text-slate-400 bg-white dark:bg-slate-800/60 hover:bg-gray-50 dark:hover:bg-slate-700">Cancel</button>
+          <div className="flex items-center justify-end gap-2 border-t border-gray-200 dark:border-slate-700 px-5 py-3">
+            <button onClick={() => { setEditingProfile(null); setEditForm(null); }} className="rounded-md border border-gray-300 dark:border-slate-600 px-3 py-1.5 text-xs text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60">Cancel</button>
             <button onClick={handleSaveEdit} disabled={editSaving || !editForm.name.trim()} className="rounded-md bg-brand-600 px-4 py-1.5 text-xs font-medium text-white disabled:opacity-50 hover:bg-brand-700">
               {editSaving ? 'Saving…' : 'Save Changes'}
             </button>

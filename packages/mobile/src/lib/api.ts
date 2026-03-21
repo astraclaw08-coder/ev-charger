@@ -12,6 +12,12 @@ export const envLabel =
   (Constants.expoConfig?.extra?.envLabel as string | undefined) || process.env.EXPO_PUBLIC_ENV_LABEL || 'DEV';
 export const apiBaseUrl = API_URL;
 
+export const appEnv =
+  ((Constants.expoConfig?.extra?.appEnv as string | undefined) || process.env.APP_ENV || 'dev').toLowerCase();
+export const envLabel =
+  (Constants.expoConfig?.extra?.envLabel as string | undefined) || process.env.EXPO_PUBLIC_ENV_LABEL || 'DEV';
+export const apiBaseUrl = API_URL;
+
 const DEV_USER_ID = process.env.EXPO_PUBLIC_DEV_USER_ID || 'user-test-driver-001';
 const AUTH_MODE = ((Constants.expoConfig?.extra?.authMode as string | undefined) || 'keycloak').trim().toLowerCase();
 

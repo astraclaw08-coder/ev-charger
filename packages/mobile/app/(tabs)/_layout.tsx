@@ -1,7 +1,6 @@
 import React from 'react';
 import { Tabs, useRouter } from 'expo-router';
 import { TouchableOpacity, Text, View } from 'react-native';
-import { BottomTabBar, type BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '@/theme';
 import { useAppAuth } from '@/providers/AuthProvider';
@@ -18,69 +17,11 @@ function formatElapsed(startedAt: string): string {
   return `${h}h ${m}m`;
 }
 
-function estimateActiveCostUsd(active: Session): number {
-  const cents = active.effectiveAmountCents ?? active.estimatedAmountCents ?? active.costEstimateCents;
-  if (cents != null && Number.isFinite(Number(cents))) return Math.max(0, Number(cents) / 100);
-
-  const kwh = Number(active.kwhDelivered ?? 0);
-  const rate = Number(active.ratePerKwh ?? 0);
-  if (kwh > 0 && rate > 0) return kwh * rate;
-  return 0;
-}
-
-const TAB_CONTENT_SHIFT_Y = 13;
-
-function FloatingTabBar({
-  isDark,
-  safeAreaBottom,
-  bannerVisible,
-  ...tabProps
-}: BottomTabBarProps & { isDark: boolean; safeAreaBottom: number; bannerVisible: boolean }) {
-  return (
-    <View
-      pointerEvents="box-none"
-      style={{
-        position: 'absolute',
-        left: 12,
-        right: 12,
-        bottom: bannerVisible ? 58 + Math.max(safeAreaBottom, 8) : Math.max(safeAreaBottom, 8),
-      }}
-    >
-      <View
-        style={{
-          borderRadius: 20,
-          overflow: 'hidden',
-          backgroundColor: isDark ? '#111827f2' : '#fffffff2',
-          borderWidth: 1,
-          borderColor: isDark ? '#374151' : '#d1d5db',
-          shadowColor: '#000',
-          shadowOpacity: isDark ? 0.25 : 0.12,
-          shadowRadius: 12,
-          shadowOffset: { width: 0, height: 6 },
-          elevation: 10,
-        }}
-      >
-        <BottomTabBar
-          {...tabProps}
-          style={{
-            borderTopWidth: 0,
-            backgroundColor: 'transparent',
-            paddingTop: 8,
-            paddingBottom: Math.max(safeAreaBottom, 4),
-            minHeight: 56 + Math.max(safeAreaBottom, 6),
-          }}
-        />
-      </View>
-    </View>
-  );
-}
-
 function ActiveSessionBanner({ active }: { active: Session }) {
   const router = useRouter();
   const { isDark } = useAppTheme();
   const insets = useSafeAreaInsets();
   const kwh = active.kwhDelivered ?? 0;
-  const costUsd = estimateActiveCostUsd(active);
   const siteName = active.connector.charger.site.name;
 
   return (
@@ -90,19 +31,19 @@ function ActiveSessionBanner({ active }: { active: Session }) {
       right: 0,
       bottom: 0,
       zIndex: 1,
-      backgroundColor: 'transparent',
+      backgroundColor: isDark ? '#030712' : '#f9fafb',
       paddingHorizontal: 12,
       paddingBottom: Math.max(insets.bottom, 8),
       paddingTop: 4,
     }}>
       <TouchableOpacity
         style={{
-          borderRadius: 16,
+          borderRadius: 12,
           paddingVertical: 10,
           paddingHorizontal: 12,
-          backgroundColor: isDark ? '#0f172a' : '#ffffff',
+          backgroundColor: isDark ? '#0f172a' : '#ecfeff',
           borderWidth: 1,
-          borderColor: isDark ? '#334155' : '#cbd5e1',
+          borderColor: isDark ? '#334155' : '#bae6fd',
           flexDirection: 'row',
           alignItems: 'center',
           justifyContent: 'space-between',
@@ -110,24 +51,18 @@ function ActiveSessionBanner({ active }: { active: Session }) {
         onPress={() => router.push(`/charger/detail/${active.connector.charger.id}`)}
         activeOpacity={0.85}
       >
-        <View style={{ flex: 1 }}>
-          <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6 }}>
-            <Text style={{ color: isDark ? '#9ca3af' : '#6b7280', fontWeight: '800', fontSize: 12 }}>
-              ⚡
-            </Text>
-            <Text style={{ color: isDark ? '#9ca3af' : '#6b7280', fontWeight: '800', fontSize: 12 }}>
-              Active charging session
-            </Text>
-          </View>
-          <View style={{ marginTop: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-            <Text numberOfLines={1} style={{ flex: 1, color: isDark ? '#f8fafc' : '#111827', fontWeight: '700', fontSize: 13 }}>
-              {siteName}
-            </Text>
-            <Text style={{ color: isDark ? '#cbd5e1' : '#4b5563', fontSize: 12, fontWeight: '700' }}>
-              {kwh.toFixed(2)} kWh · ${costUsd.toFixed(2)} · {formatElapsed(active.startedAt)}
-            </Text>
-          </View>
+        <View style={{ flex: 1, paddingRight: 8 }}>
+          <Text style={{ color: isDark ? '#bae6fd' : '#0369a1', fontWeight: '800', fontSize: 12 }}>
+            ⚡ Active charging session
+          </Text>
+          <Text numberOfLines={1} style={{ color: isDark ? '#f8fafc' : '#0f172a', fontWeight: '700', fontSize: 13, marginTop: 2 }}>
+            {siteName}
+          </Text>
+          <Text style={{ color: isDark ? '#cbd5e1' : '#334155', fontSize: 12, marginTop: 1 }}>
+            {kwh.toFixed(2)} kWh · {formatElapsed(active.startedAt)} · Tap to return
+          </Text>
         </View>
+        <Text style={{ color: isDark ? '#93c5fd' : '#0284c7', fontWeight: '800' }}>Open</Text>
       </TouchableOpacity>
     </View>
   );
@@ -143,58 +78,45 @@ export default function TabsLayout() {
     if (!isGuest) refetchSessions();
   }, [isGuest, refetchSessions]);
   const bannerVisible = Boolean(active);
+  const tabIconGap = 6;
+  const tabBottomGap = bannerVisible ? tabIconGap : Math.max(insets.bottom, 8);
 
   return (
     <>
       {active && bannerVisible ? <ActiveSessionBanner active={active} /> : null}
       <Tabs
-        tabBar={(props) => (
-          <FloatingTabBar
-            {...props}
-            isDark={isDark}
-            safeAreaBottom={insets.bottom}
-            bannerVisible={bannerVisible}
-          />
-        )}
         screenOptions={{
-          tabBarActiveTintColor: isDark ? '#ffffff' : '#000000',
-          tabBarInactiveTintColor: isDark ? '#94a3b8' : '#6b7280',
-          tabBarActiveBackgroundColor: 'transparent',
-          tabBarStyle: { backgroundColor: 'transparent', borderTopWidth: 0, elevation: 0 },
-          tabBarBackground: () => <View style={{ flex: 1, backgroundColor: 'transparent' }} />,
+          tabBarActiveTintColor: isDark ? '#67e8f9' : '#0f766e',
+          tabBarInactiveTintColor: isDark ? '#64748b' : '#94a3b8',
+          tabBarStyle: {
+            borderTopColor: isDark ? '#1f293766' : '#e5e7ebaa',
+            backgroundColor: isDark ? '#0b1220cc' : '#ffffffcc',
+            position: 'absolute',
+            paddingBottom: tabBottomGap,
+            paddingTop: tabIconGap,
+            height: 62 + tabBottomGap,
+            marginBottom: bannerVisible ? 72 + Math.max(insets.bottom, 8) : 0,
+          },
           tabBarItemStyle: {
             justifyContent: 'center',
             alignItems: 'center',
-            paddingTop: 0,
-            paddingBottom: 0,
-            transform: [{ translateY: TAB_CONTENT_SHIFT_Y }],
-            borderRadius: 22,
-            marginHorizontal: 1,
-            marginVertical: 1,
-            overflow: 'hidden',
-          },
-          tabBarIconStyle: {
-            marginTop: 0,
-            marginBottom: 0,
+            paddingVertical: 2,
           },
           tabBarLabelStyle: {
-            marginTop: 0,
-            marginBottom: 0,
+            marginTop: 2,
             paddingTop: 0,
-            lineHeight: 12,
+            lineHeight: 14,
             fontWeight: '700',
             fontSize: 11,
             letterSpacing: 0.2,
-            textAlign: 'center',
           },
-          sceneStyle: { backgroundColor: bannerVisible ? 'transparent' : (isDark ? '#030712' : '#f9fafb') },
+          sceneStyle: { backgroundColor: isDark ? '#030712' : '#f9fafb' },
           headerStyle: { backgroundColor: isDark ? '#0b1220' : '#fff' },
           headerTitle: 'Lumeo',
           headerTitleStyle: {
             color: isDark ? '#ffffff' : '#000000',
-            fontWeight: '300',
-            letterSpacing: 1.5,
-            fontSize: 22,
+            fontWeight: '800',
+            letterSpacing: 0.4,
           },
           headerTintColor: isDark ? '#f9fafb' : '#111827',
           headerShadowVisible: false,
@@ -208,7 +130,7 @@ export default function TabsLayout() {
             headerStyle: { backgroundColor: 'transparent' },
             headerShadowVisible: false,
             headerTitleAlign: 'center',
-            tabBarLabel: 'Map',
+            tabBarLabel: 'Find Charger',
             tabBarIcon: ({ size, color }) => <TabIcon icon="map-outline" size={size} color={color} />,
           }}
         />
@@ -219,14 +141,6 @@ export default function TabsLayout() {
             tabBarLabel: 'Favorites',
             tabBarIcon: ({ size, color }) => <TabIcon icon="heart-outline" size={size} color={color} />,
             href: isGuest ? null : undefined,
-          }}
-        />
-        <Tabs.Screen
-          name="scan"
-          options={{
-            title: 'Lumeo',
-            tabBarLabel: 'Scan QR',
-            tabBarIcon: ({ size, color }) => <TabIcon icon="qr-code-outline" size={size} color={color} />,
           }}
         />
         <Tabs.Screen

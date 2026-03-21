@@ -146,7 +146,7 @@ export default function CustomerSupport() {
         <p className="text-sm text-gray-500 dark:text-slate-400">Look up drivers, review session timelines, process refunds, and track support actions.</p>
       </div>
 
-      <div className="grid gap-4 rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 md:grid-cols-3">
+      <div className="grid gap-4 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 md:grid-cols-3">
         <div>
           <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Site</label>
           <select
@@ -190,12 +190,12 @@ export default function CustomerSupport() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <div className="lg:col-span-2 rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+        <div className="lg:col-span-2 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
           <h2 className="mb-3 text-sm font-semibold text-gray-700 dark:text-slate-300">Session timeline + payment triage</h2>
           <div className="space-y-3">
             {filteredSessions.length === 0 && <p className="text-sm text-gray-500 dark:text-slate-400">No sessions found for this query.</p>}
             {filteredSessions.map((s) => (
-              <div key={s.id} className="rounded-lg border border-gray-300 dark:border-slate-700 p-3">
+              <div key={s.id} className="rounded-lg border border-gray-200 dark:border-slate-700 p-3">
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-medium text-gray-900 dark:text-slate-100">{s.user?.email ?? s.idTag}</p>
                   <span className="rounded-full bg-gray-100 dark:bg-slate-800 px-2 py-0.5 text-xs text-gray-700 dark:text-slate-300">{s.status}</span>
@@ -279,7 +279,7 @@ export default function CustomerSupport() {
         </div>
 
         <div className="space-y-4">
-          <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+          <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
             <h2 className="mb-3 text-sm font-semibold text-gray-700 dark:text-slate-300">Case notes</h2>
             <textarea
               className="h-24 w-full rounded-md border border-gray-300 dark:border-slate-600 p-2 text-sm"
@@ -319,12 +319,12 @@ export default function CustomerSupport() {
             </div>
           </div>
 
-          <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+          <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
             <h2 className="mb-3 text-sm font-semibold text-gray-700 dark:text-slate-300">Support action audit history</h2>
             <div className="space-y-2">
               {audit.length === 0 && <p className="text-xs text-gray-500 dark:text-slate-400">No support actions recorded yet.</p>}
               {audit.slice(0, 12).map((a) => (
-                <div key={a.id} className="rounded-md border border-gray-300 dark:border-slate-700 p-2">
+                <div key={a.id} className="rounded-md border border-gray-200 dark:border-slate-700 p-2">
                   <p className="text-xs text-gray-500 dark:text-slate-400">{new Date(a.createdAt).toLocaleString()} · session {a.sessionId}</p>
                   <p className="text-xs font-medium text-gray-800 dark:text-slate-200">{a.action}</p>
                   <p className="text-xs text-gray-600 dark:text-slate-400">{a.reason}</p>

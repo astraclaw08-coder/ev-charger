@@ -28,7 +28,7 @@ export default function Login({ error, devMode = false, devOperatorId = 'operato
 
   return (
     <div className="flex min-h-screen items-start justify-center bg-gray-50 dark:bg-slate-800/60 px-4 py-10 md:items-center">
-      <div className="w-full max-w-md rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-6 shadow-sm">
+      <div className="w-full max-w-md rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-6 shadow-sm">
         <div className="mb-6 text-center">
           <div className="flex justify-center">
             <BrandMark className="w-[264px]" />

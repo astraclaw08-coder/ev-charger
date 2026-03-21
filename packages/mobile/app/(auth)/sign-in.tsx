@@ -29,8 +29,8 @@ function normalizePhoneInput(value: string) {
 
   const ten = digits.slice(0, 10);
   if (ten.length <= 3) return ten;
-  if (ten.length <= 6) return `(${ten.slice(0, 3)}) ${ten.slice(3)}`;
-  return `(${ten.slice(0, 3)}) ${ten.slice(3, 6)}-${ten.slice(6)}`;
+  if (ten.length <= 6) return `${ten.slice(0, 3)}-${ten.slice(3)}`;
+  return `${ten.slice(0, 3)}-${ten.slice(3, 6)}-${ten.slice(6)}`;
 }
 
 function toPhoneIdentifier(value: string) {
@@ -77,26 +77,32 @@ function BrandHeader({ isDark }: { isDark: boolean }) {
         style={styles.brandLogo}
         resizeMode="contain"
       />
-      <Text style={[styles.signInHeader, { color: isDark ? '#f1f5f9' : '#111827' }]}>Sign in / Sign up</Text>
+
     </View>
   );
 }
 
 export default function SignInScreen() {
   const router = useRouter();
-  const { signIn } = useAppAuth();
+  const { signIn, continueAsGuest: continueAsGuestFromAuth } = useAppAuth();
   const { isDark } = useAppTheme();
 
   const continueAsGuest = () => {
     setBearerToken(null);
     setGuestMode(true);
+
+    if (continueAsGuestFromAuth) {
+      continueAsGuestFromAuth();
+      return;
+    }
+
     router.replace('/(tabs)' as any);
   };
 
   if (isKeycloakMode) {
     return (
       <KeyboardAvoidingView
-        style={[styles.container, { backgroundColor: isDark ? '#0b1220' : 'transparent' }]}
+        style={[styles.container, { backgroundColor: isDark ? '#0b1220' : '#f3f4f6' }]}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <KeycloakSignInForm isDark={isDark} onContinueGuest={continueAsGuest} />
@@ -106,7 +112,7 @@ export default function SignInScreen() {
 
   if (isDevMode) {
     return (
-      <View style={[styles.container, { backgroundColor: isDark ? '#0b1220' : 'transparent' }]}> 
+      <View style={[styles.container, { backgroundColor: isDark ? '#0b1220' : '#f3f4f6' }]}> 
         <View style={styles.card}>
           <BrandHeader isDark={isDark} />
           <Text style={[styles.devNote, { color: isDark ? '#cbd5e1' : '#334155' }]}>Dev Mode — No Clerk Key Set</Text>
@@ -129,7 +135,7 @@ export default function SignInScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={[styles.container, { backgroundColor: isDark ? '#0b1220' : 'transparent' }]}
+      style={[styles.container, { backgroundColor: isDark ? '#0b1220' : '#f3f4f6' }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <ClerkSignInForm isDark={isDark} onContinueGuest={continueAsGuest} />
@@ -162,7 +168,7 @@ function KeycloakSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onCo
   function handleNextOtp() {
     const identifier = toPhoneIdentifier(phone);
     if (!identifier) {
-      Alert.alert('Invalid phone number', 'Enter a complete phone number (example: (123) 456-7890).');
+      Alert.alert('Invalid phone number', 'Enter a complete phone number (example: 123-456-7890).');
       return;
     }
     setOtpTarget(identifier);
@@ -217,17 +223,13 @@ function KeycloakSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onCo
     <View style={styles.card}>
       <BrandHeader isDark={isDark} />
 
-      <View style={styles.phoneInputWrap}>
-        <Ionicons name="call-outline" size={18} color="#64748b" />
-        <TextInput
-          style={[styles.input, styles.phoneInput]}
-          placeholder="(123) 456-7890"
-          placeholderTextColor="#94a3b8"
-          value={phone}
-          onChangeText={(value) => setPhone(normalizePhoneInput(value))}
-          keyboardType="phone-pad"
-        />
-      </View>
+      <TextInput
+        style={[styles.input, styles.centerText]}
+        placeholder="123-456-7890"
+        value={phone}
+        onChangeText={(value) => setPhone(normalizePhoneInput(value))}
+        keyboardType="phone-pad"
+      />
       <Text style={[styles.helperText, styles.centerText]}>A code will be sent to your phone for verification</Text>
 
       <TouchableOpacity style={styles.button} onPress={handleNextOtp}>
@@ -305,7 +307,7 @@ function ClerkSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onConti
     if (!isLoaded) return;
     const identifier = toPhoneIdentifier(phone);
     if (!identifier) {
-      Alert.alert('Invalid phone number', 'Enter a complete phone number (example: (123) 456-7890).');
+      Alert.alert('Invalid phone number', 'Enter a complete phone number (example: 123-456-7890).');
       return;
     }
 
@@ -436,17 +438,13 @@ function ClerkSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onConti
     <View style={styles.card}>
       <BrandHeader isDark={isDark} />
 
-      <View style={styles.phoneInputWrap}>
-        <Ionicons name="call-outline" size={18} color="#64748b" />
-        <TextInput
-          style={[styles.input, styles.phoneInput]}
-          placeholder="(123) 456-7890"
-          placeholderTextColor="#94a3b8"
-          value={phone}
-          onChangeText={(value) => setPhone(normalizePhoneInput(value))}
-          keyboardType="phone-pad"
-        />
-      </View>
+      <TextInput
+        style={[styles.input, styles.centerText]}
+        placeholder="123-456-7890"
+        value={phone}
+        onChangeText={(value) => setPhone(normalizePhoneInput(value))}
+        keyboardType="phone-pad"
+      />
       <Text style={[styles.helperText, styles.centerText]}>A code will be sent to your phone for verification</Text>
       <TouchableOpacity style={[styles.button, loading && styles.buttonDisabled]} onPress={handleRequestOtp} disabled={loading}>
         {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Next</Text>}
@@ -496,24 +494,8 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     paddingVertical: 8,
   },
-  brandWrap: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 8,
-    minHeight: 98,
-  },
-  brandLogo: {
-    width: 211,
-    height: 74,
-    marginBottom: 4,
-  },
-  signInHeader: {
-    fontSize: 18,
-    fontWeight: '700',
-    textAlign: 'center',
-    marginTop: 6,
-    letterSpacing: 0.2,
-  },
+  brandWrap: { alignItems: 'center', marginBottom: 8 },
+  brandLogo: { width: 220, height: 80, marginBottom: 4 },
   title: { fontSize: 28, fontWeight: '700', marginBottom: 12, textAlign: 'center' },
   brandTitle: { fontSize: 32, fontWeight: '800', letterSpacing: 0.4, marginBottom: 14 },
   devNote: { fontSize: 13, textAlign: 'center', marginBottom: 20, lineHeight: 20 },
@@ -526,25 +508,6 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     backgroundColor: '#f9fafb',
     color: '#111827',
-  },
-  phoneInputWrap: {
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 10,
-    backgroundColor: '#f9fafb',
-    marginBottom: 12,
-    paddingHorizontal: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  phoneInput: {
-    flex: 1,
-    marginBottom: 0,
-    borderWidth: 0,
-    backgroundColor: 'transparent',
-    paddingHorizontal: 0,
-    textAlign: 'center',
   },
   row: { flexDirection: 'row', gap: 10 },
   countryInput: { width: 78 },
@@ -629,17 +592,13 @@ const styles = StyleSheet.create({
   },
   createAccountBtnText: { color: '#ffffff', fontWeight: '800', fontSize: 14 },
   guestBtn: {
-    marginTop: 0,
+    marginTop: 10,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
-    paddingVertical: 12,
+    borderColor: '#cbd5e1',
+    paddingVertical: 11,
     alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 8,
-    backgroundColor: '#ffffff',
+    backgroundColor: 'rgba(255,255,255,0.6)',
   },
-  guestBtnText: { color: '#111827', fontWeight: '600', fontSize: 15 },
+  guestBtnText: { color: '#334155', fontWeight: '700', fontSize: 14 },
 });

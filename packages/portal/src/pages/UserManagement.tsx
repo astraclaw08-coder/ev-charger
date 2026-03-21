@@ -82,7 +82,7 @@ export default function UserManagement() {
         <p className="text-sm text-gray-500 dark:text-slate-400">Keycloak-backed admin workflows + audit trail</p>
       </div>
 
-      <section className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+      <section className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
         <h2 className="mb-3 text-sm font-semibold text-gray-700 dark:text-slate-300">Invite / Create user</h2>
         <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
           <input className="rounded border px-3 py-2 text-sm" placeholder="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} />
@@ -98,7 +98,7 @@ export default function UserManagement() {
         </div>
       </section>
 
-      <section className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+      <section className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
         <div className="mb-3 flex items-center gap-2">
           <h2 className="text-sm font-semibold text-gray-700 dark:text-slate-300">Users</h2>
           <input className="rounded border px-2 py-1 text-sm" placeholder="search" value={search} onChange={(e) => setSearch(e.target.value)} />
@@ -203,7 +203,7 @@ export default function UserManagement() {
         </div>
       </section>
 
-      <section className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+      <section className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
         <h2 className="mb-3 text-sm font-semibold text-gray-700 dark:text-slate-300">Audit trail</h2>
         <div className="space-y-2">
           {audit.map((a) => (
