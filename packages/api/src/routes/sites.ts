@@ -26,7 +26,7 @@ export async function siteRoutes(app: FastifyInstance) {
     const operator = req.currentOperator!;
     const scopedSiteIds = operator.claims?.siteIds ?? [];
 
-    const isOwner = (operator.roles ?? []).includes('owner');
+    const isOwner = (operator.roles ?? []).some(r => r === 'owner' || r === 'super_admin');
     const sites = await prisma.site.findMany({
       where: scopedSiteIds.length > 0 && !scopedSiteIds.includes('*')
         ? { id: { in: scopedSiteIds } }
@@ -350,6 +350,11 @@ export async function siteRoutes(app: FastifyInstance) {
     const getEffectiveAmountCents = (s: { meterStart: number | null; meterStop: number | null; kwhDelivered: number | null; ratePerKwh: number | null; payment: { status: string; amountCents: number | null } | null; startedAt: Date; stoppedAt: Date | null }) => (
       computeSessionAmounts({
         ...s,
+        pricingMode: site.pricingMode,
+        pricePerKwhUsd: site.pricePerKwhUsd,
+        idleFeePerMinUsd: site.idleFeePerMinUsd,
+        gracePeriodMin: site.gracePeriodMin,
+        touWindows: site.touWindows,
         softwareVendorFeeMode: site.softwareVendorFeeMode,
         softwareVendorFeeValue: site.softwareVendorFeeValue,
         activationFeeUsd: site.activationFeeUsd,

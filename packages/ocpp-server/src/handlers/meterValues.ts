@@ -61,7 +61,7 @@ export async function handleMeterValues(
 
   const latestWh = extractLatestEnergyWh(params);
 
-  await prisma.$transaction(async (tx) => {
+  await prisma.$transaction(async (tx: any) => {
     if (latestWh != null) {
       const session = await resolveActiveSession(tx, chargerId, connectorId, transactionId);
       if (session?.status === 'ACTIVE' && session.meterStart != null) {

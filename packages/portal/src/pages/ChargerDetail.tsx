@@ -18,7 +18,7 @@ function rangeDays(preset: RangePreset) {
 
 function ChargerKpiTile({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 shadow-sm">
+    <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 shadow-sm">
       <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">{label}</p>
       <p className="mt-1 text-2xl font-semibold text-gray-900 dark:text-slate-100">{value}</p>
     </div>
@@ -59,15 +59,20 @@ export default function ChargerDetail() {
     try {
       const token = await getToken();
       const client = createApiClient(token);
-      const [chargerStatus, recentSessions, uptimeData, chargers] = await Promise.all([
-        client.getChargerStatus(id!),
-        client.getChargerSessions(id!),
-        client.getChargerUptime(id!).catch(() => null),
-        client.getChargers().catch(() => []),
+
+      const chargers = await client.getChargers().catch(() => []);
+      const foundByRoute = chargers.find((c) => c.id === id || c.id.startsWith(id ?? '') || c.ocppId === id);
+      const targetId = foundByRoute?.id ?? id;
+
+      const [chargerStatus, recentSessions, uptimeData] = await Promise.all([
+        client.getChargerStatus(targetId!),
+        client.getChargerSessions(targetId!),
+        client.getChargerUptime(targetId!).catch(() => null),
       ]);
+
       setStatus(chargerStatus);
-      const found = chargers.find((c) => c.id === id || c.id.startsWith(id ?? '') || c.ocppId === id || c.ocppId === chargerStatus.ocppId);
-      setResolvedChargerId(found?.id ?? id ?? null);
+      const found = foundByRoute ?? chargers.find((c) => c.id === targetId || c.ocppId === chargerStatus.ocppId);
+      setResolvedChargerId(found?.id ?? targetId ?? null);
       setChargerSite(found ? { id: found.site.id, name: found.site.name } : null);
       setChargerMeta(found ? { serialNumber: found.serialNumber, model: found.model, vendor: found.vendor } : null);
       setSessions(recentSessions);
@@ -277,7 +282,7 @@ export default function ChargerDetail() {
             <select
               value={rangePreset}
               onChange={(e) => setRangePreset(e.target.value as RangePreset)}
-              className="rounded-md border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60"
+              className="rounded-md border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800/60 px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700"
             >
               <option value="7d">Last 7 days</option>
               <option value="30d">Last 30 days</option>
@@ -285,13 +290,13 @@ export default function ChargerDetail() {
             </select>
             <button
               onClick={() => setShowEditCharger((v) => !v)}
-              className="rounded-md border border-gray-200 dark:border-slate-700 px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60"
+              className="rounded-md border border-gray-300 dark:border-slate-700 px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-300 bg-white dark:bg-slate-800/60 hover:bg-gray-50 dark:hover:bg-slate-700"
             >
               Edit Charger
             </button>
             <button
               onClick={() => setShowQrModal(true)}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-gray-200 dark:border-slate-700 text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-gray-300 dark:border-slate-700 text-gray-700 dark:text-slate-300 bg-white dark:bg-slate-800/60 hover:bg-gray-50 dark:hover:bg-slate-700"
               title="Smart QR deep link"
               aria-label="Open Smart QR deep link"
             >
@@ -304,7 +309,7 @@ export default function ChargerDetail() {
         </div>
 
         {showEditCharger && (
-          <div className="mt-3 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+          <div className="mt-3 rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
             <h2 className="mb-3 text-sm font-semibold text-gray-700 dark:text-slate-300">Charger details</h2>
             <div className="grid gap-3 md:grid-cols-3">
               <label className="text-sm text-gray-700 dark:text-slate-300">OCPP ID
@@ -327,7 +332,7 @@ export default function ChargerDetail() {
         </div>
 
         <div className="mt-4">
-          <div className="rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+          <div className="rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
             <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">Charger Controls</p>
 
             <div className="grid gap-2 lg:grid-cols-3">
@@ -359,7 +364,7 @@ export default function ChargerDetail() {
               <button
                 onClick={() => handleReset('Soft')}
                 disabled={resetLoading}
-                className="inline-flex h-10 w-full items-center justify-center whitespace-nowrap rounded-md border border-gray-200 dark:border-slate-700 px-3 text-sm font-medium text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60 disabled:opacity-50"
+                className="inline-flex h-10 w-full items-center justify-center whitespace-nowrap rounded-md border border-gray-300 dark:border-slate-700 px-3 text-sm font-medium text-gray-600 dark:text-slate-400 bg-white dark:bg-slate-800/60 hover:bg-gray-50 dark:hover:bg-slate-700 disabled:opacity-50"
               >
                 Soft Reset
               </button>
@@ -380,14 +385,14 @@ export default function ChargerDetail() {
               <button
                 onClick={handleGetConfiguration}
                 disabled={configLoading}
-                className="inline-flex h-10 w-full items-center justify-center whitespace-nowrap rounded-md border border-gray-300 dark:border-slate-600 px-3 text-sm font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60 disabled:opacity-50"
+                className="inline-flex h-10 w-full items-center justify-center whitespace-nowrap rounded-md border border-gray-300 dark:border-slate-600 px-3 text-sm font-medium text-gray-700 dark:text-slate-300 bg-white dark:bg-slate-800/60 hover:bg-gray-50 dark:hover:bg-slate-700 disabled:opacity-50"
               >
                 {configLoading ? 'Fetching…' : 'Get Configuration'}
               </button>
             </div>
 
             {(remoteStartMsg || resetMsg || heartbeatMsg || configMsg) && (
-              <div className="mt-3 rounded-md border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/60 p-2.5 text-xs text-gray-600 dark:text-slate-300">
+              <div className="mt-3 rounded-md border border-gray-300 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/60 p-2.5 text-xs text-gray-600 dark:text-slate-300">
                 <p className="mb-1 font-semibold uppercase tracking-wide text-[10px] text-gray-500 dark:text-slate-400">OCPP request responses</p>
                 <div className="space-y-1">
                   {remoteStartMsg && <p><span className="font-medium">Remote Start:</span> {remoteStartMsg}</p>}
@@ -425,10 +430,10 @@ export default function ChargerDetail() {
 
       {showQrModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setShowQrModal(false)}>
-          <div className="w-full max-w-2xl rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
+          <div className="w-full max-w-2xl rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-sm font-semibold text-gray-800 dark:text-slate-200">Smart QR Deep Link</h2>
-              <button onClick={() => setShowQrModal(false)} className="rounded-md border border-gray-200 dark:border-slate-700 px-2 py-1 text-xs text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60">Close</button>
+              <button onClick={() => setShowQrModal(false)} className="rounded-md border border-gray-300 dark:border-slate-700 px-2 py-1 text-xs text-gray-600 dark:text-slate-400 bg-white dark:bg-slate-800/60 hover:bg-gray-50 dark:hover:bg-slate-700">Close</button>
             </div>
             <div className="grid gap-2 sm:grid-cols-3">
               <button
@@ -441,14 +446,14 @@ export default function ChargerDetail() {
               <button
                 onClick={handleCopyQrLink}
                 disabled={!qrLink}
-                className="inline-flex h-10 w-full items-center justify-center whitespace-nowrap rounded-md border border-gray-300 dark:border-slate-600 px-3 text-sm font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60 disabled:opacity-50"
+                className="inline-flex h-10 w-full items-center justify-center whitespace-nowrap rounded-md border border-gray-300 dark:border-slate-600 px-3 text-sm font-medium text-gray-700 dark:text-slate-300 bg-white dark:bg-slate-800/60 hover:bg-gray-50 dark:hover:bg-slate-700 disabled:opacity-50"
               >
                 Copy Link
               </button>
               <button
                 onClick={handleDownloadQr}
                 disabled={!qrDataUrl}
-                className="inline-flex h-10 w-full items-center justify-center whitespace-nowrap rounded-md border border-gray-300 dark:border-slate-600 px-3 text-sm font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60 disabled:opacity-50"
+                className="inline-flex h-10 w-full items-center justify-center whitespace-nowrap rounded-md border border-gray-300 dark:border-slate-600 px-3 text-sm font-medium text-gray-700 dark:text-slate-300 bg-white dark:bg-slate-800/60 hover:bg-gray-50 dark:hover:bg-slate-700 disabled:opacity-50"
               >
                 Download QR
               </button>
@@ -465,7 +470,7 @@ export default function ChargerDetail() {
       )}
 
       {uptime && (
-        <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-5 shadow-sm">
+        <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-5 shadow-sm">
           <h2 className="mb-4 text-sm font-semibold text-gray-700 dark:text-slate-300">Uptime Monitoring (OCA v1.1)</h2>
           <div className="grid gap-3 sm:grid-cols-3 mb-4">
             <div><p className="text-xs text-gray-500 dark:text-slate-400">24h</p><p className={`text-lg font-semibold ${uptime.uptimePercent24h >= 99 ? 'text-green-700' : uptime.uptimePercent24h >= 95 ? 'text-amber-700' : 'text-red-700'}`}>{uptime.uptimePercent24h.toFixed(2)}%</p></div>
@@ -480,8 +485,8 @@ export default function ChargerDetail() {
                 { window: '7d', value: uptime.uptimePercent7d },
                 { window: '30d', value: uptime.uptimePercent30d },
               ]}>
-                <XAxis dataKey="window" />
-                <YAxis domain={[0, 100]} />
+                <XAxis dataKey="window" tick={{ fill: '#94a3b8', fontSize: 11 }} />
+                <YAxis domain={[0, 100]} tick={{ fill: '#94a3b8', fontSize: 11 }} />
                 <Tooltip formatter={(v: number) => `${v.toFixed(2)}%`} />
                 <Line type="monotone" dataKey="value" stroke="#10b981" strokeWidth={2} dot />
               </LineChart>
@@ -491,8 +496,8 @@ export default function ChargerDetail() {
       )}
 
       {/* Session log */}
-      <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm">
-        <div className="border-b border-gray-200 dark:border-slate-700 px-5 py-4">
+      <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm">
+        <div className="border-b border-gray-300 dark:border-slate-700 px-5 py-4">
           <h2 className="text-sm font-semibold text-gray-700 dark:text-slate-300">Recent Sessions</h2>
         </div>
 
@@ -515,7 +520,7 @@ export default function ChargerDetail() {
               </thead>
               <tbody className="divide-y divide-gray-50 dark:divide-slate-800">
                 {sessions.map((s) => (
-                  <tr key={s.id} className="hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60">
+                  <tr key={s.id} className="bg-white dark:bg-slate-800/60 hover:bg-gray-50 dark:hover:bg-slate-700">
                     <td className="px-5 py-3 font-mono text-xs text-gray-700 dark:text-slate-300">
                       {s.transactionId ?? '—'}
                     </td>

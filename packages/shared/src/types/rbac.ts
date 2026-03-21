@@ -1,4 +1,5 @@
 export const RBAC_ROLES = [
+  'super_admin',
   'owner',
   'operator',
   'customer_service',
@@ -27,7 +28,30 @@ export type RbacPermission = (typeof RBAC_PERMISSIONS)[number];
 
 export type RolePolicyMap = Record<RbacRole, readonly RbacPermission[]>;
 
+/**
+ * Role hierarchy (highest → lowest privilege):
+ *
+ * super_admin  — Full platform access. Bypasses all site/org scope checks.
+ *                Manages all operators, sites, users across the entire platform.
+ *                Intended for platform owners only (e.g. Son / sdang3209).
+ *
+ * owner        — Full access within their assigned sites/org scope.
+ *                Can manage operators, configure sites, access billing + RBAC.
+ *
+ * operator     — Day-to-day ops: read/write sites and chargers, view sessions.
+ *                No RBAC management or billing export.
+ *
+ * customer_service — Read + refund sessions, read sites/chargers.
+ *                    No write operations.
+ *
+ * network_reliability_engineer — Site + charger read/control, incident management.
+ *                                 No billing or RBAC access.
+ *
+ * data_analyst — Read-only analytics + session data. Export allowed.
+ *                No operational or admin access.
+ */
 export const ROLE_POLICIES: RolePolicyMap = {
+  super_admin: RBAC_PERMISSIONS,
   owner: RBAC_PERMISSIONS,
   operator: [
     'site:read',

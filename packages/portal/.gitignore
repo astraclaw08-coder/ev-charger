@@ -1,1 +1,4 @@
 .vercel
+
+# Theme QC screenshots (captured during test runs, uploaded as CI artifacts)
+tests/theme-qc/screenshots/

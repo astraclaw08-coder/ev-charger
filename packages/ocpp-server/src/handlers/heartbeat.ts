@@ -15,7 +15,7 @@ export async function handleHeartbeat(
   const current = await prisma.charger.findUnique({ where: { id: chargerId }, select: { status: true } });
   const shouldRecover = current?.status === 'DEGRADED' || current?.status === 'OFFLINE';
 
-  await prisma.$transaction(async (tx) => {
+  await prisma.$transaction(async (tx: any) => {
     await tx.charger.update({
       where: { id: chargerId },
       data: { lastHeartbeat: now, status: shouldRecover ? 'ONLINE' : undefined },
@@ -31,8 +31,10 @@ export async function handleHeartbeat(
 
   if (shouldRecover) {
     await recordUptimeEvent(chargerId, 'RECOVERED', { reason: 'Heartbeat restored' });
-    await applySmartChargingForCharger(chargerId, 'heartbeat_recovered');
   }
+
+  // Apply smart charging after heartbeat gating (not on raw boot/connect).
+  await applySmartChargingForCharger(chargerId, shouldRecover ? 'heartbeat_recovered' : 'heartbeat');
 
   return { currentTime: now.toISOString() };
 }

@@ -114,11 +114,57 @@ export interface ChargerStatus {
   connectors: ConnectorStatus[];
 }
 
+type BillingBreakdown = {
+  pricingMode: 'flat' | 'tou';
+  durationMinutes: number;
+  gracePeriodMin: number;
+  energy: {
+    kwhDelivered: number;
+    totalUsd: number;
+    segments: Array<{
+      startedAt: string;
+      endedAt: string;
+      minutes: number;
+      source: 'flat' | 'tou';
+      pricePerKwhUsd: number;
+      idleFeePerMinUsd: number;
+      kwh: number;
+      energyAmountUsd: number;
+      idleMinutes: number;
+      idleAmountUsd: number;
+    }>;
+  };
+  idle: {
+    minutes: number;
+    totalUsd: number;
+    segments: Array<{
+      startedAt: string;
+      endedAt: string;
+      minutes: number;
+      idleFeePerMinUsd: number;
+      amountUsd: number;
+      source: 'flat' | 'tou';
+    }>;
+  };
+  activation: { totalUsd: number };
+  grossTotalUsd: number;
+  totals?: {
+    energyUsd: number;
+    idleUsd: number;
+    activationUsd: number;
+    grossUsd: number;
+    vendorFeeUsd: number;
+    netUsd: number;
+  };
+};
+
 export interface SessionRecord {
   id: string;
   transactionId: number | null;
   startedAt: string;
   stoppedAt: string | null;
+  plugInAt?: string | null;
+  plugOutAt?: string | null;
   status: string;
   kwhDelivered: number | null;
   ratePerKwh: number | null;
@@ -131,6 +177,7 @@ export interface SessionRecord {
   amountState?: 'FINAL' | 'PENDING' | 'ESTIMATED' | 'UNAVAILABLE';
   amountLabel?: string;
   isAmountFinal?: boolean;
+  billingBreakdown?: BillingBreakdown;
 }
 
 export interface CreatedCharger {
@@ -186,6 +233,8 @@ export interface EnrichedTransaction {
   status: string;
   startedAt: string;
   stoppedAt: string | null;
+  plugInAt?: string | null;
+  plugOutAt?: string | null;
   durationMinutes: number | null;
   energyKwh: number;
   revenueUsd: number;
@@ -195,6 +244,7 @@ export interface EnrichedTransaction {
   amountState?: 'FINAL' | 'PENDING' | 'ESTIMATED' | 'UNAVAILABLE';
   amountLabel?: string;
   isAmountFinal?: boolean;
+  billingBreakdown?: BillingBreakdown;
   meterStart: number | null;
   meterStop: number | null;
   site: { id: string; name: string; organizationName: string | null; portfolioName: string | null };

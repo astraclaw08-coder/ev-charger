@@ -1,0 +1,39 @@
+appId: dev.evcharger.app.lumeodev
+---
+- launchApp
+- waitForAnimationToEnd:
+    timeout: 4000
+
+- openLink: "evcharger-dev://session/6fbb8a1c-51f4-47a6-92d6-6661f1a68c60"
+- tapOn:
+    text: "Open"
+    optional: true
+- waitForAnimationToEnd:
+    timeout: 7000
+- assertVisible: "Session Complete"
+- assertVisible: "Receipt Breakdown"
+- scrollUntilVisible:
+    element:
+      text: "Activation fee"
+    direction: DOWN
+    timeout: 12000
+- assertVisible: "Activation fee"
+- assertVisible: "Transaction #: 56546"
+- takeScreenshot: "task-0168-cross-window-receipt"
+
+- openLink: "evcharger-dev://session/eb09aa6c-0b8c-4465-92ad-1b3793f85677"
+- tapOn:
+    text: "Open"
+    optional: true
+- waitForAnimationToEnd:
+    timeout: 7000
+- assertVisible: "Session Complete"
+- assertVisible: "Receipt Breakdown"
+- scrollUntilVisible:
+    element:
+      text: "Activation fee"
+    direction: DOWN
+    timeout: 12000
+- assertVisible: "Activation fee"
+- assertVisible: "Transaction #: 56731"
+- takeScreenshot: "task-0168-idle-activation-receipt"

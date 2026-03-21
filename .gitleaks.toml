@@ -1,0 +1,12 @@
+title = "ev-charger gitleaks config"
+
+[allowlist]
+description = "Allow placeholder tokens and generated test artifacts"
+paths = [
+  '''^packages/mobile/e2e/''',
+  '''^packages/mobile/\.expo/''',
+  '''^packages/mobile/ios/Podfile\.lock$'''
+]
+regexes = [
+  '''__SET_[A-Z0-9_]+__'''
+]

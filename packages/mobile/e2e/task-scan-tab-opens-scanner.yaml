@@ -1,0 +1,12 @@
+appId: dev.evcharger.app.lumeodev
+---
+- launchApp:
+    clearState: true
+- tapOn:
+    text: "Continue as Guest"
+    optional: true
+- tapOn:
+    point: "50%,91%"
+- assertVisible:
+    text: "Scan Charger QR"
+- takeScreenshot: "task-scan-tab-opens-scanner"

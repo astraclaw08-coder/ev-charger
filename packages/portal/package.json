@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "storybook": "storybook dev -p 6006 --no-open",
     "build-storybook": "storybook build",
-    "test:playwright": "playwright test"
+    "test:playwright": "playwright test",
+    "test:theme-qc": "playwright test tests/theme-qc/"
   },
   "dependencies": {
     "@clerk/clerk-react": "^5.0.0",

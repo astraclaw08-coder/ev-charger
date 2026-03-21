@@ -1,0 +1,6 @@
+appId: dev.evcharger.app.lumeodev
+---
+- launchApp
+- waitForAnimationToEnd:
+    timeout: 10000
+- takeScreenshot: "0063-app-open-state"
