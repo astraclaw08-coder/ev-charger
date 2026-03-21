@@ -485,8 +485,8 @@ export default function ChargerDetail() {
                 { window: '7d', value: uptime.uptimePercent7d },
                 { window: '30d', value: uptime.uptimePercent30d },
               ]}>
-                <XAxis dataKey="window" />
-                <YAxis domain={[0, 100]} />
+                <XAxis dataKey="window" tick={{ fill: '#94a3b8', fontSize: 11 }} />
+                <YAxis domain={[0, 100]} tick={{ fill: '#94a3b8', fontSize: 11 }} />
                 <Tooltip formatter={(v: number) => `${v.toFixed(2)}%`} />
                 <Line type="monotone" dataKey="value" stroke="#10b981" strokeWidth={2} dot />
               </LineChart>

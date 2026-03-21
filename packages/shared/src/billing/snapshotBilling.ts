@@ -80,7 +80,11 @@ export async function captureSessionBillingSnapshot(sessionId: string): Promise<
 
   const timings = resolveSessionStatusTimings(
     session,
-    statusLogs.map(l => ({ chargerId: l.chargerId, createdAt: l.createdAt, payload: l.payload })),
+    statusLogs.map((l: { chargerId: string; createdAt: Date; payload: unknown }) => ({
+      chargerId: l.chargerId,
+      createdAt: l.createdAt,
+      payload: l.payload,
+    })),
   );
 
   const billingStop = timings.idleStartedAt

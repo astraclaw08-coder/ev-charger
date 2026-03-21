@@ -45,6 +45,7 @@ function PortalRoutes() {
           <Routes>
           <Route path="/" element={<Navigate to={homePath} replace />} />
           <Route path="/overview" element={<Dashboard />} />
+          <Route path="/dashboard" element={<Navigate to="/overview" replace />} />
           <Route path="/sites" element={<Sites />} />
           <Route path="/sites/:id" element={<SiteDetail />} />
           <Route path="/analytics" element={<FleetAnalytics />} />
@@ -58,6 +59,7 @@ function PortalRoutes() {
           <Route path="/load-management" element={<LoadManagement />} />
           <Route path="/users" element={<UserManagement />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/admin" element={<Navigate to="/settings" replace />} />
           <Route path="/notifications" element={<Notifications />} />
           <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
