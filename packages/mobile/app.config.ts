@@ -13,7 +13,7 @@ const isProd = appEnv === 'prod';
 const isRC = appEnv === 'rc';
 
 const name = isProd ? 'Lumeo' : isRC ? 'Lumeo RC' : 'Lumeo Dev';
-const slug = isProd ? 'ev-charger' : isRC ? 'ev-charger-rc' : 'ev-charger-dev';
+const slug = isProd ? 'ev-charger' : 'ev-charger-dev';
 const scheme = isProd ? 'evcharger' : isRC ? 'evcharger-rc' : 'evcharger-dev';
 const bundleIdentifier = isProd ? 'app.evcharger.app' : isRC ? 'rc.evcharger.app' : 'dev.evcharger.app';
 const androidPackage = isProd ? 'app.evcharger.app' : isRC ? 'rc.evcharger.app' : 'dev.evcharger.app';
