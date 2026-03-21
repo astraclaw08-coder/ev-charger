@@ -98,7 +98,7 @@ jobs:
           node -e "
           const { PrismaClient } = require('./node_modules/.prisma/client');
           const p = new PrismaClient();
-          p.site.upsert({ where: { id: 'test-site-001' }, create: { id: 'test-site-001', name: 'QC Test Site', address: '1 Test St', lat: 0, lng: 0 }, update: {} })
+          p.site.upsert({ where: { id: 'test-site-001' }, create: { id: 'test-site-001', name: 'QC Test Site', address: '1 Test St', lat: 0, lng: 0, operatorId: 'operator-001' }, update: {} })
             .then(() => p.charger.upsert({ where: { ocppId: 'TEST-ASTRA-001' }, create: { id: 'test-charger-001', ocppId: 'TEST-ASTRA-001', name: 'QC Charger', siteId: 'test-site-001', status: 'OFFLINE' }, update: {} }))
             .then(() => console.log('Seeded'))
             .catch(e => { console.error(e); process.exit(1); })

@@ -23,7 +23,7 @@ export async function enqueueOcppEvent(
     create: {
       chargerId: params.chargerId,
       eventType: params.eventType,
-      payload: params.payload as Prisma.JsonObject,
+      payload: params.payload as any,
       idempotencyKey: params.idempotencyKey,
       status: 'PENDING',
     },
