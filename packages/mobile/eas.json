@@ -11,7 +11,10 @@
     },
     "rc": {
       "distribution": "internal",
-      "ios": { "resourceClass": "m-medium" },
+      "ios": {
+        "resourceClass": "m-medium",
+        "scheme": "EVCharger-RC"
+      },
       "env": {
         "APP_ENV": "rc",
         "EXPO_PUBLIC_ENV_LABEL": "RC",

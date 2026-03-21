@@ -403,7 +403,7 @@
 				CODE_SIGN_ENTITLEMENTS = EVCharger/EVCharger.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
 				INFOPLIST_FILE = EVCharger/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "EVCharger RC";
+				INFOPLIST_KEY_CFBundleDisplayName = "Lumeo RC";
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -416,8 +416,8 @@
 					"-lc++",
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_RELEASE";
-				PRODUCT_BUNDLE_IDENTIFIER = dev.evcharger.app.rc;
-				PRODUCT_NAME = "EVCharger RC";
+				PRODUCT_BUNDLE_IDENTIFIER = rc.evcharger.app;
+				PRODUCT_NAME = "Lumeo RC";
 				SWIFT_OBJC_BRIDGING_HEADER = "EVCharger/EVCharger-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
