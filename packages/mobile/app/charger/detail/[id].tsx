@@ -111,9 +111,9 @@ function SlideToStart({
   onComplete: () => void;
   label?: string;
 }) {
-  const trackWidth = 320;
   const knobSize = 56;
-  const maxX = trackWidth - knobSize;
+  const [trackWidth, setTrackWidth] = useState(320);
+  const maxX = Math.max(trackWidth - knobSize, 0);
   const x = useRef(new Animated.Value(0)).current;
   const valueRef = useRef(0);
   useEffect(() => {
@@ -122,6 +122,12 @@ function SlideToStart({
     });
     return () => x.removeListener(sub);
   }, [x]);
+
+  useEffect(() => {
+    if (valueRef.current > maxX) {
+      x.setValue(maxX);
+    }
+  }, [maxX, x]);
 
   const pan = useMemo(
     () =>
@@ -144,7 +150,21 @@ function SlideToStart({
   );
 
   return (
-    <View style={[styles.slideTrack, { backgroundColor: isDark ? '#1f2937' : '#e5e7eb', opacity: disabled ? 0.45 : 1, width: trackWidth }]}>
+    <View
+      onLayout={(e) => {
+        const w = e.nativeEvent.layout.width;
+        if (w > 0 && Math.abs(w - trackWidth) > 1) setTrackWidth(w);
+      }}
+      style={[
+        styles.slideTrack,
+        {
+          backgroundColor: isDark ? '#1f2937' : '#ffffff',
+          borderColor: isDark ? '#374151' : '#d1d5db',
+          opacity: disabled ? 0.45 : 1,
+          width: '100%',
+        },
+      ]}
+    >
       <Text style={[styles.slideLabel, { color: isDark ? '#d1d5db' : '#374151' }]}>{label}</Text>
       <Animated.View {...pan.panHandlers} style={[styles.slideKnob, { transform: [{ translateX: x }] }]}>
         <Image
@@ -243,7 +263,7 @@ function TopMetricsHero({
           ? '#d97706'
           : haloMode === 'awaitingPlug'
             ? '#16a34a'
-            : '#2563eb';
+            : '#16a34a';
 
   const valueColor = forceWhiteText ? '#ffffff' : isDark ? '#f9fafb' : '#0b1220';
   const labelColor = forceWhiteText ? '#e5e7eb' : isDark ? '#9ca3af' : '#475569';
@@ -724,7 +744,7 @@ export default function ChargerStartScreen() {
             ) : null}
 
             {pricingMode === 'tou' && touWindows.length > 0 ? (
-              <View style={[styles.touCompact, { backgroundColor: isDark ? '#1e293b' : '#f3f4f6', borderColor: isDark ? '#334155' : '#d1d5db' }]}>
+              <View style={[styles.touCompact, { backgroundColor: isDark ? '#1e293b' : '#f8fafc', borderColor: isDark ? '#334155' : '#d1d5db' }]}>
                 <Text style={[styles.touCompactTitle, { color: isDark ? '#bfdbfe' : '#000000' }]}>TOU pricing</Text>
 
                 <View style={styles.priceTilesRow}>
@@ -1047,7 +1067,7 @@ const styles = StyleSheet.create({
   touCompactTitle: { fontSize: 12, fontWeight: '900', textAlign: 'center' },
 
   priceTilesRow: { flexDirection: 'row', gap: 8 },
-  priceTile: { flex: 1, borderRadius: 12, paddingVertical: 9, paddingHorizontal: 8, alignItems: 'center' },
+  priceTile: { flex: 1, borderRadius: 12, paddingVertical: 9, paddingHorizontal: 8, alignItems: 'center', borderWidth: 1, borderColor: '#d1d5db' },
   priceTileLabel: { fontSize: 11, fontWeight: '700', textAlign: 'center' },
   priceTileValue: { fontSize: 14, fontWeight: '800', marginTop: 3, textAlign: 'center' },
 
@@ -1089,8 +1109,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 0,
     overflow: 'hidden',
-    alignSelf: 'center',
+    alignSelf: 'stretch',
     marginTop: 8,
+    borderWidth: 1,
   },
   slideLabel: { position: 'absolute', alignSelf: 'center', fontSize: 13, fontWeight: '800' },
   slideKnob: {
