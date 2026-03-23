@@ -15,9 +15,18 @@ export function useFavorites() {
 
   useEffect(() => {
     let mounted = true;
-    if (cached === null) {
-      getFavorites().then((ids) => { if (mounted) { cached = ids; setFavorites(ids); } });
+
+    // Fast paint from in-memory cache, then always refresh from server/cache source of truth.
+    if (cached !== null) {
+      setFavorites(cached);
     }
+
+    getFavorites().then((ids) => {
+      if (!mounted) return;
+      cached = ids;
+      setFavorites(ids);
+    });
+
     const listener: Listener = (ids) => { if (mounted) setFavorites(ids); };
     listeners.add(listener);
     return () => { mounted = false; listeners.delete(listener); };
