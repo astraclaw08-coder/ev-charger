@@ -1,12 +1,20 @@
 import { useCallback, useEffect, useState } from 'react';
 import { getFavorites, toggleFavorite } from '@/lib/favorites';
+import { getAuthIdentityKey, isGuestMode } from '@/lib/api';
 
 type Listener = (ids: string[]) => void;
 const listeners = new Set<Listener>();
 let cached: string[] | null = null;
+let cachedIdentityKey: string | null = null;
+
+function currentIdentityKey(): string | null {
+  if (isGuestMode()) return 'guest';
+  return getAuthIdentityKey();
+}
 
 function notify(ids: string[]) {
   cached = ids;
+  cachedIdentityKey = currentIdentityKey();
   listeners.forEach((l) => l(ids));
 }
 
@@ -15,6 +23,14 @@ export function useFavorites() {
 
   useEffect(() => {
     let mounted = true;
+    const identityKey = currentIdentityKey();
+
+    // Identity switch (or first authenticated resolve): drop stale in-memory cache.
+    if (cachedIdentityKey !== identityKey) {
+      cached = null;
+      cachedIdentityKey = identityKey;
+      setFavorites([]);
+    }
 
     // Fast paint from in-memory cache, then always refresh from server/cache source of truth.
     if (cached !== null) {
@@ -24,6 +40,7 @@ export function useFavorites() {
     getFavorites().then((ids) => {
       if (!mounted) return;
       cached = ids;
+      cachedIdentityKey = currentIdentityKey();
       setFavorites(ids);
     });
 
