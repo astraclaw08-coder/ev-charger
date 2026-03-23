@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
-import { ClerkProvider, useAuth } from '@clerk/clerk-react';
-import { HybridTokenProvider, PasswordTokenProvider, DevTokenProvider } from './auth/TokenContext';
-import { ClerkAuthUxProvider, DevAuthUxProvider } from './auth/AuthUxContext';
+import { PasswordTokenProvider, DevTokenProvider } from './auth/TokenContext';
+import { DevAuthUxProvider } from './auth/AuthUxContext';
 import { PasswordAuthProvider, usePasswordAuth } from './auth/PasswordAuthContext';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
@@ -26,13 +25,11 @@ import { ThemeProvider, usePortalTheme } from './theme/ThemeContext';
 import { PortalScopeProvider } from './context/PortalScopeContext';
 import { getDefaultHomePath, getRolePreference } from './lib/portalPreferences';
 
-const CLERK_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined;
 const AUTH_MODE = String(import.meta.env.VITE_AUTH_MODE ?? '').trim().toLowerCase();
 const DEV_LOGIN_FLAG_KEY = 'portal.dev.signedIn';
 
-function resolveAuthMode(): 'dev' | 'keycloak' | 'clerk' {
-  if (AUTH_MODE === 'dev' || AUTH_MODE === 'keycloak' || AUTH_MODE === 'clerk') return AUTH_MODE;
-  return CLERK_KEY ? 'clerk' : 'keycloak';
+function resolveAuthMode(): 'dev' | 'keycloak' {
+  return AUTH_MODE === 'dev' ? 'dev' : 'keycloak';
 }
 
 function PortalRoutes() {
@@ -77,28 +74,6 @@ function SignedOutRoutes() {
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </BrowserRouter>
-  );
-}
-
-function ClerkOrPasswordApp() {
-  const { isLoaded, isSignedIn } = useAuth();
-  const { session } = usePasswordAuth();
-  const isPasswordSignedIn = !!session && session.expiresAtMs > Date.now();
-
-  if (!isLoaded) return null;
-
-  if (isSignedIn || isPasswordSignedIn) {
-    return (
-      <HybridTokenProvider>
-        <PortalRoutes />
-      </HybridTokenProvider>
-    );
-  }
-
-  return (
-    <ClerkAuthUxProvider>
-      <SignedOutRoutes />
-    </ClerkAuthUxProvider>
   );
 }
 
@@ -173,18 +148,6 @@ function ThemedShell() {
             <Route path="*" element={<Login />} />
           </Routes>
         </BrowserRouter>
-      </div>
-    );
-  }
-
-  if (authMode === 'clerk' && CLERK_KEY) {
-    return (
-      <div className={themeClass}>
-        <PasswordAuthProvider>
-          <ClerkProvider publishableKey={CLERK_KEY}>
-            <ClerkOrPasswordApp />
-          </ClerkProvider>
-        </PasswordAuthProvider>
       </div>
     );
   }

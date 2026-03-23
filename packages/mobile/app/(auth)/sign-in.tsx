@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { AntDesign, Ionicons } from '@expo/vector-icons';
-import { isDevMode, isKeycloakMode, setBearerToken, setGuestMode } from '@/lib/api';
+import { setBearerToken, setGuestMode } from '@/lib/api';
 import { useAppAuth } from '@/providers/AuthProvider';
 import { useAppTheme } from '@/theme';
 
@@ -84,7 +84,6 @@ function BrandHeader({ isDark }: { isDark: boolean }) {
 
 export default function SignInScreen() {
   const router = useRouter();
-  const { signIn } = useAppAuth();
   const { isDark } = useAppTheme();
 
   const continueAsGuest = () => {
@@ -93,46 +92,12 @@ export default function SignInScreen() {
     router.replace('/(tabs)' as any);
   };
 
-  if (isKeycloakMode) {
-    return (
-      <KeyboardAvoidingView
-        style={[styles.container, { backgroundColor: isDark ? '#0b1220' : 'transparent' }]}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
-        <KeycloakSignInForm isDark={isDark} onContinueGuest={continueAsGuest} />
-      </KeyboardAvoidingView>
-    );
-  }
-
-  if (isDevMode) {
-    return (
-      <View style={[styles.container, { backgroundColor: isDark ? '#0b1220' : 'transparent' }]}> 
-        <View style={styles.card}>
-          <BrandHeader isDark={isDark} />
-          <Text style={[styles.devNote, { color: isDark ? '#cbd5e1' : '#334155' }]}>Dev Mode — No Clerk Key Set</Text>
-          <TouchableOpacity
-            style={styles.button}
-            onPress={() => {
-              signIn?.();
-              router.replace('/(tabs)' as any);
-            }}
-          >
-            <Text style={styles.buttonText}>Continue to App</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.guestBtn} onPress={continueAsGuest}>
-            <Text style={styles.guestBtnText}>Continue as Guest</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    );
-  }
-
   return (
     <KeyboardAvoidingView
       style={[styles.container, { backgroundColor: isDark ? '#0b1220' : 'transparent' }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <ClerkSignInForm isDark={isDark} onContinueGuest={continueAsGuest} />
+      <KeycloakSignInForm isDark={isDark} onContinueGuest={continueAsGuest} />
     </KeyboardAvoidingView>
   );
 }
@@ -276,208 +241,6 @@ function KeycloakSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onCo
         <Text style={styles.oauthText}>Google</Text>
       </TouchableOpacity>
       <TouchableOpacity style={styles.oauthBtn} onPress={() => Alert.alert('Apple Sign-In', 'Apple sign-in is not configured for this mode yet.')}>
-        <Ionicons name="logo-apple" size={18} color="#111827" />
-        <Text style={styles.oauthText}>Apple</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={styles.guestBtn} onPress={onContinueGuest}>
-        <Text style={styles.guestBtnText}>Continue as Guest</Text>
-      </TouchableOpacity>
-    </View>
-  );
-}
-
-function ClerkSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onContinueGuest: () => void }) {
-  const { signIn, setActive, isLoaded } = require('@clerk/clerk-expo').useSignIn();
-  const googleOAuth = require('@clerk/clerk-expo').useOAuth({ strategy: 'oauth_google' });
-  const appleOAuth = require('@clerk/clerk-expo').useOAuth({ strategy: 'oauth_apple' });
-  const router = useRouter();
-  const [phone, setPhone] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [code, setCode] = useState('');
-  const [awaitingCode, setAwaitingCode] = useState(false);
-  const [otpTarget, setOtpTarget] = useState('');
-  const [showEmail, setShowEmail] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const emailInputRef = useRef<TextInput>(null);
-
-  async function handleRequestOtp() {
-    if (!isLoaded) return;
-    const identifier = toPhoneIdentifier(phone);
-    if (!identifier) {
-      Alert.alert('Invalid phone number', 'Enter a complete phone number (example: (123) 456-7890).');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      await signIn.create({ strategy: 'phone_code', identifier });
-      setOtpTarget(identifier);
-      setAwaitingCode(true);
-    } catch (err: unknown) {
-      Alert.alert('OTP Request Failed', (err as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleVerifyOtp() {
-    if (!isLoaded) return;
-    setLoading(true);
-    try {
-      const result = await signIn.attemptFirstFactor({ strategy: 'phone_code', code });
-      if (result.status === 'complete') {
-        await setActive({ session: result.createdSessionId });
-        router.replace('/(tabs)' as any);
-      }
-    } catch (err: unknown) {
-      Alert.alert('Verification Failed', (err as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleResendOtp() {
-    if (!isLoaded || !otpTarget) return;
-    setLoading(true);
-    try {
-      await signIn.create({ strategy: 'phone_code', identifier: otpTarget });
-      Alert.alert('OTP sent', `A new OTP was sent to ${formatPhoneForDisplay(otpTarget)}`);
-    } catch (err: unknown) {
-      Alert.alert('OTP Request Failed', (err as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handlePasswordSignIn() {
-    if (!isLoaded) return;
-    setLoading(true);
-    try {
-      const result = await signIn.create({ identifier: email, password });
-      if (result.status === 'complete') {
-        await setActive({ session: result.createdSessionId });
-        router.replace('/(tabs)' as any);
-      }
-    } catch (err: unknown) {
-      Alert.alert('Sign In Failed', (err as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleOAuth(provider: 'google' | 'apple') {
-    setLoading(true);
-    try {
-      const start = provider === 'google' ? googleOAuth.startOAuthFlow : appleOAuth.startOAuthFlow;
-      const result = await start();
-      if (result.createdSessionId) {
-        await setActive({ session: result.createdSessionId });
-        router.replace('/(tabs)' as any);
-      }
-    } catch (err: unknown) {
-      Alert.alert('SSO Sign In Failed', (err as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  function openEmailLogin() {
-    setShowEmail(true);
-    setTimeout(() => emailInputRef.current?.focus(), 50);
-  }
-
-  useEffect(() => {
-    if (!awaitingCode || code.length !== 5 || loading) return;
-    handleVerifyOtp();
-  }, [awaitingCode, code]);
-
-  if (awaitingCode) {
-    return (
-      <View style={styles.card}>
-        <TouchableOpacity
-          style={[
-            styles.backBtn,
-            {
-              backgroundColor: isDark ? '#111827' : '#ffffff',
-              borderColor: isDark ? '#334155' : '#d1d5db',
-            },
-          ]}
-          onPress={() => { setAwaitingCode(false); setCode(''); }}
-        >
-          <Ionicons name="arrow-back" size={18} color={isDark ? '#f8fafc' : '#111827'} />
-        </TouchableOpacity>
-        <BrandHeader isDark={isDark} />
-        <Text style={[styles.helperText, styles.otpHelperText, { marginBottom: 12 }]}>Code was sent to {formatPhoneForDisplay(otpTarget)}</Text>
-        <Pressable style={styles.codeDotsWrap}>
-          {Array.from({ length: 5 }).map((_, idx) => (
-            <View key={`otp-dot-${idx}`} style={styles.codeDot}>
-              <Text style={styles.codeDotText}>{code[idx] ? code[idx] : '•'}</Text>
-            </View>
-          ))}
-        </Pressable>
-        <TextInput
-          style={styles.hiddenCodeInput}
-          value={code}
-          onChangeText={(value) => setCode(value.replace(/\D/g, '').slice(0, 5))}
-          keyboardType="number-pad"
-          maxLength={5}
-          autoFocus
-        />
-        {loading ? <ActivityIndicator color="#10b981" style={{ marginBottom: 10 }} /> : null}
-        <TouchableOpacity style={styles.oauthBtn} onPress={handleResendOtp} disabled={loading}>
-          <Text style={styles.oauthText}>Request a new OTP</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
-  return (
-    <View style={styles.card}>
-      <BrandHeader isDark={isDark} />
-
-      <View style={styles.phoneInputWrap}>
-        <Ionicons name="call-outline" size={18} color="#64748b" />
-        <TextInput
-          style={[styles.input, styles.phoneInput]}
-          placeholder="(123) 456-7890"
-          placeholderTextColor="#94a3b8"
-          value={phone}
-          onChangeText={(value) => setPhone(normalizePhoneInput(value))}
-          keyboardType="phone-pad"
-        />
-      </View>
-      <Text style={[styles.helperText, styles.centerText]}>A code will be sent to your phone for verification</Text>
-      <TouchableOpacity style={[styles.button, loading && styles.buttonDisabled]} onPress={handleRequestOtp} disabled={loading}>
-        {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Next</Text>}
-      </TouchableOpacity>
-
-      <View style={styles.dividerWrap}>
-        <View style={styles.dividerLine} />
-        <Text style={styles.dividerText}>OR</Text>
-        <View style={styles.dividerLine} />
-      </View>
-
-      <TouchableOpacity testID="clerk-email-toggle" style={styles.oauthBtn} onPress={openEmailLogin}>
-        <Ionicons name="mail-outline" size={18} color="#111827" />
-        <Text style={styles.oauthText}>Email</Text>
-      </TouchableOpacity>
-
-      {showEmail && (
-        <>
-          <TextInput ref={emailInputRef} style={styles.input} placeholder="Email" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" />
-          <TextInput style={styles.input} placeholder="Password" value={password} onChangeText={setPassword} secureTextEntry />
-          <TouchableOpacity style={[styles.button, styles.emailSignInButton, loading && styles.buttonDisabled]} onPress={handlePasswordSignIn} disabled={loading}>
-            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Sign In</Text>}
-          </TouchableOpacity>
-        </>
-      )}
-
-      <TouchableOpacity style={styles.oauthBtn} onPress={() => handleOAuth('google')} disabled={loading}>
-        <AntDesign name="google" size={18} color="#111827" />
-        <Text style={styles.oauthText}>Google</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={styles.oauthBtn} onPress={() => handleOAuth('apple')} disabled={loading}>
         <Ionicons name="logo-apple" size={18} color="#111827" />
         <Text style={styles.oauthText}>Apple</Text>
       </TouchableOpacity>

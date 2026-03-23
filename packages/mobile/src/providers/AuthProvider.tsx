@@ -208,66 +208,6 @@ function KeycloakAuthProvider({ children }: { children: React.ReactNode }) {
   return <AppAuthContext.Provider value={value}>{children}</AppAuthContext.Provider>;
 }
 
-// Clerk mode
-let ClerkProvider: React.ComponentType<{
-  publishableKey: string;
-  tokenCache: unknown;
-  children: React.ReactNode;
-}> | null = null;
-
-let useAuth: (() => {
-  isSignedIn: boolean | undefined;
-  getToken: () => Promise<string | null>;
-  signOut: () => Promise<void>;
-}) | null = null;
-
-try {
-  const clerk = require('@clerk/clerk-expo');
-  ClerkProvider = clerk.ClerkProvider;
-  useAuth = clerk.useAuth;
-} catch {
-  // fallback
-}
-
-function ClerkAuthGuard({ children }: { children: React.ReactNode }) {
-  const auth = useAuth!();
-  const router = useRouter();
-
-  useEffect(() => {
-    const guest = !auth.isSignedIn;
-    setGuestMode(guest);
-
-    if (guest) {
-      setBearerToken(null);
-      return;
-    }
-    auth.getToken().then((t) => {
-      if (t) setBearerToken(t);
-    });
-  }, [auth.isSignedIn]);
-
-  const value: AppAuthContextValue = {
-    isGuest: !auth.isSignedIn,
-    loading: auth.isSignedIn === undefined,
-    error: null,
-    continueAsGuest: () => {
-      setBearerToken(null);
-      setGuestMode(true);
-      router.replace('/(tabs)' as any);
-    },
-    signOut: () => {
-      auth.signOut().finally(() => {
-        setBearerToken(null);
-        setGuestMode(true);
-        clearFavorites().finally(() => {
-          router.replace('/(auth)/sign-in');
-        });
-      });
-    },
-  };
-
-  return <AppAuthContext.Provider value={value}>{children}</AppAuthContext.Provider>;
-}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   return <KeycloakAuthProvider>{children}</KeycloakAuthProvider>;
