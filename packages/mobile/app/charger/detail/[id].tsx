@@ -704,7 +704,13 @@ export default function ChargerStartScreen() {
             <View style={{ width: 40, alignItems: 'flex-end' }}>
               <HeartButton
                 isFavorited={isFav(charger.id)}
-                onToggle={() => toggle(charger.id)}
+                onToggle={async () => {
+                  try {
+                    await toggle(charger.id);
+                  } catch (e) {
+                    Alert.alert('Favorites update failed', e instanceof Error ? e.message : 'Please sign in again and retry.');
+                  }
+                }}
               />
             </View>
           ),

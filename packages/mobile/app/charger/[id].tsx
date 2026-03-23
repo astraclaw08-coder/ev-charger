@@ -417,7 +417,13 @@ export default function ChargerDetailScreen() {
           headerRight: () => (
             <HeartButton
               isFavorited={isFav(selectedCharger?.id ?? charger.id)}
-              onToggle={() => toggle(selectedCharger?.id ?? charger.id)}
+              onToggle={async () => {
+                try {
+                  await toggle(selectedCharger?.id ?? charger.id);
+                } catch (e) {
+                  Alert.alert('Favorites update failed', e instanceof Error ? e.message : 'Please sign in again and retry.');
+                }
+              }}
             />
           ),
         }}
