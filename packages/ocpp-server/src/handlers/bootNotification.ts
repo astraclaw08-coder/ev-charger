@@ -41,11 +41,11 @@ export async function handleBootNotification(
 
   return {
     currentTime: new Date().toISOString(),
-    // 300s OCPP heartbeat interval. The WebSocket is kept alive independently
-    // via server-side WS ping frames (pingIntervalMs: 50s in RPCServer config),
+    // 900s OCPP heartbeat interval. The WebSocket is kept alive independently
+    // via server-side WS ping frames (pingIntervalMs: 55s in RPCServer config),
     // so the OCPP Heartbeat is only needed for application-level liveness checks
     // — not as a proxy keepalive workaround.
-    interval: 300,
+    interval: 900,
     status: 'Accepted',
   };
 }

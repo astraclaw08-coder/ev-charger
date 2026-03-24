@@ -24,14 +24,13 @@ export async function startServer(port: number): Promise<OcppServerHandle> {
   const server = new RPCServer({
     protocols: ['ocpp1.6'],
     strictMode: false,  // lenient for real-world charger quirks
-    // Send a WS-level ping frame every 50s to keep the connection alive through
-    // Railway's ~60s idle proxy timeout. This is a protocol-level keepalive
-    // (a few bytes, handled by the charger's WS stack) — not an OCPP Heartbeat.
-    // deferPingsOnActivity resets the timer on any inbound message, so chargers
-    // that send frequent OCPP messages won't receive unnecessary pings.
-    // This allows the OCPP HeartbeatInterval to stay at 300s without connections
-    // being dropped by the proxy during idle windows.
-    pingIntervalMs: 50_000,
+    // Send a WS-level ping frame every 55s. Railway's reverse proxy drops idle
+    // WebSocket connections at ~60s; 55s gives a 5s margin for network jitter.
+    // This is the maximum safe interval — do not raise above 58s.
+    // WS pings are protocol-level (a few bytes) and invisible to OCPP.
+    // deferPingsOnActivity skips the ping when the charger has sent a message
+    // recently, avoiding redundant traffic on active sessions.
+    pingIntervalMs: 55_000,
     deferPingsOnActivity: true,
   });
 
