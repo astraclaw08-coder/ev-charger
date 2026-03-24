@@ -41,13 +41,11 @@ export async function handleBootNotification(
 
   return {
     currentTime: new Date().toISOString(),
-    // 30s heartbeat interval keeps the WebSocket alive through Railway's idle
-    // proxy timeout (~60s). The previous value of 900s caused the charger to
-    // go silent for 15 minutes, which Railway interpreted as an idle connection
-    // and dropped with code 1006 — making the charger appear connected in the
-    // DB (stale status) but not in the live registry, causing every
-    // RemoteStartTransaction to return Rejected server-side.
-    interval: 30,
+    // 300s OCPP heartbeat interval. The WebSocket is kept alive independently
+    // via server-side WS ping frames (pingIntervalMs: 50s in RPCServer config),
+    // so the OCPP Heartbeat is only needed for application-level liveness checks
+    // — not as a proxy keepalive workaround.
+    interval: 300,
     status: 'Accepted',
   };
 }
