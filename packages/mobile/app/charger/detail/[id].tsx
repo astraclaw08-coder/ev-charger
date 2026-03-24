@@ -391,6 +391,17 @@ export default function ChargerStartScreen() {
     setActivationModalDismissed(false);
   }, [isFlowing]);
 
+  // Reset activation state when charger returns to Available with no active session
+  // (covers the activation-timeout / no EV connected scenario)
+  useEffect(() => {
+    if (activeSession) return;
+    if (selectedConnector?.status === 'AVAILABLE') {
+      setActivationTimedOut(false);
+      setShowActivationModal(false);
+      setActivationDeadlineMs(null);
+    }
+  }, [activeSession, selectedConnector?.status]);
+
   const preferredConnector = useMemo(
     () => charger?.connectors.find((c) => c.status === 'AVAILABLE' || c.status === 'PREPARING' || c.status === 'SUSPENDED_EV') ?? null,
     [charger],
@@ -660,16 +671,20 @@ export default function ChargerStartScreen() {
     : 0;
   const topChargerStatus = selectedConnector ? connectorStatusLabel(selectedConnector.status) : 'Unknown';
   const statusRaw = selectedConnector?.status ?? null;
+  // When the connector is back to AVAILABLE with no active session, always show
+  // the idle/available state — never stay in awaitingPlug after a timeout.
   const haloMode: 'available' | 'charging' | 'faulted' | 'idle' | 'awaitingPlug' =
-    showActivationModal || activationTimedOut
-      ? 'awaitingPlug'
-      : statusRaw === 'FAULTED' || statusRaw === 'UNAVAILABLE'
-        ? 'faulted'
-        : statusRaw === 'CHARGING'
-          ? 'charging'
-          : statusRaw === 'PREPARING' || statusRaw === 'FINISHING' || statusRaw === 'SUSPENDED_EV' || statusRaw === 'SUSPENDED_EVSE'
-            ? 'idle'
-            : 'available';
+    statusRaw === 'AVAILABLE' && !activeSession
+      ? 'available'
+      : (showActivationModal || activationTimedOut)
+        ? 'awaitingPlug'
+        : statusRaw === 'FAULTED' || statusRaw === 'UNAVAILABLE'
+          ? 'faulted'
+          : statusRaw === 'CHARGING'
+            ? 'charging'
+            : statusRaw === 'PREPARING' || statusRaw === 'FINISHING' || statusRaw === 'SUSPENDED_EV' || statusRaw === 'SUSPENDED_EVSE'
+              ? 'idle'
+              : 'available';
   const sliderLabel = activeSession
     ? 'Slide to stop'
     : showActivationModal
