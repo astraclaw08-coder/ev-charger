@@ -30,41 +30,87 @@ function bearerToken(req: FastifyRequest) {
   return authHeader.slice(7);
 }
 
-async function getUserFromRequest(req: FastifyRequest) {
+/**
+ * Decode the `sub` claim from a JWT without verifying the signature.
+ * Used only to scope rate-limit buckets — not for access control.
+ */
+function jwtSubject(token: string): string | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length < 2) return null;
+    const normalized = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), '=');
+    const payload = JSON.parse(Buffer.from(padded, 'base64').toString('utf8')) as { sub?: unknown };
+    return typeof payload.sub === 'string' && payload.sub.trim() ? payload.sub.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+type IntrospectResult =
+  | { ok: true; sub: string; payload: NonNullable<Awaited<ReturnType<typeof introspectAccessToken>>> }
+  | { ok: false; reason: 'expired' | 'introspection-error' | 'no-token' };
+
+async function introspectBearer(req: FastifyRequest): Promise<IntrospectResult> {
+  const token = bearerToken(req);
+  if (!token) return { ok: false, reason: 'no-token' };
+
+  try {
+    const payload = await introspectAccessToken(token);
+    if (!payload?.sub) {
+      // Token was presented but Keycloak says it's inactive (expired / revoked).
+      // Return a typed result so callers can decide whether to count this as a
+      // suspicious failure or just a normal token-refresh race.
+      return { ok: false, reason: 'expired' };
+    }
+    return { ok: true, sub: payload.sub, payload };
+  } catch {
+    return { ok: false, reason: 'introspection-error' };
+  }
+}
+
+async function getUserFromRequest(req: FastifyRequest): Promise<{
+  user: Awaited<ReturnType<typeof prisma.user.findUnique>>;
+  sub: string | null;
+  failureReason: 'expired' | 'introspection-error' | 'no-token' | 'no-user' | null;
+}> {
   const appEnv = (process.env.APP_ENV ?? process.env.NODE_ENV ?? '').toLowerCase();
 
   // Dev override for local QA/guest transact flows only
   const devUserId = req.headers['x-dev-user-id'] as string | undefined;
   if (appEnv === 'development' && devUserId) {
-    return prisma.user.findUnique({ where: { id: devUserId } });
+    const user = await prisma.user.findUnique({ where: { id: devUserId } });
+    return { user, sub: null, failureReason: user ? null : 'no-user' };
   }
 
-  if (!keycloakPasswordAuthEnabled()) return null;
+  if (!keycloakPasswordAuthEnabled()) {
+    return { user: null, sub: null, failureReason: 'no-token' };
+  }
 
-  const token = bearerToken(req);
-  if (!token) return null;
+  const result = await introspectBearer(req);
+  if (!result.ok) {
+    return { user: null, sub: null, failureReason: result.reason };
+  }
 
+  const { sub, payload } = result;
   try {
-    const payload = await introspectAccessToken(token);
-    if (!payload?.sub) return null;
-
-    const authId = `kc:${payload.sub}`;
+    const authId = `kc:${sub}`;
     let user = await prisma.user.findUnique({ where: { clerkId: authId } });
     if (!user) {
-      const email = payload.email ?? payload.preferred_username ?? `${payload.sub}@keycloak.local`;
-      const idTag = `KC${payload.sub.replace(/[^A-Z0-9]/gi, '').slice(-18)}`.toUpperCase().slice(0, 20);
+      const email = payload.email ?? payload.preferred_username ?? `${sub}@keycloak.local`;
+      const idTag = `KC${sub.replace(/[^A-Z0-9]/gi, '').slice(-18)}`.toUpperCase().slice(0, 20);
       user = await prisma.user.create({
         data: {
           clerkId: authId,
           email,
-          name: payload.preferred_username ?? null,
+          name: (payload.preferred_username as string | undefined) ?? null,
           idTag,
         },
       });
     }
-    return user;
+    return { user, sub, failureReason: null };
   } catch {
-    return null;
+    return { user: null, sub, failureReason: 'no-user' };
   }
 }
 
@@ -75,19 +121,32 @@ export const requireAuth: preHandlerHookHandler = async (req, reply) => {
     return reply.status(401).send({ error: 'Unauthorized' });
   }
 
-  const blocked = isBlocked({ ip: req.ip, routeScope: 'user' });
+  // Peek at the JWT sub (unverified) so the block-check is scoped per-user,
+  // not per-IP. This prevents one user's expired token from poisoning other
+  // users' buckets when they share an IP (carrier NAT, office WiFi, etc.).
+  const tokenSub = token ? jwtSubject(token) : null;
+  const bucketKey = { ip: req.ip, sub: tokenSub ?? undefined, routeScope: 'user' };
+
+  const blocked = isBlocked(bucketKey);
   if (blocked.blocked) {
     reply.header('Retry-After', String(blocked.retryAfterSeconds));
     return reply.status(429).send({ error: 'Too many failed auth attempts', retryAfterSeconds: blocked.retryAfterSeconds });
   }
 
-  const user = await getUserFromRequest(req);
+  const { user, sub, failureReason } = await getUserFromRequest(req);
+
   if (!user) {
-    recordAuthFailure({ ip: req.ip, routeScope: 'user' });
+    // Expired/inactive tokens are a normal mobile race-condition (app resumes
+    // while refresh is in-flight). Don't count them against the block quota —
+    // the mobile client will retry with a fresh token automatically.
+    if (failureReason !== 'expired') {
+      const failSub = sub ?? tokenSub ?? undefined;
+      recordAuthFailure({ ip: req.ip, sub: failSub, routeScope: 'user' });
+    }
     return reply.status(401).send({ error: 'Unauthorized' });
   }
 
-  recordAuthSuccess({ ip: req.ip, routeScope: 'user' });
+  recordAuthSuccess({ ip: req.ip, sub: sub ?? undefined, routeScope: 'user' });
   req.currentUser = {
     id: user.id,
     authId: user.clerkId,
@@ -98,7 +157,11 @@ export const requireAuth: preHandlerHookHandler = async (req, reply) => {
 };
 
 export const requireOperator: preHandlerHookHandler = async (req, reply) => {
-  const blocked = isBlocked({ ip: req.ip, routeScope: 'operator' });
+  const token = bearerToken(req);
+  const tokenSub = token ? jwtSubject(token) : null;
+  const bucketKey = { ip: req.ip, sub: tokenSub ?? undefined, routeScope: 'operator' };
+
+  const blocked = isBlocked(bucketKey);
   if (blocked.blocked) {
     reply.header('Retry-After', String(blocked.retryAfterSeconds));
     return reply.status(429).send({ error: 'Too many failed auth attempts', retryAfterSeconds: blocked.retryAfterSeconds });
@@ -127,7 +190,6 @@ export const requireOperator: preHandlerHookHandler = async (req, reply) => {
     return;
   }
 
-  const token = bearerToken(req);
   if (!token) {
     return reply.status(401).send({ error: 'Unauthorized' });
   }
@@ -141,7 +203,11 @@ export const requireOperator: preHandlerHookHandler = async (req, reply) => {
     const effectiveRoles = claims.roles;
 
     if (!payload?.sub || (!effectiveRoles.includes('operator') && !effectiveRoles.includes('owner'))) {
-      recordAuthFailure({ ip: req.ip, routeScope: 'operator' });
+      // Expired token → don't record as suspicious failure
+      const isExpired = !payload?.sub;
+      if (!isExpired) {
+        recordAuthFailure({ ip: req.ip, sub: payload?.sub, routeScope: 'operator' });
+      }
       return reply.status(403).send({
         error: 'Operator access required',
         denyReason: {
@@ -161,9 +227,9 @@ export const requireOperator: preHandlerHookHandler = async (req, reply) => {
         roles: effectiveRoles,
       },
     };
-    recordAuthSuccess({ ip: req.ip, routeScope: 'operator' });
+    recordAuthSuccess({ ip: req.ip, sub: payload.sub, routeScope: 'operator' });
   } catch {
-    recordAuthFailure({ ip: req.ip, routeScope: 'operator' });
+    recordAuthFailure({ ip: req.ip, sub: tokenSub ?? undefined, routeScope: 'operator' });
     return reply.status(401).send({ error: 'Unauthorized' });
   }
 };
