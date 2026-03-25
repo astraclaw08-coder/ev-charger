@@ -389,51 +389,28 @@ export async function siteRoutes(app: FastifyInstance) {
       ? rawUtilizationRatePct
       : (sessionsCount > 0 ? 0.01 : 0);
 
-    // Uptime (period-aligned): derive per-charger uptime from uptime events over selected window.
-    const mapEventToStatus = (event: string): 'ONLINE' | 'OFFLINE' | 'DEGRADED' | 'FAULTED' => (
-      event === 'ONLINE' || event === 'RECOVERED'
-        ? 'ONLINE'
-        : event === 'FAULTED'
-          ? 'FAULTED'
-          : event === 'DEGRADED'
-            ? 'DEGRADED'
-            : 'OFFLINE'
-    );
+    // Uptime (period-aligned): read from materialized UptimeDaily rows per charger.
+    const uptimeStartDate = new Date(startDate);
+    uptimeStartDate.setUTCHours(0, 0, 0, 0);
+    const uptimeEndDate = new Date(endDate);
+    uptimeEndDate.setUTCHours(0, 0, 0, 0);
 
     const chargerUptimePct = await Promise.all(site.chargers.map(async (charger: { id: string; status: string }) => {
-      const [eventsInRange, beforeRange] = await Promise.all([
-        prisma.uptimeEvent.findMany({
-          where: { chargerId: charger.id, createdAt: { gte: startDate, lte: endDate } },
-          orderBy: { createdAt: 'asc' },
-        }),
-        prisma.uptimeEvent.findFirst({
-          where: { chargerId: charger.id, createdAt: { lt: startDate } },
-          orderBy: { createdAt: 'desc' },
-        }),
-      ]);
+      const dailyRows = await prisma.uptimeDaily.findMany({
+        where: {
+          chargerId: charger.id,
+          date: { gte: uptimeStartDate, lte: uptimeEndDate },
+        },
+      });
 
-      let state: 'ONLINE' | 'OFFLINE' | 'DEGRADED' | 'FAULTED' = beforeRange
-        ? mapEventToStatus(beforeRange.event)
-        : (charger.status as 'ONLINE' | 'OFFLINE' | 'DEGRADED' | 'FAULTED');
+      if (dailyRows.length === 0) return 0;
 
-      let upMs = 0;
-      let cursor = startDate.getTime();
-      const endMs = endDate.getTime();
+      const totalSec = dailyRows.reduce((s, r) => s + r.totalSeconds, 0);
+      const outageSec = dailyRows.reduce((s, r) => s + r.outageSeconds, 0);
+      const excludedSec = dailyRows.reduce((s, r) => s + r.excludedOutageSeconds, 0);
+      const countedOutage = Math.max(0, outageSec - excludedSec);
 
-      for (const e of eventsInRange) {
-        const ts = e.createdAt.getTime();
-        if (ts <= cursor) {
-          state = mapEventToStatus(e.event);
-          continue;
-        }
-        if (state === 'ONLINE') upMs += ts - cursor;
-        cursor = ts;
-        state = mapEventToStatus(e.event);
-      }
-
-      if (state === 'ONLINE') upMs += endMs - cursor;
-      const totalMs = endMs - startDate.getTime();
-      return totalMs > 0 ? Math.max(0, Math.min(100, (upMs / totalMs) * 100)) : 0;
+      return totalSec > 0 ? Math.max(0, Math.min(100, ((totalSec - countedOutage) / totalSec) * 100)) : 0;
     }));
 
     const uptimePct = chargerUptimePct.length

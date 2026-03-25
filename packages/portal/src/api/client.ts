@@ -298,6 +298,13 @@ export interface UptimeIncident {
   timestamp: string;
 }
 
+export interface UptimeBreakdown {
+  totalSeconds: number;
+  availableSeconds: number;
+  outageSeconds: number;
+  excludedOutageSeconds: number;
+}
+
 export interface ChargerUptime {
   chargerId: string;
   currentStatus: 'ONLINE' | 'OFFLINE' | 'FAULTED' | 'DEGRADED';
@@ -305,6 +312,14 @@ export interface ChargerUptime {
   uptimePercent24h: number;
   uptimePercent7d: number;
   uptimePercent30d: number;
+  availableSeconds?: number | null;
+  outageSeconds?: number | null;
+  excludedOutageSeconds?: number | null;
+  breakdown?: {
+    h24: UptimeBreakdown | null;
+    d7: UptimeBreakdown | null;
+    d30: UptimeBreakdown | null;
+  };
   incidents: UptimeIncident[];
 }
 

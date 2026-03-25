@@ -1,5 +1,14 @@
 import { prisma, type UptimeEventType } from '@ev-charger/shared';
 
+/** Event types excluded from uptime calculation per NEVI §680.116(b)(3). */
+export const EXCLUDED_EVENT_TYPES = new Set<string>([
+  'SCHEDULED_MAINTENANCE',
+  'UTILITY_INTERRUPTION',
+  'VEHICLE_FAULT',
+  'VANDALISM',
+  'FORCE_MAJEURE',
+]);
+
 export async function recordUptimeEvent(
   chargerId: string,
   event: UptimeEventType,
