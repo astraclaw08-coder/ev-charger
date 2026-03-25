@@ -1,6 +1,7 @@
 import { prisma } from '@ev-charger/shared';
 import { recordUptimeEvent } from '../uptimeEvents';
 import { enqueueOcppEvent } from '../outbox';
+import { clientRegistry } from '../clientRegistry';
 import type { BootNotificationRequest, BootNotificationResponse } from '@ev-charger/shared';
 
 export async function handleBootNotification(
@@ -9,6 +10,10 @@ export async function handleBootNotification(
   params: BootNotificationRequest,
 ): Promise<BootNotificationResponse> {
   console.log(`[BootNotification] chargerId=${chargerId} vendor=${params.chargePointVendor} model=${params.chargePointModel}`);
+
+  // Track boot receipt for connection stability instrumentation
+  const ocppId = (await prisma.charger.findUnique({ where: { id: chargerId }, select: { ocppId: true } }))?.ocppId;
+  if (ocppId) clientRegistry.markBoot(ocppId);
 
   await prisma.$transaction(async (tx) => {
     await tx.charger.update({

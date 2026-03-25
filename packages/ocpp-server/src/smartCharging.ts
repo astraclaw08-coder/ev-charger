@@ -150,6 +150,8 @@ export async function applySmartChargingForCharger(chargerId: string, trigger: s
   });
   if (!charger) return;
 
+  console.log(`[SmartCharging] apply attempt for ${charger.ocppId} trigger=${trigger} status=${charger.status}`);
+
   const [chargerProfiles, groupProfiles, siteProfiles] = await Promise.all([
     prisma.smartChargingProfile.findMany({ where: { scope: 'CHARGER', chargerId, enabled: true }, orderBy: [{ priority: 'desc' }, { updatedAt: 'desc' }] }),
     charger.groupId

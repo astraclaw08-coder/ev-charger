@@ -28,10 +28,12 @@ export async function startServer(port: number): Promise<OcppServerHandle> {
     // WebSocket connections at ~60s; 55s gives a 5s margin for network jitter.
     // This is the maximum safe interval — do not raise above 58s.
     // WS pings are protocol-level (a few bytes) and invisible to OCPP.
-    // deferPingsOnActivity skips the ping when the charger has sent a message
-    // recently, avoiding redundant traffic on active sessions.
+    // deferPingsOnActivity DISABLED: always send pings on the 55s cadence
+    // regardless of charger activity. This ensures consistent keepalive
+    // behavior and eliminates edge cases where deferred pings could allow
+    // an idle gap long enough for Railway proxy to close the connection.
     pingIntervalMs: 55_000,
-    deferPingsOnActivity: true,
+    deferPingsOnActivity: false,
   });
 
   // ── Authentication ──────────────────────────────────────────────────────────

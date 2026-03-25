@@ -2,6 +2,7 @@ import { prisma } from '@ev-charger/shared';
 import { recordUptimeEvent } from '../uptimeEvents';
 import { enqueueOcppEvent } from '../outbox';
 import { applySmartChargingForCharger } from '../smartCharging';
+import { clientRegistry } from '../clientRegistry';
 import type { HeartbeatResponse } from '@ev-charger/shared';
 
 export async function handleHeartbeat(
@@ -11,6 +12,10 @@ export async function handleHeartbeat(
 ): Promise<HeartbeatResponse> {
   const now = new Date();
   console.log(`[Heartbeat] chargerId=${chargerId}`);
+
+  // Track heartbeat count for connection stability instrumentation
+  const ocppId = (await prisma.charger.findUnique({ where: { id: chargerId }, select: { ocppId: true } }))?.ocppId;
+  if (ocppId) clientRegistry.markHeartbeat(ocppId);
 
   const current = await prisma.charger.findUnique({ where: { id: chargerId }, select: { status: true } });
   const shouldRecover = current?.status === 'DEGRADED' || current?.status === 'OFFLINE';
