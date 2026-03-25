@@ -14,15 +14,18 @@ export type UptimeIncident = {
   timestamp: string;
 };
 
+/**
+ * OCA v1.1 uptime: only ONLINE counts as "available".
+ * DEGRADED (stale heartbeat, reachable but uncertain) is NOT counted as up.
+ */
 function isUp(status: ChargerStatus): boolean {
-  // DEGRADED means reachable but stale-risk; count as available uptime.
-  return status === 'ONLINE' || status === 'DEGRADED';
+  return status === 'ONLINE';
 }
 
 export async function ensureChargerLiveness(chargerId: string) {
   const charger = await prisma.charger.findUnique({
     where: { id: chargerId },
-    select: { id: true, status: true, lastHeartbeat: true },
+    select: { id: true, status: true, lastHeartbeat: true, createdAt: true },
   });
   if (!charger) return null;
 
@@ -138,13 +141,18 @@ export async function getChargerUptime(chargerId: string) {
   };
 
   const calcPct = (from: Date) => {
-    const fromMs = from.getTime();
+    // Clamp window start to charger provisioning date — don't count time
+    // before the charger existed as either up or down (OCA v1.1).
+    const effectiveFrom = new Date(Math.max(from.getTime(), charger.createdAt.getTime()));
+    const fromMs = effectiveFrom.getTime();
     const totalMs = now - fromMs;
     if (totalMs <= 0) return 100;
 
-    // Charger-level down intervals from timeline events
-    let state: ChargerStatus = charger.status;
-    const before = timelineEvents.filter((e: any) => e.createdAt < from).at(-1);
+    // Default to OFFLINE when no prior event exists before window start.
+    // Previously fell back to charger.status (current), which inflated uptime
+    // for chargers with no history before the window.
+    let state: ChargerStatus = 'OFFLINE';
+    const before = timelineEvents.filter((e: any) => e.createdAt < effectiveFrom).at(-1);
     if (before) state = toStatus(before.event as UptimeEventType);
 
     let cursor = fromMs;
