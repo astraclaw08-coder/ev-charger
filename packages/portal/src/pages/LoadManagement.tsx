@@ -439,71 +439,136 @@ export default function LoadManagement() {
         </ol>
       </div>
 
-      {/* Active limit states overview — shows all profile-driven states including pending/error */}
-      {states.filter((s) => Boolean(s.sourceProfileId)).length > 0 && (
+      {/* Active Limits — derived from all enabled profiles with charger/group/site assignments */}
+      {(() => {
+        // Build rows from profiles: each enabled profile assigned to a target gets a row
+        const activeRows = profiles.filter((p) => p.enabled && (p.chargerId || p.chargerGroupId || p.siteId)).map((p) => {
+          // Determine target charger IDs for this profile
+          let targetChargerIds: string[] = [];
+          let targetLabel = '';
+          let targetDetail = '';
+
+          if (p.scope === 'CHARGER' && p.chargerId) {
+            targetChargerIds = [p.chargerId];
+            const c = chargers.find((x) => x.id === p.chargerId);
+            targetLabel = c?.ocppId ?? p.chargerId;
+            targetDetail = c ? `${c.status}` : '';
+          } else if (p.scope === 'GROUP' && p.chargerGroupId) {
+            const g = groups.find((x) => x.id === p.chargerGroupId);
+            targetLabel = g?.name ?? p.chargerGroupId;
+            targetChargerIds = g?.chargerIds ?? [];
+            targetDetail = `${targetChargerIds.length} charger${targetChargerIds.length !== 1 ? 's' : ''}`;
+          } else if (p.scope === 'SITE' && p.siteId) {
+            const s = sites.find((x) => x.id === p.siteId);
+            targetLabel = s?.name ?? p.siteId;
+            const siteChargers = chargers.filter((c) => c.siteId === p.siteId);
+            targetChargerIds = siteChargers.map((c) => c.id);
+            targetDetail = `${targetChargerIds.length} charger${targetChargerIds.length !== 1 ? 's' : ''}`;
+          }
+
+          // Find matching state(s) — check if this profile is the current source for any target charger
+          const matchingStates = states.filter((s) => targetChargerIds.includes(s.chargerId));
+          const isCurrentSource = matchingStates.some((s) => s.sourceProfileId === p.id);
+          const activeState = matchingStates.find((s) => s.sourceProfileId === p.id);
+
+          // Determine schedule description
+          const schedule = Array.isArray(p.schedule) ? p.schedule : [];
+          const windowSummary = schedule.map((w: any) => {
+            const days = (w.daysOfWeek ?? []).length === 7 ? 'Daily' : `${(w.daysOfWeek ?? []).length} days/wk`;
+            return `${w.startTime}–${w.endTime} ${days} @ ${w.limitKw} kW`;
+          }).join('; ') || (p.defaultLimitKw != null ? `${p.defaultLimitKw} kW always` : 'No schedule');
+
+          // Determine status
+          let statusLabel = '';
+          let statusColor = '';
+          if (isCurrentSource && activeState) {
+            switch (activeState.status) {
+              case 'APPLIED':
+                statusLabel = activeState.lastAppliedAt ? `✅ Active — applied ${new Date(activeState.lastAppliedAt).toLocaleString()}` : '✅ Active';
+                statusColor = 'text-green-600 dark:text-green-400';
+                break;
+              case 'FALLBACK_APPLIED':
+                statusLabel = '✅ Fallback active';
+                statusColor = 'text-green-600 dark:text-green-400';
+                break;
+              case 'PENDING_OFFLINE':
+                statusLabel = '⏳ Pending charger reconnection';
+                statusColor = 'text-amber-600 dark:text-amber-400';
+                break;
+              case 'ERROR':
+                statusLabel = `❌ Failed${activeState.lastError ? `: ${activeState.lastError}` : ''}`;
+                statusColor = 'text-red-600 dark:text-red-400';
+                break;
+              default:
+                statusLabel = activeState.status ?? '—';
+                statusColor = 'text-gray-500 dark:text-slate-400';
+            }
+          } else if (matchingStates.length > 0) {
+            // Profile is assigned but not the current winner — scheduled/queued
+            statusLabel = '🕐 Scheduled — not in active window';
+            statusColor = 'text-blue-600 dark:text-blue-400';
+          } else {
+            statusLabel = '⏳ Pending charger reconnection';
+            statusColor = 'text-amber-600 dark:text-amber-400';
+          }
+
+          return { profile: p, targetLabel, targetDetail, windowSummary, statusLabel, statusColor, targetChargerIds };
+        });
+
+        if (activeRows.length === 0) return null;
+
+        return (
         <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm">
           <div className="border-b border-gray-300 dark:border-slate-700 px-5 py-4">
             <h2 className="text-sm font-semibold text-gray-700 dark:text-slate-300">Active Limits</h2>
-            <p className="mt-0.5 text-xs text-gray-500 dark:text-slate-400">All chargers with assigned load profiles and their current apply status.</p>
+            <p className="mt-0.5 text-xs text-gray-500 dark:text-slate-400">All load profiles assigned to chargers, groups, or sites — showing current and scheduled limits.</p>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100 dark:border-slate-800 bg-gray-50 dark:bg-slate-800/60 text-left text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">
-                  <th className="px-5 py-3">Applied to</th>
-                  <th className="px-5 py-3">Limit (kW)</th>
+                  <th className="px-5 py-3">Target</th>
                   <th className="px-5 py-3">Profile</th>
+                  <th className="px-5 py-3">Schedule</th>
                   <th className="px-5 py-3">Status</th>
                   <th className="px-5 py-3">Push</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50 dark:divide-slate-800">
-                {states
-                  .filter((s) => Boolean(s.sourceProfileId))
-                  .map((s) => {
-                    const statusDisplay = (() => {
-                      switch (s.status) {
-                        case 'APPLIED':
-                          return { label: s.lastAppliedAt ? `✅ Applied ${new Date(s.lastAppliedAt).toLocaleString()}` : '✅ Applied', color: 'text-green-600 dark:text-green-400' };
-                        case 'FALLBACK_APPLIED':
-                          return { label: s.lastAppliedAt ? `✅ Fallback ${new Date(s.lastAppliedAt).toLocaleString()}` : '✅ Fallback active', color: 'text-green-600 dark:text-green-400' };
-                        case 'PENDING_OFFLINE':
-                          return { label: '⏳ Pending charger reconnection', color: 'text-amber-600 dark:text-amber-400' };
-                        case 'ERROR':
-                          return { label: `❌ Failed${s.lastError ? `: ${s.lastError}` : ''}`, color: 'text-red-600 dark:text-red-400' };
-                        default:
-                          return { label: s.status ?? '—', color: 'text-gray-500 dark:text-slate-400' };
-                      }
-                    })();
-                    return (
-                  <tr key={s.id} className="bg-white dark:bg-slate-800/60 hover:bg-gray-50 dark:hover:bg-slate-700">
+                {activeRows.map((row) => (
+                  <tr key={row.profile.id} className="bg-white dark:bg-slate-800/60 hover:bg-gray-50 dark:hover:bg-slate-700">
                     <td className="px-5 py-3">
-                      <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">{appliedToDisplay(s).title}</p>
-                      {appliedToDisplay(s).detail && <p className="text-xs text-gray-500 dark:text-slate-400">{appliedToDisplay(s).detail}</p>}
+                      <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">{row.targetLabel}</p>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <ScopePill scope={row.profile.scope as Scope} />
+                        {row.targetDetail && <span className="text-xs text-gray-500 dark:text-slate-400">{row.targetDetail}</span>}
+                      </div>
                     </td>
                     <td className="px-5 py-3">
-                      <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">{limitDisplay(profileById[s.sourceProfileId ?? '']).title}</p>
-                      {limitDisplay(profileById[s.sourceProfileId ?? '']).detail && <p className="text-xs text-gray-500 dark:text-slate-400">{limitDisplay(profileById[s.sourceProfileId ?? '']).detail}</p>}
-                    </td>
-                    <td className="px-5 py-3 text-xs font-medium text-gray-700 dark:text-slate-300">
-                      {s.sourceProfile?.name ?? '—'}
+                      <p className="text-xs font-medium text-gray-700 dark:text-slate-300">{row.profile.name}</p>
+                      <p className="text-xs text-gray-400 dark:text-slate-500">Priority: {row.profile.priority}</p>
                     </td>
                     <td className="px-5 py-3">
-                      <p className={`text-xs font-medium ${statusDisplay.color}`}>{statusDisplay.label}</p>
+                      <p className="text-xs text-gray-600 dark:text-slate-300">{row.windowSummary}</p>
                     </td>
                     <td className="px-5 py-3">
-                      <button onClick={() => handlePush(s.chargerId)} className="rounded-md border border-brand-200 px-2 py-1 text-xs font-medium text-brand-700 hover:bg-brand-50">
-                        Re-push
-                      </button>
+                      <p className={`text-xs font-medium ${row.statusColor}`}>{row.statusLabel}</p>
+                    </td>
+                    <td className="px-5 py-3">
+                      {row.targetChargerIds.length > 0 && (
+                        <button onClick={() => handlePush(row.targetChargerIds[0])} className="rounded-md border border-brand-200 px-2 py-1 text-xs font-medium text-brand-700 hover:bg-brand-50">
+                          Re-push
+                        </button>
+                      )}
                     </td>
                   </tr>
-                    );
-                  })}
+                ))}
               </tbody>
             </table>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* Two-column layout: profiles + groups */}
       <div className="grid gap-6 lg:grid-cols-2">
