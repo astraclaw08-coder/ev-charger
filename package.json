@@ -11,6 +11,7 @@
     "dev:portal": "npm run dev --workspace=packages/portal",
     "dev:mobile": "npm run dev --workspace=packages/mobile",
     "dev:stack:start": "npm run watchdog:start",
+    "dev:stack:stop": "npm run watchdog:stop",
     "dev:stack:status": "npm run watchdog:status",
     "dev:stack:health": "node scripts/dev-supervisor.js health-check",
     "build": "npm run build --workspace=packages/shared && npm run build --workspaces --if-present",
