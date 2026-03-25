@@ -95,18 +95,35 @@ async function getUserFromRequest(req: FastifyRequest): Promise<{
   const { sub, payload } = result;
   try {
     const authId = `kc:${sub}`;
+    const email = payload.email ?? payload.preferred_username ?? `${sub}@keycloak.local`;
+    const normalizedEmail = email.trim().toLowerCase();
     let user = await prisma.user.findUnique({ where: { clerkId: authId } });
+
     if (!user) {
-      const email = payload.email ?? payload.preferred_username ?? `${sub}@keycloak.local`;
-      const idTag = `KC${sub.replace(/[^A-Z0-9]/gi, '').slice(-18)}`.toUpperCase().slice(0, 20);
-      user = await prisma.user.create({
-        data: {
-          clerkId: authId,
-          email,
-          name: (payload.preferred_username as string | undefined) ?? null,
-          idTag,
-        },
-      });
+      // Migration-safe path: older/local rows may already exist under the same email
+      // with a stale clerkId from a previous auth provider or Keycloak realm. In that
+      // case, adopt the existing row instead of hard-failing with 401 on unique email.
+      const existingByEmail = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+      if (existingByEmail) {
+        user = await prisma.user.update({
+          where: { id: existingByEmail.id },
+          data: {
+            clerkId: authId,
+            email: normalizedEmail,
+            name: (payload.preferred_username as string | undefined) ?? existingByEmail.name,
+          },
+        });
+      } else {
+        const idTag = `KC${sub.replace(/[^A-Z0-9]/gi, '').slice(-18)}`.toUpperCase().slice(0, 20);
+        user = await prisma.user.create({
+          data: {
+            clerkId: authId,
+            email: normalizedEmail,
+            name: (payload.preferred_username as string | undefined) ?? null,
+            idTag,
+          },
+        });
+      }
     }
     return { user, sub, failureReason: null };
   } catch {
