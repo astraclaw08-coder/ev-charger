@@ -24,32 +24,30 @@ function readEnv(name: string): string {
 }
 
 function getOidcConfig() {
-  const baseUrl = (process.env.KEYCLOAK_BASE_URL ?? process.env.KEYCLOAK_URL);
-  if (!baseUrl) throw new Error('Missing required env var: KEYCLOAK_BASE_URL (or KEYCLOAK_URL)');
+  // Canonical env key names — identical in dev and prod, only values differ.
+  const baseUrl = readEnv('KEYCLOAK_BASE_URL');
   const realm = readEnv('KEYCLOAK_REALM');
-  const clientId = process.env.KEYCLOAK_PORTAL_CLIENT_ID ?? process.env.KEYCLOAK_ADMIN_CLIENT_ID ?? process.env.KEYCLOAK_CLIENT_ID;
-  const clientSecret = process.env.KEYCLOAK_PORTAL_CLIENT_SECRET ?? process.env.KEYCLOAK_ADMIN_CLIENT_SECRET ?? process.env.KEYCLOAK_CLIENT_SECRET;
+  const clientId = readEnv('KEYCLOAK_PORTAL_CLIENT_ID');
+  const clientSecret = readEnv('KEYCLOAK_PORTAL_CLIENT_SECRET');
 
-  if (!clientId || !clientSecret) {
-    throw new Error('Missing Keycloak portal client credentials');
-  }
-
+  const normalizedBase = baseUrl.replace(/\/$/, '');
   return {
-    baseUrl: baseUrl.replace(/\/$/, ''),
+    baseUrl: normalizedBase,
     realm,
     clientId,
     clientSecret,
-    tokenEndpoint: `${baseUrl}/realms/${realm}/protocol/openid-connect/token`,
-    introspectionEndpoint: `${baseUrl}/realms/${realm}/protocol/openid-connect/token/introspect`,
+    tokenEndpoint: `${normalizedBase}/realms/${realm}/protocol/openid-connect/token`,
+    introspectionEndpoint: `${normalizedBase}/realms/${realm}/protocol/openid-connect/token/introspect`,
   };
 }
 
 export function keycloakPasswordAuthEnabled() {
+  // Uses same canonical key names as getOidcConfig — no aliases.
   return Boolean(
-    (process.env.KEYCLOAK_BASE_URL || process.env.KEYCLOAK_URL) &&
+    process.env.KEYCLOAK_BASE_URL &&
     process.env.KEYCLOAK_REALM &&
-    (process.env.KEYCLOAK_PORTAL_CLIENT_ID || process.env.KEYCLOAK_ADMIN_CLIENT_ID || process.env.KEYCLOAK_CLIENT_ID) &&
-    (process.env.KEYCLOAK_PORTAL_CLIENT_SECRET || process.env.KEYCLOAK_ADMIN_CLIENT_SECRET || process.env.KEYCLOAK_CLIENT_SECRET),
+    process.env.KEYCLOAK_PORTAL_CLIENT_ID &&
+    process.env.KEYCLOAK_PORTAL_CLIENT_SECRET,
   );
 }
 
