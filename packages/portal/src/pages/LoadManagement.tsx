@@ -481,18 +481,17 @@ export default function LoadManagement() {
           // Determine status
           let statusLabel = '';
           let statusColor = '';
+          // Status reflects whether the charger has confirmed acceptance of this profile.
+          // The schedule column already shows when the limit takes effect.
           if (isCurrentSource && activeState) {
             switch (activeState.status) {
               case 'APPLIED':
-                statusLabel = activeState.lastAppliedAt ? `✅ Active — applied ${new Date(activeState.lastAppliedAt).toLocaleString()}` : '✅ Active';
-                statusColor = 'text-green-600 dark:text-green-400';
-                break;
               case 'FALLBACK_APPLIED':
-                statusLabel = '✅ Fallback active';
+                statusLabel = activeState.lastAppliedAt ? `✅ Applied ${new Date(activeState.lastAppliedAt).toLocaleString()}` : '✅ Applied';
                 statusColor = 'text-green-600 dark:text-green-400';
                 break;
               case 'PENDING_OFFLINE':
-                statusLabel = '⏳ Pending charger reconnection';
+                statusLabel = '⏳ Pending — charger offline';
                 statusColor = 'text-amber-600 dark:text-amber-400';
                 break;
               case 'ERROR':
@@ -503,12 +502,14 @@ export default function LoadManagement() {
                 statusLabel = activeState.status ?? '—';
                 statusColor = 'text-gray-500 dark:text-slate-400';
             }
-          } else if (matchingStates.length > 0) {
-            // Profile is assigned but not the current winner — scheduled/queued
-            statusLabel = '🕐 Scheduled — not in active window';
-            statusColor = 'text-blue-600 dark:text-blue-400';
+          } else if (matchingStates.length > 0 && matchingStates.some((s) => s.status === 'APPLIED' || s.status === 'FALLBACK_APPLIED')) {
+            // Charger is online and has an applied state, but from a different (higher-priority) profile.
+            // This profile was still sent to the charger as part of the reconcile — it's applied.
+            const lastApplied = matchingStates.find((s) => s.lastAppliedAt)?.lastAppliedAt;
+            statusLabel = lastApplied ? `✅ Applied ${new Date(lastApplied).toLocaleString()}` : '✅ Applied';
+            statusColor = 'text-green-600 dark:text-green-400';
           } else {
-            statusLabel = '⏳ Pending charger reconnection';
+            statusLabel = '⏳ Pending — charger offline';
             statusColor = 'text-amber-600 dark:text-amber-400';
           }
 
