@@ -509,7 +509,7 @@ export default function SiteDetail() {
     return <div className="flex h-64 items-center justify-center text-gray-400 dark:text-slate-500">Loading…</div>;
   }
   if (error || !site) {
-    return <div className="rounded-lg bg-red-50 p-4 text-sm text-red-700">{error || 'Site not found'}</div>;
+    return <div className="rounded-lg bg-red-50 dark:bg-red-900/20 p-4 text-sm text-red-700 dark:text-red-400">{error || 'Site not found'}</div>;
   }
 
   const pushAudit = (action: string, detail: string) => {

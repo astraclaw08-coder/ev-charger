@@ -99,7 +99,7 @@ export default function NetworkOps() {
   }, [effectiveSiteChargers]);
 
   if (loading) return <div className="text-sm text-gray-500 dark:text-slate-400">Loading network ops workspace…</div>;
-  if (error) return <div className="rounded-lg bg-red-50 p-4 text-sm text-red-700">{error}</div>;
+  if (error) return <div className="rounded-lg bg-red-50 dark:bg-red-900/20 p-4 text-sm text-red-700 dark:text-red-400">{error}</div>;
 
   return (
     <div className="space-y-6">
@@ -159,11 +159,11 @@ export default function NetworkOps() {
               <div key={c.id} className="rounded-md border border-gray-300 dark:border-slate-700 p-3">
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-medium text-gray-900 dark:text-slate-100">{c.ocppId}</p>
-                  <span className={`rounded-full px-2 py-0.5 text-xs ${c.status==='ONLINE'?'bg-green-100 text-green-700':c.status==='DEGRADED'?'bg-amber-100 text-amber-700':c.status==='OFFLINE'?'bg-yellow-100 text-yellow-700':'bg-red-100 text-red-700'}`}>{c.status}</span>
+                  <span className={`rounded-full px-2 py-0.5 text-xs ${c.status==='ONLINE'?'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400':c.status==='DEGRADED'?'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400':c.status==='OFFLINE'?'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400':'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'}`}>{c.status}</span>
                 </div>
                 <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">Last heartbeat: {c.lastHeartbeat ? new Date(c.lastHeartbeat).toLocaleString() : 'never'}</p>
                 {c.status === 'DEGRADED' && (
-                  <p className="mt-1 text-xs text-amber-700">Pending offline confirmation (heartbeat stale/disconnect window).</p>
+                  <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">Pending offline confirmation (heartbeat stale/disconnect window).</p>
                 )}
                 {c.status === 'OFFLINE' && (
                   <p className="mt-1 text-xs text-yellow-700">Confirmed unreachable after heartbeat timeout window.</p>
@@ -256,7 +256,7 @@ function MiniCard({label, value, tone}:{label:string; value:number; tone:'green'
   const cls = tone==='green'
     ? 'bg-green-50 text-green-700 border-green-200'
     : tone==='amber'
-      ? 'bg-amber-50 text-amber-700 border-amber-200'
+      ? 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-700'
       : tone==='yellow'
         ? 'bg-yellow-50 text-yellow-700 border-yellow-200'
         : 'bg-red-50 text-red-700 border-red-200';

@@ -238,7 +238,7 @@ export default function FleetAnalytics() {
   const portfolioOptions = useMemo(() => Array.from(new Set(sites.map((s) => s.portfolioName ?? '').filter(Boolean))).sort(), [sites]);
 
   if (loading) return <div className="flex h-64 items-center justify-center text-gray-400 dark:text-slate-500">Loading analytics…</div>;
-  if (error) return <div className="rounded-lg bg-red-50 p-4 text-sm text-red-700">{error}</div>;
+  if (error) return <div className="rounded-lg bg-red-50 dark:bg-red-900/20 p-4 text-sm text-red-700 dark:text-red-400">{error}</div>;
 
   return (
     <div className="space-y-6">
@@ -322,7 +322,7 @@ export default function FleetAnalytics() {
       </div>
 
       {siteFilter !== 'all' && chargerFilter !== 'all' && (
-        <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800">
+        <div className="rounded-xl border border-blue-200 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/20 p-3 text-xs text-blue-800 dark:text-blue-300">
           Charger-level filtering is best-effort in this version because analytics daily aggregates are site-scoped. Site scope is fully enforced.
         </div>
       )}

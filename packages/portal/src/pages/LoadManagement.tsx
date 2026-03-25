@@ -22,9 +22,9 @@ const SCOPE_LABELS: Record<Scope, string> = {
 
 function ScopePill({ scope }: { scope: Scope }) {
   const colors: Record<Scope, string> = {
-    CHARGER: 'bg-blue-50 text-blue-700 border-blue-200',
-    GROUP: 'bg-purple-50 text-purple-700 border-purple-200',
-    SITE: 'bg-amber-50 text-amber-700 border-amber-200',
+    CHARGER: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-700',
+    GROUP: 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-700',
+    SITE: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-700',
   };
   return (
     <span className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${colors[scope]}`}>
@@ -282,7 +282,7 @@ export default function LoadManagement() {
   }
 
   if (loading) return <div className="flex h-64 items-center justify-center text-gray-400 dark:text-slate-500">Loading load management…</div>;
-  if (error) return <div className="rounded-lg bg-red-50 p-4 text-sm text-red-700">{error}</div>;
+  if (error) return <div className="rounded-lg bg-red-50 dark:bg-red-900/20 p-4 text-sm text-red-700 dark:text-red-400">{error}</div>;
 
   const stateByChargerId = Object.fromEntries(states.map((s) => [s.chargerId, s]));
   const profileById = Object.fromEntries(profiles.map((p) => [p.id, p]));
@@ -557,7 +557,7 @@ export default function LoadManagement() {
                     </td>
                     <td className="px-5 py-3">
                       {row.targetChargerIds.length > 0 && (
-                        <button onClick={() => handlePush(row.targetChargerIds[0])} className="rounded-md border border-brand-200 px-2 py-1 text-xs font-medium text-brand-700 hover:bg-brand-50">
+                        <button onClick={() => handlePush(row.targetChargerIds[0])} className="rounded-md border border-brand-200 dark:border-brand-700 px-2 py-1 text-xs font-medium text-brand-700 dark:text-brand-300 hover:bg-brand-50 dark:hover:bg-brand-900/20">
                           Re-push
                         </button>
                       )}
@@ -712,8 +712,8 @@ export default function LoadManagement() {
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
-                  <button onClick={() => openEdit(p)} className="rounded-md border border-brand-200 px-2 py-1 text-xs font-medium text-brand-700 hover:bg-brand-50">Edit</button>
-                  <button onClick={() => handleToggleProfile(p)} className={`rounded-md border px-2 py-1 text-xs font-medium ${p.enabled ? 'border-amber-200 text-amber-700 hover:bg-amber-50' : 'border-green-200 text-green-700 hover:bg-green-50'}`}>
+                  <button onClick={() => openEdit(p)} className="rounded-md border border-brand-200 dark:border-brand-700 px-2 py-1 text-xs font-medium text-brand-700 dark:text-brand-300 hover:bg-brand-50 dark:hover:bg-brand-900/20">Edit</button>
+                  <button onClick={() => handleToggleProfile(p)} className={`rounded-md border px-2 py-1 text-xs font-medium ${p.enabled ? 'border-amber-200 dark:border-amber-700 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20' : 'border-green-200 dark:border-green-700 text-green-700 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20'}`}>
                     {p.enabled ? 'Disable' : 'Enable'}
                   </button>
                   <button onClick={() => handleDeleteProfile(p.id)} className="rounded-md border border-red-200 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50">Delete</button>
@@ -771,7 +771,7 @@ export default function LoadManagement() {
                       <p className="mt-0.5 text-xs text-gray-500 dark:text-slate-400">{groupChargers.length} charger(s) · {siteName}</p>
                     </div>
                     <div className="flex items-center gap-2">
-                      <button onClick={() => setEditingGroup(g)} className="rounded-md border border-brand-200 px-2 py-1 text-xs font-medium text-brand-700 hover:bg-brand-50">Edit</button>
+                      <button onClick={() => setEditingGroup(g)} className="rounded-md border border-brand-200 dark:border-brand-700 px-2 py-1 text-xs font-medium text-brand-700 dark:text-brand-300 hover:bg-brand-50 dark:hover:bg-brand-900/20">Edit</button>
                       <button onClick={() => handleDeleteGroup(g.id)} className="rounded-md border border-red-200 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50">Delete</button>
                     </div>
                   </div>
@@ -834,7 +834,7 @@ export default function LoadManagement() {
                       ) : <span className="text-xs text-gray-400 dark:text-slate-500">no profile</span>}
                     </td>
                     <td className="px-5 py-3">
-                      <button onClick={() => handlePush(c.id)} className="rounded-md border border-brand-200 px-2 py-1 text-xs font-medium text-brand-700 hover:bg-brand-50">
+                      <button onClick={() => handlePush(c.id)} className="rounded-md border border-brand-200 dark:border-brand-700 px-2 py-1 text-xs font-medium text-brand-700 dark:text-brand-300 hover:bg-brand-50 dark:hover:bg-brand-900/20">
                         Push
                       </button>
                     </td>
@@ -879,7 +879,7 @@ export default function LoadManagement() {
               <button
                 onClick={() => handleAssignCharger(editingGroup.id)}
                 disabled={!groupAssignSelection[editingGroup.id]}
-                className="rounded-md border border-brand-200 px-3 py-1.5 text-xs font-medium text-brand-700 hover:bg-brand-50 disabled:opacity-50"
+                className="rounded-md border border-brand-200 dark:border-brand-700 px-3 py-1.5 text-xs font-medium text-brand-700 dark:text-brand-300 hover:bg-brand-50 dark:hover:bg-brand-900/20 disabled:opacity-50"
               >
                 Add
               </button>
@@ -1022,7 +1022,7 @@ export default function LoadManagement() {
               editForm.chargerId !== (editingProfile.chargerId ?? '') ||
               editForm.siteId !== (editingProfile.siteId ?? '') ||
               editForm.chargerGroupId !== (editingProfile.chargerGroupId ?? '')) && (
-              <div className="mt-3 rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-700">
+              <div className="mt-3 rounded-md bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
                 ⚠ Changing the scope or target will delete this profile and create a new one. Push state will be reset.
               </div>
             )}

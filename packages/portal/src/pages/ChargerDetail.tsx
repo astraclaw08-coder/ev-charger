@@ -225,7 +225,7 @@ export default function ChargerDetail() {
     return <div className="flex h-64 items-center justify-center text-gray-400 dark:text-slate-500">Loading charger…</div>;
   }
   if (error || !status) {
-    return <div className="rounded-lg bg-red-50 p-4 text-sm text-red-700">{error || 'Charger not found'}</div>;
+    return <div className="rounded-lg bg-red-50 dark:bg-red-900/20 p-4 text-sm text-red-700 dark:text-red-400">{error || 'Charger not found'}</div>;
   }
 
   const days = rangeDays(rangePreset);

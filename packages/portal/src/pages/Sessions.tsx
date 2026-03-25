@@ -143,7 +143,7 @@ export default function Sessions() {
   }), [filtered]);
 
   if (loading) return <div className="text-sm text-gray-500 dark:text-slate-400">Loading sessions…</div>;
-  if (error) return <div className="rounded-lg bg-red-50 p-4 text-sm text-red-700">{error}</div>;
+  if (error) return <div className="rounded-lg bg-red-50 dark:bg-red-900/20 p-4 text-sm text-red-700 dark:text-red-400">{error}</div>;
 
   return (
     <div className="space-y-4">

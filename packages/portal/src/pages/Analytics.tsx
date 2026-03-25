@@ -156,7 +156,7 @@ export default function Analytics() {
     return <div className="flex h-64 items-center justify-center text-gray-400 dark:text-slate-500">Loading analytics…</div>;
   }
   if (error || !data) {
-    return <div className="rounded-lg bg-red-50 p-4 text-sm text-red-700">{error || 'Failed to load'}</div>;
+    return <div className="rounded-lg bg-red-50 dark:bg-red-900/20 p-4 text-sm text-red-700 dark:text-red-400">{error || 'Failed to load'}</div>;
   }
 
   return (
@@ -283,7 +283,7 @@ export default function Analytics() {
                 <p className="text-xs text-gray-600 dark:text-slate-400">
                   {new Date(job.createdAt).toLocaleString()} · {job.filter} · {job.role}
                 </p>
-                <span className={`rounded-full px-2 py-0.5 text-xs ${job.status === 'complete' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                <span className={`rounded-full px-2 py-0.5 text-xs ${job.status === 'complete' ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400'}`}>
                   {job.status}
                 </span>
               </div>
@@ -329,7 +329,7 @@ export default function Analytics() {
           </ResponsiveContainer>
         </ChartCard>
       ) : (
-        <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
+        <div className="rounded-xl border border-blue-200 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/20 p-4 text-sm text-blue-800 dark:text-blue-300">
           Revenue chart hidden for analyst role scope.
         </div>
       )}

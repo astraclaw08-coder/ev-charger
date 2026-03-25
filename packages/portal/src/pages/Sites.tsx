@@ -96,7 +96,7 @@ export default function Sites() {
   }
 
   if (loading) return <div className="flex h-64 items-center justify-center text-gray-400 dark:text-slate-500">Loading sites…</div>;
-  if (error) return <div className="rounded-lg bg-red-50 p-4 text-sm text-red-700">{error}</div>;
+  if (error) return <div className="rounded-lg bg-red-50 dark:bg-red-900/20 p-4 text-sm text-red-700 dark:text-red-400">{error}</div>;
 
   return (
     <div>

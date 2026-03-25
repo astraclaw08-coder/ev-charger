@@ -53,7 +53,7 @@ export default function Chargers() {
   }), [rows]);
 
   if (loading) return <div className="text-sm text-gray-500 dark:text-slate-400">Loading chargers…</div>;
-  if (error) return <div className="rounded-lg bg-red-50 p-4 text-sm text-red-700">{error}</div>;
+  if (error) return <div className="rounded-lg bg-red-50 dark:bg-red-900/20 p-4 text-sm text-red-700 dark:text-red-400">{error}</div>;
 
   return (
     <div className="space-y-4">
@@ -144,12 +144,12 @@ export default function Chargers() {
 
 function StatusPill({ status }: { status: ChargerListItem['status'] }) {
   const cls = status === 'ONLINE'
-    ? 'bg-green-100 text-green-700'
+    ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
     : status === 'DEGRADED'
-      ? 'bg-amber-100 text-amber-700'
+      ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400'
       : status === 'OFFLINE'
         ? 'bg-slate-200 text-slate-700'
-        : 'bg-red-100 text-red-700';
+        : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400';
 
   return <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${cls}`}>{status}</span>;
 }

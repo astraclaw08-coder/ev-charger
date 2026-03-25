@@ -32,7 +32,7 @@ export default function AnalyticsPicker() {
       </div>
 
       {loading && <div className="rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 text-sm text-gray-600 dark:text-slate-400">Loading sites…</div>}
-      {error && <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>}
+      {error && <div className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-900/20 p-4 text-sm text-red-700 dark:text-red-400">{error}</div>}
 
       {!loading && !error && (
         <div className="grid gap-3 md:grid-cols-2">

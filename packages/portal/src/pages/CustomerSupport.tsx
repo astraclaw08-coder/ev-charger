@@ -132,7 +132,7 @@ export default function CustomerSupport() {
   }, [notes]);
 
   if (loading) return <div className="text-sm text-gray-500 dark:text-slate-400">Loading customer support workspace…</div>;
-  if (error) return <div className="rounded-lg bg-red-50 p-4 text-sm text-red-700">{error}</div>;
+  if (error) return <div className="rounded-lg bg-red-50 dark:bg-red-900/20 p-4 text-sm text-red-700 dark:text-red-400">{error}</div>;
 
   return (
     <div className="space-y-6">
@@ -210,12 +210,12 @@ export default function CustomerSupport() {
                   {s.amountState === 'PENDING' ? ' · Estimated while settlement is pending' : ''}
                   {s.payment && ['CAPTURED', 'AUTHORIZED'].includes(String(s.payment.status)) ? ' · Refund eligible' : ''}
                 </p>
-                <p className="mt-1 text-xs text-brand-700">Case notes: {noteCountBySession.get(s.id) ?? 0}</p>
+                <p className="mt-1 text-xs text-brand-700 dark:text-brand-300">Case notes: {noteCountBySession.get(s.id) ?? 0}</p>
 
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <button
                     type="button"
-                    className="rounded-md border border-green-300 bg-green-50 px-2 py-1 text-xs text-green-700 hover:bg-green-100"
+                    className="rounded-md border border-green-300 bg-green-50 dark:bg-green-900/20 px-2 py-1 text-xs text-green-700 dark:text-green-400 hover:bg-green-100"
                     onClick={() => {
                       if (!selectedChargerId) return;
                       const canRefund = !!s.payment && ['CAPTURED', 'AUTHORIZED'].includes(String(s.payment.status));
@@ -240,7 +240,7 @@ export default function CustomerSupport() {
                   >Issue refund</button>
                   <button
                     type="button"
-                    className="rounded-md border border-red-300 bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100"
+                    className="rounded-md border border-red-300 bg-red-50 dark:bg-red-900/20 px-2 py-1 text-xs text-red-700 dark:text-red-400 hover:bg-red-100"
                     onClick={() => {
                       if (!selectedChargerId) return;
                       const record: SupportAudit = {

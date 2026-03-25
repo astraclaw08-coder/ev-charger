@@ -136,7 +136,7 @@ export default function SiteRoleAssignment() {
               </div>
               <button
                 type="button"
-                className="rounded-md border border-red-300 bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100"
+                className="rounded-md border border-red-300 bg-red-50 dark:bg-red-900/20 px-2 py-1 text-xs text-red-700 dark:text-red-400 hover:bg-red-100"
                 onClick={() => removeAssignment(a.id)}
               >
                 Remove
