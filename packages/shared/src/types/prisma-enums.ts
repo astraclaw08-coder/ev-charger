@@ -28,6 +28,7 @@ export type PaymentStatus = 'PENDING' | 'AUTHORIZED' | 'CAPTURED' | 'FAILED' | '
 
 export type OcppDirection = 'INBOUND' | 'OUTBOUND';
 
-export type UptimeEventType = 'ONLINE' | 'OFFLINE' | 'FAULTED' | 'DEGRADED' | 'RECOVERED';
+export type UptimeEventType = 'ONLINE' | 'OFFLINE' | 'FAULTED' | 'DEGRADED' | 'RECOVERED'
+  | 'SCHEDULED_MAINTENANCE' | 'UTILITY_INTERRUPTION' | 'VEHICLE_FAULT' | 'VANDALISM' | 'FORCE_MAJEURE';
 
 export type SmartChargingScope = 'CHARGER' | 'GROUP' | 'SITE';

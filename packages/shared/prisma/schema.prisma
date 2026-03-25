@@ -53,6 +53,11 @@ enum UptimeEventType {
   FAULTED
   DEGRADED
   RECOVERED
+  SCHEDULED_MAINTENANCE
+  UTILITY_INTERRUPTION
+  VEHICLE_FAULT
+  VANDALISM
+  FORCE_MAJEURE
 }
 
 enum OcppOutboxStatus {
@@ -123,6 +128,7 @@ model Charger {
   sessionFacts    SessionFact[]
   rebateIntervals RebateInterval15m[]
   favoritedBy     UserFavoriteCharger[]
+  uptimeDailies   UptimeDaily[]
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
 
@@ -468,6 +474,26 @@ model UptimeEvent {
   @@index([chargerId, createdAt])
   @@index([createdAt])
   @@index([event])
+}
+
+/// Materialized daily uptime counters per charger (OCA/NEVI §680.116).
+/// Upserted every 5 minutes by the uptimeMaterializer worker.
+model UptimeDaily {
+  id                    String   @id @default(uuid())
+  chargerId             String
+  charger               Charger  @relation(fields: [chargerId], references: [id], onDelete: Cascade)
+  date                  DateTime @db.Date
+  totalSeconds          Int      // wall clock seconds for the day (86400 normally, less on provisioning day)
+  availableSeconds      Int      // seconds charger was ONLINE
+  outageSeconds         Int      // seconds in OFFLINE/FAULTED/DEGRADED/excluded states
+  excludedOutageSeconds Int      @default(0) // outage seconds excluded per NEVI (maintenance, utility, vehicle fault, vandalism, force majeure)
+  uptimePercent         Float    // (totalSeconds - (outageSeconds - excludedOutageSeconds)) / totalSeconds * 100
+
+  updatedAt             DateTime @updatedAt
+
+  @@unique([chargerId, date])
+  @@index([chargerId])
+  @@index([date])
 }
 
 model AdminAuditEvent {

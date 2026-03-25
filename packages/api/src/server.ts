@@ -16,6 +16,7 @@ import { qrRedirectRoutes } from './routes/qrRedirect';
 // Temporarily disabled until notification Prisma models/types are aligned.
 // import { notificationRoutes } from './routes/notifications';
 import { prisma } from '@ev-charger/shared';
+import { materializeUptime } from './workers/uptimeMaterializer';
 
 export async function buildServer() {
   const app = Fastify({
@@ -75,6 +76,15 @@ export async function buildServer() {
   await app.register(smartChargingRoutes);
   await app.register(qrRedirectRoutes);
   // await app.register(notificationRoutes);
+
+  // Uptime materializer: run every 5 minutes, initial run after 10s startup delay
+  const MATERIALIZE_INTERVAL_MS = 5 * 60 * 1000;
+  setTimeout(() => {
+    materializeUptime().catch((err) => app.log.error({ err }, '[UptimeMaterializer] Initial run failed'));
+    setInterval(() => {
+      materializeUptime().catch((err) => app.log.error({ err }, '[UptimeMaterializer] Periodic run failed'));
+    }, MATERIALIZE_INTERVAL_MS);
+  }, 10_000);
 
   return app;
 }

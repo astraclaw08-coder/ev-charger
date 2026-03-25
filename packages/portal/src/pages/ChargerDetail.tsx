@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { buildChargerQrRedirectUrl, createApiClient, type ChargerStatus, type SessionRecord, type ChargerUptime } from '../api/client';
 import { useToken } from '../auth/TokenContext';
 import StatusBadge from '../components/StatusBadge';
-import { formatDate, formatDuration } from '../lib/utils';
+import { formatDate, formatDuration, formatSeconds } from '../lib/utils';
 import { shortId } from '../lib/shortId';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import QRCode from 'qrcode';
@@ -471,12 +471,25 @@ export default function ChargerDetail() {
 
       {uptime && (
         <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-5 shadow-sm">
-          <h2 className="mb-4 text-sm font-semibold text-gray-700 dark:text-slate-300">Uptime Monitoring (OCA v1.1)</h2>
+          <h2 className="mb-4 text-sm font-semibold text-gray-700 dark:text-slate-300">Uptime Monitoring (NEVI §680.116)</h2>
           <div className="grid gap-3 sm:grid-cols-3 mb-4">
             <div><p className="text-xs text-gray-500 dark:text-slate-400">24h</p><p className={`text-lg font-semibold ${uptime.uptimePercent24h >= 99 ? 'text-green-700' : uptime.uptimePercent24h >= 95 ? 'text-amber-700' : 'text-red-700'}`}>{uptime.uptimePercent24h.toFixed(2)}%</p></div>
             <div><p className="text-xs text-gray-500 dark:text-slate-400">7d</p><p className={`text-lg font-semibold ${uptime.uptimePercent7d >= 99 ? 'text-green-700' : uptime.uptimePercent7d >= 95 ? 'text-amber-700' : 'text-red-700'}`}>{uptime.uptimePercent7d.toFixed(2)}%</p></div>
             <div><p className="text-xs text-gray-500 dark:text-slate-400">30d</p><p className={`text-lg font-semibold ${uptime.uptimePercent30d >= 99 ? 'text-green-700' : uptime.uptimePercent30d >= 95 ? 'text-amber-700' : 'text-red-700'}`}>{uptime.uptimePercent30d.toFixed(2)}%</p></div>
           </div>
+
+          {/* NEVI Breakdown */}
+          {uptime.breakdown?.d30 && (
+            <div className="mb-4 rounded-lg bg-gray-50 dark:bg-slate-800 p-4">
+              <p className="text-xs font-semibold text-gray-600 dark:text-slate-400 mb-2">30-Day Breakdown</p>
+              <div className="grid gap-2 sm:grid-cols-2 text-xs">
+                <div className="flex justify-between"><span className="text-gray-500 dark:text-slate-400">Available</span><span className="font-medium text-green-700 dark:text-green-400">{formatSeconds(uptime.breakdown.d30.availableSeconds)}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500 dark:text-slate-400">Total outage</span><span className="font-medium text-red-600 dark:text-red-400">{formatSeconds(uptime.breakdown.d30.outageSeconds)}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500 dark:text-slate-400" title="Excluded per NEVI: utility interruptions, vehicle faults, scheduled maintenance, vandalism, force majeure">Excluded outage ⓘ</span><span className="font-medium text-amber-600 dark:text-amber-400">{formatSeconds(uptime.breakdown.d30.excludedOutageSeconds)}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500 dark:text-slate-400">Net counted outage</span><span className="font-medium text-red-700 dark:text-red-300">{formatSeconds(Math.max(0, uptime.breakdown.d30.outageSeconds - uptime.breakdown.d30.excludedOutageSeconds))}</span></div>
+              </div>
+            </div>
+          )}
 
           <div className="h-36">
             <ResponsiveContainer width="100%" height="100%">

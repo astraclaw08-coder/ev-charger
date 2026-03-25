@@ -17,3 +17,14 @@ export function formatDuration(startedAt: string, stoppedAt: string | null | und
   const hrs = Math.floor(mins / 60);
   return hrs > 0 ? `${hrs}h ${mins % 60}m` : `${mins}m`;
 }
+
+/** Format a total number of seconds into human-readable "Xd Xh Xm" or "Xh Xm" or "Xm". */
+export function formatSeconds(totalSeconds: number): string {
+  if (totalSeconds <= 0) return '0m';
+  const days = Math.floor(totalSeconds / 86400);
+  const hrs = Math.floor((totalSeconds % 86400) / 3600);
+  const mins = Math.floor((totalSeconds % 3600) / 60);
+  if (days > 0) return `${days}d ${hrs}h ${mins}m`;
+  if (hrs > 0) return `${hrs}h ${mins}m`;
+  return `${mins}m`;
+}
