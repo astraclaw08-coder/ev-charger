@@ -430,9 +430,9 @@ export default function LoadManagement() {
         <p className="text-sm text-gray-500 dark:text-slate-400">Control power limits per charger, group, or site using OCPP smart charging profiles.</p>
       </div>
 
-      <div className="rounded-xl border border-brand-300 bg-brand-100 px-5 py-4 dark:border-brand-500/30 dark:bg-brand-900/20">
-        <h2 className="text-sm font-semibold text-brand-900 dark:text-brand-200">Recommended flow</h2>
-        <ol className="mt-2 list-decimal space-y-1 pl-5 text-xs text-brand-900 dark:text-brand-100/90">
+      <div className="rounded-xl border border-blue-300 bg-blue-50 px-5 py-4 dark:border-blue-700 dark:bg-blue-900/20">
+        <h2 className="text-sm font-semibold text-gray-900 dark:text-slate-100">Recommended flow</h2>
+        <ol className="mt-2 list-decimal space-y-1 pl-5 text-xs text-gray-700 dark:text-slate-300">
           <li>Create a <strong>charger group</strong> for a site and assign chargers to it.</li>
           <li>Create one <strong>group-scoped load profile</strong> with default cap + optional time window cap.</li>
           <li>Use <strong>Re-push</strong> to apply immediately, then verify in Active Limits.</li>
