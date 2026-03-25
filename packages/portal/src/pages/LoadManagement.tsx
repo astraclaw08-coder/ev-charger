@@ -439,12 +439,12 @@ export default function LoadManagement() {
         </ol>
       </div>
 
-      {/* Active limit states overview */}
-      {states.filter((s) => Boolean(s.sourceProfileId) && (s.status === 'APPLIED' || s.status === 'FALLBACK_APPLIED')).length > 0 && (
+      {/* Active limit states overview — shows all profile-driven states including pending/error */}
+      {states.filter((s) => Boolean(s.sourceProfileId)).length > 0 && (
         <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm">
           <div className="border-b border-gray-300 dark:border-slate-700 px-5 py-4">
             <h2 className="text-sm font-semibold text-gray-700 dark:text-slate-300">Active Limits</h2>
-            <p className="mt-0.5 text-xs text-gray-500 dark:text-slate-400">Only currently active profile-driven limits.</p>
+            <p className="mt-0.5 text-xs text-gray-500 dark:text-slate-400">All chargers with assigned load profiles and their current apply status.</p>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -453,14 +453,29 @@ export default function LoadManagement() {
                   <th className="px-5 py-3">Applied to</th>
                   <th className="px-5 py-3">Limit (kW)</th>
                   <th className="px-5 py-3">Profile</th>
-                  <th className="px-5 py-3">Applied</th>
+                  <th className="px-5 py-3">Status</th>
                   <th className="px-5 py-3">Push</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50 dark:divide-slate-800">
                 {states
-                  .filter((s) => Boolean(s.sourceProfileId) && (s.status === 'APPLIED' || s.status === 'FALLBACK_APPLIED'))
-                  .map((s) => (
+                  .filter((s) => Boolean(s.sourceProfileId))
+                  .map((s) => {
+                    const statusDisplay = (() => {
+                      switch (s.status) {
+                        case 'APPLIED':
+                          return { label: s.lastAppliedAt ? `✅ Applied ${new Date(s.lastAppliedAt).toLocaleString()}` : '✅ Applied', color: 'text-green-600 dark:text-green-400' };
+                        case 'FALLBACK_APPLIED':
+                          return { label: s.lastAppliedAt ? `✅ Fallback ${new Date(s.lastAppliedAt).toLocaleString()}` : '✅ Fallback active', color: 'text-green-600 dark:text-green-400' };
+                        case 'PENDING_OFFLINE':
+                          return { label: '⏳ Pending charger reconnection', color: 'text-amber-600 dark:text-amber-400' };
+                        case 'ERROR':
+                          return { label: `❌ Failed${s.lastError ? `: ${s.lastError}` : ''}`, color: 'text-red-600 dark:text-red-400' };
+                        default:
+                          return { label: s.status ?? '—', color: 'text-gray-500 dark:text-slate-400' };
+                      }
+                    })();
+                    return (
                   <tr key={s.id} className="bg-white dark:bg-slate-800/60 hover:bg-gray-50 dark:hover:bg-slate-700">
                     <td className="px-5 py-3">
                       <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">{appliedToDisplay(s).title}</p>
@@ -473,8 +488,8 @@ export default function LoadManagement() {
                     <td className="px-5 py-3 text-xs font-medium text-gray-700 dark:text-slate-300">
                       {s.sourceProfile?.name ?? '—'}
                     </td>
-                    <td className="px-5 py-3 text-xs text-gray-500 dark:text-slate-400">
-                      {s.lastAppliedAt ? new Date(s.lastAppliedAt).toLocaleString() : '—'}
+                    <td className="px-5 py-3">
+                      <p className={`text-xs font-medium ${statusDisplay.color}`}>{statusDisplay.label}</p>
                     </td>
                     <td className="px-5 py-3">
                       <button onClick={() => handlePush(s.chargerId)} className="rounded-md border border-brand-200 px-2 py-1 text-xs font-medium text-brand-700 hover:bg-brand-50">
@@ -482,7 +497,8 @@ export default function LoadManagement() {
                       </button>
                     </td>
                   </tr>
-                ))}
+                    );
+                  })}
               </tbody>
             </table>
           </div>
