@@ -1,0 +1,61 @@
+name: Schema Drift Check
+
+on:
+  pull_request:
+    branches: [main, dev]
+    paths:
+      - 'packages/shared/prisma/schema.prisma'
+      - 'packages/shared/prisma/migrations/**'
+
+jobs:
+  drift-check:
+    name: Prisma Schema ↔ Migration Drift
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://ev:ev@localhost:5432/evcharger
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: ev
+          POSTGRES_PASSWORD: ev
+          POSTGRES_DB: evcharger
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+        ports:
+          - 5432:5432
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate --schema=packages/shared/prisma/schema.prisma
+
+      - name: Apply all migrations
+        run: npx prisma migrate deploy --schema=packages/shared/prisma/schema.prisma
+
+      - name: Check for schema drift
+        run: |
+          DRIFT=$(npx prisma migrate diff \
+            --from-migrations ./packages/shared/prisma/migrations \
+            --to-schema-datamodel ./packages/shared/prisma/schema.prisma \
+            --script 2>&1)
+          if [ -n "$DRIFT" ] && [ "$DRIFT" != "-- This is an empty migration." ]; then
+            echo "❌ Schema drift detected! Your schema.prisma has changes not covered by a migration."
+            echo ""
+            echo "Missing migration SQL:"
+            echo "$DRIFT"
+            echo ""
+            echo "Fix: run 'npx prisma migrate dev --name <description>' to create the migration file."
+            exit 1
+          fi
+          echo "✅ No schema drift — all models are covered by migration files."
