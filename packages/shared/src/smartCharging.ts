@@ -105,9 +105,39 @@ function isProfileWithinValidityWindow(profile: SmartChargingProfileLike, at: Da
   return true;
 }
 
-function isWindowActive(window: SmartChargingWindow, at: Date): boolean {
-  const day = at.getUTCDay();
-  const minuteOfDay = at.getUTCHours() * 60 + at.getUTCMinutes();
+// Timezone-aware local day/minute resolver (same pattern as touPricing.ts)
+const scDtfCache = new Map<string, Intl.DateTimeFormat>();
+function scLocalDayMinute(at: Date, timeZone?: string | null): { day: number; minuteOfDay: number } {
+  if (!timeZone) {
+    // Fallback to UTC if no timezone
+    return { day: at.getUTCDay(), minuteOfDay: at.getUTCHours() * 60 + at.getUTCMinutes() };
+  }
+  const key = timeZone.trim();
+  let fmt = scDtfCache.get(key);
+  if (!fmt) {
+    try {
+      fmt = new Intl.DateTimeFormat('en-US', {
+        timeZone: key,
+        hour12: false,
+        weekday: 'short',
+        hour: 'numeric',
+        minute: 'numeric',
+      });
+      scDtfCache.set(key, fmt);
+    } catch {
+      return { day: at.getUTCDay(), minuteOfDay: at.getUTCHours() * 60 + at.getUTCMinutes() };
+    }
+  }
+  const parts = fmt.formatToParts(at);
+  const dayStr = parts.find((p) => p.type === 'weekday')?.value ?? '';
+  const hour = Number(parts.find((p) => p.type === 'hour')?.value ?? 0);
+  const minute = Number(parts.find((p) => p.type === 'minute')?.value ?? 0);
+  const dayMap: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+  return { day: dayMap[dayStr] ?? at.getUTCDay(), minuteOfDay: hour * 60 + minute };
+}
+
+function isWindowActive(window: SmartChargingWindow, at: Date, timeZone?: string | null): boolean {
+  const { day, minuteOfDay } = scLocalDayMinute(at, timeZone);
 
   if (!window.daysOfWeek.includes(day)) return false;
 
@@ -134,9 +164,11 @@ export function resolveEffectiveSmartChargingLimit(args: {
   groupProfiles: SmartChargingProfileLike[];
   siteProfiles: SmartChargingProfileLike[];
   at?: Date;
+  timeZone?: string | null;
   fallbackLimitKw: number;
 }): SmartChargingResolution {
   const at = args.at ?? new Date();
+  const timeZone = args.timeZone;
   const invalidProfileIds: string[] = [];
   const scopeOrder: Array<{ scope: SmartChargingScope; profiles: SmartChargingProfileLike[] }> = [
     { scope: 'CHARGER', profiles: sortProfiles(args.chargerProfiles) },
@@ -155,7 +187,7 @@ export function resolveEffectiveSmartChargingLimit(args: {
         continue;
       }
 
-      const activeWindow = parsed.windows.find((w) => isWindowActive(w, at));
+      const activeWindow = parsed.windows.find((w) => isWindowActive(w, at, timeZone));
       if (activeWindow) {
         return {
           effectiveLimitKw: activeWindow.limitKw,

@@ -86,6 +86,7 @@ model Site {
   softwareVendorFeeValue Float         @default(0)
   softwareFeeIncludesActivation Boolean @default(false)
   touWindows       Json?
+  timeZone         String              @default("America/Los_Angeles") // IANA timezone for TOU pricing + smart charging
   organizationName String?
   portfolioName    String?
   chargers         Charger[]

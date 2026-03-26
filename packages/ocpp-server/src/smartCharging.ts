@@ -146,11 +146,12 @@ function buildConstantPayload(limitKw: number, profile?: SmartChargingProfileLik
 export async function applySmartChargingForCharger(chargerId: string, trigger: string): Promise<void> {
   const charger = await prisma.charger.findUnique({
     where: { id: chargerId },
-    select: { id: true, ocppId: true, siteId: true, groupId: true, status: true },
+    select: { id: true, ocppId: true, siteId: true, groupId: true, status: true, site: { select: { timeZone: true } } },
   });
   if (!charger) return;
 
-  console.log(`[SmartCharging] apply attempt for ${charger.ocppId} trigger=${trigger} status=${charger.status}`);
+  const siteTimeZone = (charger as any).site?.timeZone ?? 'America/Los_Angeles';
+  console.log(`[SmartCharging] apply attempt for ${charger.ocppId} trigger=${trigger} status=${charger.status} tz=${siteTimeZone}`);
 
   const [chargerProfiles, groupProfiles, siteProfiles] = await Promise.all([
     prisma.smartChargingProfile.findMany({ where: { scope: 'CHARGER', chargerId, enabled: true }, orderBy: [{ priority: 'desc' }, { updatedAt: 'desc' }] }),
@@ -164,6 +165,7 @@ export async function applySmartChargingForCharger(chargerId: string, trigger: s
     chargerProfiles: chargerProfiles.map(toProfileLike),
     groupProfiles: groupProfiles.map(toProfileLike),
     siteProfiles: siteProfiles.map(toProfileLike),
+    timeZone: siteTimeZone,
     fallbackLimitKw: SAFE_LIMIT_KW,
   });
 

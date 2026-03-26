@@ -33,6 +33,7 @@ export async function handleStartTransaction(
                 pricePerKwhUsd: true,
                 idleFeePerMinUsd: true,
                 touWindows: true,
+                timeZone: true,
               },
             },
           },
@@ -69,6 +70,7 @@ export async function handleStartTransaction(
         defaultPricePerKwhUsd: connector.charger.site.pricePerKwhUsd ?? DEFAULT_RATE_PER_KWH,
         defaultIdleFeePerMinUsd: connector.charger.site.idleFeePerMinUsd ?? 0,
         touWindows: connector.charger.site.touWindows,
+        timeZone: connector.charger.site.timeZone ?? 'America/Los_Angeles',
       });
       session = await prisma.session.create({
         data: {

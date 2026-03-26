@@ -62,6 +62,7 @@ export async function handleStopTransaction(
                   pricePerKwhUsd: true,
                   idleFeePerMinUsd: true,
                   touWindows: true,
+                  timeZone: true,
                 },
               },
             },
@@ -104,6 +105,7 @@ export async function handleStopTransaction(
     defaultPricePerKwhUsd: site.pricePerKwhUsd,
     defaultIdleFeePerMinUsd: site.idleFeePerMinUsd,
     touWindows: site.touWindows,
+    timeZone: site.timeZone ?? 'America/Los_Angeles',
   });
   const totalSegmentMinutes = durationSegments.reduce((sum, seg) => sum + seg.minutes, 0);
   const weightedRatePerKwh =
