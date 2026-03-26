@@ -176,33 +176,83 @@ function UserCreateInline({ onSubmit, onCancel }: { onSubmit: (data: { email: st
   const [email, setEmail] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
+  const [role, setRole] = useState('operator');
+  const [org, setOrg] = useState('');
+  const [siteAccess, setSiteAccess] = useState('all');
+  const [selectedSites, setSelectedSites] = useState('');
+  const [privilege, setPrivilege] = useState('read_write');
+
+  const inputCls = 'mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100 placeholder-gray-400 dark:placeholder-slate-500';
+  const selectCls = 'mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100';
+  const labelCls = 'font-medium text-gray-700 dark:text-slate-300';
 
   return (
-    <div className="mb-5 rounded-lg border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/40 p-4">
-      <div className="flex items-center justify-between mb-3">
+    <div className="mb-5 rounded-lg border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/40 p-5">
+      <div className="flex items-center justify-between mb-4">
         <h4 className="text-sm font-semibold text-gray-900 dark:text-slate-100">New User</h4>
         <button onClick={onCancel} className="text-xs text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200">Cancel</button>
       </div>
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-        <label className="block text-sm">
-          <span className="font-medium text-gray-700 dark:text-slate-300">Email</span>
-          <input type="email" placeholder="user@company.com" value={email} onChange={(e) => setEmail(e.target.value)}
-            className="mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100 placeholder-gray-400 dark:placeholder-slate-500" />
-        </label>
-        <label className="block text-sm">
-          <span className="font-medium text-gray-700 dark:text-slate-300">First Name</span>
-          <input placeholder="Jane" value={firstName} onChange={(e) => setFirstName(e.target.value)}
-            className="mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100 placeholder-gray-400 dark:placeholder-slate-500" />
-        </label>
-        <label className="block text-sm">
-          <span className="font-medium text-gray-700 dark:text-slate-300">Last Name</span>
-          <input placeholder="Smith" value={lastName} onChange={(e) => setLastName(e.target.value)}
-            className="mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100 placeholder-gray-400 dark:placeholder-slate-500" />
-        </label>
-        <div className="flex items-end">
-          <PrimaryButton disabled={!email.trim()} onClick={() => onSubmit({ email: email.trim(), firstName, lastName })} className="w-full">Create & Invite</PrimaryButton>
-        </div>
+
+      {/* Identity */}
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3 mb-4">
+        <label className="block text-sm"><span className={labelCls}>Email *</span><input type="email" placeholder="user@company.com" value={email} onChange={(e) => setEmail(e.target.value)} className={inputCls} /></label>
+        <label className="block text-sm"><span className={labelCls}>First Name</span><input placeholder="Jane" value={firstName} onChange={(e) => setFirstName(e.target.value)} className={inputCls} /></label>
+        <label className="block text-sm"><span className={labelCls}>Last Name</span><input placeholder="Smith" value={lastName} onChange={(e) => setLastName(e.target.value)} className={inputCls} /></label>
       </div>
+
+      {/* Role + Organization */}
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3 mb-4">
+        <label className="block text-sm">
+          <span className={labelCls}>Role</span>
+          <select value={role} onChange={(e) => setRole(e.target.value)} className={selectCls}>
+            <option value="super_admin">Super Admin</option>
+            <option value="admin">Admin</option>
+            <option value="org_admin">Organization Admin</option>
+            <option value="operator">Operator</option>
+            <option value="analyst">Analyst</option>
+            <option value="support">Support Agent</option>
+          </select>
+          <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
+            {role === 'super_admin' ? 'Full access to all organizations and sites' :
+             role === 'admin' ? 'Full access within assigned organizations' :
+             role === 'org_admin' ? 'Manage users and sites within their org' :
+             role === 'operator' ? 'Operate and monitor assigned sites' :
+             role === 'analyst' ? 'Read-only analytics and reports' : 'Customer support workflows'}
+          </p>
+        </label>
+        <label className="block text-sm">
+          <span className={labelCls}>Organization</span>
+          <input placeholder="Organization name" value={org} onChange={(e) => setOrg(e.target.value)} className={inputCls} />
+          <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">Org admins can only assign their own org</p>
+        </label>
+        <label className="block text-sm">
+          <span className={labelCls}>Privilege</span>
+          <select value={privilege} onChange={(e) => setPrivilege(e.target.value)} className={selectCls}>
+            <option value="read">Read Only</option>
+            <option value="read_write">Read & Write</option>
+            <option value="admin">Full Admin</option>
+          </select>
+        </label>
+      </div>
+
+      {/* Site access */}
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 mb-4">
+        <label className="block text-sm">
+          <span className={labelCls}>Site Access</span>
+          <select value={siteAccess} onChange={(e) => setSiteAccess(e.target.value)} className={selectCls}>
+            <option value="all">All sites in organization</option>
+            <option value="selected">Selected sites only</option>
+          </select>
+        </label>
+        {siteAccess === 'selected' && (
+          <label className="block text-sm">
+            <span className={labelCls}>Sites</span>
+            <input placeholder="Site names or IDs (comma-separated)" value={selectedSites} onChange={(e) => setSelectedSites(e.target.value)} className={inputCls} />
+          </label>
+        )}
+      </div>
+
+      <PrimaryButton disabled={!email.trim()} onClick={() => onSubmit({ email: email.trim(), firstName, lastName })}>Create & Invite</PrimaryButton>
     </div>
   );
 }
