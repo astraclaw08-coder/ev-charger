@@ -306,6 +306,16 @@ export default function LoadManagement() {
   const stateByChargerId = Object.fromEntries(states.map((s) => [s.chargerId, s]));
   const profileById = Object.fromEntries(profiles.map((p) => [p.id, p]));
 
+  /** Convert "HH:MM" (24h) to "h:MM AM/PM" (12h) */
+  function to12h(time24: string): string {
+    const [hStr, mStr] = time24.split(':');
+    let h = parseInt(hStr, 10);
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    if (h === 0) h = 12;
+    else if (h > 12) h -= 12;
+    return `${h}:${mStr} ${ampm}`;
+  }
+
   function formatSchedule(schedule: unknown): string {
     if (!Array.isArray(schedule) || schedule.length === 0) return 'No time windows';
     const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -322,7 +332,7 @@ export default function LoadManagement() {
         const days = localDays.length > 0
           ? localDays.map((d) => dayNames[d] ?? `D${d}`).join(',')
           : 'All days';
-        return `${days} ${localStart}-${localEnd} @ ${win.limitKw ?? '?'}kW`;
+        return `${days} ${to12h(localStart)}-${to12h(localEnd)} @ ${win.limitKw ?? '?'}kW`;
       })
       .join(' · ');
   }
@@ -375,7 +385,7 @@ export default function LoadManagement() {
         const local = fromUtcSchedule(first);
         const allDays = Array.isArray(first.daysOfWeek) && first.daysOfWeek.length === 7;
         const dayText = allDays ? 'daily' : 'scheduled';
-        return `${first.limitKw} kW ${dayText} ${local.start}–${local.end} (local)`;
+        return `${first.limitKw} kW ${dayText} ${to12h(local.start)}–${to12h(local.end)}`;
       }
     }
     if (profile.defaultLimitKw != null) return `${profile.defaultLimitKw} kW always`;
@@ -415,7 +425,7 @@ export default function LoadManagement() {
       const allDays = Array.isArray(first.daysOfWeek) && first.daysOfWeek.length === 7;
       return {
         title: `${first.limitKw ?? profile.defaultLimitKw ?? '?'} kW`,
-        detail: `${local.start} - ${local.end} (${allDays ? 'daily' : 'scheduled'})`,
+        detail: `${to12h(local.start)} - ${to12h(local.end)} (${allDays ? 'daily' : 'scheduled'})`,
       };
     }
     if (profile.defaultLimitKw != null) return { title: `${profile.defaultLimitKw} kW`, detail: 'always' };
@@ -496,7 +506,7 @@ export default function LoadManagement() {
             const days = (w.daysOfWeek ?? []).length === 7 ? 'Daily' : `${(w.daysOfWeek ?? []).length} days/wk`;
             const localStart = w.startTime ? utcTimeToLocal(w.startTime).time : w.startTime;
             const localEnd = w.endTime ? utcTimeToLocal(w.endTime).time : w.endTime;
-            return `${localStart}–${localEnd} ${days} @ ${w.limitKw} kW`;
+            return `${to12h(localStart)}–${to12h(localEnd)} ${days} @ ${w.limitKw} kW`;
           }).join('; ') || (p.defaultLimitKw != null ? `${p.defaultLimitKw} kW always` : 'No schedule');
 
           // Determine status
