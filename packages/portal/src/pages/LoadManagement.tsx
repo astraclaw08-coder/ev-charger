@@ -33,6 +33,25 @@ function ScopePill({ scope }: { scope: Scope }) {
   );
 }
 
+function RecommendedFlow() {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="rounded-xl border border-gray-300 dark:border-slate-700 px-5 py-3">
+      <button type="button" onClick={() => setOpen((v) => !v)} className="flex w-full items-center justify-between text-left">
+        <h2 className="text-sm font-semibold text-gray-900 dark:text-slate-100">Recommended flow</h2>
+        <span className="text-xs text-gray-400 dark:text-slate-500">{open ? '▲' : '▼'}</span>
+      </button>
+      {open && (
+        <ol className="mt-2 list-decimal space-y-1 pl-5 text-xs text-gray-700 dark:text-slate-300">
+          <li>Create a <strong>charger group</strong> for a site and assign chargers to it.</li>
+          <li>Create one <strong>group-scoped load profile</strong> with default cap + optional time window cap.</li>
+          <li>Use <strong>Re-push</strong> to apply immediately, then verify in Active Limits.</li>
+        </ol>
+      )}
+    </div>
+  );
+}
+
 export default function LoadManagement() {
   const getToken = useToken();
   const [loading, setLoading] = useState(true);
@@ -430,14 +449,7 @@ export default function LoadManagement() {
         <p className="text-sm text-gray-500 dark:text-slate-400">Control power limits per charger, group, or site using OCPP smart charging profiles.</p>
       </div>
 
-      <div className="rounded-xl border border-blue-300 bg-blue-50 px-5 py-4 dark:border-blue-700 dark:bg-blue-900/20">
-        <h2 className="text-sm font-semibold text-gray-900 dark:text-slate-100">Recommended flow</h2>
-        <ol className="mt-2 list-decimal space-y-1 pl-5 text-xs text-gray-700 dark:text-slate-300">
-          <li>Create a <strong>charger group</strong> for a site and assign chargers to it.</li>
-          <li>Create one <strong>group-scoped load profile</strong> with default cap + optional time window cap.</li>
-          <li>Use <strong>Re-push</strong> to apply immediately, then verify in Active Limits.</li>
-        </ol>
-      </div>
+      <RecommendedFlow />
 
       {/* Active Limits — derived from all enabled profiles with charger/group/site assignments */}
       {(() => {

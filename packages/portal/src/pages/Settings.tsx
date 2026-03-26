@@ -144,76 +144,14 @@ function SecondaryButton({ children, ...props }: React.ButtonHTMLAttributes<HTML
 
 // ─── Tab: Users ───────────────────────────────────────────────────────────────
 function UsersTab() {
-  const [showCreate, setShowCreate] = useState(false);
-
   return (
-    <div className="space-y-6">
-      <SectionCard
-        title="Users"
-        description="Manage user accounts, roles, and access levels."
-        actions={<PrimaryButton onClick={() => setShowCreate((v) => !v)}>+ User</PrimaryButton>}
-      >
-        {showCreate && (
-          <div className="mb-6 rounded-lg border border-brand-200 dark:border-brand-700 bg-brand-50/30 dark:bg-brand-900/10 p-4">
-            <UserInviteForm onClose={() => setShowCreate(false)} />
-          </div>
-        )}
-        <UserManagement />
-      </SectionCard>
-    </div>
-  );
-}
-
-function UserInviteForm({ onClose }: { onClose: () => void }) {
-  const [form, setForm] = useState({
-    email: '', firstName: '', lastName: '', role: 'operator',
-    organization: '', portfolio: '', siteAccess: 'all', selectedSites: '', privilege: 'read',
-  });
-
-  const roles = [
-    { value: 'super_admin', label: 'Super Admin' },
-    { value: 'admin', label: 'Admin' },
-    { value: 'org_admin', label: 'Org Admin' },
-    { value: 'operator', label: 'Operator' },
-    { value: 'analyst', label: 'Analyst' },
-    { value: 'support', label: 'Support' },
-  ];
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h4 className="text-sm font-semibold text-gray-900 dark:text-slate-100">New User</h4>
-        <button onClick={onClose} className="text-xs text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200">Cancel</button>
-      </div>
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-        <FieldRow label="Email"><Input type="email" placeholder="user@company.com" value={form.email} onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))} /></FieldRow>
-        <FieldRow label="First Name"><Input placeholder="Jane" value={form.firstName} onChange={(e) => setForm((p) => ({ ...p, firstName: e.target.value }))} /></FieldRow>
-        <FieldRow label="Last Name"><Input placeholder="Smith" value={form.lastName} onChange={(e) => setForm((p) => ({ ...p, lastName: e.target.value }))} /></FieldRow>
-        <FieldRow label="Role">
-          <select className="w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100" value={form.role} onChange={(e) => setForm((p) => ({ ...p, role: e.target.value }))}>
-            {roles.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
-          </select>
-        </FieldRow>
-      </div>
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-        <FieldRow label="Organization"><Input placeholder="Org name" value={form.organization} onChange={(e) => setForm((p) => ({ ...p, organization: e.target.value }))} /></FieldRow>
-        <FieldRow label="Portfolio"><Input placeholder="Portfolio (optional)" value={form.portfolio} onChange={(e) => setForm((p) => ({ ...p, portfolio: e.target.value }))} /></FieldRow>
-        <FieldRow label="Site Access">
-          <select className="w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100" value={form.siteAccess} onChange={(e) => setForm((p) => ({ ...p, siteAccess: e.target.value }))}>
-            <option value="all">All org sites</option><option value="selected">Selected sites</option>
-          </select>
-        </FieldRow>
-        <FieldRow label="Privilege">
-          <select className="w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100" value={form.privilege} onChange={(e) => setForm((p) => ({ ...p, privilege: e.target.value }))}>
-            <option value="read">Read Only</option><option value="read_write">Read & Write</option><option value="admin">Full Admin</option>
-          </select>
-        </FieldRow>
-      </div>
-      {form.siteAccess === 'selected' && (
-        <FieldRow label="Selected Sites"><Input placeholder="Comma-separated site IDs or names" value={form.selectedSites} onChange={(e) => setForm((p) => ({ ...p, selectedSites: e.target.value }))} /></FieldRow>
-      )}
-      <PrimaryButton disabled={!form.email.trim() || !form.firstName.trim()}>Create User</PrimaryButton>
-    </div>
+    <SectionCard
+      title="Users"
+      description="Manage user accounts, roles, organizations, and access levels."
+      actions={<PrimaryButton>+ User</PrimaryButton>}
+    >
+      <UserManagement />
+    </SectionCard>
   );
 }
 

@@ -159,7 +159,7 @@ export default function NetworkOps() {
               <div key={c.id} className="rounded-md border border-gray-300 dark:border-slate-700 p-3">
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-medium text-gray-900 dark:text-slate-100">{c.ocppId}</p>
-                  <span className={`rounded-full px-2 py-0.5 text-xs ${c.status==='ONLINE'?'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400':c.status==='DEGRADED'?'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400':c.status==='OFFLINE'?'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400':'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'}`}>{c.status}</span>
+                  <span className={`text-xs font-semibold ${c.status==='ONLINE'?'text-green-600 dark:text-green-400':c.status==='DEGRADED'?'text-amber-600 dark:text-amber-400':c.status==='OFFLINE'?'text-slate-500 dark:text-slate-400':'text-red-600 dark:text-red-400'}`}>{c.status}</span>
                 </div>
                 <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">Last heartbeat: {c.lastHeartbeat ? new Date(c.lastHeartbeat).toLocaleString() : 'never'}</p>
                 {c.status === 'DEGRADED' && (

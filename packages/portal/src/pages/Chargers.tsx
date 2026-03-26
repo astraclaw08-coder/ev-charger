@@ -144,29 +144,29 @@ export default function Chargers() {
 
 function StatusPill({ status }: { status: ChargerListItem['status'] }) {
   const cls = status === 'ONLINE'
-    ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+    ? 'text-green-600 dark:text-green-400'
     : status === 'DEGRADED'
-      ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400'
+      ? 'text-amber-600 dark:text-amber-400'
       : status === 'OFFLINE'
-        ? 'bg-slate-200 text-slate-700'
-        : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400';
+        ? 'text-slate-500 dark:text-slate-400'
+        : 'text-red-600 dark:text-red-400';
 
-  return <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${cls}`}>{status}</span>;
+  return <span className={`text-xs font-semibold ${cls}`}>{status}</span>;
 }
 
 function Stat({ label, value, tone = 'default' }: { label: string; value: number; tone?: 'default' | 'green' | 'amber' | 'slate' | 'red' }) {
   const toneClass = tone === 'green'
-    ? 'text-green-700'
+    ? 'text-green-600 dark:text-green-400'
     : tone === 'amber'
-      ? 'text-amber-700'
+      ? 'text-amber-600 dark:text-amber-400'
       : tone === 'slate'
-        ? 'text-slate-700'
+        ? 'text-slate-500 dark:text-slate-400'
         : tone === 'red'
-          ? 'text-red-700'
+          ? 'text-red-600 dark:text-red-400'
           : 'text-gray-900 dark:text-slate-100';
 
   return (
-    <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+    <div className="rounded-xl border border-gray-300 dark:border-slate-700 p-4">
       <p className="text-xs text-gray-500 dark:text-slate-400">{label}</p>
       <p className={`mt-1 text-xl font-semibold ${toneClass}`}>{value}</p>
     </div>
