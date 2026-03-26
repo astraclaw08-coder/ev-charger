@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { createApiClient, type AdminAuditEvent, type ChargerModelCatalogItem, type OperatorNotificationPreference, type PortalSettings } from '../api/client';
 import { useToken } from '../auth/TokenContext';
 import UserManagement from './UserManagement';
-import SiteRoleAssignment from './SiteRoleAssignment';
 import { cn } from '../lib/utils';
 import { usePortalTheme } from '../theme/ThemeContext';
 import { usePasswordAuth } from '../auth/PasswordAuthContext';
@@ -43,14 +42,14 @@ const EMPTY_ORG: OrgDraft = {
 };
 
 const ADMIN_TABS = [
-  { id: 'users', label: 'Users & Permissions' },
+  { id: 'users', label: 'Users' },
   { id: 'organizations', label: 'Organizations' },
   { id: 'notifications', label: 'Notifications' },
-  { id: 'audit', label: 'Audit Log' },
-  { id: 'api', label: 'API Keys & Integrations' },
-  { id: 'billing', label: 'Billing & Remittance' },
+  { id: 'audit', label: 'Audit' },
+  { id: 'api', label: 'Integrations' },
+  { id: 'billing', label: 'Billing' },
   { id: 'security', label: 'Security' },
-  { id: 'charger-models', label: 'Charger Models' },
+  { id: 'charger-models', label: 'Chargers' },
 ] as const;
 
 type TabId = (typeof ADMIN_TABS)[number]['id'];
@@ -82,8 +81,8 @@ function TabButton({ label, active, onClick }: { label: string; active: boolean;
       className={cn(
         'rounded-lg px-3 py-2 text-sm font-medium transition',
         active
-          ? 'bg-brand-50 text-brand-700 dark:bg-brand-500/20 dark:text-brand-200'
-          : 'bg-white dark:bg-slate-900 text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800 hover:text-gray-900 dark:hover:text-slate-100',
+          ? 'bg-gray-100 text-gray-900 dark:bg-brand-500/20 dark:text-brand-200'
+          : 'bg-white dark:bg-slate-900 text-gray-500 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800 hover:text-gray-900 dark:hover:text-slate-100',
       )}
     >
       {label}
@@ -143,16 +142,126 @@ function SecondaryButton({ children, ...props }: React.ButtonHTMLAttributes<HTML
   );
 }
 
-// ─── Tab: Users & Permissions ─────────────────────────────────────────────────
+// ─── Tab: Users ───────────────────────────────────────────────────────────────
 function UsersTab() {
   return (
     <div className="space-y-6">
-      <SectionCard title="User Management" description="Add, edit, and manage user accounts and credentials.">
+      <SectionCard title="User Management" description="Add, edit, and manage user accounts, access levels, and site assignments.">
         <UserManagement />
       </SectionCard>
-      <SectionCard title="Site Role Assignments" description="Assign or remove stackable per-site roles across all sites.">
-        <SiteRoleAssignment />
+      <SectionCard title="Invite / Create User" description="Create a new user with organization, portfolio, site access, and privilege assignment.">
+        <UserInviteForm />
       </SectionCard>
+    </div>
+  );
+}
+
+function UserInviteForm() {
+  const [form, setForm] = useState({
+    email: '',
+    firstName: '',
+    lastName: '',
+    role: 'operator',
+    organization: '',
+    portfolio: '',
+    siteAccess: 'all', // 'all' | 'selected'
+    selectedSites: '',
+    privilege: 'read',  // 'read' | 'read_write' | 'admin'
+  });
+
+  const roles = [
+    { value: 'super_admin', label: 'Super Admin', description: 'Full platform access across all organizations' },
+    { value: 'admin', label: 'Admin', description: 'Full access within assigned organizations' },
+    { value: 'org_admin', label: 'Organization Admin', description: 'Manage users and sites within their organization' },
+    { value: 'operator', label: 'Operator', description: 'Operate and monitor assigned sites/chargers' },
+    { value: 'analyst', label: 'Analyst', description: 'Read-only access to analytics and reports' },
+    { value: 'support', label: 'Support Agent', description: 'Customer support workflows only' },
+  ];
+
+  const privileges = [
+    { value: 'read', label: 'Read Only', description: 'View dashboards, reports, and charger status' },
+    { value: 'read_write', label: 'Read & Write', description: 'View + manage chargers, sessions, pricing' },
+    { value: 'admin', label: 'Full Admin', description: 'All permissions including user management' },
+  ];
+
+  return (
+    <div className="space-y-5">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <FieldRow label="Email">
+          <Input type="email" placeholder="user@company.com" value={form.email} onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))} />
+        </FieldRow>
+        <FieldRow label="First Name">
+          <Input placeholder="Jane" value={form.firstName} onChange={(e) => setForm((p) => ({ ...p, firstName: e.target.value }))} />
+        </FieldRow>
+        <FieldRow label="Last Name">
+          <Input placeholder="Smith" value={form.lastName} onChange={(e) => setForm((p) => ({ ...p, lastName: e.target.value }))} />
+        </FieldRow>
+        <FieldRow label="Role">
+          <select
+            className="w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100"
+            value={form.role}
+            onChange={(e) => setForm((p) => ({ ...p, role: e.target.value }))}
+          >
+            {roles.map((r) => (
+              <option key={r.value} value={r.value}>{r.label}</option>
+            ))}
+          </select>
+          <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">{roles.find((r) => r.value === form.role)?.description}</p>
+        </FieldRow>
+      </div>
+
+      <div className="border-t border-gray-100 dark:border-slate-800 pt-4">
+        <h4 className="text-xs font-semibold text-gray-700 dark:text-slate-300 uppercase tracking-wide mb-3">Access Scope</h4>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <FieldRow label="Organization">
+            <Input placeholder="Organization name or ID" value={form.organization} onChange={(e) => setForm((p) => ({ ...p, organization: e.target.value }))} />
+            <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">Org admins can only assign their own organization.</p>
+          </FieldRow>
+          <FieldRow label="Portfolio">
+            <Input placeholder="Portfolio name (optional)" value={form.portfolio} onChange={(e) => setForm((p) => ({ ...p, portfolio: e.target.value }))} />
+          </FieldRow>
+          <FieldRow label="Site Access">
+            <select
+              className="w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100"
+              value={form.siteAccess}
+              onChange={(e) => setForm((p) => ({ ...p, siteAccess: e.target.value }))}
+            >
+              <option value="all">All sites in organization</option>
+              <option value="selected">Selected sites only</option>
+            </select>
+          </FieldRow>
+          {form.siteAccess === 'selected' && (
+            <FieldRow label="Selected Sites">
+              <Input placeholder="Comma-separated site IDs or names" value={form.selectedSites} onChange={(e) => setForm((p) => ({ ...p, selectedSites: e.target.value }))} />
+            </FieldRow>
+          )}
+        </div>
+      </div>
+
+      <div className="border-t border-gray-100 dark:border-slate-800 pt-4">
+        <h4 className="text-xs font-semibold text-gray-700 dark:text-slate-300 uppercase tracking-wide mb-3">Privileges</h4>
+        <div className="space-y-2">
+          {privileges.map((p) => (
+            <label key={p.value} className="flex items-start gap-3 cursor-pointer rounded-lg border border-gray-100 dark:border-slate-800 bg-gray-50 dark:bg-slate-800/40 px-4 py-3">
+              <input
+                type="radio"
+                name="user-privilege"
+                checked={form.privilege === p.value}
+                onChange={() => setForm((prev) => ({ ...prev, privilege: p.value }))}
+                className="mt-0.5 h-4 w-4 border-gray-300 dark:border-slate-600 text-brand-600"
+              />
+              <div>
+                <p className="text-sm font-medium text-gray-900 dark:text-slate-100">{p.label}</p>
+                <p className="text-xs text-gray-500 dark:text-slate-400">{p.description}</p>
+              </div>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      <div className="pt-2">
+        <PrimaryButton disabled={!form.email.trim() || !form.firstName.trim()}>Create User</PrimaryButton>
+      </div>
     </div>
   );
 }
