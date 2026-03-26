@@ -48,6 +48,33 @@ function ensureDirs() {
   fs.mkdirSync(path.dirname(LOG_FILE), { recursive: true });
 }
 
+function runDockerCompose(args) {
+  return new Promise((resolve) => {
+    const child = spawn('docker', ['compose', ...args], {
+      cwd: ROOT,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...process.env, FORCE_COLOR: '0' },
+    });
+
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (d) => { stdout += d.toString('utf8'); });
+    child.stderr.on('data', (d) => { stderr += d.toString('utf8'); });
+    child.on('exit', (code) => resolve({ code: code || 0, stdout, stderr }));
+    child.on('error', (error) => resolve({ code: 1, stdout, stderr: error.message }));
+  });
+}
+
+async function ensureInfra() {
+  log('infra: ensuring docker services (postgres, keycloak, pgadmin)');
+  const result = await runDockerCompose(['up', '-d', 'postgres', 'keycloak', 'pgadmin']);
+  if (result.stdout.trim()) fs.appendFileSync(LOG_FILE, `[${now()}] infra: ${result.stdout.trim()}\n`);
+  if (result.stderr.trim()) fs.appendFileSync(LOG_FILE, `[${now()}] infra [err]: ${result.stderr.trim()}\n`);
+  if (result.code !== 0) {
+    throw new Error(`docker compose up failed: ${result.stderr || result.stdout || `exit ${result.code}`}`);
+  }
+}
+
 function now() {
   return new Date().toISOString();
 }
@@ -327,6 +354,7 @@ class Supervisor {
     ensureDirs();
     fs.writeFileSync(PID_FILE, String(process.pid));
     log(`supervisor: started pid=${process.pid}`);
+    await ensureInfra();
     for (const name of Object.keys(SERVICES)) this.spawnService(name);
     this.startControlServer();
     this.healthLoop();

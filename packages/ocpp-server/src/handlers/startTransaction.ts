@@ -1,4 +1,4 @@
-import { prisma } from '@ev-charger/shared';
+import { prisma, resolveTouRateAt } from '@ev-charger/shared';
 import { enqueueOcppEvent } from '../outbox';
 import type { StartTransactionRequest, StartTransactionResponse } from '@ev-charger/shared';
 
@@ -28,7 +28,13 @@ export async function handleStartTransaction(
         charger: {
           include: {
             site: {
-              select: { pricePerKwhUsd: true },
+              select: {
+                pricingMode: true,
+                pricePerKwhUsd: true,
+                idleFeePerMinUsd: true,
+                touWindows: true,
+                timeZone: true,
+              },
             },
           },
         },
@@ -58,6 +64,14 @@ export async function handleStartTransaction(
   for (let attempt = 1; attempt <= TX_ID_MAX_ATTEMPTS; attempt++) {
     transactionId = randomFiveDigitTransactionId();
     try {
+      const resolvedRate = resolveTouRateAt({
+        at: timestamp,
+        pricingMode: connector.charger.site.pricingMode,
+        defaultPricePerKwhUsd: connector.charger.site.pricePerKwhUsd ?? DEFAULT_RATE_PER_KWH,
+        defaultIdleFeePerMinUsd: connector.charger.site.idleFeePerMinUsd ?? 0,
+        touWindows: connector.charger.site.touWindows,
+        timeZone: connector.charger.site.timeZone ?? 'America/Los_Angeles',
+      });
       session = await prisma.session.create({
         data: {
           connectorId: connector.id,
@@ -66,7 +80,7 @@ export async function handleStartTransaction(
           idTag,
           startedAt: new Date(timestamp),
           meterStart,
-          ratePerKwh: connector.charger.site.pricePerKwhUsd ?? DEFAULT_RATE_PER_KWH,
+          ratePerKwh: resolvedRate.pricePerKwhUsd,
           status: 'ACTIVE',
         },
       });
@@ -83,7 +97,7 @@ export async function handleStartTransaction(
   }
 
   // Mark connector as Charging and enqueue OCPP event for downstream processing.
-  await prisma.$transaction(async (tx) => {
+  await prisma.$transaction(async (tx: any) => {
     await tx.connector.update({
       where: { id: connector.id },
       data: { status: 'CHARGING' },

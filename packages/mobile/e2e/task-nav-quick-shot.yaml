@@ -1,0 +1,5 @@
+appId: dev.evcharger.app.dev
+---
+- launchApp:
+    clearState: false
+- takeScreenshot: "nav-quick-shot"

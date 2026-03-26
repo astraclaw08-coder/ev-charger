@@ -17,6 +17,26 @@ services:
       timeout: 5s
       retries: 5
 
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0.3
+    container_name: ev-charger-keycloak
+    restart: unless-stopped
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_HTTP_ENABLED: "true"
+    ports:
+      - "8090:8080"
+    volumes:
+      - keycloak_data:/opt/keycloak/data
+      - ./scripts/auth/keycloak-dev-import.json:/opt/keycloak/data/import/keycloak-dev-import.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8080"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
   pgadmin:
     image: dpage/pgadmin4:latest
     container_name: ev-charger-pgadmin
@@ -34,4 +54,5 @@ services:
 
 volumes:
   postgres_data:
+  keycloak_data:
   pgadmin_data:

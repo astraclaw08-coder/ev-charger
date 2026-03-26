@@ -360,6 +360,7 @@
 			baseConfigurationReference = C5CF8CA6CBA2A30BD4B67B83 /* Pods-EVCharger.debug.xcconfig */;
 			buildSettings = {
 				APP_URL_SCHEME = "evcharger-dev";
+				GOOGLE_MAPS_API_KEY_IOS = "AIzaSyBd1Z3B7M3Bk88uk731vuMd26s_C-YDzXw";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = EVCharger/EVCharger.entitlements;
@@ -370,7 +371,7 @@
 					"FB_SONARKIT_ENABLED=1",
 				);
 				INFOPLIST_FILE = EVCharger/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "EVCharger Dev";
+				INFOPLIST_KEY_CFBundleDisplayName = "Lumeo Dev";
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -383,8 +384,8 @@
 					"-lc++",
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_DEBUG";
-				PRODUCT_BUNDLE_IDENTIFIER = dev.evcharger.app.dev;
-				PRODUCT_NAME = "EVCharger Dev";
+				PRODUCT_BUNDLE_IDENTIFIER = dev.evcharger.app.lumeodev;
+				PRODUCT_NAME = "Lumeo Dev";
 				SWIFT_OBJC_BRIDGING_HEADER = "EVCharger/EVCharger-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
@@ -398,12 +399,13 @@
 			baseConfigurationReference = 24E0822A9ED9788FFCF00976 /* Pods-EVCharger.release.xcconfig */;
 			buildSettings = {
 				APP_URL_SCHEME = evcharger;
+				GOOGLE_MAPS_API_KEY_IOS = "AIzaSyDyeqOzqFAykdeKzLkK_rZA-_iIUK21LxE";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = EVCharger/EVCharger.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
 				INFOPLIST_FILE = EVCharger/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "EVCharger RC";
+				INFOPLIST_KEY_CFBundleDisplayName = "Lumeo RC";
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -416,8 +418,8 @@
 					"-lc++",
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_RELEASE";
-				PRODUCT_BUNDLE_IDENTIFIER = dev.evcharger.app.rc;
-				PRODUCT_NAME = "EVCharger RC";
+				PRODUCT_BUNDLE_IDENTIFIER = rc.evcharger.app;
+				PRODUCT_NAME = "Lumeo RC";
 				SWIFT_OBJC_BRIDGING_HEADER = "EVCharger/EVCharger-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";

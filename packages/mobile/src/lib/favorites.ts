@@ -57,7 +57,15 @@ async function ensureMigratedIfNeeded() {
 
   const localFavorites = await readLegacyFavorites();
   if (localFavorites.length > 0) {
-    await api.favorites.replace(localFavorites);
+    // Non-destructive migration: merge legacy entries into server favorites.
+    // Avoid replace() here because legacy IDs may include old/non-canonical values.
+    for (const chargerId of localFavorites) {
+      try {
+        await api.favorites.add(chargerId);
+      } catch {
+        // ignore invalid/stale legacy IDs
+      }
+    }
   }
 
   await AsyncStorage.setItem(key, '1');
@@ -120,20 +128,17 @@ export async function toggleFavorite(id: string): Promise<boolean> {
   const favorites = await getFavorites();
   const alreadyFavorite = favorites.includes(chargerId);
 
-  try {
-    if (alreadyFavorite) {
-      await api.favorites.remove(chargerId);
-      const next = favorites.filter((x) => x !== chargerId);
-      await writeCachedFavorites(next);
-      return false;
-    }
-    await api.favorites.add(chargerId);
-    const next = sanitizeIds([...favorites, chargerId]);
+  if (alreadyFavorite) {
+    await api.favorites.remove(chargerId);
+    const next = favorites.filter((x) => x !== chargerId);
     await writeCachedFavorites(next);
-    return true;
-  } catch {
-    return alreadyFavorite;
+    return false;
   }
+
+  await api.favorites.add(chargerId);
+  const next = sanitizeIds([...favorites, chargerId]);
+  await writeCachedFavorites(next);
+  return true;
 }
 
 export async function clearFavorites(): Promise<void> {

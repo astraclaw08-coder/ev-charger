@@ -4,7 +4,7 @@ import { Buffer } from 'buffer';
 const API_URL =
   (Constants.expoConfig?.extra?.apiUrl as string | undefined) ||
   process.env.EXPO_PUBLIC_API_URL ||
-  'http://localhost:3001';
+  'http://127.0.0.1:3001';
 
 export const appEnv =
   ((Constants.expoConfig?.extra?.appEnv as string | undefined) || process.env.APP_ENV || 'dev').toLowerCase();
@@ -169,12 +169,57 @@ export interface Session {
   ratePerKwh: number | null;
   startedAt: string;
   endedAt: string | null;
+  plugInAt?: string | null;
+  plugOutAt?: string | null;
   costEstimateCents?: number | null;
   estimatedAmountCents?: number | null;
   effectiveAmountCents?: number | null;
   amountState?: 'FINAL' | 'PENDING' | 'ESTIMATED' | 'UNAVAILABLE';
   amountLabel?: string;
   isAmountFinal?: boolean;
+  billingBreakdown?: {
+    pricingMode: 'flat' | 'tou';
+    durationMinutes: number;
+    gracePeriodMin: number;
+    energy: {
+      kwhDelivered: number;
+      totalUsd: number;
+      segments: Array<{
+        startedAt: string;
+        endedAt: string;
+        minutes: number;
+        source: 'flat' | 'tou';
+        pricePerKwhUsd: number;
+        idleFeePerMinUsd: number;
+        kwh: number;
+        energyAmountUsd: number;
+        idleMinutes: number;
+        idleAmountUsd: number;
+      }>;
+    };
+    idle: {
+      minutes: number;
+      totalUsd: number;
+      segments: Array<{
+        startedAt: string;
+        endedAt: string;
+        minutes: number;
+        idleFeePerMinUsd: number;
+        amountUsd: number;
+        source: 'flat' | 'tou';
+      }>;
+    };
+    activation: { totalUsd: number };
+    grossTotalUsd: number;
+    totals?: {
+      energyUsd: number;
+      idleUsd: number;
+      activationUsd: number;
+      grossUsd: number;
+      vendorFeeUsd: number;
+      netUsd: number;
+    };
+  };
   connector: {
     connectorId: number;
     charger: {
@@ -270,6 +315,7 @@ export interface EnrichedTransaction {
   amountState?: 'FINAL' | 'PENDING' | 'ESTIMATED' | 'UNAVAILABLE';
   amountLabel?: string;
   isAmountFinal?: boolean;
+  billingBreakdown?: Session['billingBreakdown'];
   meterStart: number | null;
   meterStop: number | null;
   site: { id: string; name: string };

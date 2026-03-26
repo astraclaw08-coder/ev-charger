@@ -3,6 +3,47 @@ import { remoteClearChargingProfile, remoteSetChargingProfile } from './remote';
 
 const SAFE_LIMIT_KW = Number(process.env.SMART_CHARGING_SAFE_LIMIT_KW ?? '7.2') || 7.2;
 const STACK_LEVEL = Number.parseInt(process.env.SMART_CHARGING_STACK_LEVEL ?? '50', 10) || 50;
+const MIN_HEARTBEATS_AFTER_BOOT = Number.parseInt(process.env.SMART_CHARGING_MIN_HEARTBEATS_AFTER_BOOT ?? '1', 10) || 1;
+const MIN_SECONDS_AFTER_BOOT = Number.parseInt(process.env.SMART_CHARGING_MIN_SECONDS_AFTER_BOOT ?? '0', 10) || 0;
+
+async function connectionReadyForSmartCharging(chargerId: string): Promise<{ ready: boolean; reason: string }> {
+  const latestBoot = await prisma.ocppEventOutbox.findFirst({
+    where: { chargerId, eventType: 'BootNotification' },
+    orderBy: { createdAt: 'desc' },
+    select: { createdAt: true },
+  });
+
+  if (!latestBoot) {
+    return { ready: false, reason: 'No BootNotification observed yet' };
+  }
+
+  const heartbeatCount = await prisma.ocppEventOutbox.count({
+    where: {
+      chargerId,
+      eventType: 'Heartbeat',
+      createdAt: { gte: latestBoot.createdAt },
+    },
+  });
+
+  if (heartbeatCount < MIN_HEARTBEATS_AFTER_BOOT) {
+    return {
+      ready: false,
+      reason: `Waiting for heartbeat gate (${heartbeatCount}/${MIN_HEARTBEATS_AFTER_BOOT}) after boot`,
+    };
+  }
+
+  if (MIN_SECONDS_AFTER_BOOT > 0) {
+    const ageSec = Math.floor((Date.now() - latestBoot.createdAt.getTime()) / 1000);
+    if (ageSec < MIN_SECONDS_AFTER_BOOT) {
+      return {
+        ready: false,
+        reason: `Waiting for boot settle window (${ageSec}/${MIN_SECONDS_AFTER_BOOT}s)`,
+      };
+    }
+  }
+
+  return { ready: true, reason: 'Connection gate satisfied (boot + heartbeat)' };
+}
 
 function toProfileLike(profile: any): SmartChargingProfileLike {
   return {
@@ -105,9 +146,12 @@ function buildConstantPayload(limitKw: number, profile?: SmartChargingProfileLik
 export async function applySmartChargingForCharger(chargerId: string, trigger: string): Promise<void> {
   const charger = await prisma.charger.findUnique({
     where: { id: chargerId },
-    select: { id: true, ocppId: true, siteId: true, groupId: true, status: true },
+    select: { id: true, ocppId: true, siteId: true, groupId: true, status: true, site: { select: { timeZone: true } } },
   });
   if (!charger) return;
+
+  const siteTimeZone = (charger as any).site?.timeZone ?? 'America/Los_Angeles';
+  console.log(`[SmartCharging] apply attempt for ${charger.ocppId} trigger=${trigger} status=${charger.status} tz=${siteTimeZone}`);
 
   const [chargerProfiles, groupProfiles, siteProfiles] = await Promise.all([
     prisma.smartChargingProfile.findMany({ where: { scope: 'CHARGER', chargerId, enabled: true }, orderBy: [{ priority: 'desc' }, { updatedAt: 'desc' }] }),
@@ -121,6 +165,7 @@ export async function applySmartChargingForCharger(chargerId: string, trigger: s
     chargerProfiles: chargerProfiles.map(toProfileLike),
     groupProfiles: groupProfiles.map(toProfileLike),
     siteProfiles: siteProfiles.map(toProfileLike),
+    timeZone: siteTimeZone,
     fallbackLimitKw: SAFE_LIMIT_KW,
   });
 
@@ -128,30 +173,61 @@ export async function applySmartChargingForCharger(chargerId: string, trigger: s
   let lastError: string | null = null;
   let lastAppliedAt: Date | null = null;
 
+  const existingState = await prisma.smartChargingState.findUnique({
+    where: { chargerId: charger.id },
+    select: { effectiveLimitKw: true, sourceProfileId: true, status: true, lastAppliedAt: true },
+  });
+
   if (charger.status === 'ONLINE') {
-    const allProfiles = [...chargerProfiles, ...groupProfiles, ...siteProfiles].map(toProfileLike);
-    const sourceProfile = resolution.sourceProfileId
-      ? allProfiles.find((p) => p.id === resolution.sourceProfileId)
-      : undefined;
-
-    const payload = sourceProfile
-      ? (buildRecurringWeeklyPayload(sourceProfile, resolution.effectiveLimitKw, new Date()) ?? buildConstantPayload(resolution.effectiveLimitKw, sourceProfile))
-      : buildConstantPayload(resolution.effectiveLimitKw);
-
-    // Avoid stale constraints from previous pushes at same stack/purpose.
-    await remoteClearChargingProfile(charger.ocppId, {
-      connectorId: 0,
-      chargingProfilePurpose: 'ChargePointMaxProfile',
-      stackLevel: STACK_LEVEL,
-    });
-
-    const ocppStatus = await remoteSetChargingProfile(charger.ocppId, payload);
-    if (ocppStatus === 'Accepted') {
-      status = resolution.fallbackApplied ? 'FALLBACK_APPLIED' : 'APPLIED';
-      lastAppliedAt = new Date();
+    const readiness = await connectionReadyForSmartCharging(charger.id);
+    if (!readiness.ready) {
+      status = 'PENDING_OFFLINE';
+      lastError = readiness.reason;
     } else {
-      status = 'ERROR';
-      lastError = `SetChargingProfile rejected (${ocppStatus})`;
+      const allProfiles = [...chargerProfiles, ...groupProfiles, ...siteProfiles].map(toProfileLike);
+      const sourceProfile = resolution.sourceProfileId
+        ? allProfiles.find((p) => p.id === resolution.sourceProfileId)
+        : undefined;
+
+      // If no matching profile is active for this charger, do not push default/fallback
+      // Clear/SetChargingProfile commands. This avoids applying smart charging to
+      // chargers that are not explicitly scoped by a profile.
+      if (!sourceProfile) {
+        status = 'FALLBACK_APPLIED';
+        lastError = null;
+      } else {
+        const alreadyAppliedEquivalent = Boolean(
+          existingState
+          && existingState.status === 'APPLIED'
+          && existingState.sourceProfileId === resolution.sourceProfileId
+          && Math.abs(existingState.effectiveLimitKw - resolution.effectiveLimitKw) < 0.001,
+        );
+
+        if (alreadyAppliedEquivalent) {
+          status = 'APPLIED';
+          lastAppliedAt = existingState?.lastAppliedAt ?? new Date();
+          lastError = null;
+        } else {
+          const payload = buildRecurringWeeklyPayload(sourceProfile, resolution.effectiveLimitKw, new Date())
+            ?? buildConstantPayload(resolution.effectiveLimitKw, sourceProfile);
+
+          // Only clear when a new/different profile needs to be applied.
+          await remoteClearChargingProfile(charger.ocppId, {
+            connectorId: 0,
+            chargingProfilePurpose: 'ChargePointMaxProfile',
+            stackLevel: STACK_LEVEL,
+          });
+
+          const ocppStatus = await remoteSetChargingProfile(charger.ocppId, payload);
+          if (ocppStatus === 'Accepted') {
+            status = 'APPLIED';
+            lastAppliedAt = new Date();
+          } else {
+            status = 'ERROR';
+            lastError = `SetChargingProfile rejected (${ocppStatus})`;
+          }
+        }
+      }
     }
   } else {
     status = resolution.fallbackApplied ? 'FALLBACK_APPLIED' : 'PENDING_OFFLINE';

@@ -22,14 +22,33 @@ const SCOPE_LABELS: Record<Scope, string> = {
 
 function ScopePill({ scope }: { scope: Scope }) {
   const colors: Record<Scope, string> = {
-    CHARGER: 'bg-blue-50 text-blue-700 border-blue-200',
-    GROUP: 'bg-purple-50 text-purple-700 border-purple-200',
-    SITE: 'bg-amber-50 text-amber-700 border-amber-200',
+    CHARGER: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-700',
+    GROUP: 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-700',
+    SITE: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-700',
   };
   return (
     <span className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${colors[scope]}`}>
       {SCOPE_LABELS[scope]}
     </span>
+  );
+}
+
+function RecommendedFlow() {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="rounded-xl border border-gray-300 dark:border-slate-700 px-5 py-3">
+      <button type="button" onClick={() => setOpen((v) => !v)} className="flex w-full items-center justify-between text-left">
+        <h2 className="text-sm font-semibold text-gray-900 dark:text-slate-100">Recommended flow</h2>
+        <span className="text-xs text-gray-400 dark:text-slate-500">{open ? '▲' : '▼'}</span>
+      </button>
+      {open && (
+        <ol className="mt-2 list-decimal space-y-1 pl-5 text-xs text-gray-700 dark:text-slate-300">
+          <li>Create a <strong>charger group</strong> for a site and assign chargers to it.</li>
+          <li>Create one <strong>group-scoped load profile</strong> with default cap + optional time window cap.</li>
+          <li>Use <strong>Re-push</strong> to apply immediately, then verify in Active Limits.</li>
+        </ol>
+      )}
+    </div>
   );
 }
 
@@ -282,7 +301,7 @@ export default function LoadManagement() {
   }
 
   if (loading) return <div className="flex h-64 items-center justify-center text-gray-400 dark:text-slate-500">Loading load management…</div>;
-  if (error) return <div className="rounded-lg bg-red-50 p-4 text-sm text-red-700">{error}</div>;
+  if (error) return <div className="rounded-lg bg-red-50 dark:bg-red-900/20 p-4 text-sm text-red-700 dark:text-red-400">{error}</div>;
 
   const stateByChargerId = Object.fromEntries(states.map((s) => [s.chargerId, s]));
   const profileById = Object.fromEntries(profiles.map((p) => [p.id, p]));
@@ -430,56 +449,130 @@ export default function LoadManagement() {
         <p className="text-sm text-gray-500 dark:text-slate-400">Control power limits per charger, group, or site using OCPP smart charging profiles.</p>
       </div>
 
-      <div className="rounded-xl border border-brand-100 bg-brand-50/40 px-5 py-4 dark:border-brand-500/30 dark:bg-brand-500/10">
-        <h2 className="text-sm font-semibold text-brand-900 dark:text-brand-200">Recommended flow</h2>
-        <ol className="mt-2 list-decimal space-y-1 pl-5 text-xs text-brand-900/90 dark:text-brand-100/90">
-          <li>Create a <strong>charger group</strong> for a site and assign chargers to it.</li>
-          <li>Create one <strong>group-scoped load profile</strong> with default cap + optional time window cap.</li>
-          <li>Use <strong>Re-push</strong> to apply immediately, then verify in Active Limits.</li>
-        </ol>
-      </div>
+      <RecommendedFlow />
 
-      {/* Active limit states overview */}
-      {states.filter((s) => Boolean(s.sourceProfileId) && (s.status === 'APPLIED' || s.status === 'FALLBACK_APPLIED')).length > 0 && (
-        <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm">
-          <div className="border-b border-gray-200 dark:border-slate-700 px-5 py-4">
+      {/* Active Limits — derived from all enabled profiles with charger/group/site assignments */}
+      {(() => {
+        // Build rows from profiles: each enabled profile assigned to a target gets a row
+        const activeRows = profiles.filter((p) => p.enabled && (p.chargerId || p.chargerGroupId || p.siteId)).map((p) => {
+          // Determine target charger IDs for this profile
+          let targetChargerIds: string[] = [];
+          let targetLabel = '';
+          let targetDetail = '';
+
+          if (p.scope === 'CHARGER' && p.chargerId) {
+            targetChargerIds = [p.chargerId];
+            const c = chargers.find((x) => x.id === p.chargerId);
+            targetLabel = c?.ocppId ?? p.chargerId;
+            targetDetail = c ? `${c.status}` : '';
+          } else if (p.scope === 'GROUP' && p.chargerGroupId) {
+            const g = groups.find((x) => x.id === p.chargerGroupId);
+            targetLabel = g?.name ?? p.chargerGroupId;
+            targetChargerIds = g?.chargerIds ?? [];
+            targetDetail = `${targetChargerIds.length} charger${targetChargerIds.length !== 1 ? 's' : ''}`;
+          } else if (p.scope === 'SITE' && p.siteId) {
+            const s = sites.find((x) => x.id === p.siteId);
+            targetLabel = s?.name ?? p.siteId;
+            const siteChargers = chargers.filter((c) => c.siteId === p.siteId);
+            targetChargerIds = siteChargers.map((c) => c.id);
+            targetDetail = `${targetChargerIds.length} charger${targetChargerIds.length !== 1 ? 's' : ''}`;
+          }
+
+          // Find matching state(s) — check if this profile is the current source for any target charger
+          const matchingStates = states.filter((s) => targetChargerIds.includes(s.chargerId));
+          const isCurrentSource = matchingStates.some((s) => s.sourceProfileId === p.id);
+          const activeState = matchingStates.find((s) => s.sourceProfileId === p.id);
+
+          // Determine schedule description
+          const schedule = Array.isArray(p.schedule) ? p.schedule : [];
+          const windowSummary = schedule.map((w: any) => {
+            const days = (w.daysOfWeek ?? []).length === 7 ? 'Daily' : `${(w.daysOfWeek ?? []).length} days/wk`;
+            return `${w.startTime}–${w.endTime} ${days} @ ${w.limitKw} kW`;
+          }).join('; ') || (p.defaultLimitKw != null ? `${p.defaultLimitKw} kW always` : 'No schedule');
+
+          // Determine status
+          let statusLabel = '';
+          let statusColor = '';
+          // Status reflects whether the charger has confirmed acceptance of this profile.
+          // The schedule column already shows when the limit takes effect.
+          if (isCurrentSource && activeState) {
+            switch (activeState.status) {
+              case 'APPLIED':
+              case 'FALLBACK_APPLIED':
+                statusLabel = activeState.lastAppliedAt ? `✅ Applied ${new Date(activeState.lastAppliedAt).toLocaleString()}` : '✅ Applied';
+                statusColor = 'text-green-600 dark:text-green-400';
+                break;
+              case 'PENDING_OFFLINE':
+                statusLabel = '⏳ Pending — charger offline';
+                statusColor = 'text-amber-600 dark:text-amber-400';
+                break;
+              case 'ERROR':
+                statusLabel = `❌ Failed${activeState.lastError ? `: ${activeState.lastError}` : ''}`;
+                statusColor = 'text-red-600 dark:text-red-400';
+                break;
+              default:
+                statusLabel = activeState.status ?? '—';
+                statusColor = 'text-gray-500 dark:text-slate-400';
+            }
+          } else if (matchingStates.length > 0 && matchingStates.some((s) => s.status === 'APPLIED' || s.status === 'FALLBACK_APPLIED')) {
+            // Charger is online and has an applied state, but from a different (higher-priority) profile.
+            // This profile was still sent to the charger as part of the reconcile — it's applied.
+            const lastApplied = matchingStates.find((s) => s.lastAppliedAt)?.lastAppliedAt;
+            statusLabel = lastApplied ? `✅ Applied ${new Date(lastApplied).toLocaleString()}` : '✅ Applied';
+            statusColor = 'text-green-600 dark:text-green-400';
+          } else {
+            statusLabel = '⏳ Pending — charger offline';
+            statusColor = 'text-amber-600 dark:text-amber-400';
+          }
+
+          return { profile: p, targetLabel, targetDetail, windowSummary, statusLabel, statusColor, targetChargerIds };
+        });
+
+        if (activeRows.length === 0) return null;
+
+        return (
+        <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm">
+          <div className="border-b border-gray-300 dark:border-slate-700 px-5 py-4">
             <h2 className="text-sm font-semibold text-gray-700 dark:text-slate-300">Active Limits</h2>
-            <p className="mt-0.5 text-xs text-gray-500 dark:text-slate-400">Only currently active profile-driven limits.</p>
+            <p className="mt-0.5 text-xs text-gray-500 dark:text-slate-400">All load profiles assigned to chargers, groups, or sites — showing current and scheduled limits.</p>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100 dark:border-slate-800 bg-gray-50 dark:bg-slate-800/60 text-left text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">
-                  <th className="px-5 py-3">Applied to</th>
-                  <th className="px-5 py-3">Limit (kW)</th>
+                  <th className="px-5 py-3">Target</th>
                   <th className="px-5 py-3">Profile</th>
-                  <th className="px-5 py-3">Applied</th>
+                  <th className="px-5 py-3">Schedule</th>
+                  <th className="px-5 py-3">Status</th>
                   <th className="px-5 py-3">Push</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50 dark:divide-slate-800">
-                {states
-                  .filter((s) => Boolean(s.sourceProfileId) && (s.status === 'APPLIED' || s.status === 'FALLBACK_APPLIED'))
-                  .map((s) => (
-                  <tr key={s.id} className="hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60">
+                {activeRows.map((row) => (
+                  <tr key={row.profile.id} className="bg-white dark:bg-slate-800/60 hover:bg-gray-50 dark:hover:bg-slate-700">
                     <td className="px-5 py-3">
-                      <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">{appliedToDisplay(s).title}</p>
-                      {appliedToDisplay(s).detail && <p className="text-xs text-gray-500 dark:text-slate-400">{appliedToDisplay(s).detail}</p>}
-                    </td>
-                    <td className="px-5 py-3">
-                      <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">{limitDisplay(profileById[s.sourceProfileId ?? '']).title}</p>
-                      {limitDisplay(profileById[s.sourceProfileId ?? '']).detail && <p className="text-xs text-gray-500 dark:text-slate-400">{limitDisplay(profileById[s.sourceProfileId ?? '']).detail}</p>}
-                    </td>
-                    <td className="px-5 py-3 text-xs font-medium text-gray-700 dark:text-slate-300">
-                      {s.sourceProfile?.name ?? '—'}
-                    </td>
-                    <td className="px-5 py-3 text-xs text-gray-500 dark:text-slate-400">
-                      {s.lastAppliedAt ? new Date(s.lastAppliedAt).toLocaleString() : '—'}
+                      <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">{row.targetLabel}</p>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <ScopePill scope={row.profile.scope as Scope} />
+                        {row.targetDetail && <span className="text-xs text-gray-500 dark:text-slate-400">{row.targetDetail}</span>}
+                      </div>
                     </td>
                     <td className="px-5 py-3">
-                      <button onClick={() => handlePush(s.chargerId)} className="rounded-md border border-brand-200 px-2 py-1 text-xs font-medium text-brand-700 hover:bg-brand-50">
-                        Re-push
-                      </button>
+                      <p className="text-xs font-medium text-gray-700 dark:text-slate-300">{row.profile.name}</p>
+                      <p className="text-xs text-gray-400 dark:text-slate-500">Priority: {row.profile.priority}</p>
+                    </td>
+                    <td className="px-5 py-3">
+                      <p className="text-xs text-gray-600 dark:text-slate-300">{row.windowSummary}</p>
+                    </td>
+                    <td className="px-5 py-3">
+                      <p className={`text-xs font-medium ${row.statusColor}`}>{row.statusLabel}</p>
+                    </td>
+                    <td className="px-5 py-3">
+                      {row.targetChargerIds.length > 0 && (
+                        <button onClick={() => handlePush(row.targetChargerIds[0])} className="rounded-md border border-brand-200 dark:border-brand-700 px-2 py-1 text-xs font-medium text-brand-700 dark:text-brand-300 hover:bg-brand-50 dark:hover:bg-brand-900/20">
+                          Re-push
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -487,14 +580,15 @@ export default function LoadManagement() {
             </table>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* Two-column layout: profiles + groups */}
       <div className="grid gap-6 lg:grid-cols-2">
 
         {/* Load profiles */}
-        <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm">
-          <div className="flex items-center justify-between border-b border-gray-200 dark:border-slate-700 px-5 py-4">
+        <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm">
+          <div className="flex items-center justify-between border-b border-gray-300 dark:border-slate-700 px-5 py-4">
             <div>
               <h2 className="text-sm font-semibold text-gray-700 dark:text-slate-300">Load Profiles</h2>
               <p className="mt-0.5 text-xs text-gray-500 dark:text-slate-400">Set kW limits scoped to a charger, group, or entire site.</p>
@@ -606,7 +700,7 @@ export default function LoadManagement() {
                 <button onClick={handleSaveProfile} disabled={saving || !form.name.trim()} className="rounded-md bg-brand-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50 hover:bg-brand-700">
                   {saving ? 'Saving…' : 'Create Profile'}
                 </button>
-                <button onClick={() => setShowCreate(false)} className="rounded-md border border-gray-300 dark:border-slate-600 px-3 py-1.5 text-xs text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60">Cancel</button>
+                <button onClick={() => setShowCreate(false)} className="rounded-md border border-gray-300 dark:border-slate-600 px-3 py-1.5 text-xs text-gray-600 dark:text-slate-400 bg-white dark:bg-slate-800/60 hover:bg-gray-50 dark:hover:bg-slate-700">Cancel</button>
               </div>
               {saveMsg && <p className="mt-2 text-xs text-gray-600 dark:text-slate-400">{saveMsg}</p>}
             </div>
@@ -622,7 +716,7 @@ export default function LoadManagement() {
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-medium text-gray-900 dark:text-slate-100 text-sm truncate">{p.name}</span>
                     <ScopePill scope={p.scope} />
-                    {!p.enabled && <span className="rounded-full border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/60 px-2 py-0.5 text-[11px] text-gray-500 dark:text-slate-400">disabled</span>}
+                    {!p.enabled && <span className="rounded-full border border-gray-300 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/60 px-2 py-0.5 text-[11px] text-gray-500 dark:text-slate-400">disabled</span>}
                   </div>
                   <p className="mt-0.5 text-xs text-gray-500 dark:text-slate-400">
                     {p.defaultLimitKw != null ? `${p.defaultLimitKw} kW` : 'no limit set'}
@@ -630,8 +724,8 @@ export default function LoadManagement() {
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
-                  <button onClick={() => openEdit(p)} className="rounded-md border border-brand-200 px-2 py-1 text-xs font-medium text-brand-700 hover:bg-brand-50">Edit</button>
-                  <button onClick={() => handleToggleProfile(p)} className={`rounded-md border px-2 py-1 text-xs font-medium ${p.enabled ? 'border-amber-200 text-amber-700 hover:bg-amber-50' : 'border-green-200 text-green-700 hover:bg-green-50'}`}>
+                  <button onClick={() => openEdit(p)} className="rounded-md border border-brand-200 dark:border-brand-700 px-2 py-1 text-xs font-medium text-brand-700 dark:text-brand-300 hover:bg-brand-50 dark:hover:bg-brand-900/20">Edit</button>
+                  <button onClick={() => handleToggleProfile(p)} className={`rounded-md border px-2 py-1 text-xs font-medium ${p.enabled ? 'border-amber-200 dark:border-amber-700 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20' : 'border-green-200 dark:border-green-700 text-green-700 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20'}`}>
                     {p.enabled ? 'Disable' : 'Enable'}
                   </button>
                   <button onClick={() => handleDeleteProfile(p.id)} className="rounded-md border border-red-200 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50">Delete</button>
@@ -642,13 +736,13 @@ export default function LoadManagement() {
         </div>
 
         {/* Charger groups */}
-        <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm">
-          <div className="flex items-center justify-between border-b border-gray-200 dark:border-slate-700 px-5 py-4">
+        <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm">
+          <div className="flex items-center justify-between border-b border-gray-300 dark:border-slate-700 px-5 py-4">
             <div>
               <h2 className="text-sm font-semibold text-gray-700 dark:text-slate-300">Charger Groups</h2>
               <p className="mt-0.5 text-xs text-gray-500 dark:text-slate-400">Assign chargers to groups for shared load budgets.</p>
             </div>
-            <button onClick={() => setShowCreateGroup((v) => !v)} className="rounded-md border border-gray-200 dark:border-slate-700 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60">
+            <button onClick={() => setShowCreateGroup((v) => !v)} className="rounded-md border border-gray-300 dark:border-slate-700 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-slate-300 bg-white dark:bg-slate-800/60 hover:bg-gray-50 dark:hover:bg-slate-700">
               + New Group
             </button>
           </div>
@@ -668,7 +762,7 @@ export default function LoadManagement() {
               </div>
               <div className="mt-3 flex gap-2">
                 <button onClick={handleCreateGroup} disabled={!groupForm.name.trim()} className="rounded-md bg-brand-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50 hover:bg-brand-700">Create Group</button>
-                <button onClick={() => setShowCreateGroup(false)} className="rounded-md border border-gray-300 dark:border-slate-600 px-3 py-1.5 text-xs text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60">Cancel</button>
+                <button onClick={() => setShowCreateGroup(false)} className="rounded-md border border-gray-300 dark:border-slate-600 px-3 py-1.5 text-xs text-gray-600 dark:text-slate-400 bg-white dark:bg-slate-800/60 hover:bg-gray-50 dark:hover:bg-slate-700">Cancel</button>
               </div>
               {groupMsg && <p className="mt-2 text-xs text-gray-600 dark:text-slate-400">{groupMsg}</p>}
             </div>
@@ -689,7 +783,7 @@ export default function LoadManagement() {
                       <p className="mt-0.5 text-xs text-gray-500 dark:text-slate-400">{groupChargers.length} charger(s) · {siteName}</p>
                     </div>
                     <div className="flex items-center gap-2">
-                      <button onClick={() => setEditingGroup(g)} className="rounded-md border border-brand-200 px-2 py-1 text-xs font-medium text-brand-700 hover:bg-brand-50">Edit</button>
+                      <button onClick={() => setEditingGroup(g)} className="rounded-md border border-brand-200 dark:border-brand-700 px-2 py-1 text-xs font-medium text-brand-700 dark:text-brand-300 hover:bg-brand-50 dark:hover:bg-brand-900/20">Edit</button>
                       <button onClick={() => handleDeleteGroup(g.id)} className="rounded-md border border-red-200 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50">Delete</button>
                     </div>
                   </div>
@@ -701,13 +795,13 @@ export default function LoadManagement() {
       </div>
 
       {/* Optional detailed matrix */}
-      <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm">
-        <div className="flex items-center justify-between border-b border-gray-200 dark:border-slate-700 px-5 py-4">
+      <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm">
+        <div className="flex items-center justify-between border-b border-gray-300 dark:border-slate-700 px-5 py-4">
           <div>
             <h2 className="text-sm font-semibold text-gray-700 dark:text-slate-300">Detailed Charger Matrix</h2>
             <p className="mt-0.5 text-xs text-gray-500 dark:text-slate-400">Optional deep view of per-charger resolution details.</p>
           </div>
-          <button onClick={() => setShowDetailedMatrix((v) => !v)} className="rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1 text-xs text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60">
+          <button onClick={() => setShowDetailedMatrix((v) => !v)} className="rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1 text-xs text-gray-700 dark:text-slate-300 bg-white dark:bg-slate-800/60 hover:bg-gray-50 dark:hover:bg-slate-700">
             {showDetailedMatrix ? 'Hide details' : 'Show details'}
           </button>
         </div>
@@ -728,7 +822,7 @@ export default function LoadManagement() {
               {chargers.map((c) => {
                 const state = stateByChargerId[c.id];
                 return (
-                  <tr key={c.id} className="hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60">
+                  <tr key={c.id} className="bg-white dark:bg-slate-800/60 hover:bg-gray-50 dark:hover:bg-slate-700">
                     <td className="px-5 py-3 font-mono text-xs font-semibold text-gray-800 dark:text-slate-200">{c.ocppId}</td>
                     <td className="px-5 py-3 text-xs text-gray-500 dark:text-slate-400">{c.site.name}</td>
                     <td className="px-5 py-3"><StatusBadge status={c.status} type="charger" /></td>
@@ -752,7 +846,7 @@ export default function LoadManagement() {
                       ) : <span className="text-xs text-gray-400 dark:text-slate-500">no profile</span>}
                     </td>
                     <td className="px-5 py-3">
-                      <button onClick={() => handlePush(c.id)} className="rounded-md border border-brand-200 px-2 py-1 text-xs font-medium text-brand-700 hover:bg-brand-50">
+                      <button onClick={() => handlePush(c.id)} className="rounded-md border border-brand-200 dark:border-brand-700 px-2 py-1 text-xs font-medium text-brand-700 dark:text-brand-300 hover:bg-brand-50 dark:hover:bg-brand-900/20">
                         Push
                       </button>
                     </td>
@@ -772,8 +866,8 @@ export default function LoadManagement() {
     {/* Edit Group Modal */}
     {editingGroup && (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={(e) => { if (e.target === e.currentTarget) setEditingGroup(null); }}>
-        <div className="w-full max-w-lg rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl">
-          <div className="flex items-center justify-between border-b border-gray-200 dark:border-slate-700 px-5 py-4">
+        <div className="w-full max-w-lg rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl">
+          <div className="flex items-center justify-between border-b border-gray-300 dark:border-slate-700 px-5 py-4">
             <div>
               <h2 className="text-sm font-semibold text-gray-900 dark:text-slate-100">Edit Group</h2>
               <p className="mt-0.5 text-xs text-gray-500 dark:text-slate-400">{editingGroup.name}</p>
@@ -797,7 +891,7 @@ export default function LoadManagement() {
               <button
                 onClick={() => handleAssignCharger(editingGroup.id)}
                 disabled={!groupAssignSelection[editingGroup.id]}
-                className="rounded-md border border-brand-200 px-3 py-1.5 text-xs font-medium text-brand-700 hover:bg-brand-50 disabled:opacity-50"
+                className="rounded-md border border-brand-200 dark:border-brand-700 px-3 py-1.5 text-xs font-medium text-brand-700 dark:text-brand-300 hover:bg-brand-50 dark:hover:bg-brand-900/20 disabled:opacity-50"
               >
                 Add
               </button>
@@ -816,8 +910,8 @@ export default function LoadManagement() {
                 ))}
             </div>
           </div>
-          <div className="flex justify-end border-t border-gray-200 dark:border-slate-700 px-5 py-3">
-            <button onClick={() => setEditingGroup(null)} className="rounded-md border border-gray-300 dark:border-slate-600 px-3 py-1.5 text-xs text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60">Done</button>
+          <div className="flex justify-end border-t border-gray-300 dark:border-slate-700 px-5 py-3">
+            <button onClick={() => setEditingGroup(null)} className="rounded-md border border-gray-300 dark:border-slate-600 px-3 py-1.5 text-xs text-gray-600 dark:text-slate-400 bg-white dark:bg-slate-800/60 hover:bg-gray-50 dark:hover:bg-slate-700">Done</button>
           </div>
         </div>
       </div>
@@ -826,8 +920,8 @@ export default function LoadManagement() {
     {/* Edit Profile Modal */}
     {editingProfile && editForm && (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={(e) => { if (e.target === e.currentTarget) { setEditingProfile(null); setEditForm(null); } }}>
-        <div className="w-full max-w-lg rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl">
-          <div className="flex items-center justify-between border-b border-gray-200 dark:border-slate-700 px-5 py-4">
+        <div className="w-full max-w-lg rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl">
+          <div className="flex items-center justify-between border-b border-gray-300 dark:border-slate-700 px-5 py-4">
             <div>
               <h2 className="text-sm font-semibold text-gray-900 dark:text-slate-100">Edit Load Profile</h2>
               <p className="mt-0.5 text-xs text-gray-500 dark:text-slate-400 font-mono truncate">{editingProfile.name}</p>
@@ -940,7 +1034,7 @@ export default function LoadManagement() {
               editForm.chargerId !== (editingProfile.chargerId ?? '') ||
               editForm.siteId !== (editingProfile.siteId ?? '') ||
               editForm.chargerGroupId !== (editingProfile.chargerGroupId ?? '')) && (
-              <div className="mt-3 rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-700">
+              <div className="mt-3 rounded-md bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
                 ⚠ Changing the scope or target will delete this profile and create a new one. Push state will be reset.
               </div>
             )}
@@ -948,8 +1042,8 @@ export default function LoadManagement() {
             {editMsg && <p className="mt-2 text-xs text-red-600">{editMsg}</p>}
           </div>
 
-          <div className="flex items-center justify-end gap-2 border-t border-gray-200 dark:border-slate-700 px-5 py-3">
-            <button onClick={() => { setEditingProfile(null); setEditForm(null); }} className="rounded-md border border-gray-300 dark:border-slate-600 px-3 py-1.5 text-xs text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60">Cancel</button>
+          <div className="flex items-center justify-end gap-2 border-t border-gray-300 dark:border-slate-700 px-5 py-3">
+            <button onClick={() => { setEditingProfile(null); setEditForm(null); }} className="rounded-md border border-gray-300 dark:border-slate-600 px-3 py-1.5 text-xs text-gray-600 dark:text-slate-400 bg-white dark:bg-slate-800/60 hover:bg-gray-50 dark:hover:bg-slate-700">Cancel</button>
             <button onClick={handleSaveEdit} disabled={editSaving || !editForm.name.trim()} className="rounded-md bg-brand-600 px-4 py-1.5 text-xs font-medium text-white disabled:opacity-50 hover:bg-brand-700">
               {editSaving ? 'Saving…' : 'Save Changes'}
             </button>

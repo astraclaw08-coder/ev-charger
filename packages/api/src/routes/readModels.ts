@@ -38,6 +38,141 @@ function hasSiteAccess(siteId: string, siteIds: string[] | undefined) {
   return siteIds.includes(siteId);
 }
 
+type StatusLogLike = {
+  chargerId: string;
+  createdAt: Date;
+  payload: unknown;
+};
+
+function parseConnectorStatus(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().replace(/[-\s]/g, '_').toUpperCase();
+  const map: Record<string, string> = {
+    AVAILABLE: 'AVAILABLE',
+    PREPARING: 'PREPARING',
+    CHARGING: 'CHARGING',
+    FINISHING: 'FINISHING',
+    SUSPENDEDEV: 'SUSPENDED_EV',
+    SUSPENDED_EV: 'SUSPENDED_EV',
+    SUSPENDEDEVSE: 'SUSPENDED_EVSE',
+    SUSPENDED_EVSE: 'SUSPENDED_EVSE',
+    RESERVED: 'RESERVED',
+    UNAVAILABLE: 'UNAVAILABLE',
+    FAULTED: 'FAULTED',
+  };
+  return map[normalized] ?? null;
+}
+
+function extractStatusEvent(log: StatusLogLike): { connectorId: number; status: string; at: Date } | null {
+  if (!log.payload || typeof log.payload !== 'object') return null;
+  const payload = log.payload as { connectorId?: number | string; status?: string; timestamp?: string };
+  const connectorId = Number(payload.connectorId);
+  const status = parseConnectorStatus(payload.status);
+  if (!Number.isInteger(connectorId) || connectorId <= 0 || !status) return null;
+  const timestamp = payload.timestamp ? new Date(payload.timestamp) : null;
+  const at = timestamp && Number.isFinite(timestamp.getTime()) ? timestamp : log.createdAt;
+  return { connectorId, status, at };
+}
+
+function resolveSessionStatusTimings(input: {
+  startedAt?: Date | string | null;
+  stoppedAt?: Date | string | null;
+  connectorId?: number | null;
+  statusLogs: StatusLogLike[];
+}): { idleStartedAt?: string; idleStoppedAt?: string; plugInAt?: string; plugOutAt?: string } {
+  if (!input.startedAt || !input.connectorId) return {};
+  const sessionStart = new Date(input.startedAt);
+  if (!Number.isFinite(sessionStart.getTime())) return {};
+
+  const sessionStop = input.stoppedAt ? new Date(input.stoppedAt) : null;
+  const lookbackMs = 24 * 60 * 60 * 1000;
+  const hardStartMs = sessionStart.getTime() - lookbackMs;
+  const hardEndMs = sessionStop && Number.isFinite(sessionStop.getTime())
+    ? sessionStop.getTime() + (2 * 60 * 60 * 1000)
+    : Date.now() + (2 * 60 * 60 * 1000);
+
+  const baseEvents = input.statusLogs
+    .map(extractStatusEvent)
+    .filter((e): e is { connectorId: number; status: string; at: Date } => Boolean(e))
+    .filter((e) => e.connectorId === input.connectorId)
+    .filter((e) => {
+      const atMs = e.at.getTime();
+      return atMs >= hardStartMs && atMs <= hardEndMs;
+    })
+    .sort((a, b) => a.at.getTime() - b.at.getTime());
+
+  if (baseEvents.length === 0) {
+    return { plugInAt: sessionStart.toISOString() };
+  }
+
+  const events = baseEvents.map((e, idx) => ({
+    ...e,
+    prevStatus: idx > 0 ? baseEvents[idx - 1].status : null as string | null,
+  }));
+
+  const plugInCandidates = events.filter((e) =>
+    e.prevStatus === 'AVAILABLE'
+    && e.status === 'PREPARING'
+    && e.at.getTime() <= sessionStart.getTime(),
+  );
+  const preparingCandidates = events.filter((e) =>
+    e.status === 'PREPARING'
+    && e.at.getTime() <= sessionStart.getTime(),
+  );
+  const plugIn = plugInCandidates.length > 0
+    ? plugInCandidates[plugInCandidates.length - 1]
+    : (preparingCandidates.length > 0 ? preparingCandidates[preparingCandidates.length - 1] : null);
+
+  const plugOutCandidates = events.filter((e) =>
+    e.status === 'AVAILABLE'
+    && !!e.prevStatus
+    && new Set(['FINISHING', 'SUSPENDED_EV', 'SUSPENDED_EVSE']).has(e.prevStatus)
+    && (!sessionStop || e.at.getTime() >= sessionStop.getTime()),
+  );
+  const plugOut = plugOutCandidates.length > 0
+    ? plugOutCandidates[0]
+    : events.find((e) =>
+      e.status === 'AVAILABLE'
+      && !!e.prevStatus
+      && new Set(['FINISHING', 'SUSPENDED_EV', 'SUSPENDED_EVSE']).has(e.prevStatus),
+    );
+
+  const idleStart = events.find((e) =>
+    e.at.getTime() >= sessionStart.getTime()
+    && e.prevStatus === 'CHARGING'
+    && (e.status === 'SUSPENDED_EV' || e.status === 'SUSPENDED_EVSE'),
+  ) ?? events.find((e) =>
+    e.at.getTime() >= sessionStart.getTime()
+    && e.prevStatus === 'CHARGING'
+    && e.status === 'FINISHING',
+  );
+
+  const idleEnd = idleStart
+    ? events.find((e) =>
+      e.at.getTime() >= idleStart.at.getTime()
+      && e.status === 'AVAILABLE'
+      && (
+        e.prevStatus === 'FINISHING'
+        || e.prevStatus === 'SUSPENDED_EV'
+        || e.prevStatus === 'SUSPENDED_EVSE'
+      ),
+    )
+    : null;
+
+  const resolvedIdleEnd = idleEnd?.at ?? plugOut?.at ?? sessionStop ?? null;
+
+  return {
+    idleStartedAt: idleStart?.at && resolvedIdleEnd && resolvedIdleEnd.getTime() > idleStart.at.getTime()
+      ? idleStart.at.toISOString()
+      : undefined,
+    idleStoppedAt: idleStart?.at && resolvedIdleEnd && resolvedIdleEnd.getTime() > idleStart.at.getTime()
+      ? resolvedIdleEnd.toISOString()
+      : undefined,
+    plugInAt: plugIn?.at?.toISOString() ?? sessionStart.toISOString(),
+    plugOutAt: plugOut?.at?.toISOString(),
+  };
+}
+
 export async function readModelRoutes(app: FastifyInstance) {
   // GET /analytics/portfolio-summary — org/portfolio/site rollups from SiteDailyFact
   app.get<{
@@ -246,7 +381,23 @@ export async function readModelRoutes(app: FastifyInstance) {
         take: limit,
         skip: offset,
         include: {
-          site: { select: { id: true, name: true, organizationName: true, portfolioName: true, softwareVendorFeeMode: true, softwareVendorFeeValue: true } },
+          site: {
+            select: {
+              id: true,
+              name: true,
+              organizationName: true,
+              portfolioName: true,
+              pricingMode: true,
+              pricePerKwhUsd: true,
+              idleFeePerMinUsd: true,
+              activationFeeUsd: true,
+              gracePeriodMin: true,
+              touWindows: true,
+              softwareVendorFeeMode: true,
+              softwareVendorFeeValue: true,
+              softwareFeeIncludesActivation: true,
+            },
+          },
           charger: { select: { id: true, ocppId: true, serialNumber: true, model: true, vendor: true } },
           session: {
             select: {
@@ -257,13 +408,30 @@ export async function readModelRoutes(app: FastifyInstance) {
               meterStop: true,
               kwhDelivered: true,
               ratePerKwh: true,
+              connector: { select: { connectorId: true } },
               payment: { select: { status: true, amountCents: true } },
+              billingSnapshot: { select: { billingBreakdownJson: true, grossAmountUsd: true, netAmountUsd: true, vendorFeeUsd: true, kwhDelivered: true, capturedAt: true } },
             },
           },
         },
       }),
       prisma.sessionFact.count({ where }),
     ]);
+
+    const chargerIds = Array.from(new Set(rows.map((row: any) => row.charger?.id).filter(Boolean)));
+    const statusLogs = chargerIds.length > 0
+      ? await prisma.ocppLog.findMany({
+          where: { chargerId: { in: chargerIds }, action: 'StatusNotification' },
+          orderBy: { createdAt: 'desc' },
+          take: 10000,
+        })
+      : [];
+    const statusLogsByCharger = new Map<string, StatusLogLike[]>();
+    for (const log of statusLogs) {
+      const arr = statusLogsByCharger.get(log.chargerId) ?? [];
+      arr.push({ chargerId: log.chargerId, createdAt: log.createdAt, payload: log.payload });
+      statusLogsByCharger.set(log.chargerId, arr);
+    }
 
     return {
       total,
@@ -272,6 +440,12 @@ export async function readModelRoutes(app: FastifyInstance) {
       transactions: rows.map((row: any) => {
         const energyKwh = Number(toNumber(row.energyKwh).toFixed(6));
         const revenueUsd = Number(toNumber(row.revenueUsd).toFixed(6));
+        const sessionTimings = resolveSessionStatusTimings({
+          startedAt: row.startedAt,
+          stoppedAt: row.stoppedAt,
+          connectorId: row.session?.connector?.connectorId,
+          statusLogs: statusLogsByCharger.get(row.charger?.id) ?? [],
+        });
         const amounts = computeSessionAmounts({
           meterStart: row.session.meterStart,
           meterStop: row.session.meterStop,
@@ -282,9 +456,22 @@ export async function readModelRoutes(app: FastifyInstance) {
           durationMinutes: row.durationMinutes,
           startedAt: row.startedAt,
           stoppedAt: row.stoppedAt,
+          pricingMode: row.site.pricingMode,
+          pricePerKwhUsd: row.site.pricePerKwhUsd,
+          idleFeePerMinUsd: row.site.idleFeePerMinUsd,
+          activationFeeUsd: row.site.activationFeeUsd,
+          gracePeriodMin: row.site.gracePeriodMin,
+          touWindows: row.site.touWindows,
           softwareVendorFeeMode: row.site.softwareVendorFeeMode,
           softwareVendorFeeValue: row.site.softwareVendorFeeValue,
+          softwareFeeIncludesActivation: row.site.softwareFeeIncludesActivation,
+          idleStartedAt: sessionTimings.idleStartedAt,
+          idleStoppedAt: sessionTimings.idleStoppedAt,
         });
+
+        const snapshot = row.session?.billingSnapshot;
+        const snapshotGrossUsd = snapshot?.grossAmountUsd != null ? Number(snapshot.grossAmountUsd) : null;
+        const snapshotGrossCents = snapshotGrossUsd != null ? Math.round(snapshotGrossUsd * 100) : null;
 
         return {
           id: row.id,
@@ -293,18 +480,21 @@ export async function readModelRoutes(app: FastifyInstance) {
           idTag: row.session.idTag,
           status: row.status,
           startedAt: row.startedAt,
-          stoppedAt: row.stoppedAt,
+          stoppedAt: sessionTimings.plugOutAt ? new Date(sessionTimings.plugOutAt) : row.stoppedAt,
+          plugInAt: sessionTimings.plugInAt ? new Date(sessionTimings.plugInAt) : undefined,
+          plugOutAt: sessionTimings.plugOutAt ? new Date(sessionTimings.plugOutAt) : undefined,
           durationMinutes: row.durationMinutes,
-          energyKwh,
-          revenueUsd,
+          energyKwh: snapshot?.kwhDelivered ?? energyKwh,
+          revenueUsd: snapshotGrossUsd ?? revenueUsd,
           payment: row.session.payment,
           meterStart: row.session.meterStart,
           meterStop: row.session.meterStop,
-          effectiveAmountCents: amounts.effectiveAmountCents,
-          estimatedAmountCents: amounts.estimatedAmountCents,
-          amountState: amounts.amountState,
-          amountLabel: amounts.amountLabel,
-          isAmountFinal: amounts.isAmountFinal,
+          effectiveAmountCents: snapshotGrossCents ?? amounts.effectiveAmountCents,
+          estimatedAmountCents: snapshotGrossCents ?? amounts.estimatedAmountCents,
+          amountState: snapshot ? 'FINAL' : amounts.amountState,
+          amountLabel: snapshot ? 'Final' : amounts.amountLabel,
+          isAmountFinal: snapshot ? true : amounts.isAmountFinal,
+          billingBreakdown: snapshot?.billingBreakdownJson ?? amounts.billingBreakdown,
           site: row.site,
           charger: row.charger,
           sourceVersion: row.sourceVersion,

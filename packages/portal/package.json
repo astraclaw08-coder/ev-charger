@@ -9,10 +9,10 @@
     "preview": "vite preview",
     "storybook": "storybook dev -p 6006 --no-open",
     "build-storybook": "storybook build",
-    "test:playwright": "playwright test"
+    "test:playwright": "playwright test",
+    "test:theme-qc": "playwright test tests/theme-qc/"
   },
   "dependencies": {
-    "@clerk/clerk-react": "^5.0.0",
     "@react-google-maps/api": "^2.20.7",
     "clsx": "^2.1.0",
     "qrcode": "^1.5.4",

@@ -38,14 +38,14 @@ npm run build:prod
 
 Set these for each environment (locally or in EAS env):
 
-- `EXPO_PUBLIC_API_URL_DEV` (dev only)
-- `EXPO_PUBLIC_API_URL_PROD` (optional override; defaults to prod Railway API)
-- `GOOGLE_MAPS_API_KEY` (or platform-specific `GOOGLE_MAPS_API_KEY_IOS` / `GOOGLE_MAPS_API_KEY_ANDROID`)
+- `EXPO_PUBLIC_API_URL`
+- `GOOGLE_MAPS_API_KEY_IOS`
+- `GOOGLE_MAPS_API_KEY_ANDROID`
 - `EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY` (prod/live payment flow)
 
 Notes:
-- Auth mode is now hard-separated by app env: `dev -> dev auth`, `prod -> keycloak`.
-- `EXPO_PUBLIC_AUTH_MODE` is no longer used for normal env selection.
+- Auth is Keycloak-only.
+- Keep key names the same across envs; only values change per profile (`development`, `rc`, `production`).
 
 ## Verification in app
 

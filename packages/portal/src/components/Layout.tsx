@@ -103,8 +103,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen bg-gray-50 dark:bg-slate-950">
       {/* Sidebar */}
-      <aside className="flex w-56 flex-col border-r border-slate-200 bg-white/95 dark:border-slate-800 dark:bg-slate-950/95">
-        <div className="flex h-14 items-center border-b border-slate-200 px-4 dark:border-slate-800">
+      <aside className="flex w-56 flex-col border-r border-slate-700 bg-slate-900 dark:border-slate-800 dark:bg-slate-950/95">
+        <div className="flex h-14 items-center border-b border-slate-700 px-4 dark:border-slate-800">
           <BrandMark className="w-[140px]" />
         </div>
 
@@ -120,25 +120,25 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 className={cn(
                   'group flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/70 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-slate-950',
                   active
-                    ? 'bg-brand-100/80 text-brand-800 shadow-sm dark:bg-brand-500/20 dark:text-brand-200'
-                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-950 dark:text-slate-400 dark:hover:bg-slate-900 dark:hover:text-slate-100',
+                    ? 'bg-slate-700 text-white shadow-sm dark:bg-slate-700 dark:text-white'
+                    : 'text-slate-300 dark:text-slate-400',
                 )}
               >
                 <item.Icon
                   className={cn(
                     'h-[19px] w-[19px] shrink-0 transition-all',
                     active
-                      ? 'text-brand-700 dark:text-brand-300'
-                      : 'text-slate-500 group-hover:text-slate-900 dark:text-slate-500 dark:group-hover:text-slate-100',
+                      ? 'text-white dark:text-white'
+                      : 'text-slate-400 dark:text-slate-500',
                   )}
                 />
-                {item.label}
+                <span className={active ? 'text-white' : undefined}>{item.label}</span>
               </Link>
             );
           })}
         </nav>
 
-        <div className="border-t border-slate-200 p-3 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+        <div className="border-t border-slate-700 p-3 text-xs text-slate-500 dark:border-slate-800 dark:text-slate-500">
           <div>OCPP 1.6J Central System</div>
           <div className="mt-1">Version {portalVersion}</div>
         </div>

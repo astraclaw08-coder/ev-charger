@@ -5,6 +5,7 @@ import {
   Area,
   BarChart,
   Bar,
+  CartesianGrid,
   LineChart,
   Line,
   XAxis,
@@ -14,6 +15,7 @@ import {
 } from 'recharts';
 import { createApiClient, type Analytics as AnalyticsType } from '../api/client';
 import { useToken } from '../auth/TokenContext';
+import { usePortalTheme } from '../theme/ThemeContext';
 
 type TimeFilter = '7d' | '14d' | '30d';
 type AnalystRole = 'owner' | 'operator' | 'analyst';
@@ -71,6 +73,15 @@ function persistExportQueue(siteId: string, jobs: ExportJob[]) {
 export default function Analytics() {
   const { id } = useParams<{ id: string }>();
   const getToken = useToken();
+  const { theme } = usePortalTheme();
+  const isDark = theme === 'dark';
+  const chartColors = {
+    grid: isDark ? '#334155' : '#e2e8f0',
+    tick: isDark ? '#94a3b8' : '#64748b',
+    tooltip: isDark
+      ? { backgroundColor: '#1e293b', border: '1px solid #334155', color: '#f1f5f9' }
+      : { backgroundColor: '#ffffff', border: '1px solid #e2e8f0', color: '#1e293b' },
+  };
   const [data, setData] = useState<AnalyticsType | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -81,13 +92,19 @@ export default function Analytics() {
 
   const [roleScope, setRoleScope] = useState<AnalystRole>('owner');
   const [exportQueue, setExportQueue] = useState<ExportJob[]>([]);
+  const [resolvedSiteId, setResolvedSiteId] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
       try {
         const token = await getToken();
-        const result = await createApiClient(token).getAnalytics(id!);
+        const client = createApiClient(token);
+        const sites = await client.getSites().catch(() => []);
+        const matchedSite = sites.find((s) => s.id === id || s.id.startsWith(id ?? ''));
+        const siteId = matchedSite?.id ?? id!;
+        const result = await client.getAnalytics(siteId);
         setData(result);
+        setResolvedSiteId(siteId);
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : 'Failed to load analytics');
       } finally {
@@ -98,10 +115,10 @@ export default function Analytics() {
   }, [id, getToken]);
 
   useEffect(() => {
-    if (!id) return;
-    setSavedViews(loadSavedViews(id));
-    setExportQueue(loadExportQueue(id));
-  }, [id]);
+    if (!resolvedSiteId) return;
+    setSavedViews(loadSavedViews(resolvedSiteId));
+    setExportQueue(loadExportQueue(resolvedSiteId));
+  }, [resolvedSiteId]);
 
   const visibleDaily = useMemo(() => {
     if (!data) return [];
@@ -139,7 +156,7 @@ export default function Analytics() {
     return <div className="flex h-64 items-center justify-center text-gray-400 dark:text-slate-500">Loading analytics…</div>;
   }
   if (error || !data) {
-    return <div className="rounded-lg bg-red-50 p-4 text-sm text-red-700">{error || 'Failed to load'}</div>;
+    return <div className="rounded-lg bg-red-50 dark:bg-red-900/20 p-4 text-sm text-red-700 dark:text-red-400">{error || 'Failed to load'}</div>;
   }
 
   return (
@@ -148,7 +165,7 @@ export default function Analytics() {
         <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-slate-400">
           <Link to="/overview" className="hover:text-gray-700 dark:hover:text-slate-200 dark:text-slate-300">Overview</Link>
           <span>/</span>
-          <Link to={`/sites/${id}`} className="hover:text-gray-700 dark:hover:text-slate-200 dark:text-slate-300">{data.siteName}</Link>
+          <Link to={`/sites/${resolvedSiteId ?? id}`} className="hover:text-gray-700 dark:hover:text-slate-200 dark:text-slate-300">{data.siteName}</Link>
           <span>/</span>
           <span className="text-gray-900 dark:text-slate-100">Analytics</span>
         </div>
@@ -156,7 +173,7 @@ export default function Analytics() {
         <p className="text-sm text-gray-500 dark:text-slate-400">Trend filters + saved views + export queue controls</p>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
         <label className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Range</label>
         <select
           value={timeFilter}
@@ -189,10 +206,10 @@ export default function Analytics() {
           <button
             type="button"
             onClick={() => {
-              if (!id || !viewName.trim()) return;
+              if (!resolvedSiteId || !viewName.trim()) return;
               const next = [{ name: viewName.trim(), filter: timeFilter }, ...savedViews.filter((v) => v.name !== viewName.trim())];
               setSavedViews(next);
-              persistSavedViews(id, next);
+              persistSavedViews(resolvedSiteId, next);
               setViewName('');
             }}
             className="rounded-md bg-brand-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-700"
@@ -202,7 +219,7 @@ export default function Analytics() {
           <button
             type="button"
             onClick={() => {
-              if (!id) return;
+              if (!resolvedSiteId) return;
               const job: ExportJob = {
                 id: crypto.randomUUID(),
                 createdAt: new Date().toISOString(),
@@ -212,16 +229,16 @@ export default function Analytics() {
               };
               const next = [job, ...exportQueue];
               setExportQueue(next);
-              persistExportQueue(id, next);
+              persistExportQueue(resolvedSiteId, next);
               setTimeout(() => {
                 setExportQueue((current) => {
                   const updated = current.map((j) => (j.id === job.id ? { ...j, status: 'complete' as const } : j));
-                  persistExportQueue(id, updated);
+                  persistExportQueue(resolvedSiteId, updated);
                   return updated;
                 });
               }, 800);
             }}
-            className="rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60"
+            className="rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800/60 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700"
           >
             Queue export
           </button>
@@ -234,7 +251,7 @@ export default function Analytics() {
                 key={view.name}
                 type="button"
                 onClick={() => setTimeFilter(view.filter)}
-                className="rounded-full border border-gray-300 dark:border-slate-600 px-3 py-1 text-xs text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60"
+                className="rounded-full border border-gray-300 dark:border-slate-600 px-3 py-1 text-xs text-gray-700 dark:text-slate-300 bg-white dark:bg-slate-800/60 hover:bg-gray-50 dark:hover:bg-slate-700"
                 title={`Apply ${view.filter} filter`}
               >
                 {view.name}
@@ -255,18 +272,18 @@ export default function Analytics() {
         <SummaryCard label="Utilization" value={`${Math.max(data.utilizationRatePct, data.sessionsCount > 0 ? 0.01 : 0).toFixed(2)}%`} icon="📶" />
       </div>
 
-      <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+      <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
         <h3 className="mb-2 text-sm font-semibold text-gray-700 dark:text-slate-300">Export/report queue</h3>
         {exportQueue.length === 0 ? (
           <p className="text-sm text-gray-500 dark:text-slate-400">No exports queued yet.</p>
         ) : (
           <div className="space-y-2">
             {exportQueue.slice(0, 8).map((job) => (
-              <div key={job.id} className="flex items-center justify-between rounded-md border border-gray-200 dark:border-slate-700 px-3 py-2">
+              <div key={job.id} className="flex items-center justify-between rounded-md border border-gray-300 dark:border-slate-700 px-3 py-2">
                 <p className="text-xs text-gray-600 dark:text-slate-400">
                   {new Date(job.createdAt).toLocaleString()} · {job.filter} · {job.role}
                 </p>
-                <span className={`rounded-full px-2 py-0.5 text-xs ${job.status === 'complete' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                <span className={`rounded-full px-2 py-0.5 text-xs ${job.status === 'complete' ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400'}`}>
                   {job.status}
                 </span>
               </div>
@@ -278,9 +295,10 @@ export default function Analytics() {
       <ChartCard title="Sessions per Day">
         <ResponsiveContainer width="100%" height={200}>
           <LineChart data={chartData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
-            <XAxis dataKey="label" tick={{ fontSize: 11 }} tickLine={false} />
-            <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-            <Tooltip formatter={(v: number) => [v, 'Sessions']} labelFormatter={(l) => `Date: ${l}`} />
+            <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} />
+            <XAxis dataKey="label" tick={{ fontSize: 11, fill: chartColors.tick }} tickLine={false} />
+            <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: chartColors.tick }} />
+            <Tooltip contentStyle={chartColors.tooltip} formatter={(v: number) => [v, 'Sessions']} labelFormatter={(l) => `Date: ${l}`} />
             <Line type="monotone" dataKey="sessions" stroke="#16a34a" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
           </LineChart>
         </ResponsiveContainer>
@@ -289,10 +307,11 @@ export default function Analytics() {
       <ChartCard title="kWh Delivered per Day">
         <ResponsiveContainer width="100%" height={200}>
           <AreaChart data={chartData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
-            <XAxis dataKey="label" tick={{ fontSize: 11 }} tickLine={false} />
-            <YAxis tick={{ fontSize: 11 }} />
-            <Tooltip formatter={(v: number) => [`${v} kWh`, 'Energy']} labelFormatter={(l) => `Date: ${l}`} />
-            <Area type="monotone" dataKey="kwhDelivered" stroke="#2563eb" fill="#dbeafe" strokeWidth={2} />
+            <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} />
+            <XAxis dataKey="label" tick={{ fontSize: 11, fill: chartColors.tick }} tickLine={false} />
+            <YAxis tick={{ fontSize: 11, fill: chartColors.tick }} />
+            <Tooltip contentStyle={chartColors.tooltip} formatter={(v: number) => [`${v} kWh`, 'Energy']} labelFormatter={(l) => `Date: ${l}`} />
+            <Area type="monotone" dataKey="kwhDelivered" stroke="#2563eb" fill={isDark ? '#1e3a5f' : '#dbeafe'} strokeWidth={2} />
           </AreaChart>
         </ResponsiveContainer>
       </ChartCard>
@@ -301,15 +320,16 @@ export default function Analytics() {
         <ChartCard title="Revenue per Day (USD)">
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={chartData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
-              <XAxis dataKey="label" tick={{ fontSize: 11 }} tickLine={false} />
-              <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `$${v}`} />
-              <Tooltip formatter={(v: number) => [`$${v.toFixed(2)}`, 'Revenue']} labelFormatter={(l) => `Date: ${l}`} />
+              <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} />
+              <XAxis dataKey="label" tick={{ fontSize: 11, fill: chartColors.tick }} tickLine={false} />
+              <YAxis tick={{ fontSize: 11, fill: chartColors.tick }} tickFormatter={(v) => `$${v}`} />
+              <Tooltip contentStyle={chartColors.tooltip} formatter={(v: number) => [`$${v.toFixed(2)}`, 'Revenue']} labelFormatter={(l) => `Date: ${l}`} />
               <Bar dataKey="revenueUsd" fill="#16a34a" radius={[3, 3, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
       ) : (
-        <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
+        <div className="rounded-xl border border-blue-200 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/20 p-4 text-sm text-blue-800 dark:text-blue-300">
           Revenue chart hidden for analyst role scope.
         </div>
       )}
@@ -319,7 +339,7 @@ export default function Analytics() {
 
 function SummaryCard({ label, value, icon }: { label: string; value: string; icon: string }) {
   return (
-    <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 shadow-sm">
+    <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 shadow-sm">
       <div className="flex items-center gap-3">
         <span className="text-2xl">{icon}</span>
         <div>
@@ -333,7 +353,7 @@ function SummaryCard({ label, value, icon }: { label: string; value: string; ico
 
 function ChartCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-5 shadow-sm">
+    <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-5 shadow-sm">
       <h3 className="mb-4 text-sm font-semibold text-gray-700 dark:text-slate-300">{title}</h3>
       {children}
     </div>

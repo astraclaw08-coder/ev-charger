@@ -70,18 +70,22 @@ function buildSetChargingProfilePayload(limitKw: number): Record<string, unknown
 
 async function loadScopeProfiles(chargerId: string): Promise<{
   charger: { id: string; ocppId: string; siteId: string; groupId: string | null; status: string };
+  siteTimeZone: string;
   chargerProfiles: SmartChargingProfileLike[];
   groupProfiles: SmartChargingProfileLike[];
   siteProfiles: SmartChargingProfileLike[];
 }> {
-  const charger = await db.charger.findUnique({
+  const chargerWithSite = await db.charger.findUnique({
     where: { id: chargerId },
-    select: { id: true, ocppId: true, siteId: true, groupId: true, status: true },
+    select: { id: true, ocppId: true, siteId: true, groupId: true, status: true, site: { select: { timeZone: true } } },
   });
 
-  if (!charger) {
+  if (!chargerWithSite) {
     throw new Error('Charger not found');
   }
+
+  const siteTimeZone = chargerWithSite.site?.timeZone ?? 'America/Los_Angeles';
+  const charger = { id: chargerWithSite.id, ocppId: chargerWithSite.ocppId, siteId: chargerWithSite.siteId, groupId: chargerWithSite.groupId, status: chargerWithSite.status };
 
   const [chargerProfiles, groupProfiles, siteProfiles] = await Promise.all([
     db.smartChargingProfile.findMany({
@@ -102,6 +106,7 @@ async function loadScopeProfiles(chargerId: string): Promise<{
 
   return {
     charger,
+    siteTimeZone,
     chargerProfiles: chargerProfiles.map(asProfileLike),
     groupProfiles: groupProfiles.map(asProfileLike),
     siteProfiles: siteProfiles.map(asProfileLike),
@@ -115,6 +120,7 @@ export async function previewEffectiveSmartChargingLimit(chargerId: string, at?:
     groupProfiles: scoped.groupProfiles,
     siteProfiles: scoped.siteProfiles,
     at,
+    timeZone: scoped.siteTimeZone,
     fallbackLimitKw: SAFE_LIMIT_KW,
   });
 
@@ -144,6 +150,7 @@ export async function reconcileSmartChargingForCharger(chargerId: string, trigge
     groupProfiles: scoped.groupProfiles,
     siteProfiles: scoped.siteProfiles,
     at: now,
+    timeZone: scoped.siteTimeZone,
     fallbackLimitKw: SAFE_LIMIT_KW,
   });
 

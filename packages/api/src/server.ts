@@ -20,6 +20,10 @@ import { prisma } from '@ev-charger/shared';
 export async function buildServer() {
   const app = Fastify({
     logger: { level: process.env.LOG_LEVEL ?? 'info' },
+    // Trust Railway's reverse proxy so req.ip resolves to the real client IP
+    // from X-Forwarded-For instead of the internal load-balancer address.
+    // Without this every mobile user shares the same IP → shared auth-failure bucket.
+    trustProxy: true,
   });
 
   await app.register(cors, { origin: true });

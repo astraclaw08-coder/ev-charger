@@ -15,18 +15,36 @@ function settings() {
   const env = (process.env.APP_ENV ?? process.env.NODE_ENV ?? 'development').toLowerCase();
   return {
     enabled: env === 'production',
-    maxAttempts: readNumberEnv('SECURITY_AUTH_FAILURE_MAX_ATTEMPTS', 8),
+    // Raised from 8 → 20: accounts for legitimate concurrent mobile users sharing an IP
+    // via carrier NAT before trustProxy fully resolves (belt-and-suspenders).
+    // Override with SECURITY_AUTH_FAILURE_MAX_ATTEMPTS env var.
+    maxAttempts: readNumberEnv('SECURITY_AUTH_FAILURE_MAX_ATTEMPTS', 20),
     windowSeconds: readNumberEnv('SECURITY_AUTH_FAILURE_WINDOW_SECONDS', 300),
     blockSeconds: readNumberEnv('SECURITY_AUTH_BLOCK_SECONDS', 900),
   };
 }
 
-function normalizedKey(input: { ip?: string; routeScope: string }) {
+/**
+ * Build a failure-bucket key.
+ *
+ * When a JWT subject (`sub`) is available we key by `scope:sub` so that
+ * failures are isolated per-user.  This prevents one user's expired token
+ * from consuming slots in another user's bucket even if they share an IP
+ * (e.g. carrier NAT, corporate WiFi).
+ *
+ * When no sub is available (pre-auth requests like password-login) we fall
+ * back to `scope:ip` as before.
+ */
+function normalizedKey(input: { ip?: string; sub?: string; routeScope: string }) {
+  if (input.sub) {
+    const sub = input.sub.trim().toLowerCase();
+    return `${input.routeScope}:sub:${sub}`;
+  }
   const ip = (input.ip ?? 'unknown').trim().toLowerCase();
-  return `${input.routeScope}:${ip}`;
+  return `${input.routeScope}:ip:${ip}`;
 }
 
-export function isBlocked(input: { ip?: string; routeScope: string }) {
+export function isBlocked(input: { ip?: string; sub?: string; routeScope: string }) {
   const cfg = settings();
   if (!cfg.enabled) return { blocked: false } as const;
 
@@ -43,7 +61,7 @@ export function isBlocked(input: { ip?: string; routeScope: string }) {
   return { blocked: false } as const;
 }
 
-export function recordAuthFailure(input: { ip?: string; routeScope: string }) {
+export function recordAuthFailure(input: { ip?: string; sub?: string; routeScope: string }) {
   const now = Date.now();
   const key = normalizedKey(input);
   const cfg = settings();
@@ -62,7 +80,7 @@ export function recordAuthFailure(input: { ip?: string; routeScope: string }) {
   failuresByKey.set(key, existing);
 }
 
-export function recordAuthSuccess(input: { ip?: string; routeScope: string }) {
+export function recordAuthSuccess(input: { ip?: string; sub?: string; routeScope: string }) {
   const key = normalizedKey(input);
   failuresByKey.delete(key);
 }

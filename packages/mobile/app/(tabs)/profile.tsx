@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -46,7 +46,8 @@ const EMPTY: DriverProfile = {
 };
 
 const expoVersion = Constants.expoConfig?.version || '1.0.0';
-const mobileVersion = `${expoVersion} (${envLabel.toLowerCase()})`;
+const safeEnvLabel = typeof envLabel === 'string' && envLabel.trim().length > 0 ? envLabel : 'DEV';
+const mobileVersion = `${expoVersion} (${safeEnvLabel.toLowerCase()})`;
 
 export default function ProfileScreen() {
   const { isDark, setMode } = useAppTheme();
@@ -79,6 +80,32 @@ export default function ProfileScreen() {
       paymentProfile: data.paymentProfile ?? '',
     });
   }, [data]);
+
+  const hasProfileChanges = useMemo(() => {
+    if (!data) return false;
+    const baseline: DriverProfile = {
+      name: data.name ?? '',
+      email: data.email ?? '',
+      phone: data.phone ?? '',
+      homeAddress: data.homeAddress ?? '',
+      homeSiteAddress: data.homeSiteAddress ?? data.homeAddress ?? '',
+      homeCity: data.homeCity ?? '',
+      homeState: data.homeState ?? '',
+      homeZipCode: data.homeZipCode ?? '',
+      paymentProfile: data.paymentProfile ?? '',
+    };
+    return (
+      profile.name !== baseline.name ||
+      profile.email !== baseline.email ||
+      profile.phone !== baseline.phone ||
+      profile.homeAddress !== baseline.homeAddress ||
+      profile.homeSiteAddress !== baseline.homeSiteAddress ||
+      profile.homeCity !== baseline.homeCity ||
+      profile.homeState !== baseline.homeState ||
+      profile.homeZipCode !== baseline.homeZipCode ||
+      profile.paymentProfile !== baseline.paymentProfile
+    );
+  }, [data, profile]);
 
   const saveMutation = useMutation({
     mutationFn: () =>
@@ -131,10 +158,7 @@ export default function ProfileScreen() {
         </View>
         <Text style={[styles.subtitle, { color: isDark ? '#9ca3af' : '#6b7280' }]}>Sign in to access profile, history, and charging actions.</Text>
         <TouchableOpacity style={styles.saveBtn} onPress={() => router.replace('/(auth)/sign-in' as any)}>
-          <Text style={styles.saveText}>Sign In</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.createAccountBtn} onPress={() => router.push('/(auth)/sign-up' as any)}>
-          <Text style={styles.createAccountText}>Create Account</Text>
+          <Text style={styles.saveText}>Sign in / Sign up</Text>
         </TouchableOpacity>
       </View>
     );
@@ -219,17 +243,25 @@ export default function ProfileScreen() {
       </View>
 
       <TouchableOpacity
-        style={[styles.saveBtn, (isLoading || saveMutation.isPending) && { opacity: 0.6 }]}
+        style={[
+          styles.saveBtn,
+          !hasProfileChanges && {
+            backgroundColor: isDark ? '#374151' : '#e5e7eb',
+            borderColor: isDark ? '#4b5563' : '#d1d5db',
+            borderWidth: 1,
+          },
+          (isLoading || saveMutation.isPending) && { opacity: 0.6 },
+        ]}
         onPress={() => saveMutation.mutate()}
-        disabled={isLoading || saveMutation.isPending}
+        disabled={isLoading || saveMutation.isPending || !hasProfileChanges}
       >
-        <Text style={styles.saveText}>Save Profile</Text>
+        <Text style={[styles.saveText, !hasProfileChanges && { color: isDark ? '#d1d5db' : '#6b7280' }]}>Save Profile</Text>
       </TouchableOpacity>
 
       <TouchableOpacity
         style={[
           styles.logoutBtn,
-          { backgroundColor: isDark ? '#7f1d1d' : '#b91c1c' },
+          { backgroundColor: isDark ? '#6b7280' : '#4b5563' },
         ]}
         onPress={() => setShowLogoutConfirm(true)}
       >

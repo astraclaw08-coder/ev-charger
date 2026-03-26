@@ -9,8 +9,10 @@ import {
   AppState,
   Modal,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useQuery } from '@tanstack/react-query';
@@ -22,6 +24,7 @@ import { parseChargerQrPayload } from '@/lib/chargerQr';
 import { useAppTheme } from '@/theme';
 import { useChargingNotifications } from '@/providers/ChargingNotificationsProvider';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 
 type Coord = { latitude: number; longitude: number };
 
@@ -74,6 +77,7 @@ function statusLabelFromStatuses(statuses: string[], chargerStatuses: string[]):
 
 export default function MapScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ openScanner?: string; scanNonce?: string }>();
   const mapRef = useRef<MapView | null>(null);
   const searchInputRef = useRef<TextInput | null>(null);
   const regionRef = useRef<Region | null>(null);
@@ -95,6 +99,12 @@ export default function MapScreen() {
   const [manualStationNumber, setManualStationNumber] = useState('');
   const [selectedSite, setSelectedSite] = useState<SiteAggregate | null>(null);
 
+  useEffect(() => {
+    if (params.openScanner !== '1') return;
+    void openScanner();
+    router.setParams({ openScanner: undefined, scanNonce: undefined });
+  }, [params.openScanner, params.scanNonce]);
+
   const { data: chargers = [], refetch } = useQuery({
     queryKey: ['chargers'],
     queryFn: () => api.chargers.list(),
@@ -102,8 +112,8 @@ export default function MapScreen() {
     placeholderData: (prev) => prev,
   });
 
-  const activeBannerOffset = activeSession ? 72 + Math.max(insets.bottom, 8) : 0;
-  const controlsBottom = tabBarHeight + activeBannerOffset + 8;
+  const activeBannerOffset = activeSession ? 58 + Math.max(insets.bottom, 8) : 0;
+  const controlsBottom = tabBarHeight + activeBannerOffset + 44;
 
   useEffect(() => {
     (async () => {
@@ -392,6 +402,7 @@ export default function MapScreen() {
           rotateEnabled
           pitchEnabled
           userInterfaceStyle={isDark ? 'dark' : 'light'}
+          legalLabelInsets={{ bottom: controlsBottom + 56, left: 8, right: 0, top: 0 }}
           onRegionChangeComplete={(r) => {
             regionRef.current = r;
           }}
@@ -416,31 +427,20 @@ export default function MapScreen() {
           })}
         </MapView>
 
-        <View pointerEvents="box-none" style={styles.mapControls}>
-          <TouchableOpacity style={styles.locateBtn} onPress={recenterToUser}>
-            <Text style={styles.locateText}>◎</Text>
+        <View pointerEvents="box-none" style={[styles.mapControls, { bottom: controlsBottom + 72 }]}> 
+          <TouchableOpacity
+            style={[
+              styles.locateBtn,
+              {
+                backgroundColor: isDark ? '#111827e6' : '#fffffff0',
+                borderColor: isDark ? '#374151' : '#d1d5db',
+              },
+            ]}
+            onPress={recenterToUser}
+          >
+            <Ionicons name="locate" size={20} color={isDark ? '#f9fafb' : '#0f172a'} />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.zoomBtn} onPress={() => zoomBy(1)}><Text style={styles.zoomText}>＋</Text></TouchableOpacity>
-          <TouchableOpacity style={styles.zoomBtn} onPress={() => zoomBy(-1)}><Text style={styles.zoomText}>－</Text></TouchableOpacity>
         </View>
-
-        <TouchableOpacity
-          testID="map-qr-scan-tile"
-          accessibilityRole="button"
-          accessibilityLabel="Scan charger QR"
-          style={[
-            styles.qrTile,
-            {
-              bottom: controlsBottom + 64,
-              backgroundColor: isDark ? '#111827e8' : '#fffffff2',
-              borderColor: isDark ? '#374151' : '#d1d5db',
-            },
-          ]}
-          onPress={openScanner}
-        >
-          <Text style={[styles.qrTileIcon, { color: isDark ? '#34d399' : '#065f46' }]}>▦</Text>
-          <Text style={[styles.qrTileLabel, { color: isDark ? '#f9fafb' : '#111827' }]}>Scan QR</Text>
-        </TouchableOpacity>
 
         <View
           style={[
@@ -451,6 +451,12 @@ export default function MapScreen() {
             },
           ]}
         >
+          <Ionicons
+            name="search"
+            size={16}
+            color={isDark ? '#9ca3af' : '#6b7280'}
+            style={styles.searchIcon}
+          />
           <TextInput
             ref={searchInputRef}
             testID="map-search-input"
@@ -505,67 +511,76 @@ export default function MapScreen() {
       </View>
 
       <Modal visible={showScanner} animationType="slide" onRequestClose={closeScanner}>
-        <View style={[styles.scannerModalContainer, { backgroundColor: isDark ? '#020617' : '#030712' }]}> 
-          <View style={styles.scannerHeader}>
-            <Text style={styles.scannerTitle}>Scan Charger QR</Text>
-            <TouchableOpacity onPress={closeScanner} style={styles.scannerCloseBtn}>
-              <Text style={styles.scannerCloseText}>Done</Text>
-            </TouchableOpacity>
-          </View>
-
-          {permissionDenied ? (
-            <View style={styles.scannerStateCard}>
-              <Text style={styles.scannerErrorTitle}>Camera access needed</Text>
-              <Text style={styles.scannerErrorText}>
-                Camera permission is denied or restricted. Please allow camera access in Settings, then retry.
-              </Text>
-              <TouchableOpacity style={styles.scannerRetryBtn} onPress={openScanner}>
-                <Text style={styles.scannerRetryText}>Retry Permission</Text>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <View style={[styles.scannerModalContainer, { backgroundColor: isDark ? '#020617' : '#030712' }]}>
+            <View style={styles.scannerHeader}>
+              <Text style={styles.scannerTitle}>Scan Charger QR</Text>
+              <TouchableOpacity onPress={closeScanner} style={styles.scannerCloseBtn}>
+                <Text style={styles.scannerCloseText}>Done</Text>
               </TouchableOpacity>
             </View>
-          ) : (
-            <>
-              <CameraView
-                style={styles.cameraView}
-                facing="back"
-                enableTorch={torchEnabled}
-                barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
-                onBarcodeScanned={scanLocked ? undefined : handleQrScanned}
-              />
 
-              <View style={styles.scannerControlsRow}>
-                <TouchableOpacity
-                  style={[styles.flashBtn, { backgroundColor: torchEnabled ? '#0f766e' : '#1f2937' }]}
-                  onPress={() => setTorchEnabled((v) => !v)}
-                >
-                  <Text style={styles.flashBtnText}>{torchEnabled ? 'Flashlight On' : 'Flashlight Off'}</Text>
+            {permissionDenied ? (
+              <View style={styles.scannerStateCard}>
+                <Text style={styles.scannerErrorTitle}>Camera access needed</Text>
+                <Text style={styles.scannerErrorText}>
+                  Camera permission is denied or restricted. Please allow camera access in Settings, then retry.
+                </Text>
+                <TouchableOpacity style={styles.scannerRetryBtn} onPress={openScanner}>
+                  <Text style={styles.scannerRetryText}>Retry Permission</Text>
                 </TouchableOpacity>
               </View>
-
-              <View style={styles.scannerHintWrap}>
-                <Text style={styles.scannerHintText}>Align the charger QR code inside the camera frame.</Text>
-              </View>
-
-              <View style={[styles.manualEntryCard, { backgroundColor: isDark ? '#111827' : '#ffffff' }]}>
-                <Text style={[styles.manualEntryTitle, { color: isDark ? '#f9fafb' : '#111827' }]}>No QR code?</Text>
-                <Text style={[styles.manualEntrySub, { color: isDark ? '#9ca3af' : '#64748b' }]}>Enter charger station number manually.</Text>
-                <View style={styles.manualEntryRow}>
-                  <TextInput
-                    value={manualStationNumber}
-                    onChangeText={setManualStationNumber}
-                    placeholder="e.g. CP-00008"
-                    autoCapitalize="characters"
-                    autoCorrect={false}
-                    placeholderTextColor={isDark ? '#6b7280' : '#9ca3af'}
-                    style={[styles.manualEntryInput, { color: isDark ? '#f9fafb' : '#111827', borderColor: isDark ? '#374151' : '#d1d5db' }]}
+            ) : (
+              <>
+                <View style={styles.cameraWrap}>
+                  <CameraView
+                    style={styles.cameraView}
+                    facing="back"
+                    enableTorch={torchEnabled}
+                    barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
+                    onBarcodeScanned={scanLocked ? undefined : handleQrScanned}
                   />
-                  <TouchableOpacity style={styles.manualEntryBtn} onPress={handleManualStationSubmit} disabled={resolvingScan}>
-                    <Text style={styles.manualEntryBtnText}>Open</Text>
+                  <View pointerEvents="none" style={styles.qrGuideFrame} />
+                </View>
+
+                <View style={styles.scannerControlsRow}>
+                  <TouchableOpacity
+                    style={[styles.flashBtn, { backgroundColor: torchEnabled ? '#0f766e' : '#1f2937' }]}
+                    onPress={() => setTorchEnabled((v) => !v)}
+                  >
+                    <Text style={styles.flashBtnText}>{torchEnabled ? 'Flashlight On' : 'Flashlight Off'}</Text>
                   </TouchableOpacity>
                 </View>
-              </View>
-            </>
-          )}
+
+                <View style={styles.scannerHintWrap}>
+                  <Text style={styles.scannerHintText}>Align the charger QR code inside the camera frame.</Text>
+                </View>
+
+                <View style={[styles.manualEntryDock, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+                  <View style={[styles.manualEntryCard, { backgroundColor: isDark ? '#111827' : '#ffffff' }]}>
+                    <Text style={[styles.manualEntryTitle, { color: isDark ? '#f9fafb' : '#111827' }]}>No QR code?</Text>
+                    <Text style={[styles.manualEntrySub, { color: isDark ? '#9ca3af' : '#64748b' }]}>Enter charger station number manually.</Text>
+                    <View style={styles.manualEntryRow}>
+                      <TextInput
+                        value={manualStationNumber}
+                        onChangeText={setManualStationNumber}
+                        placeholder="e.g. CP-00008"
+                        autoCapitalize="characters"
+                        autoCorrect={false}
+                        placeholderTextColor={isDark ? '#6b7280' : '#9ca3af'}
+                        style={[styles.manualEntryInput, { color: isDark ? '#f9fafb' : '#111827', borderColor: isDark ? '#374151' : '#d1d5db' }]}
+                      />
+                      <TouchableOpacity style={styles.manualEntryBtn} onPress={handleManualStationSubmit} disabled={resolvingScan}>
+                        <Text style={styles.manualEntryBtnText}>Next</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </View>
+              </>
+            )}
 
           {(scannerError || resolvingScan) && (
             <View style={[styles.scanResultCard, { backgroundColor: isDark ? '#111827' : '#ffffff' }]}>
@@ -592,7 +607,8 @@ export default function MapScreen() {
               )}
             </View>
           )}
-        </View>
+          </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Site preview bottom sheet */}
@@ -668,25 +684,9 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   mapSection: { flex: 1, position: 'relative' },
   map: { flex: 1 },
-  mapControls: { position: 'absolute', right: 12, top: 12, gap: 8 },
-  locateBtn: { width: 40, height: 40, backgroundColor: '#111827cc', borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
-  locateText: { color: '#fff', fontWeight: '800', fontSize: 18 },
-  zoomBtn: { width: 40, height: 40, backgroundColor: '#111827cc', borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  zoomText: { color: '#fff', fontSize: 22, fontWeight: '700', lineHeight: 22 },
-  qrTile: {
-    position: 'absolute',
-    right: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    minWidth: 96,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 2,
-  },
-  qrTileIcon: { fontSize: 20, fontWeight: '900', lineHeight: 20 },
-  qrTileLabel: { fontSize: 12, fontWeight: '800' },
+  mapControls: { position: 'absolute', right: 12, gap: 8 },
+  locateBtn: { width: 42, height: 42, borderRadius: 21, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  zoomBtn: { width: 42, height: 42, backgroundColor: '#111827cc', borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   searchWrap: {
     position: 'absolute',
     left: 12,
@@ -697,7 +697,10 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
     borderWidth: 1,
     borderColor: '#ffffff33',
+    flexDirection: 'row',
+    alignItems: 'center',
   },
+  searchIcon: { marginRight: 8 },
   searchInput: { fontSize: 14, fontWeight: '600', flex: 1, paddingRight: 40 },
   clearBtn: {
     position: 'absolute',
@@ -722,18 +725,31 @@ const styles = StyleSheet.create({
   scannerTitle: { color: '#f9fafb', fontSize: 20, fontWeight: '800' },
   scannerCloseBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, backgroundColor: '#1f2937' },
   scannerCloseText: { color: '#d1d5db', fontSize: 13, fontWeight: '700' },
-  cameraView: { flex: 1, borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: '#1f2937' },
+  cameraWrap: { flex: 1, borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: '#1f2937', position: 'relative' },
+  cameraView: { flex: 1 },
+  qrGuideFrame: {
+    position: 'absolute',
+    left: '13%',
+    right: '13%',
+    top: '24%',
+    bottom: '24%',
+    borderWidth: 2,
+    borderColor: '#67e8f9',
+    borderRadius: 18,
+    backgroundColor: 'transparent',
+  },
   scannerControlsRow: { paddingTop: 10, alignItems: 'flex-end' },
   flashBtn: { borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8 },
   flashBtnText: { color: '#ecfeff', fontSize: 12, fontWeight: '800' },
-  scannerHintWrap: { paddingVertical: 10, alignItems: 'center' },
+  scannerHintWrap: { paddingTop: 8, paddingBottom: 6, alignItems: 'center' },
   scannerHintText: { color: '#9ca3af', fontSize: 13, textAlign: 'center' },
+  manualEntryDock: { marginTop: 'auto' },
   manualEntryCard: { borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#374151', gap: 8 },
   manualEntryTitle: { fontSize: 14, fontWeight: '800' },
   manualEntrySub: { fontSize: 12 },
   manualEntryRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
-  manualEntryInput: { flex: 1, borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 9, fontSize: 13, fontWeight: '700' },
-  manualEntryBtn: { backgroundColor: '#065f46', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 9 },
+  manualEntryInput: { flex: 1, borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 14, fontSize: 13, fontWeight: '700' },
+  manualEntryBtn: { backgroundColor: '#065f46', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 14 },
   manualEntryBtnText: { color: '#ecfdf5', fontSize: 13, fontWeight: '800' },
   scannerStateCard: { borderRadius: 14, borderWidth: 1, borderColor: '#374151', backgroundColor: '#111827', padding: 16, gap: 10, marginTop: 8 },
   scannerErrorTitle: { color: '#fca5a5', fontSize: 16, fontWeight: '800' },
@@ -868,4 +884,5 @@ const mapStyles = StyleSheet.create({
     marginBottom: 4,
   },
 });
+
 

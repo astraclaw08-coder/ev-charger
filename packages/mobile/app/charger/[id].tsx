@@ -27,6 +27,79 @@ import { useAppAuth } from '@/providers/AuthProvider';
 
 const RATE_PER_KWH = 0.35; // fallback only
 
+type TouWindowMobile = {
+  day: number; // 0 Sun..6 Sat
+  start: string; // HH:mm
+  end: string;   // HH:mm|23:59
+  pricePerKwhUsd: number;
+  idleFeePerMinUsd: number;
+};
+
+function toMinutes(v: string): number {
+  const [h, m] = String(v).split(':').map(Number);
+  if (Number.isNaN(h) || Number.isNaN(m)) return -1;
+  return h * 60 + m;
+}
+
+function hour12(h: number): string {
+  if (h === 0 || h === 24) return '12 AM';
+  if (h === 12) return '12 PM';
+  return h < 12 ? `${h} AM` : `${h - 12} PM`;
+}
+
+function time12(v: string): string {
+  const [hh, mm] = String(v).split(':');
+  const h = Number(hh);
+  if (!Number.isFinite(h)) return v;
+  const suffix = h >= 12 ? 'PM' : 'AM';
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  if (mm === '00') return `${h12} ${suffix}`;
+  return `${h12}:${mm} ${suffix}`;
+}
+
+function normalizedTouEnd(start: string, end: string): string {
+  if (end === '23:59') return '24:00';
+  if (end === '00:00' && toMinutes(start) > 0) return '24:00';
+  return end;
+}
+
+function windowLabel12(start: string, end: string): string {
+  const normalizedEnd = normalizedTouEnd(start, end);
+  if (normalizedEnd === '24:00') return `${time12(start)}-12 AM`;
+  return `${time12(start)}-${time12(normalizedEnd)}`;
+}
+
+function parseTouWindows(raw: unknown): TouWindowMobile[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((w: any) => ({
+      day: Number(w?.day ?? 0),
+      start: String(w?.start ?? '00:00'),
+      end: String(w?.end ?? '00:00'),
+      pricePerKwhUsd: Number(w?.pricePerKwhUsd ?? 0),
+      idleFeePerMinUsd: Number(w?.idleFeePerMinUsd ?? 0),
+    }))
+    .filter((w) => {
+      if (w.day < 0 || w.day > 6) return false;
+      const startMin = toMinutes(w.start);
+      const endMin = toMinutes(normalizedTouEnd(w.start, w.end));
+      return startMin >= 0 && endMin > startMin;
+    })
+    .sort((a, b) => a.day - b.day || toMinutes(a.start) - toMinutes(b.start));
+}
+
+function currentTouWindow(windows: TouWindowMobile[]): TouWindowMobile | null {
+  const now = new Date();
+  const day = now.getDay();
+  const mins = now.getHours() * 60 + now.getMinutes();
+  return windows.find((w) => {
+    if (w.day !== day) return false;
+    const s = toMinutes(w.start);
+    const e = toMinutes(normalizedTouEnd(w.start, w.end));
+    return mins >= s && mins < e;
+  }) ?? null;
+}
+
 function chargerStatusLabel(charger: Charger): string {
   const statuses = charger.connectors.map((c) => c.status);
   if (statuses.some((s) => s === 'AVAILABLE')) return 'Available';
@@ -71,6 +144,7 @@ export default function ChargerDetailScreen() {
   }, [allChargers, charger]);
 
   const [selectedChargerId, setSelectedChargerId] = useState<string | null>(null);
+  const [showTouDetails, setShowTouDetails] = useState(false);
 
   useEffect(() => {
     if (!charger) return;
@@ -293,16 +367,47 @@ export default function ChargerDetailScreen() {
   );
   const showPaymentSetupBanner = !hasDefaultPaymentMethod && hasBillablePricing;
 
+  const pricingMode = String((selectedCharger?.site as any)?.pricingMode ?? 'flat');
+  const touWindows = parseTouWindows((selectedCharger?.site as any)?.touWindows);
+  const nowTou = currentTouWindow(touWindows);
+  const displayedEnergyRate = pricingMode === 'tou' && nowTou ? nowTou.pricePerKwhUsd : (selectedCharger?.site.pricePerKwhUsd ?? RATE_PER_KWH);
+  const displayedIdleRate = pricingMode === 'tou' && nowTou ? nowTou.idleFeePerMinUsd : idleFeePerMinUsd;
+  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+  // Collapse saved windows into one representative day-bar + applicable days list
+  const dayRows = Array.from({ length: 7 }, (_, day) => ({
+    day,
+    rows: touWindows.filter((w) => w.day === day).sort((a, b) => toMinutes(a.start) - toMinutes(b.start)),
+  })).filter((d) => d.rows.length > 0);
+
+  const signatureFor = (rows: TouWindowMobile[]) => rows.map((r) => `${r.start}-${r.end}-${r.pricePerKwhUsd.toFixed(4)}-${r.idleFeePerMinUsd.toFixed(4)}`).join('|');
+  const canonical = (() => {
+    if (dayRows.length === 0) return null as null | { rows: TouWindowMobile[]; days: number[] };
+    const bySig = new Map<string, { rows: TouWindowMobile[]; days: number[] }>();
+    for (const d of dayRows) {
+      const sig = signatureFor(d.rows);
+      if (!bySig.has(sig)) bySig.set(sig, { rows: d.rows, days: [] });
+      bySig.get(sig)!.days.push(d.day);
+    }
+    return Array.from(bySig.values()).sort((a, b) => b.days.length - a.days.length)[0] ?? null;
+  })();
+
 
   return (
     <>
       <Stack.Screen
         options={{
-          title: charger.site.name,
+          title: 'Lumeo',
           headerShown: true,
           headerStyle: { backgroundColor: isDark ? '#0b1220' : '#ffffff' },
           headerTintColor: isDark ? '#f9fafb' : '#111827',
           headerShadowVisible: false,
+          headerTitleStyle: {
+            color: isDark ? '#ffffff' : '#000000',
+            fontWeight: '300',
+            letterSpacing: 1.5,
+            fontSize: 22,
+          } as any,
           headerBackButtonDisplayMode: 'minimal',
           headerLeft: () => (
             <TouchableOpacity onPress={() => router.back()} style={{ paddingHorizontal: 4, paddingVertical: 4 }}>
@@ -312,7 +417,13 @@ export default function ChargerDetailScreen() {
           headerRight: () => (
             <HeartButton
               isFavorited={isFav(selectedCharger?.id ?? charger.id)}
-              onToggle={() => toggle(selectedCharger?.id ?? charger.id)}
+              onToggle={async () => {
+                try {
+                  await toggle(selectedCharger?.id ?? charger.id);
+                } catch (e) {
+                  Alert.alert('Favorites update failed', e instanceof Error ? e.message : 'Please sign in again and retry.');
+                }
+              }}
             />
           ),
         }}
@@ -324,24 +435,124 @@ export default function ChargerDetailScreen() {
       >
         {/* Site info */}
         <View style={[styles.siteCard, { backgroundColor: isDark ? '#111827' : '#fff' }]}>
+          <Text style={[styles.siteName, { color: isDark ? '#f9fafb' : '#111827' }]}>{charger.site.name}</Text>
           <Text style={[styles.siteAddress, { color: isDark ? '#9ca3af' : '#6b7280' }]}>{charger.site.address}</Text>
 
           <View style={[styles.pricingWrap, { borderTopColor: isDark ? '#1f2937' : '#e5e7eb' }]}>
-            <Text style={[styles.pricingTitle, { color: isDark ? '#e5e7eb' : '#111827' }]}>Charging pricing</Text>
+            <Text style={[styles.pricingTitle, { color: isDark ? '#e5e7eb' : '#111827' }]}>Price</Text>
+            {pricingMode === 'tou' && nowTou ? (
+              <Text style={[styles.pricingSubtitle, { color: isDark ? '#cbd5e1' : '#94a3b8' }]}>TOU {windowLabel12(nowTou.start, nowTou.end)}</Text>
+            ) : null}
+
             <View style={styles.priceTilesRow}>
               <View style={[styles.priceTile, { backgroundColor: isDark ? '#0f172a' : '#f3f4f6' }]}>
-                <Text style={[styles.priceTileLabel, { color: isDark ? '#9ca3af' : '#6b7280' }]}>Energy</Text>
-                <Text numberOfLines={1} style={[styles.priceTileValue, { color: isDark ? '#f9fafb' : '#111827' }]}>${(selectedCharger?.site.pricePerKwhUsd ?? RATE_PER_KWH).toFixed(2)}/kWh</Text>
+                <Text numberOfLines={1} style={[styles.priceTileLabel, { color: isDark ? '#9ca3af' : '#6b7280' }]}>Activation</Text>
+                <Text style={[styles.priceTileValue, { color: isDark ? '#f9fafb' : '#111827' }]}>${activationFeeUsd.toFixed(2)}</Text>
               </View>
               <View style={[styles.priceTile, { backgroundColor: isDark ? '#0f172a' : '#f3f4f6' }]}>
-                <Text style={[styles.priceTileLabel, { color: isDark ? '#9ca3af' : '#6b7280' }]}>Idle</Text>
-                <Text numberOfLines={1} style={[styles.priceTileValue, { color: isDark ? '#f9fafb' : '#111827' }]}>${idleFeePerMinUsd.toFixed(2)}/min</Text>
+                <Text numberOfLines={1} style={[styles.priceTileLabel, { color: isDark ? '#9ca3af' : '#6b7280' }]}>Energy</Text>
+                <Text style={[styles.priceTileValue, { color: isDark ? '#f9fafb' : '#111827' }]}>${displayedEnergyRate.toFixed(2)}/kWh</Text>
               </View>
               <View style={[styles.priceTile, { backgroundColor: isDark ? '#0f172a' : '#f3f4f6' }]}>
-                <Text style={[styles.priceTileLabel, { color: isDark ? '#9ca3af' : '#6b7280' }]}>Activation</Text>
-                <Text numberOfLines={1} style={[styles.priceTileValue, { color: isDark ? '#f9fafb' : '#111827' }]}>${activationFeeUsd.toFixed(2)}</Text>
+                <Text numberOfLines={1} style={[styles.priceTileLabel, { color: isDark ? '#9ca3af' : '#6b7280' }]}>Idle</Text>
+                <Text style={[styles.priceTileValue, { color: isDark ? '#f9fafb' : '#111827' }]}>${displayedIdleRate.toFixed(2)}/min</Text>
               </View>
             </View>
+
+            {pricingMode === 'tou' && touWindows.length > 0 ? (
+              <View style={styles.touDetailsWrap}>
+                <TouchableOpacity
+                  style={styles.touDetailsToggle}
+                  onPress={() => setShowTouDetails((v) => !v)}
+                  activeOpacity={0.85}
+                >
+                  <Text style={[styles.touDetailsToggleText, { color: isDark ? '#cbd5e1' : '#94a3b8' }]}>TOU details</Text>
+                  <Ionicons name={showTouDetails ? 'chevron-down' : 'chevron-up'} size={18} color={isDark ? '#cbd5e1' : '#94a3b8'} />
+                </TouchableOpacity>
+
+                {showTouDetails ? (
+                  <View style={[styles.touBlock, { borderColor: isDark ? '#334155' : '#dbeafe', backgroundColor: isDark ? '#0b1220' : '#f8fafc' }]}> 
+                    {(() => {
+                      const tierMap = new Map<string, { label: string; color: string; darkColor: string; energy: number; idle: number }>();
+                      const colors = [
+                        { color: '#10b981', darkColor: '#34d399' },
+                        { color: '#f59e0b', darkColor: '#fbbf24' },
+                        { color: '#ef4444', darkColor: '#f87171' },
+                        { color: '#8b5cf6', darkColor: '#a78bfa' },
+                        { color: '#06b6d4', darkColor: '#22d3ee' },
+                      ];
+                      const unique = Array.from(new Set(touWindows.map((w) => `${w.pricePerKwhUsd.toFixed(4)}|${w.idleFeePerMinUsd.toFixed(4)}`)));
+                      const sortedByEnergy = unique
+                        .map((k) => {
+                          const [e, idl] = k.split('|').map(Number);
+                          return { k, e, idl };
+                        })
+                        .sort((a, b) => a.e - b.e || a.idl - b.idl);
+                      const tierName = (idx: number) => (idx === 0 ? 'Low' : idx === 1 ? 'Med' : idx === 2 ? 'High' : `Tier ${idx + 1}`);
+                      sortedByEnergy.forEach((row, i) => {
+                        tierMap.set(row.k, { label: tierName(i), ...colors[i % colors.length], energy: row.e, idle: row.idl });
+                      });
+
+                      const rows = canonical?.rows ?? [];
+                      const days = canonical?.days ?? [];
+
+                      return (
+                        <>
+                          <Text style={[styles.touDaysMeta, { color: isDark ? '#cbd5e1' : '#94a3b8' }]}>Applies on: {days.map((d) => dayNames[d]).join(', ')}</Text>
+
+                          <View style={styles.touVisualDayRow}>
+                            <View style={styles.touTrackWrap}>
+                              <View style={[styles.touTrack, { backgroundColor: isDark ? '#1f2937' : '#e5e7eb' }]}>
+                              {rows.map((w, idx) => {
+                                const k = `${w.pricePerKwhUsd.toFixed(4)}|${w.idleFeePerMinUsd.toFixed(4)}`;
+                                const meta = tierMap.get(k)!;
+                                const start = toMinutes(w.start);
+                                const end = toMinutes(normalizedTouEnd(w.start, w.end));
+                                const leftPct = Math.max(0, Math.min(100, (start / 1440) * 100));
+                                const widthPct = Math.max(1, Math.min(100 - leftPct, ((end - start) / 1440) * 100));
+                                return (
+                                  <View
+                                    key={`canon-${idx}`}
+                                    style={[
+                                      styles.touSegment,
+                                      {
+                                        left: `${leftPct}%`,
+                                        width: `${widthPct}%`,
+                                        backgroundColor: isDark ? meta.darkColor : meta.color,
+                                      },
+                                    ]}
+                                  />
+                                );
+                              })}
+                              </View>
+                              <View style={styles.touAxisRow}>
+                                {['12A', '6A', '12P', '6P', '12A'].map((t, idx) => (
+                                  <Text key={`${t}-${idx}`} style={[styles.touAxisText, { color: isDark ? '#94a3b8' : '#64748b' }]}>{t}</Text>
+                                ))}
+                              </View>
+                            </View>
+                          </View>
+
+                          <View style={styles.touLegendRow}>
+                            {unique.map((k) => {
+                              const meta = tierMap.get(k)!;
+                              return (
+                                <View key={k} style={styles.touLegendItem}>
+                                  <View style={[styles.touLegendDot, { backgroundColor: isDark ? meta.darkColor : meta.color }]} />
+                                  <Text style={[styles.touLegendText, { color: isDark ? '#cbd5e1' : '#334155' }]}>
+                                    {meta.label}: ${meta.energy.toFixed(2)}/kWh · ${meta.idle.toFixed(2)}/min
+                                  </Text>
+                                </View>
+                              );
+                            })}
+                          </View>
+                        </>
+                      );
+                    })()}
+                  </View>
+                ) : null}
+              </View>
+            ) : null}
           </View>
         </View>
 
@@ -438,14 +649,43 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 2,
   },
-  siteName: { fontSize: 18, fontWeight: '700', color: '#111827' },
-  siteAddress: { fontSize: 13, color: '#6b7280' },
-  pricingWrap: { marginTop: 12, borderTopWidth: 1, paddingTop: 10, gap: 8 },
-  pricingTitle: { fontSize: 13, fontWeight: '700' },
-  priceTilesRow: { flexDirection: 'row', gap: 8 },
-  priceTile: { flex: 1, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 8 },
-  priceTileLabel: { fontSize: 11, fontWeight: '600' },
-  priceTileValue: { fontSize: 14, fontWeight: '700', marginTop: 4 },
+  siteName: { fontSize: 18, fontWeight: '700', color: '#111827', textAlign: 'center' },
+  siteAddress: { fontSize: 13, color: '#6b7280', textAlign: 'center' },
+  pricingWrap: { marginTop: 12, borderTopWidth: 1, paddingTop: 10, gap: 10 },
+  pricingTitle: { fontSize: 13, fontWeight: '700', textAlign: 'center' },
+  pricingSubtitle: { fontSize: 11, fontWeight: '700', textAlign: 'center', marginTop: -4 },
+  priceTilesRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'stretch' },
+  touDetailsWrap: { gap: 8, marginTop: 2 },
+  touDetailsToggle: {
+    paddingVertical: 4,
+    paddingHorizontal: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    alignSelf: 'center',
+  },
+  touDetailsToggleText: { fontSize: 12, fontWeight: '800', textAlign: 'center' },
+  priceTile: { width: '31.5%', minWidth: 0, minHeight: 82, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 6, alignItems: 'center', justifyContent: 'center' },
+  priceTileLabel: { width: '100%', fontSize: 12, fontWeight: '600', textAlign: 'center', lineHeight: 16 },
+  priceTileValue: { width: '100%', fontSize: 13, fontWeight: '700', marginTop: 6, textAlign: 'center' },
+
+  touBlock: { marginTop: 10, borderWidth: 1, borderRadius: 12, padding: 10, gap: 10 },
+  touNowPill: { borderRadius: 10, paddingVertical: 7, paddingHorizontal: 9 },
+  touNowText: { fontSize: 12, fontWeight: '700', lineHeight: 17 },
+  touDaysMeta: { fontSize: 11, fontWeight: '700', textAlign: 'center' },
+  touLegendRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'center' },
+  touLegendItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  touLegendDot: { width: 10, height: 10, borderRadius: 5 },
+  touLegendText: { fontSize: 11, fontWeight: '700' },
+  touVisualDayRow: { width: '100%' },
+  touTrackWrap: { width: '100%', gap: 4 },
+  touTrack: { height: 18, borderRadius: 9, position: 'relative', overflow: 'hidden' },
+  touAxisRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  touAxisText: { fontSize: 10, fontWeight: '700' },
+  touSegment: { position: 'absolute', top: 0, bottom: 0, borderRadius: 8 },
+  touActivationNote: { marginTop: 6, borderWidth: 1, borderRadius: 10, paddingVertical: 7, paddingHorizontal: 9 },
+  touActivationText: { fontSize: 11, fontWeight: '700', lineHeight: 16 },
 
   paymentBanner: {
     backgroundColor: '#fffbeb',

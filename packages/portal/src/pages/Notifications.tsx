@@ -89,7 +89,7 @@ export default function Notifications() {
         <h1 className="mt-1 text-xl font-semibold text-gray-900 dark:text-slate-100">Notifications</h1>
       </div>
 
-      <section className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-5">
+      <section className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-5">
         <h2 className="text-base font-semibold text-gray-900 dark:text-slate-100">In-app notifications</h2>
         <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">Compose and send custom push-style in-app messages to EV users.</p>
 
@@ -157,7 +157,7 @@ export default function Notifications() {
         </button>
       </section>
 
-      <section className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-5">
+      <section className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-5">
         <h2 className="text-sm font-semibold text-gray-700 dark:text-slate-300">Send audit trail</h2>
         <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">Most recent campaigns and recipient counts.</p>
 
@@ -165,7 +165,7 @@ export default function Notifications() {
           {audit.length === 0 ? (
             <div className="rounded border border-dashed px-3 py-4 text-sm text-gray-500 dark:text-slate-400">No campaigns sent yet.</div>
           ) : audit.map((row) => (
-            <div key={row.id} className="rounded border border-gray-200 dark:border-slate-700 px-3 py-3 text-sm">
+            <div key={row.id} className="rounded border border-gray-300 dark:border-slate-700 px-3 py-3 text-sm">
               <div className="flex items-center justify-between gap-3">
                 <div className="font-medium text-gray-900 dark:text-slate-100">{row.title}</div>
                 <div className="text-xs text-gray-500 dark:text-slate-400">{new Date(row.sentAt).toLocaleString()} · {row.deliveryCount} recipients</div>

@@ -4,7 +4,7 @@
 import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  ActivityIndicator, RefreshControl,
+  ActivityIndicator, RefreshControl, Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -124,9 +124,14 @@ export default function FavoritesScreen() {
               <HeartButton
                 isFavorited={favoriteIds.includes(item.id)}
                 onToggle={async () => {
-                  await toggleFavorite(item.id);
-                  queryClient.invalidateQueries({ queryKey: ['favorites'] });
-                  queryClient.invalidateQueries({ queryKey: ['chargers'] });
+                  try {
+                    await toggleFavorite(item.id);
+                    queryClient.invalidateQueries({ queryKey: ['favorites'] });
+                    queryClient.invalidateQueries({ queryKey: ['chargers'] });
+                  } catch (e) {
+                    const msg = e instanceof Error ? e.message : 'Please sign in again and retry.';
+                    Alert.alert('Favorites update failed', msg);
+                  }
                 }}
               />
             </TouchableOpacity>

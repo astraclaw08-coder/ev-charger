@@ -24,6 +24,16 @@ export async function startServer(port: number): Promise<OcppServerHandle> {
   const server = new RPCServer({
     protocols: ['ocpp1.6'],
     strictMode: false,  // lenient for real-world charger quirks
+    // Send a WS-level ping frame every 55s. Railway's reverse proxy drops idle
+    // WebSocket connections at ~60s; 55s gives a 5s margin for network jitter.
+    // This is the maximum safe interval — do not raise above 58s.
+    // WS pings are protocol-level (a few bytes) and invisible to OCPP.
+    // deferPingsOnActivity DISABLED: always send pings on the 55s cadence
+    // regardless of charger activity. This ensures consistent keepalive
+    // behavior and eliminates edge cases where deferred pings could allow
+    // an idle gap long enough for Railway proxy to close the connection.
+    pingIntervalMs: 55_000,
+    deferPingsOnActivity: false,
   });
 
   // ── Authentication ──────────────────────────────────────────────────────────
@@ -139,9 +149,8 @@ export async function startServer(port: number): Promise<OcppServerHandle> {
     client.handle(async ({ method, params, messageId }: any) => {
       console.warn(`[Server] Unhandled action: ${method}`, JSON.stringify(params));
       await logOcppMessage(chargerId, 'INBOUND', method, params, messageId);
-      const response = {};
-      await logOcppMessage(chargerId, 'OUTBOUND', method, response, messageId ? `${messageId}:response` : undefined);
-      return response;
+      await logOcppMessage(chargerId, 'OUTBOUND', method, {}, messageId ? `${messageId}:response` : undefined);
+      return {};
     });
 
     // ── Disconnect / diagnostics ──────────────────────────────────────────────

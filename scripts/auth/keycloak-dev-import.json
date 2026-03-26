@@ -1,0 +1,99 @@
+{
+  "realm": "ev-charger-dev",
+  "enabled": true,
+  "displayName": "EV Charger Dev",
+  "sslRequired": "NONE",
+  "loginWithEmailAllowed": true,
+  "registrationEmailAsUsername": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "rememberMe": true,
+  "roles": {
+    "realm": [
+      {
+        "name": "owner"
+      },
+      {
+        "name": "operator"
+      },
+      {
+        "name": "driver"
+      }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "ev-charger-portal",
+      "name": "EV Charger Portal",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "dev-portal-client-secret-01",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "redirectUris": [
+        "http://localhost:5173/*",
+        "http://localhost:3001/*"
+      ],
+      "webOrigins": [
+        "http://localhost:5173",
+        "http://localhost:3001"
+      ],
+      "protocolMappers": [
+        {
+          "name": "realm-roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "multivalued": "true",
+            "userinfo.token.claim": "true",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "roles",
+            "jsonType.label": "String"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "ev-charger-admin",
+      "name": "EV Charger Admin",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "dev-admin-client-secret-01",
+      "serviceAccountsEnabled": true,
+      "directAccessGrantsEnabled": true
+    }
+  ],
+  "users": [
+    {
+      "username": "sdang3209@gmail.com",
+      "email": "sdang3209@gmail.com",
+      "firstName": "Son",
+      "lastName": "Dang",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "DevPass#2026",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "owner"
+      ]
+    }
+  ],
+  "serviceAccountClientRoles": {
+    "ev-charger-admin": {
+      "realm-management": [
+        "manage-users",
+        "view-users",
+        "query-users"
+      ]
+    }
+  }
+}

@@ -69,6 +69,37 @@ function getLiveKwh(session: Session): number {
   return 0;
 }
 
+type TouWindowMobile = { day: number; start: string; end: string; pricePerKwhUsd: number; idleFeePerMinUsd: number };
+function toMinutes(v: string): number {
+  const [h, m] = String(v).split(':').map(Number);
+  if (Number.isNaN(h) || Number.isNaN(m)) return -1;
+  return h * 60 + m;
+}
+function parseTouWindows(raw: unknown): TouWindowMobile[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((w: any) => ({
+      day: Number(w?.day ?? 0),
+      start: String(w?.start ?? '00:00'),
+      end: String(w?.end ?? '00:00'),
+      pricePerKwhUsd: Number(w?.pricePerKwhUsd ?? 0),
+      idleFeePerMinUsd: Number(w?.idleFeePerMinUsd ?? 0),
+    }))
+    .filter((w) => w.day >= 0 && w.day <= 6 && toMinutes(w.start) >= 0 && (toMinutes(w.end) > toMinutes(w.start) || w.end === '23:59'))
+    .sort((a, b) => a.day - b.day || toMinutes(a.start) - toMinutes(b.start));
+}
+function currentTouWindow(windows: TouWindowMobile[]): TouWindowMobile | null {
+  const now = new Date();
+  const d = now.getDay();
+  const mins = now.getHours() * 60 + now.getMinutes();
+  return windows.find((w) => {
+    if (w.day !== d) return false;
+    const s = toMinutes(w.start);
+    const e = w.end === '23:59' ? 24 * 60 : toMinutes(w.end);
+    return mins >= s && mins < e;
+  }) ?? null;
+}
+
 function SlideToStart({
   disabled,
   isDark,
@@ -80,18 +111,23 @@ function SlideToStart({
   onComplete: () => void;
   label?: string;
 }) {
-  const trackWidth = 320;
   const knobSize = 56;
-  const maxX = trackWidth - knobSize;
+  const [trackWidth, setTrackWidth] = useState(320);
+  const maxX = Math.max(trackWidth - knobSize, 0);
   const x = useRef(new Animated.Value(0)).current;
   const valueRef = useRef(0);
-
   useEffect(() => {
     const sub = x.addListener(({ value }) => {
       valueRef.current = value;
     });
     return () => x.removeListener(sub);
   }, [x]);
+
+  useEffect(() => {
+    if (valueRef.current > maxX) {
+      x.setValue(maxX);
+    }
+  }, [maxX, x]);
 
   const pan = useMemo(
     () =>
@@ -114,10 +150,28 @@ function SlideToStart({
   );
 
   return (
-    <View style={[styles.slideTrack, { backgroundColor: isDark ? '#1f2937' : '#e5e7eb', opacity: disabled ? 0.45 : 1, width: trackWidth }]}>
+    <View
+      onLayout={(e) => {
+        const w = e.nativeEvent.layout.width;
+        if (w > 0 && Math.abs(w - trackWidth) > 1) setTrackWidth(w);
+      }}
+      style={[
+        styles.slideTrack,
+        {
+          backgroundColor: isDark ? '#1f2937' : '#ffffff',
+          borderColor: isDark ? '#374151' : '#d1d5db',
+          opacity: disabled ? 0.45 : 1,
+          width: '100%',
+        },
+      ]}
+    >
       <Text style={[styles.slideLabel, { color: isDark ? '#d1d5db' : '#374151' }]}>{label}</Text>
       <Animated.View {...pan.panHandlers} style={[styles.slideKnob, { transform: [{ translateX: x }] }]}>
-        <Image source={require('../../../assets/branding/lumeo_logo_swirl_only.png')} style={styles.slideKnobLogo} resizeMode="contain" />
+        <Image
+          source={require('../../../assets/branding/lumeo_logo_swirl_only.png')}
+          style={styles.slideKnobLogo}
+          resizeMode="contain"
+        />
       </Animated.View>
     </View>
   );
@@ -202,27 +256,24 @@ function TopMetricsHero({
 
   const haloColor =
     haloMode === 'faulted'
-      ? '#ef4444'
+      ? '#dc2626'
       : haloMode === 'charging'
-        ? '#7dd3fc'
+        ? '#0891b2'
         : haloMode === 'idle'
-          ? '#facc15'
-          : '#ffffff';
-  const haloAura =
-    haloMode === 'faulted'
-      ? '#ef444455'
-      : haloMode === 'charging'
-        ? '#7dd3fc66'
-        : haloMode === 'idle'
-          ? '#facc1566'
-          : '#ffffff55';
-  const valueColor = forceWhiteText ? '#ffffff' : isDark ? '#f9fafb' : '#0f172a';
-  const labelColor = forceWhiteText ? '#e5e7eb' : isDark ? '#9ca3af' : '#64748b';
+          ? '#d97706'
+          : haloMode === 'awaitingPlug'
+            ? '#16a34a'
+            : '#16a34a';
+
+  const valueColor = forceWhiteText ? '#ffffff' : isDark ? '#f9fafb' : '#0b1220';
+  const labelColor = forceWhiteText ? '#e5e7eb' : isDark ? '#9ca3af' : '#475569';
 
   return (
-    <View style={[styles.metricsHeroCard, { backgroundColor: isDark ? '#0b1220' : '#e0f2fe' }]}>
-      {/* Animated halo border + aura - only this layer blinks, not the card content */}
-      <Animated.View pointerEvents="none" style={[styles.haloRingOverlay, { borderColor: haloColor, shadowColor: haloAura, opacity: haloBlink }]} />
+    <View style={[styles.metricsHeroCard, { backgroundColor: isDark ? '#0b1220' : '#f8fbff' }]}>
+      {/* 30% glow bloom behind the ring — blinks in sync with ring */}
+      <Animated.View pointerEvents="none" style={[styles.haloGlowOverlay, { shadowColor: haloColor, opacity: haloBlink }]} />
+      {/* Crisp halo ring — sits outside tile so tile edge is never exposed */}
+      <Animated.View pointerEvents="none" style={[styles.haloRingOverlay, { borderColor: haloColor, shadowColor: haloColor, opacity: haloBlink }]} />
       <View style={styles.metricsGrid}>
         <View style={[styles.metricTile, { backgroundColor: isDark ? '#111827' : '#ffffff' }]}>
           <Text style={[styles.metricLabel, { color: labelColor }]}>Total kWh</Text>
@@ -340,6 +391,7 @@ export default function ChargerStartScreen() {
     setActivationModalDismissed(false);
   }, [isFlowing]);
 
+  // Reset activation state when charger returns to Available with no active session
   const preferredConnector = useMemo(
     () => charger?.connectors.find((c) => c.status === 'AVAILABLE' || c.status === 'PREPARING' || c.status === 'SUSPENDED_EV') ?? null,
     [charger],
@@ -361,6 +413,17 @@ export default function ChargerStartScreen() {
     if (charger.connectors.length === 1) return charger.connectors[0] ?? null;
     return charger.connectors.find((c) => c.connectorId === selectedConnectorId) ?? preferredConnector;
   }, [charger, preferredConnector, selectedConnectorId]);
+
+  // Reset activation UI when connector returns to AVAILABLE
+  // (covers the activation-timeout / no EV connected scenario)
+  useEffect(() => {
+    if (activeSession) return;
+    if (selectedConnector?.status === 'AVAILABLE') {
+      setActivationTimedOut(false);
+      setShowActivationModal(false);
+      setActivationDeadlineMs(null);
+    }
+  }, [activeSession, selectedConnector?.status]);
 
   useEffect(() => {
     if (!showActivationModal || !activationDeadlineMs) return;
@@ -434,6 +497,7 @@ export default function ChargerStartScreen() {
 
       const startedAt = Date.now();
       const timeoutMs = 120000;
+      const modalDisplayDelayMs = 2000;
 
       const pollForChargingTransition = async () => {
         try {
@@ -470,7 +534,7 @@ export default function ChargerStartScreen() {
           }
 
           if (isPreparingWithoutCharging) {
-            if (!activationModalDismissedRef.current) {
+            if (!activationModalDismissedRef.current && Date.now() - startedAt >= modalDisplayDelayMs) {
               setShowActivationModal(true);
             }
             setActivationDeadlineMs(startedAt + timeoutMs);
@@ -559,15 +623,45 @@ export default function ChargerStartScreen() {
 
   if (isLoading || !charger) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator color="#10b981" />
-      </View>
+      <>
+        <Stack.Screen
+          options={{
+            title: 'Lumeo',
+            headerShown: true,
+            headerStyle: { backgroundColor: isDark ? '#0b1220' : '#ffffff' },
+            headerTintColor: isDark ? '#f9fafb' : '#111827',
+            headerShadowVisible: false,
+            headerTitleStyle: {
+              color: isDark ? '#ffffff' : '#000000',
+              fontWeight: '300',
+              letterSpacing: 1.5,
+              fontSize: 22,
+            } as any,
+            gestureEnabled: false,
+            headerBackButtonDisplayMode: 'minimal',
+            headerLeft: () => (
+              <TouchableOpacity onPress={() => router.back()} style={{ paddingHorizontal: 4, paddingVertical: 4 }}>
+                <Ionicons name="chevron-back" size={30} color={isDark ? '#ffffff' : '#111827'} />
+              </TouchableOpacity>
+            ),
+            headerRight: () => <View style={{ width: 40, height: 40 }} />,
+          }}
+        />
+        <View style={styles.centered}>
+          <ActivityIndicator color="#10b981" />
+        </View>
+      </>
     );
   }
 
   const pricePerKwhUsd = Number(charger.site.pricePerKwhUsd ?? 0.35);
   const idleFeePerMinUsd = Number(charger.site.idleFeePerMinUsd ?? 0);
   const activationFeeUsd = Number((charger.site as any).activationFeeUsd ?? 0);
+  const pricingMode = String((charger.site as any).pricingMode ?? 'flat');
+  const touWindows = parseTouWindows((charger.site as any).touWindows);
+  const nowTou = currentTouWindow(touWindows);
+  const displayedEnergyRate = pricingMode === 'tou' && nowTou ? nowTou.pricePerKwhUsd : pricePerKwhUsd;
+  const displayedIdleRate = pricingMode === 'tou' && nowTou ? nowTou.idleFeePerMinUsd : idleFeePerMinUsd;
 
   const liveKwh = activeSession ? getLiveKwh(activeSession) : 0;
   const liveRate = Number(activeSession?.ratePerKwh ?? pricePerKwhUsd);
@@ -578,16 +672,20 @@ export default function ChargerStartScreen() {
     : 0;
   const topChargerStatus = selectedConnector ? connectorStatusLabel(selectedConnector.status) : 'Unknown';
   const statusRaw = selectedConnector?.status ?? null;
+  // When the connector is back to AVAILABLE with no active session, always show
+  // the idle/available state — never stay in awaitingPlug after a timeout.
   const haloMode: 'available' | 'charging' | 'faulted' | 'idle' | 'awaitingPlug' =
-    showActivationModal || activationTimedOut
-      ? 'awaitingPlug'
-      : statusRaw === 'FAULTED' || statusRaw === 'UNAVAILABLE'
-        ? 'faulted'
-        : statusRaw === 'CHARGING'
-          ? 'charging'
-          : statusRaw === 'PREPARING' || statusRaw === 'FINISHING' || statusRaw === 'SUSPENDED_EV' || statusRaw === 'SUSPENDED_EVSE'
-            ? 'idle'
-            : 'available';
+    statusRaw === 'AVAILABLE' && !activeSession
+      ? 'available'
+      : (showActivationModal || activationTimedOut)
+        ? 'awaitingPlug'
+        : statusRaw === 'FAULTED' || statusRaw === 'UNAVAILABLE'
+          ? 'faulted'
+          : statusRaw === 'CHARGING'
+            ? 'charging'
+            : statusRaw === 'PREPARING' || statusRaw === 'FINISHING' || statusRaw === 'SUSPENDED_EV' || statusRaw === 'SUSPENDED_EVSE'
+              ? 'idle'
+              : 'available';
   const sliderLabel = activeSession
     ? 'Slide to stop'
     : showActivationModal
@@ -607,8 +705,10 @@ export default function ChargerStartScreen() {
           headerShadowVisible: false,
           headerTitleStyle: {
             color: isDark ? '#ffffff' : '#000000',
-            fontWeight: '800',
-          },
+            fontWeight: '300',
+            letterSpacing: 1.5,
+            fontSize: 22,
+          } as any,
           gestureEnabled: false,
           headerBackButtonDisplayMode: 'minimal',
           headerLeft: () => (
@@ -617,10 +717,18 @@ export default function ChargerStartScreen() {
             </TouchableOpacity>
           ),
           headerRight: () => (
-            <HeartButton
-              isFavorited={isFav(charger.id)}
-              onToggle={() => toggle(charger.id)}
-            />
+            <View style={{ width: 40, alignItems: 'flex-end' }}>
+              <HeartButton
+                isFavorited={isFav(charger.id)}
+                onToggle={async () => {
+                  try {
+                    await toggle(charger.id);
+                  } catch (e) {
+                    Alert.alert('Favorites update failed', e instanceof Error ? e.message : 'Please sign in again and retry.');
+                  }
+                }}
+              />
+            </View>
           ),
         }}
       />
@@ -657,20 +765,41 @@ export default function ChargerStartScreen() {
               </>
             ) : null}
 
-            <View style={styles.priceTilesRow}>
-              <View style={[styles.priceTile, { backgroundColor: isDark ? '#0f172a' : '#f1f5f9' }]}>
-                <Text style={[styles.priceTileLabel, { color: isDark ? '#9ca3af' : '#64748b' }]}>Energy</Text>
-                <Text style={[styles.priceTileValue, { color: isDark ? '#f9fafb' : '#0f172a' }]}>${pricePerKwhUsd.toFixed(2)}/kWh</Text>
+            {pricingMode === 'tou' && touWindows.length > 0 ? (
+              <View style={[styles.touCompact, { backgroundColor: isDark ? '#1e293b' : '#f8fafc', borderColor: isDark ? '#334155' : '#d1d5db' }]}>
+                <Text style={[styles.touCompactTitle, { color: isDark ? '#bfdbfe' : '#000000' }]}>TOU pricing</Text>
+
+                <View style={styles.priceTilesRow}>
+                  <View style={[styles.priceTile, { backgroundColor: isDark ? '#0f172a' : '#ffffff' }]}>
+                    <Text style={[styles.priceTileLabel, { color: isDark ? '#9ca3af' : '#64748b' }]}>Activation</Text>
+                    <Text style={[styles.priceTileValue, { color: isDark ? '#f9fafb' : '#0f172a' }]}>${activationFeeUsd.toFixed(2)}</Text>
+                  </View>
+                  <View style={[styles.priceTile, { backgroundColor: isDark ? '#0f172a' : '#ffffff' }]}>
+                    <Text style={[styles.priceTileLabel, { color: isDark ? '#9ca3af' : '#64748b' }]}>Energy (now)</Text>
+                    <Text style={[styles.priceTileValue, { color: isDark ? '#f9fafb' : '#0f172a' }]}>${displayedEnergyRate.toFixed(2)}/kWh</Text>
+                  </View>
+                  <View style={[styles.priceTile, { backgroundColor: isDark ? '#0f172a' : '#ffffff' }]}>
+                    <Text style={[styles.priceTileLabel, { color: isDark ? '#9ca3af' : '#64748b' }]}>Idle (now)</Text>
+                    <Text style={[styles.priceTileValue, { color: isDark ? '#f9fafb' : '#0f172a' }]}>${displayedIdleRate.toFixed(2)}/min</Text>
+                  </View>
+                </View>
               </View>
-              <View style={[styles.priceTile, { backgroundColor: isDark ? '#0f172a' : '#f1f5f9' }]}>
-                <Text style={[styles.priceTileLabel, { color: isDark ? '#9ca3af' : '#64748b' }]}>Idle</Text>
-                <Text style={[styles.priceTileValue, { color: isDark ? '#f9fafb' : '#0f172a' }]}>${idleFeePerMinUsd.toFixed(2)}/min</Text>
+            ) : (
+              <View style={styles.priceTilesRow}>
+                <View style={[styles.priceTile, { backgroundColor: isDark ? '#0f172a' : '#f1f5f9' }]}> 
+                  <Text style={[styles.priceTileLabel, { color: isDark ? '#9ca3af' : '#64748b' }]}>Energy</Text>
+                  <Text style={[styles.priceTileValue, { color: isDark ? '#f9fafb' : '#0f172a' }]}>${displayedEnergyRate.toFixed(2)}/kWh</Text>
+                </View>
+                <View style={[styles.priceTile, { backgroundColor: isDark ? '#0f172a' : '#f1f5f9' }]}> 
+                  <Text style={[styles.priceTileLabel, { color: isDark ? '#9ca3af' : '#64748b' }]}>Idle</Text>
+                  <Text style={[styles.priceTileValue, { color: isDark ? '#f9fafb' : '#0f172a' }]}>${displayedIdleRate.toFixed(2)}/min</Text>
+                </View>
+                <View style={[styles.priceTile, { backgroundColor: isDark ? '#0f172a' : '#f1f5f9' }]}> 
+                  <Text style={[styles.priceTileLabel, { color: isDark ? '#9ca3af' : '#64748b' }]}>Activation</Text>
+                  <Text style={[styles.priceTileValue, { color: isDark ? '#f9fafb' : '#0f172a' }]}>${activationFeeUsd.toFixed(2)}</Text>
+                </View>
               </View>
-              <View style={[styles.priceTile, { backgroundColor: isDark ? '#0f172a' : '#f1f5f9' }]}>
-                <Text style={[styles.priceTileLabel, { color: isDark ? '#9ca3af' : '#64748b' }]}>Activation</Text>
-                <Text style={[styles.priceTileValue, { color: isDark ? '#f9fafb' : '#0f172a' }]}>${activationFeeUsd.toFixed(2)}</Text>
-              </View>
-            </View>
+            )}
 
 
           </View>
@@ -686,7 +815,7 @@ export default function ChargerStartScreen() {
                 <Text style={[styles.paymentCardBody, { color: isDark ? '#cbd5e1' : '#334155' }]}>
                   {hasPaymentMethod ? paymentLabel : 'No payment method added yet'}
                 </Text>
-                <Text style={[styles.paymentCardHint, { color: isDark ? '#93c5fd' : '#1d4ed8' }]}> 
+                <Text style={[styles.paymentCardHint, { color: isDark ? '#93c5fd' : '#1d4ed8' }]}>
                   {hasPaymentMethod ? 'Tap to change card or add a new card' : 'Tap to add a payment card'}
                 </Text>
               </TouchableOpacity>
@@ -765,25 +894,40 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     padding: 18,
     gap: 14,
-    borderWidth: 3,
+    borderWidth: 0,
     borderColor: 'transparent',
     shadowOpacity: 0,
     elevation: 0,
     overflow: 'visible',
   },
+  // 30% glow bloom — sits furthest out, soft and wide
+  haloGlowOverlay: {
+    position: 'absolute',
+    top: -14,
+    left: -14,
+    right: -14,
+    bottom: -14,
+    borderRadius: 32,
+    borderWidth: 0,
+    backgroundColor: 'transparent',
+    shadowOpacity: 0.30,
+    shadowRadius: 28,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 0,
+  },
+  // Crisp halo ring — sits just outside tile edge so tile edge is never visible
   haloRingOverlay: {
     position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    borderRadius: 18,
+    top: -3,
+    left: -3,
+    right: -3,
+    bottom: -3,
+    borderRadius: 21,
     borderWidth: 3,
-    shadowOpacity: 1,
-    shadowRadius: 18,
+    shadowOpacity: 0.85,
+    shadowRadius: 10,
     shadowOffset: { width: 0, height: 0 },
-    elevation: 10,
-    pointerEvents: 'none',
+    elevation: 8,
   },
   metricsGrid: {
     flexDirection: 'row',
@@ -795,9 +939,12 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingVertical: 15,
     paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    alignItems: 'center',
   },
-  metricLabel: { fontSize: 13, fontWeight: '700' },
-  metricValue: { fontSize: 30, fontWeight: '900', marginTop: 6 },
+  metricLabel: { fontSize: 13, fontWeight: '700', textAlign: 'center' },
+  metricValue: { fontSize: 30, fontWeight: '900', marginTop: 6, textAlign: 'center' },
   chargingAnimWrap: {
     width: '100%',
     borderRadius: 12,
@@ -935,13 +1082,16 @@ const styles = StyleSheet.create({
   collapseHeader: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', position: 'relative' },
   collapseTitle: { fontSize: 15, fontWeight: '800' },
   collapseChevron: { fontSize: 18, fontWeight: '800', position: 'absolute', right: 0 },
-  heroTitle: { fontSize: 18, fontWeight: '800' },
-  heroSubtitle: { fontSize: 13, marginTop: 2 },
+  heroTitle: { fontSize: 18, fontWeight: '800', textAlign: 'center' },
+  heroSubtitle: { fontSize: 13, marginTop: 2, textAlign: 'center' },
+
+  touCompact: { borderWidth: 1, borderRadius: 12, paddingVertical: 10, paddingHorizontal: 10, marginBottom: 8, gap: 8 },
+  touCompactTitle: { fontSize: 12, fontWeight: '900', textAlign: 'center' },
 
   priceTilesRow: { flexDirection: 'row', gap: 8 },
-  priceTile: { flex: 1, borderRadius: 12, paddingVertical: 9, paddingHorizontal: 8 },
-  priceTileLabel: { fontSize: 11, fontWeight: '700' },
-  priceTileValue: { fontSize: 14, fontWeight: '800', marginTop: 3 },
+  priceTile: { flex: 1, borderRadius: 12, paddingVertical: 9, paddingHorizontal: 8, alignItems: 'center', borderWidth: 1, borderColor: '#d1d5db' },
+  priceTileLabel: { fontSize: 11, fontWeight: '700', textAlign: 'center' },
+  priceTileValue: { fontSize: 14, fontWeight: '800', marginTop: 3, textAlign: 'center' },
 
 
   liveCard: { borderRadius: 18, padding: 16, gap: 8 },
@@ -956,10 +1106,10 @@ const styles = StyleSheet.create({
   startCard: { borderRadius: 18, padding: 16, gap: 10 },
   sectionTitle: { fontSize: 18, fontWeight: '800' },
   subText: { fontSize: 13 },
-  paymentCard: { borderWidth: 1, borderRadius: 12, padding: 12, gap: 4 },
-  paymentCardTitle: { fontSize: 13, fontWeight: '800' },
-  paymentCardBody: { fontSize: 13, fontWeight: '700' },
-  paymentCardHint: { fontSize: 12, fontWeight: '700' },
+  paymentCard: { borderWidth: 1, borderRadius: 12, padding: 12, gap: 4, alignItems: 'center' },
+  paymentCardTitle: { fontSize: 13, fontWeight: '800', textAlign: 'center' },
+  paymentCardBody: { fontSize: 13, fontWeight: '700', textAlign: 'center' },
+  paymentCardHint: { fontSize: 12, fontWeight: '700', textAlign: 'center' },
 
   connectorRow: {
     borderWidth: 1,
@@ -981,8 +1131,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 0,
     overflow: 'hidden',
-    alignSelf: 'center',
+    alignSelf: 'stretch',
     marginTop: 8,
+    borderWidth: 1,
   },
   slideLabel: { position: 'absolute', alignSelf: 'center', fontSize: 13, fontWeight: '800' },
   slideKnob: {
@@ -994,7 +1145,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     overflow: 'hidden',
   },
-  slideKnobLogo: { width: 56, height: 56 },
+  slideKnobLogo: { width: 48, height: 48 },
 
   modalBackdrop: {
     flex: 1,

@@ -1,4 +1,4 @@
-import { prisma } from '@ev-charger/shared';
+import { prisma, splitTouDuration, captureSessionBillingSnapshot } from '@ev-charger/shared';
 import { enqueueOcppEvent } from '../outbox';
 import type { StopTransactionRequest, StopTransactionResponse } from '@ev-charger/shared';
 
@@ -34,9 +34,10 @@ function extractTransactionContextWh(
   return bestWh;
 }
 
-async function triggerBillingHook(sessionId: string, kwhDelivered: number, ratePerKwh: number) {
-  const amountUsd = kwhDelivered * ratePerKwh;
-  console.log(`[Billing] Session ${sessionId} — ${kwhDelivered.toFixed(3)} kWh × $${ratePerKwh}/kWh = $${amountUsd.toFixed(2)}`);
+async function triggerBillingHook(sessionId: string, kwhDelivered: number, ratePerKwh: number, amountUsd: number) {
+  console.log(
+    `[Billing] Session ${sessionId} — ${kwhDelivered.toFixed(3)} kWh @ $${ratePerKwh.toFixed(4)}/kWh (effective) = $${amountUsd.toFixed(2)}`,
+  );
   // TODO Phase 3: initiate Stripe capture here
 }
 
@@ -50,7 +51,25 @@ export async function handleStopTransaction(
 
   const session = await prisma.session.findUnique({
     where: { transactionId },
-    include: { connector: true },
+    include: {
+      connector: {
+        include: {
+          charger: {
+            include: {
+              site: {
+                select: {
+                  pricingMode: true,
+                  pricePerKwhUsd: true,
+                  idleFeePerMinUsd: true,
+                  touWindows: true,
+                  timeZone: true,
+                },
+              },
+            },
+          },
+        },
+      },
+    },
   });
 
   if (!session) {
@@ -78,13 +97,31 @@ export async function handleStopTransaction(
     `[StopTransaction] finalMeterStop=${finalMeterStop}Wh txBegin=${transactionBeginWh ?? 'n/a'} txEnd=${transactionEndWh ?? 'n/a'} sessionMeterStart=${session.meterStart ?? 'n/a'} sessionMeterStop=${session.meterStop ?? 'n/a'} kWh=${kwhDelivered.toFixed(6)}`,
   );
 
-  await prisma.$transaction(async (tx) => {
+  const site = session.connector.charger.site;
+  const durationSegments = splitTouDuration({
+    startedAt: session.startedAt,
+    stoppedAt: timestamp,
+    pricingMode: site.pricingMode,
+    defaultPricePerKwhUsd: site.pricePerKwhUsd,
+    defaultIdleFeePerMinUsd: site.idleFeePerMinUsd,
+    touWindows: site.touWindows,
+    timeZone: site.timeZone ?? 'America/Los_Angeles',
+  });
+  const totalSegmentMinutes = durationSegments.reduce((sum, seg) => sum + seg.minutes, 0);
+  const weightedRatePerKwh =
+    totalSegmentMinutes > 0
+      ? durationSegments.reduce((sum, seg) => sum + (seg.minutes / totalSegmentMinutes) * seg.pricePerKwhUsd, 0)
+      : (session.ratePerKwh ?? site.pricePerKwhUsd ?? 0);
+  const estimatedEnergyAmountUsd = kwhDelivered * weightedRatePerKwh;
+
+  await prisma.$transaction(async (tx: any) => {
     await tx.session.update({
       where: { id: session.id },
       data: {
         meterStop: finalMeterStop,
         stoppedAt: new Date(timestamp),
         kwhDelivered,
+        ratePerKwh: weightedRatePerKwh,
         status: 'COMPLETED',
       },
     });
@@ -103,8 +140,15 @@ export async function handleStopTransaction(
     });
   });
 
-  if (session.ratePerKwh != null) {
-    await triggerBillingHook(session.id, kwhDelivered, session.ratePerKwh);
+  if (weightedRatePerKwh > 0 || estimatedEnergyAmountUsd > 0) {
+    await triggerBillingHook(session.id, kwhDelivered, weightedRatePerKwh, estimatedEnergyAmountUsd);
+  }
+
+  // Capture immutable billing snapshot — non-blocking, failure must not fail StopTransaction
+  try {
+    await captureSessionBillingSnapshot(session.id);
+  } catch (snapErr) {
+    console.error('[BillingSnapshot] Failed to capture snapshot on StopTransaction:', snapErr);
   }
 
   const response: StopTransactionResponse = {};

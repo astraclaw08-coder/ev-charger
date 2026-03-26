@@ -96,7 +96,7 @@ export default function Sites() {
   }
 
   if (loading) return <div className="flex h-64 items-center justify-center text-gray-400 dark:text-slate-500">Loading sites…</div>;
-  if (error) return <div className="rounded-lg bg-red-50 p-4 text-sm text-red-700">{error}</div>;
+  if (error) return <div className="rounded-lg bg-red-50 dark:bg-red-900/20 p-4 text-sm text-red-700 dark:text-red-400">{error}</div>;
 
   return (
     <div>
@@ -127,7 +127,7 @@ export default function Sites() {
           { label: 'Total Chargers', value: totalChargers },
           { label: 'Total Connectors', value: totalConnectors },
         ].map(({ label, value }) => (
-          <div key={label} className="rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2.5">
+          <div key={label} className="rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2.5">
             <p className="truncate text-[10px] font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">{label}</p>
             <p className="mt-1 truncate text-lg font-semibold leading-tight text-gray-900 dark:text-slate-100">{value}</p>
           </div>
@@ -153,8 +153,8 @@ export default function Sites() {
           <p className="mt-2 font-medium">No matching sites</p>
         </div>
       ) : filteredSites.length > 4 ? (
-        <div className="mt-6 overflow-hidden rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900">
-          <div className="hidden grid-cols-[1.8fr_1fr_1fr_1fr] gap-3 border-b border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/60 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400 md:grid">
+        <div className="mt-6 overflow-hidden rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900">
+          <div className="hidden grid-cols-[1.8fr_1fr_1fr_1fr] gap-3 border-b border-gray-300 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/60 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400 md:grid">
             <span>Site</span>
             <span>Chargers</span>
             <span className="inline-flex items-center gap-1">
@@ -189,7 +189,7 @@ export default function Sites() {
 
       {showAddSiteModal && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 p-4" onClick={() => setShowAddSiteModal(false)}>
-          <div className="w-full max-w-lg rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-5" onClick={(e) => e.stopPropagation()}>
+          <div className="w-full max-w-lg rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-5" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">Add Site</h2>
             <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">Owner/Operator action — create a new charging site.</p>
             <form className="mt-4 space-y-3" onSubmit={handleCreateSite}>
@@ -225,7 +225,7 @@ export default function Sites() {
               <div className="mt-2 flex justify-end gap-2">
                 <button
                   type="button"
-                  className="rounded-md border border-gray-300 dark:border-slate-600 px-3 py-2 text-sm text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60"
+                  className="rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-700"
                   onClick={() => setShowAddSiteModal(false)}
                   disabled={createLoading}
                 >
@@ -262,10 +262,10 @@ function SiteListRow({ site }: { site: SiteListItem }) {
       <div className="text-sm text-gray-700 dark:text-slate-300">{total}</div>
       <div className="flex flex-wrap gap-2 text-xs">
         <span className="rounded-full border border-green-200 bg-green-50 px-2 py-0.5 text-green-700">Online {online}</span>
-        {offline > 0 && <span className="rounded-full border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/60 px-2 py-0.5 text-gray-600 dark:text-slate-400">Offline {offline}</span>}
+        {offline > 0 && <span className="rounded-full border border-gray-300 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/60 px-2 py-0.5 text-gray-600 dark:text-slate-400">Offline {offline}</span>}
       </div>
       <div className="md:text-right">
-        <Link to={`/sites/${shortId(site.id)}`} className="inline-block rounded-md border border-gray-200 dark:border-slate-700 px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60">
+        <Link to={`/sites/${shortId(site.id)}`} className="inline-block rounded-md border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-700">
           View Site →
         </Link>
       </div>
@@ -279,7 +279,7 @@ function SiteCard({ site }: { site: SiteListItem }) {
   const offline = site.statusSummary.offline + site.statusSummary.faulted;
 
   return (
-    <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-5 shadow-sm transition hover:shadow-md">
+    <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-5 shadow-sm transition hover:shadow-md">
       <div className="flex items-start justify-between">
         <div className="min-w-0">
           <Link to={`/sites/${shortId(site.id)}`} className="block truncate font-semibold text-gray-900 dark:text-slate-100 hover:text-brand-700 hover:underline">
@@ -305,7 +305,7 @@ function SiteCard({ site }: { site: SiteListItem }) {
         </Link>
         <Link
           to={`/sites/${shortId(site.id)}/analytics`}
-          className="flex-1 rounded-md border border-gray-200 dark:border-slate-700 px-3 py-1.5 text-center text-xs font-medium text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/60"
+          className="flex-1 rounded-md border border-gray-300 dark:border-slate-700 px-3 py-1.5 text-center text-xs font-medium text-gray-600 dark:text-slate-400 bg-white dark:bg-slate-800/60 hover:bg-gray-50 dark:hover:bg-slate-700"
         >
           Analytics
         </Link>

@@ -1,11 +1,21 @@
 import { useState, useEffect } from 'react';
-import { Bar, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { createApiClient, type DailyEntry, type SiteListItem } from '../api/client';
 import DashboardSitesMap, { type DashboardSiteMapItem } from '../components/DashboardSitesMap';
 import { useToken } from '../auth/TokenContext';
 import { usePortalScope } from '../context/PortalScopeContext';
+import { usePortalTheme } from '../theme/ThemeContext';
 
 export default function Dashboard() {
+  const { theme } = usePortalTheme();
+  const isDark = theme === 'dark';
+  const chartColors = {
+    grid: isDark ? '#334155' : '#e2e8f0',
+    tick: isDark ? '#94a3b8' : '#64748b',
+    tooltip: isDark
+      ? { backgroundColor: '#1e293b', border: '1px solid #334155', color: '#f1f5f9' }
+      : { backgroundColor: '#ffffff', border: '1px solid #e2e8f0', color: '#1e293b' },
+  };
   const getToken = useToken();
   const [sites, setSites] = useState<SiteListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -229,7 +239,7 @@ export default function Dashboard() {
 
   if (error) {
     return (
-      <div className="rounded-lg bg-red-50 p-4 text-sm text-red-700">{error}</div>
+      <div className="rounded-lg bg-red-50 dark:bg-red-900/20 p-4 text-sm text-red-700 dark:text-red-400">{error}</div>
     );
   }
 
@@ -281,7 +291,7 @@ export default function Dashboard() {
       )}
 
       {fleetStatus && (
-        <div className="mt-3 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+        <div className="mt-3 rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-sm font-semibold text-gray-700 dark:text-slate-300">Connector Statuses</p>
             <p className="text-xs text-gray-500 dark:text-slate-400">
@@ -292,20 +302,20 @@ export default function Dashboard() {
           </div>
 
           <div className="mt-2 text-sm text-gray-700 dark:text-slate-300">
-            <span className="font-medium text-green-700">🟢 Available {fleetStatus.available}</span>
-            <span className="mx-2 text-gray-300">·</span>
-            <span className="font-medium text-amber-700">🟡 Charging {fleetStatus.charging}</span>
-            <span className="mx-2 text-gray-300">·</span>
-            <span className="font-medium text-red-700">🔴 Faulted {fleetStatus.faulted}</span>
-            <span className="mx-2 text-gray-300">·</span>
-            <span className="font-medium text-gray-600 dark:text-slate-400">⚫ Offline {fleetStatus.offline}</span>
+            <span className="font-medium text-emerald-600 dark:text-emerald-400">🟢 Available {fleetStatus.available}</span>
+            <span className="mx-2 text-gray-300 dark:text-slate-600">·</span>
+            <span className="font-medium text-amber-600 dark:text-amber-400">🟡 Charging {fleetStatus.charging}</span>
+            <span className="mx-2 text-gray-300 dark:text-slate-600">·</span>
+            <span className="font-medium text-red-600 dark:text-red-400">🔴 Faulted {fleetStatus.faulted}</span>
+            <span className="mx-2 text-gray-300 dark:text-slate-600">·</span>
+            <span className="font-semibold text-gray-700 dark:text-slate-300">⚫ Offline {fleetStatus.offline}</span>
           </div>
 
           <div className="mt-3 flex flex-wrap gap-2">
             {fleetStatus.byStatus
               .filter((entry) => !['AVAILABLE', 'PREPARING', 'CHARGING', 'FINISHING', 'SUSPENDED_EV', 'SUSPENDED_EVSE', 'FAULTED', 'UNAVAILABLE', 'OFFLINE'].includes(entry.status))
               .map((entry) => (
-                <span key={entry.status} className="rounded-full border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/60 px-2.5 py-1 text-xs text-gray-700 dark:text-slate-300">
+                <span key={entry.status} className="rounded-full border border-gray-300 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/60 px-2.5 py-1 text-xs text-gray-700 dark:text-slate-300">
                   {entry.status}: {entry.count}
                 </span>
               ))}
@@ -314,7 +324,7 @@ export default function Dashboard() {
       )}
 
       {fleetStatus && (
-        <div className="mt-3 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+        <div className="mt-3 rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
           <div className="flex items-center justify-between gap-3">
             <p className="text-sm font-semibold text-gray-700 dark:text-slate-300">Needs action now</p>
             <a href="/operations" className="text-xs font-medium text-brand-700 hover:underline">Open Operations</a>
@@ -329,7 +339,7 @@ export default function Dashboard() {
 
       <DashboardSitesMap sites={siteMapItems} />
 
-      <div className="mt-4 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+      <div className="mt-4 rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
         <p className="text-sm font-semibold">
           <span className="text-blue-600">Energy (kWh)</span>
           <span className="text-gray-400 dark:text-slate-500"> | </span>
@@ -347,10 +357,11 @@ export default function Dashboard() {
           ) : (
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={fleetTrend} margin={{ top: 8, right: 16, left: 4, bottom: 0 }}>
-                <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-                <YAxis yAxisId="left" tick={{ fontSize: 11 }} />
-                <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11 }} />
-                <Tooltip />
+                <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} />
+                <XAxis dataKey="label" tick={{ fontSize: 11, fill: chartColors.tick }} />
+                <YAxis yAxisId="left" tick={{ fontSize: 11, fill: chartColors.tick }} />
+                <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: chartColors.tick }} />
+                <Tooltip contentStyle={chartColors.tooltip} />
                 <Bar yAxisId="left" dataKey="kwhDelivered" name="Energy (kWh)" fill="#3b82f6" radius={[4, 4, 0, 0]} />
                 <Line yAxisId="right" type="monotone" dataKey="revenueUsd" name="Revenue ($)" stroke="#10b981" strokeWidth={2} dot={false} />
                 <Line yAxisId="left" type="monotone" dataKey="sessions" name="Transactions" stroke="#f59e0b" strokeWidth={2} dot={false} />
@@ -361,7 +372,7 @@ export default function Dashboard() {
       </div>
 
       {fleetUptime && (
-        <div className="mt-4 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+        <div className="mt-4 rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
           <p className="text-sm font-semibold text-gray-700 dark:text-slate-300">Fleet uptime summary (OCA v1.1)</p>
           <div className="mt-2 grid gap-3 sm:grid-cols-3">
             <div><p className="text-xs text-gray-500 dark:text-slate-400">24h</p><p className="text-lg font-semibold text-gray-900 dark:text-slate-100">{fleetUptime.uptime24h.toFixed(2)}%</p></div>
@@ -377,7 +388,7 @@ export default function Dashboard() {
 
 function KpiTile({ label, value, live }: { label: string; value: string; live?: boolean }) {
   return (
-    <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+    <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
       <div className="flex items-center gap-1.5">
         <p className="truncate text-[11px] leading-tight text-gray-500 dark:text-slate-400">{label}</p>
         {live && <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-500" title="Live" />}
@@ -389,10 +400,10 @@ function KpiTile({ label, value, live }: { label: string; value: string; live?: 
 
 function ActionTile({ label, value, tone }: { label: string; value: number; tone: 'red' | 'slate' | 'blue' }) {
   const toneClass = tone === 'red'
-    ? 'text-red-700 bg-red-50 border-red-200'
+    ? 'text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/25 border-red-200 dark:border-red-800/60'
     : tone === 'slate'
-      ? 'text-slate-700 bg-slate-100 border-slate-300'
-      : 'text-brand-700 bg-brand-50 border-brand-200';
+      ? 'text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700'
+      : 'text-brand-700 dark:text-brand-200 bg-brand-50 dark:bg-brand-900/25 border-brand-200 dark:border-brand-800/60';
 
   return (
     <div className={`rounded-lg border p-3 ${toneClass}`}>

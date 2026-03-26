@@ -6,14 +6,32 @@
       "developmentClient": true,
       "env": {
         "APP_ENV": "dev",
-        "EXPO_PUBLIC_ENV_LABEL": "DEV"
+        "EXPO_PUBLIC_ENV_LABEL": "DEV",
+        "GOOGLE_MAPS_API_KEY_IOS": "AIzaSyBd1Z3B7M3Bk88uk731vuMd26s_C-YDzXw",
+        "GOOGLE_MAPS_API_KEY_ANDROID": "AIzaSyCbugzGq9SdIM4NxnKHNNjiRl_pwQB2mh8"
+      }
+    },
+    "rc": {
+      "distribution": "internal",
+      "ios": {
+        "resourceClass": "m-medium",
+        "scheme": "EVCharger-RC"
+      },
+      "env": {
+        "APP_ENV": "rc",
+        "EXPO_PUBLIC_ENV_LABEL": "RC",
+        "EXPO_PUBLIC_API_URL": "https://api-production-26cf.up.railway.app",
+        "GOOGLE_MAPS_API_KEY_IOS": "AIzaSyDyeqOzqFAykdeKzLkK_rZA-_iIUK21LxE",
+        "GOOGLE_MAPS_API_KEY_ANDROID": "AIzaSyDofrEgtFZPIbq3U7E0Vj0bHSLJVMvPT1g"
       }
     },
     "production": {
       "ios": { "resourceClass": "m-medium" },
       "env": {
         "APP_ENV": "prod",
-        "EXPO_PUBLIC_ENV_LABEL": "PROD"
+        "EXPO_PUBLIC_ENV_LABEL": "PROD",
+        "GOOGLE_MAPS_API_KEY_IOS": "AIzaSyDyeqOzqFAykdeKzLkK_rZA-_iIUK21LxE",
+        "GOOGLE_MAPS_API_KEY_ANDROID": "AIzaSyDofrEgtFZPIbq3U7E0Vj0bHSLJVMvPT1g"
       }
     }
   },

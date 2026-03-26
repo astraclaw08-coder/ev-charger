@@ -1,0 +1,19 @@
+appId: dev.evcharger.app.lumeodev
+---
+- launchApp:
+    clearState: true
+- tapOn:
+    text: "Continue as Guest"
+    optional: true
+- assertVisible:
+    text: "Find Charger"
+- assertVisible:
+    text: "Profile"
+- assertVisible:
+    id: "map-search-input"
+- takeScreenshot: "task-nav-floating-qc-find-charger"
+- tapOn:
+    text: "Profile"
+- assertVisible:
+    text: "Profile"
+- takeScreenshot: "task-nav-floating-qc-profile"

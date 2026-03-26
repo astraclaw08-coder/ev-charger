@@ -1,10 +1,10 @@
 import { prisma, type ChargerStatus, type UptimeEventType } from '@ev-charger/shared';
+import { isAvailable } from '../workers/uptimeMaterializer';
 
 const HEARTBEAT_THRESHOLD_SECONDS = Number(process.env.OCPP_HEARTBEAT_THRESHOLD_SECONDS ?? 900);
 const OFFLINE_GRACE_SECONDS = Number(process.env.OCPP_OFFLINE_GRACE_SECONDS ?? 120);
 const OFFLINE_CONFIRM_SECONDS = Number(process.env.OCPP_OFFLINE_CONFIRM_SECONDS ?? 120);
 const UPTIME_ALERT_THRESHOLD_PERCENT = Number(process.env.OCPP_UPTIME_ALERT_THRESHOLD_PERCENT ?? 95);
-const CONNECTOR_FAULT_NOISE_MS = 1000;
 
 export type UptimeIncident = {
   event: UptimeEventType;
@@ -14,12 +14,11 @@ export type UptimeIncident = {
   timestamp: string;
 };
 
-/**
- * OCA v1.1 uptime: only ONLINE counts as "available".
- * DEGRADED (stale heartbeat, reachable but uncertain) is NOT counted as up.
- */
-function isUp(status: ChargerStatus): boolean {
-  return status === 'ONLINE';
+export interface DailySums {
+  totalSeconds: number;
+  availableSeconds: number;
+  outageSeconds: number;
+  excludedOutageSeconds: number;
 }
 
 export async function ensureChargerLiveness(chargerId: string) {
@@ -76,38 +75,148 @@ export async function ensureChargerLiveness(chargerId: string) {
   return charger;
 }
 
+// ─── UptimeDaily-based calculation (primary) ─────────────────────────────────
+
+async function sumUptimeDaily(chargerId: string, fromDate: Date, toDate: Date): Promise<DailySums | null> {
+  const rows = await prisma.uptimeDaily.findMany({
+    where: {
+      chargerId,
+      date: { gte: fromDate, lte: toDate },
+    },
+  });
+
+  if (rows.length === 0) return null;
+
+  return (rows as DailySums[]).reduce(
+    (acc: DailySums, r: DailySums) => ({
+      totalSeconds: acc.totalSeconds + r.totalSeconds,
+      availableSeconds: acc.availableSeconds + r.availableSeconds,
+      outageSeconds: acc.outageSeconds + r.outageSeconds,
+      excludedOutageSeconds: acc.excludedOutageSeconds + r.excludedOutageSeconds,
+    }),
+    { totalSeconds: 0, availableSeconds: 0, outageSeconds: 0, excludedOutageSeconds: 0 },
+  );
+}
+
+function computePercent(sums: DailySums): number {
+  if (sums.totalSeconds <= 0) return 100;
+  const countedOutage = Math.max(0, sums.outageSeconds - sums.excludedOutageSeconds);
+  const pct = ((sums.totalSeconds - countedOutage) / sums.totalSeconds) * 100;
+  return Math.max(0, Math.min(100, Math.round(pct * 100) / 100));
+}
+
+// ─── Legacy fallback (timeline walk) for chargers with no UptimeDaily rows ──
+
+function toStatus(event: UptimeEventType): ChargerStatus {
+  return event === 'ONLINE' || event === 'RECOVERED'
+    ? 'ONLINE'
+    : event === 'FAULTED'
+      ? 'FAULTED'
+      : event === 'DEGRADED'
+        ? 'DEGRADED'
+        : 'OFFLINE';
+}
+
+function legacyCalcPct(
+  timelineEvents: Array<{ createdAt: Date; event: string }>,
+  chargerCreatedAt: Date,
+  from: Date,
+  now: number,
+): number {
+  const effectiveFrom = new Date(Math.max(from.getTime(), chargerCreatedAt.getTime()));
+  const fromMs = effectiveFrom.getTime();
+  const totalMs = now - fromMs;
+  if (totalMs <= 0) return 100;
+
+  let state: ChargerStatus = 'OFFLINE';
+  const before = timelineEvents.filter((e) => e.createdAt.getTime() < fromMs).at(-1);
+  if (before) state = toStatus(before.event as UptimeEventType);
+
+  let upMs = 0;
+  let cursor = fromMs;
+
+  for (const e of timelineEvents) {
+    const ts = e.createdAt.getTime();
+    if (ts < fromMs) continue;
+    if (isAvailable(state)) upMs += ts - cursor;
+    cursor = ts;
+    state = toStatus(e.event as UptimeEventType);
+  }
+  if (isAvailable(state)) upMs += now - cursor;
+
+  return Math.max(0, Math.min(100, Math.round((upMs / totalMs) * 10000) / 100));
+}
+
+// ─── Main public API ─────────────────────────────────────────────────────────
+
 export async function getChargerUptime(chargerId: string) {
   const charger = await ensureChargerLiveness(chargerId);
   if (!charger) return null;
 
   const now = Date.now();
-  const windows = {
-    h24: new Date(now - 24 * 60 * 60 * 1000),
-    d7: new Date(now - 7 * 24 * 60 * 60 * 1000),
-    d30: new Date(now - 30 * 24 * 60 * 60 * 1000),
-  };
+  const nowDate = new Date(now);
 
-  // Timeline events for uptime % calculation:
-  // - include charger-level transitions only (connectorId null/0)
-  // - exclude synthetic alert marker events so they don't feed back into downtime math
-  const timelineEvents = await prisma.uptimeEvent.findMany({
-    where: {
-      chargerId,
-      createdAt: { gte: windows.d30 },
-      OR: [{ connectorId: null }, { connectorId: 0 }],
-      NOT: { reason: 'uptime-alert-below-threshold' },
-    },
-    orderBy: { createdAt: 'asc' },
-  });
+  // Date boundaries for UptimeDaily queries
+  const today = dayStartUTC(nowDate);
+  const d1ago = new Date(today.getTime() - 1 * 86400000);
+  const d7ago = new Date(today.getTime() - 6 * 86400000);
+  const d30ago = new Date(today.getTime() - 29 * 86400000);
 
-  // Incidents panel can still include connector-level issues for operational visibility.
+  // Try UptimeDaily first
+  const [sums24h, sums7d, sums30d] = await Promise.all([
+    sumUptimeDaily(chargerId, d1ago, today),
+    sumUptimeDaily(chargerId, d7ago, today),
+    sumUptimeDaily(chargerId, d30ago, today),
+  ]);
+
+  let uptimePercent24h: number;
+  let uptimePercent7d: number;
+  let uptimePercent30d: number;
+  let breakdown24h: DailySums | null = sums24h;
+  let breakdown7d: DailySums | null = sums7d;
+  let breakdown30d: DailySums | null = sums30d;
+
+  if (sums24h && sums7d && sums30d) {
+    // Use materialized data
+    uptimePercent24h = computePercent(sums24h);
+    uptimePercent7d = computePercent(sums7d);
+    uptimePercent30d = computePercent(sums30d);
+  } else {
+    // Fallback: legacy timeline walk (before materializer has run)
+    const windows = {
+      h24: new Date(now - 24 * 60 * 60 * 1000),
+      d7: new Date(now - 7 * 24 * 60 * 60 * 1000),
+      d30: new Date(now - 30 * 24 * 60 * 60 * 1000),
+    };
+
+    const timelineEvents = await prisma.uptimeEvent.findMany({
+      where: {
+        chargerId,
+        createdAt: { gte: windows.d30 },
+        OR: [{ connectorId: null }, { connectorId: 0 }],
+        NOT: { reason: 'uptime-alert-below-threshold' },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    uptimePercent24h = legacyCalcPct(timelineEvents, charger.createdAt, windows.h24, now);
+    uptimePercent7d = legacyCalcPct(timelineEvents, charger.createdAt, windows.d7, now);
+    uptimePercent30d = legacyCalcPct(timelineEvents, charger.createdAt, windows.d30, now);
+    breakdown24h = null;
+    breakdown7d = null;
+    breakdown30d = null;
+  }
+
+  // Incidents — always from UptimeEvent
   const incidentEvents = await prisma.uptimeEvent.findMany({
-    where: { chargerId, createdAt: { gte: windows.d30 } },
+    where: { chargerId, createdAt: { gte: new Date(now - 30 * 86400000) } },
     orderBy: { createdAt: 'asc' },
   });
 
   const incidents: UptimeIncident[] = incidentEvents
-    .filter((e: any) => e.event === 'OFFLINE' || e.event === 'FAULTED' || e.event === 'DEGRADED')
+    .filter((e: any) => e.event === 'OFFLINE' || e.event === 'FAULTED' || e.event === 'DEGRADED'
+      || e.event === 'SCHEDULED_MAINTENANCE' || e.event === 'UTILITY_INTERRUPTION'
+      || e.event === 'VEHICLE_FAULT' || e.event === 'VANDALISM' || e.event === 'FORCE_MAJEURE')
     .slice(-20)
     .map((e: any) => ({
       event: e.event,
@@ -117,73 +226,7 @@ export async function getChargerUptime(chargerId: string) {
       timestamp: e.createdAt.toISOString(),
     }));
 
-  const toStatus = (event: UptimeEventType): ChargerStatus => (
-    event === 'ONLINE' || event === 'RECOVERED'
-      ? 'ONLINE'
-      : event === 'FAULTED'
-        ? 'FAULTED'
-        : event === 'DEGRADED'
-          ? 'DEGRADED'
-          : 'OFFLINE'
-  );
-
-  const mergeIntervals = (intervals: Array<[number, number]>): Array<[number, number]> => {
-    if (!intervals.length) return [];
-    const sorted = [...intervals].sort((a, b) => a[0] - b[0]);
-    const merged: Array<[number, number]> = [sorted[0]];
-    for (let i = 1; i < sorted.length; i++) {
-      const [s, e] = sorted[i];
-      const last = merged[merged.length - 1];
-      if (s <= last[1]) last[1] = Math.max(last[1], e);
-      else merged.push([s, e]);
-    }
-    return merged;
-  };
-
-  const calcPct = (from: Date) => {
-    // Clamp window start to charger provisioning date — don't count time
-    // before the charger existed as either up or down (OCA v1.1).
-    const effectiveFrom = new Date(Math.max(from.getTime(), charger.createdAt.getTime()));
-    const fromMs = effectiveFrom.getTime();
-    const totalMs = now - fromMs;
-    if (totalMs <= 0) return 100;
-
-    // Default to OFFLINE when no prior event exists before window start.
-    // Previously fell back to charger.status (current), which inflated uptime
-    // for chargers with no history before the window.
-    let state: ChargerStatus = 'OFFLINE';
-    const before = timelineEvents.filter((e: any) => e.createdAt < effectiveFrom).at(-1);
-    if (before) state = toStatus(before.event as UptimeEventType);
-
-    let cursor = fromMs;
-    const chargerDownIntervals: Array<[number, number]> = [];
-
-    for (const e of timelineEvents) {
-      const ts = e.createdAt.getTime();
-      if (ts < fromMs) continue;
-      if (!isUp(state) && ts > cursor) chargerDownIntervals.push([cursor, ts]);
-      cursor = ts;
-      state = toStatus(e.event as UptimeEventType);
-    }
-    if (!isUp(state) && now > cursor) chargerDownIntervals.push([cursor, now]);
-
-    // Ignore sub-second down flaps as noise (fault flip <=1s).
-    const stableDown = chargerDownIntervals.filter(([s, e]) => (e - s) > CONNECTOR_FAULT_NOISE_MS);
-
-    // Merge to avoid double-counting overlaps.
-    const allDown = mergeIntervals(stableDown);
-    const downMs = allDown.reduce((sum, [s, e]) => sum + Math.max(0, e - s), 0);
-    const upMs = Math.max(0, totalMs - downMs);
-
-    return Math.max(0, Math.min(100, Math.round((upMs / totalMs) * 10000) / 100));
-  };
-
-  const uptimePercent24h = calcPct(windows.h24);
-  const uptimePercent7d = calcPct(windows.d7);
-  const uptimePercent30d = calcPct(windows.d30);
-
   if (uptimePercent24h < UPTIME_ALERT_THRESHOLD_PERCENT) {
-    // Keep alerting side-effect free for uptime timeline math.
     console.warn(`[UptimeAlert] charger ${chargerId} below threshold: ${uptimePercent24h}% < ${UPTIME_ALERT_THRESHOLD_PERCENT}%`);
   }
 
@@ -194,6 +237,21 @@ export async function getChargerUptime(chargerId: string) {
     uptimePercent24h,
     uptimePercent7d,
     uptimePercent30d,
+    // Breakdown fields (null when using legacy fallback)
+    availableSeconds: breakdown30d?.availableSeconds ?? null,
+    outageSeconds: breakdown30d?.outageSeconds ?? null,
+    excludedOutageSeconds: breakdown30d?.excludedOutageSeconds ?? null,
+    breakdown: {
+      h24: breakdown24h,
+      d7: breakdown7d,
+      d30: breakdown30d,
+    },
     incidents,
   };
+}
+
+function dayStartUTC(date: Date): Date {
+  const d = new Date(date);
+  d.setUTCHours(0, 0, 0, 0);
+  return d;
 }

@@ -1,0 +1,151 @@
+name: Portal Theme QC (light + dark)
+
+on:
+  pull_request:
+    paths:
+      - 'packages/portal/src/**'
+      - 'packages/portal/tailwind.config.*'
+      - 'packages/portal/src/theme/**'
+  push:
+    branches: [main, dev]
+    paths:
+      - 'packages/portal/src/**'
+
+jobs:
+  theme-regression:
+    name: Theme Regression Screenshots
+    runs-on: ubuntu-latest
+    env:
+      VITE_AUTH_MODE: dev
+      VITE_DEV_OPERATOR_ID: operator-001
+      DATABASE_URL: postgresql://ev:ev@localhost:5432/evcharger
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: ev
+          POSTGRES_PASSWORD: ev
+          POSTGRES_DB: evcharger
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+        ports:
+          - 5432:5432
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build shared package
+        run: npm run build --workspace=packages/shared
+
+      - name: Apply DB migrations (for API dev server)
+        run: npx prisma migrate deploy --schema=packages/shared/prisma/schema.prisma
+
+      - name: Install Playwright browsers (chromium only)
+        run: cd packages/portal && npx playwright install --with-deps chromium
+
+      - name: Portal build check
+        run: npm run build --workspace=packages/portal
+
+      - name: Start portal dev server (background)
+        run: |
+          cd packages/portal
+          VITE_AUTH_MODE=dev npm run dev -- --host 127.0.0.1 --port 5175 &
+          echo $! > /tmp/portal.pid
+          # Wait for server to be ready
+          timeout 60 bash -c 'until curl -sf http://127.0.0.1:5175/; do sleep 1; done'
+          echo "Portal dev server ready"
+
+      - name: Run theme QC suite
+        run: |
+          cd packages/portal
+          npx playwright test tests/theme-qc/ \
+            --config playwright.config.ts \
+            --project chromium \
+            --reporter=list
+        env:
+          PLAYWRIGHT_BASE_URL: http://127.0.0.1:5175
+
+      - name: Upload theme screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: theme-qc-screenshots-${{ github.sha }}
+          path: packages/portal/tests/theme-qc/screenshots/
+          retention-days: 30
+
+      - name: Upload Playwright HTML report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-theme-report-${{ github.sha }}
+          path: packages/portal/playwright-report/
+          retention-days: 14
+
+      - name: Stop portal dev server
+        if: always()
+        run: kill $(cat /tmp/portal.pid) 2>/dev/null || true
+
+  theme-token-lint:
+    name: Theme Token Policy Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for hardcoded non-themed bg-white without dark variant
+        run: |
+          # Find bg-white used in className without a paired dark:bg-* variant
+          # Allow: bg-white dark: (properly themed)
+          # Flag: bare bg-white in component JSX
+          VIOLATIONS=$(grep -rn \
+            --include="*.tsx" --include="*.ts" \
+            -P 'className=["\`][^"` ]*bg-white(?![^"` ]*dark:bg-)' \
+            packages/portal/src/ \
+            | grep -v "//\|Login\|ResetPassword" \
+            | wc -l)
+          echo "Unthemed bg-white usages: $VIOLATIONS"
+          # Warn only (not fail) — some pages legitimately use bg-white in light context
+          if [ "$VIOLATIONS" -gt 30 ]; then
+            echo "::warning ::$VIOLATIONS unthemed bg-white usages found. Consider adding dark: variants."
+          fi
+
+      - name: Check Recharts axes have explicit tick fill
+        run: |
+          # Find XAxis/YAxis without tick prop (chart labels will be invisible in dark mode)
+          VIOLATIONS=$(grep -rn \
+            --include="*.tsx" \
+            -P '<(XAxis|YAxis)(?![^>]*tick\s*=)' \
+            packages/portal/src/ \
+            | wc -l)
+          echo "XAxis/YAxis without explicit tick prop: $VIOLATIONS"
+          if [ "$VIOLATIONS" -gt 0 ]; then
+            echo "::error ::$VIOLATIONS Recharts axis elements missing explicit tick fill. Chart labels will be invisible in dark mode."
+            grep -rn --include="*.tsx" -P '<(XAxis|YAxis)(?![^>]*tick\s*=)' packages/portal/src/ | head -20
+            exit 1
+          fi
+          echo "✅ All chart axes have explicit tick props"
+
+      - name: Check chart grid colors are themed
+        run: |
+          # CartesianGrid without explicit stroke is invisible in dark mode
+          VIOLATIONS=$(grep -rn \
+            --include="*.tsx" \
+            -P '<CartesianGrid(?![^>]*stroke\s*=)' \
+            packages/portal/src/ \
+            | wc -l)
+          echo "CartesianGrid without explicit stroke: $VIOLATIONS"
+          if [ "$VIOLATIONS" -gt 0 ]; then
+            echo "::error ::$VIOLATIONS CartesianGrid elements missing explicit stroke color. Grid will be invisible in dark mode."
+            grep -rn --include="*.tsx" -P '<CartesianGrid(?![^>]*stroke\s*=)' packages/portal/src/ | head -20
+            exit 1
+          fi
+          echo "✅ All CartesianGrid elements have explicit stroke"

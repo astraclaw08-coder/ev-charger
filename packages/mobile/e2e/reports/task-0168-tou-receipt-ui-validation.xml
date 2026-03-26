@@ -1,0 +1,8 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="iPhone 17 Pro - iOS 26.2 - 3D00C844-48CC-4CC9-A7FE-13D7AE1D8B98" tests="1" failures="1" time="24.0">
+    <testcase id="task-0168-tou-receipt-ui-validation" name="task-0168-tou-receipt-ui-validation" classname="task-0168-tou-receipt-ui-validation" time="24.0" status="ERROR">
+      <failure>No visible element found: "Activation fee"</failure>
+    </testcase>
+  </testsuite>
+</testsuites>
