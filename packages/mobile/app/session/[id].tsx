@@ -720,7 +720,7 @@ export default function SessionScreen() {
             fontWeight: '300',
             letterSpacing: 1.5,
             fontSize: 22,
-          },
+          } as any,
           headerShadowVisible: false,
         }}
       />

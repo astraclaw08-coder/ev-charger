@@ -407,7 +407,7 @@ export default function ChargerDetailScreen() {
             fontWeight: '300',
             letterSpacing: 1.5,
             fontSize: 22,
-          },
+          } as any,
           headerBackButtonDisplayMode: 'minimal',
           headerLeft: () => (
             <TouchableOpacity onPress={() => router.back()} style={{ paddingHorizontal: 4, paddingVertical: 4 }}>

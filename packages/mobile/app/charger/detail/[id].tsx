@@ -392,16 +392,6 @@ export default function ChargerStartScreen() {
   }, [isFlowing]);
 
   // Reset activation state when charger returns to Available with no active session
-  // (covers the activation-timeout / no EV connected scenario)
-  useEffect(() => {
-    if (activeSession) return;
-    if (selectedConnector?.status === 'AVAILABLE') {
-      setActivationTimedOut(false);
-      setShowActivationModal(false);
-      setActivationDeadlineMs(null);
-    }
-  }, [activeSession, selectedConnector?.status]);
-
   const preferredConnector = useMemo(
     () => charger?.connectors.find((c) => c.status === 'AVAILABLE' || c.status === 'PREPARING' || c.status === 'SUSPENDED_EV') ?? null,
     [charger],
@@ -423,6 +413,17 @@ export default function ChargerStartScreen() {
     if (charger.connectors.length === 1) return charger.connectors[0] ?? null;
     return charger.connectors.find((c) => c.connectorId === selectedConnectorId) ?? preferredConnector;
   }, [charger, preferredConnector, selectedConnectorId]);
+
+  // Reset activation UI when connector returns to AVAILABLE
+  // (covers the activation-timeout / no EV connected scenario)
+  useEffect(() => {
+    if (activeSession) return;
+    if (selectedConnector?.status === 'AVAILABLE') {
+      setActivationTimedOut(false);
+      setShowActivationModal(false);
+      setActivationDeadlineMs(null);
+    }
+  }, [activeSession, selectedConnector?.status]);
 
   useEffect(() => {
     if (!showActivationModal || !activationDeadlineMs) return;
@@ -635,7 +636,7 @@ export default function ChargerStartScreen() {
               fontWeight: '300',
               letterSpacing: 1.5,
               fontSize: 22,
-            },
+            } as any,
             gestureEnabled: false,
             headerBackButtonDisplayMode: 'minimal',
             headerLeft: () => (
@@ -707,7 +708,7 @@ export default function ChargerStartScreen() {
             fontWeight: '300',
             letterSpacing: 1.5,
             fontSize: 22,
-          },
+          } as any,
           gestureEnabled: false,
           headerBackButtonDisplayMode: 'minimal',
           headerLeft: () => (
