@@ -149,9 +149,8 @@ export async function startServer(port: number): Promise<OcppServerHandle> {
     client.handle(async ({ method, params, messageId }: any) => {
       console.warn(`[Server] Unhandled action: ${method}`, JSON.stringify(params));
       await logOcppMessage(chargerId, 'INBOUND', method, params, messageId);
-      const response = {};
-      await logOcppMessage(chargerId, 'OUTBOUND', method, response, messageId ? `${messageId}:response` : undefined);
-      return response;
+      await logOcppMessage(chargerId, 'OUTBOUND', method, {}, messageId ? `${messageId}:response` : undefined);
+      return {};
     });
 
     // ── Disconnect / diagnostics ──────────────────────────────────────────────

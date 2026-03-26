@@ -89,6 +89,8 @@ jobs:
           node-version: '22'
           cache: 'npm'
       - run: npm ci
+      - name: Generate Prisma client
+        run: npx prisma generate --schema=packages/shared/prisma/schema.prisma
       - name: Apply DB migrations
         run: npx prisma migrate deploy --schema=packages/shared/prisma/schema.prisma
       - name: Seed test charger (TEST-ASTRA-001)
