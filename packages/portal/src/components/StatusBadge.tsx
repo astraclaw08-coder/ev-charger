@@ -1,6 +1,6 @@
 import { cn } from '../lib/utils';
 
-type ChargerStatus = 'ONLINE' | 'OFFLINE' | 'FAULTED' | 'DEGRADED';
+type ChargerStatus = 'ONLINE' | 'OFFLINE' | 'FAULTED';
 type ConnectorStatus =
   | 'AVAILABLE'
   | 'PREPARING'
@@ -14,7 +14,7 @@ type ConnectorStatus =
 
 const CHARGER_COLORS: Record<ChargerStatus, string> = {
   ONLINE: 'bg-green-100 text-green-800',
-  DEGRADED: 'bg-amber-100 text-amber-800',
+
   OFFLINE: 'bg-gray-100 text-gray-600',
   FAULTED: 'bg-red-100 text-red-800',
 };

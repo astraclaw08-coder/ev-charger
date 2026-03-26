@@ -36,8 +36,7 @@ export async function ensureChargerLiveness(chargerId: string) {
   const stale = ageMs > staleAfterMs;
   const offlineEligible = ageMs > offlineAfterMs;
 
-  // Binary model: stale heartbeat = OFFLINE. No intermediate DEGRADED state.
-  if (stale && (charger.status === 'ONLINE' || charger.status === 'DEGRADED')) {
+  if (stale && charger.status === 'ONLINE') {
     await prisma.charger.update({ where: { id: charger.id }, data: { status: 'OFFLINE' } });
     await prisma.uptimeEvent.create({
       data: {
@@ -87,7 +86,6 @@ function computePercent(sums: DailySums): number {
 function toStatus(event: UptimeEventType): ChargerStatus {
   if (event === 'ONLINE' || event === 'RECOVERED') return 'ONLINE';
   if (event === 'FAULTED') return 'FAULTED';
-  // DEGRADED = can't confirm online = treat as OFFLINE for uptime
   return 'OFFLINE';
 }
 
@@ -195,7 +193,7 @@ export async function getChargerUptime(chargerId: string) {
   });
 
   const incidents: UptimeIncident[] = incidentEvents
-    .filter((e: any) => e.event === 'OFFLINE' || e.event === 'FAULTED' || e.event === 'DEGRADED'
+    .filter((e: any) => e.event === 'OFFLINE' || e.event === 'FAULTED'
       || e.event === 'SCHEDULED_MAINTENANCE' || e.event === 'UTILITY_INTERRUPTION'
       || e.event === 'VEHICLE_FAULT' || e.event === 'VANDALISM' || e.event === 'FORCE_MAJEURE')
     .slice(-20)

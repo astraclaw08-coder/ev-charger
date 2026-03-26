@@ -222,14 +222,14 @@ export async function startServer(port: number): Promise<OcppServerHandle> {
 
       prisma.charger.update({
         where: { id: chargerId },
-        data: { status: 'DEGRADED' },
+        data: { status: 'OFFLINE' },
       }).catch(console.error);
 
       prisma.uptimeEvent.create({
         data: {
           chargerId,
-          event: 'DEGRADED',
-          reason: 'WebSocket disconnected; pending offline confirmation window',
+          event: 'OFFLINE',
+          reason: 'WebSocket disconnected',
         },
       }).catch(console.error);
     });

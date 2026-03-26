@@ -38,7 +38,7 @@ export interface ChargerInfo {
   serialNumber: string;
   model: string;
   vendor: string;
-  status: 'ONLINE' | 'OFFLINE' | 'FAULTED' | 'DEGRADED';
+  status: 'ONLINE' | 'OFFLINE' | 'FAULTED';
   lastHeartbeat: string | null;
   siteId: string;
   connectors: ConnectorInfo[];
@@ -291,7 +291,7 @@ export interface RebateIntervalsResponse {
 }
 
 export interface UptimeIncident {
-  event: 'ONLINE' | 'OFFLINE' | 'FAULTED' | 'DEGRADED' | 'RECOVERED';
+  event: 'ONLINE' | 'OFFLINE' | 'FAULTED' | 'RECOVERED';
   reason: string | null;
   errorCode: string | null;
   connectorId: number | null;
@@ -300,7 +300,7 @@ export interface UptimeIncident {
 
 export interface ChargerUptime {
   chargerId: string;
-  currentStatus: 'ONLINE' | 'OFFLINE' | 'FAULTED' | 'DEGRADED';
+  currentStatus: 'ONLINE' | 'OFFLINE' | 'FAULTED';
   lastOnlineAt: string | null;
   uptimePercent24h: number;
   uptimePercent7d: number;
@@ -315,7 +315,7 @@ export interface SiteUptime {
   uptimePercent24h: number;
   uptimePercent7d: number;
   uptimePercent30d: number;
-  degradedChargers: number;
+
   incidents: Array<UptimeIncident & { chargerId: string }>;
 }
 

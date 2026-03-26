@@ -57,7 +57,7 @@ export async function buildServer() {
       return { status: 'ok', service: 'ev-charger-api', db: 'ok' };
     } catch (error) {
       app.log.error({ error }, 'Health DB check failed');
-      return { status: 'degraded', service: 'ev-charger-api', db: 'down' };
+      return { status: 'error', service: 'ev-charger-api', db: 'down' };
     }
   });
 

@@ -89,10 +89,9 @@ export default function NetworkOps() {
   }, [site, allChargers, selectedSiteId]);
 
   const chargerStatusSummary = useMemo(() => {
-    if (!effectiveSiteChargers.length) return { online: 0, degraded: 0, offline: 0, faulted: 0 };
+    if (!effectiveSiteChargers.length) return { online: 0, offline: 0, faulted: 0 };
     return {
       online: effectiveSiteChargers.filter((c) => c.status === 'ONLINE').length,
-      degraded: effectiveSiteChargers.filter((c) => c.status === 'DEGRADED').length,
       offline: effectiveSiteChargers.filter((c) => c.status === 'OFFLINE').length,
       faulted: effectiveSiteChargers.filter((c) => c.status === 'FAULTED').length,
     };
@@ -145,7 +144,7 @@ export default function NetworkOps() {
         </div>
         <div className="grid grid-cols-4 gap-2 text-center">
           <MiniCard label="Online" value={chargerStatusSummary.online} tone="green" />
-          <MiniCard label="Degraded" value={chargerStatusSummary.degraded} tone="amber" />
+
           <MiniCard label="Offline" value={chargerStatusSummary.offline} tone="yellow" />
           <MiniCard label="Faulted" value={chargerStatusSummary.faulted} tone="red" />
         </div>
@@ -159,7 +158,7 @@ export default function NetworkOps() {
               <div key={c.id} className="rounded-md border border-gray-300 dark:border-slate-700 p-3">
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-medium text-gray-900 dark:text-slate-100">{c.ocppId}</p>
-                  <span className={`text-xs font-semibold ${c.status==='ONLINE'?'text-green-600 dark:text-green-400':c.status==='DEGRADED'?'text-amber-600 dark:text-amber-400':c.status==='OFFLINE'?'text-slate-500 dark:text-slate-400':'text-red-600 dark:text-red-400'}`}>{c.status}</span>
+                  <span className={`text-xs font-semibold ${c.status==='ONLINE'?'text-green-600 dark:text-green-400':c.status==='OFFLINE'?'text-slate-500 dark:text-slate-400':'text-red-600 dark:text-red-400'}`}>{c.status}</span>
                 </div>
                 <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">Last heartbeat: {c.lastHeartbeat ? new Date(c.lastHeartbeat).toLocaleString() : 'never'}</p>
                 {c.status === 'DEGRADED' && (

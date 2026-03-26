@@ -295,7 +295,7 @@ export async function siteRoutes(app: FastifyInstance) {
       uptimePercent24h: avg(rows.map(r => r.uptimePercent24h)),
       uptimePercent7d: avg(rows.map(r => r.uptimePercent7d)),
       uptimePercent30d: avg(rows.map(r => r.uptimePercent30d)),
-      degradedChargers: rows.filter(r => r.currentStatus === 'DEGRADED').length,
+      degradedChargers: 0, // deprecated — binary model: ONLINE or OFFLINE
       incidents: rows.flatMap(r => r.incidents.map(i => ({ ...i, chargerId: r.chargerId }))).slice(-50),
     };
   });
@@ -390,7 +390,7 @@ export async function siteRoutes(app: FastifyInstance) {
       : (sessionsCount > 0 ? 0.01 : 0);
 
     // Uptime (period-aligned): use materialized UptimeDaily for consistency with charger detail.
-    // OCA/NEVI §680.116: ONLINE + DEGRADED + RECOVERED = available.
+    // NEVI §680.116: ONLINE = available, everything else = down.
     const chargerUptimePct = await Promise.all(site.chargers.map(async (charger: { id: string; status: string }) => {
       const dailyRows = await prisma.uptimeDaily.findMany({
         where: {

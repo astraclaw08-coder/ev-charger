@@ -13,7 +13,6 @@ enum ChargerStatus {
   OFFLINE
   ONLINE
   FAULTED
-  DEGRADED
 }
 
 enum ConnectorStatus {
@@ -51,8 +50,12 @@ enum UptimeEventType {
   ONLINE
   OFFLINE
   FAULTED
-  DEGRADED
   RECOVERED
+  SCHEDULED_MAINTENANCE
+  UTILITY_INTERRUPTION
+  VEHICLE_FAULT
+  VANDALISM
+  FORCE_MAJEURE
 }
 
 enum OcppOutboxStatus {

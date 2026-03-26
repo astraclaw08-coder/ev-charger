@@ -8,7 +8,7 @@ import { prisma, type UptimeEventType, type ChargerStatus } from '@ev-charger/sh
  *
  * Availability (binary):
  *   UP:   ONLINE — active WS connection or recent heartbeat, non-faulted, non-unavailable
- *   DOWN: everything else — OFFLINE (no WS / no recent heartbeat), FAULTED, DEGRADED, UNAVAILABLE
+ *   DOWN: everything else — OFFLINE (no WS / no recent heartbeat), FAULTED
  *
  * Excluded outage types (per §680.116(b)(3)):
  *   SCHEDULED_MAINTENANCE, UTILITY_INTERRUPTION, VEHICLE_FAULT, VANDALISM, FORCE_MAJEURE
@@ -28,8 +28,7 @@ const EXCLUDED_EVENT_TYPES: Set<string> = new Set([
 const DAY_SECONDS = 86400;
 
 /**
- * Binary availability: only ONLINE is "up".
- * DEGRADED, OFFLINE, FAULTED are all "down".
+ * Binary availability: ONLINE = up, everything else = down.
  */
 export function isAvailable(status: ChargerStatus): boolean {
   return status === 'ONLINE';
@@ -38,8 +37,6 @@ export function isAvailable(status: ChargerStatus): boolean {
 function toChargerStatus(event: UptimeEventType): ChargerStatus {
   if (event === 'ONLINE' || event === 'RECOVERED') return 'ONLINE';
   if (event === 'FAULTED') return 'FAULTED';
-  // DEGRADED = no WS / stale heartbeat = not confirmed online = OFFLINE for uptime
-  if (event === 'DEGRADED') return 'OFFLINE';
   return 'OFFLINE';
 }
 

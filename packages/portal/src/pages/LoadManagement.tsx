@@ -312,10 +312,17 @@ export default function LoadManagement() {
     return schedule
       .map((w) => {
         const win = w as { daysOfWeek?: number[]; startTime?: string; endTime?: string; limitKw?: number };
-        const days = Array.isArray(win.daysOfWeek) && win.daysOfWeek.length > 0
-          ? win.daysOfWeek.map((d) => dayNames[d] ?? `D${d}`).join(',')
+        const localStart = win.startTime ? utcTimeToLocal(win.startTime).time : '--:--';
+        const localEnd = win.endTime ? utcTimeToLocal(win.endTime).time : '--:--';
+        const startDayShift = win.startTime ? utcTimeToLocal(win.startTime).dayShift : 0;
+        const rawDays = Array.isArray(win.daysOfWeek) ? win.daysOfWeek : [];
+        const localDays = rawDays.length > 0
+          ? rawDays.map((d) => (d - startDayShift + 7) % 7)
+          : [];
+        const days = localDays.length > 0
+          ? localDays.map((d) => dayNames[d] ?? `D${d}`).join(',')
           : 'All days';
-        return `${days} ${win.startTime ?? '--:--'}-${win.endTime ?? '--:--'} @ ${win.limitKw ?? '?'}kW`;
+        return `${days} ${localStart}-${localEnd} @ ${win.limitKw ?? '?'}kW`;
       })
       .join(' · ');
   }
@@ -483,11 +490,13 @@ export default function LoadManagement() {
           const isCurrentSource = matchingStates.some((s) => s.sourceProfileId === p.id);
           const activeState = matchingStates.find((s) => s.sourceProfileId === p.id);
 
-          // Determine schedule description
+          // Determine schedule description (convert UTC → local for display)
           const schedule = Array.isArray(p.schedule) ? p.schedule : [];
           const windowSummary = schedule.map((w: any) => {
             const days = (w.daysOfWeek ?? []).length === 7 ? 'Daily' : `${(w.daysOfWeek ?? []).length} days/wk`;
-            return `${w.startTime}–${w.endTime} ${days} @ ${w.limitKw} kW`;
+            const localStart = w.startTime ? utcTimeToLocal(w.startTime).time : w.startTime;
+            const localEnd = w.endTime ? utcTimeToLocal(w.endTime).time : w.endTime;
+            return `${localStart}–${localEnd} ${days} @ ${w.limitKw} kW`;
           }).join('; ') || (p.defaultLimitKw != null ? `${p.defaultLimitKw} kW always` : 'No schedule');
 
           // Determine status
