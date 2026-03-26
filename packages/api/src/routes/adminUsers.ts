@@ -278,6 +278,60 @@ export async function adminUserRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
+  // ── Update user ────────────────────────────────────────────────────────────
+  app.put<{
+    Params: { userId: string };
+    Body: { email?: string; firstName?: string; lastName?: string };
+  }>('/admin/users/:userId', {
+    preHandler: [requireOperator, requirePolicy('admin.users.write'), guardSensitiveAction as any],
+  }, async (req, reply) => {
+    const kc = getKeycloakAdminClient();
+    const patch: Record<string, unknown> = {};
+    if (req.body.email) {
+      const email = normalizeEmail(req.body.email);
+      if (!isValidEmail(email)) return reply.status(400).send({ error: 'Valid email is required' });
+      patch.email = email;
+      patch.username = email.toLowerCase();
+    }
+    if (req.body.firstName !== undefined) patch.firstName = req.body.firstName.trim();
+    if (req.body.lastName !== undefined) patch.lastName = req.body.lastName.trim();
+
+    await kc.updateUser(req.params.userId, patch);
+
+    await writeAdminAudit({
+      operatorId: req.currentOperator!.id,
+      action: 'keycloak.user.update',
+      targetUserId: req.params.userId,
+      metadata: { fields: Object.keys(patch) },
+    });
+
+    const updated = await kc.getUser(req.params.userId);
+    return reply.send(updated);
+  });
+
+  // ── Delete user ───────────────────────────────────────────────────────────
+  app.delete<{
+    Params: { userId: string };
+    Body: { reason?: string };
+  }>('/admin/users/:userId', {
+    preHandler: [requireOperator, requirePolicy('admin.users.write'), guardSensitiveAction as any],
+  }, async (req, reply) => {
+    const kc = getKeycloakAdminClient();
+    const user = await kc.getUser(req.params.userId);
+
+    await kc.deleteUser(req.params.userId);
+
+    await writeAdminAudit({
+      operatorId: req.currentOperator!.id,
+      action: 'keycloak.user.delete',
+      targetUserId: req.params.userId,
+      targetEmail: user.email,
+      metadata: { reason: parseOptionalReason(req.body?.reason) },
+    });
+
+    return reply.send({ ok: true });
+  });
+
   app.get<{ Querystring: { limit?: string } }>('/admin/users/audit', {
     preHandler: [requireOperator, requirePolicy('admin.audit.read')],
   }, async (req) => {

@@ -168,6 +168,10 @@ export class KeycloakAdminClient {
     await this.updateUser(userId, { enabled });
   }
 
+  async deleteUser(userId: string) {
+    await this.request<null>(`/users/${userId}`, { method: 'DELETE' });
+  }
+
   async setPassword(userId: string, value: string, temporary = false) {
     await this.request<null>(`/users/${userId}/reset-password`, {
       method: 'PUT',

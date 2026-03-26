@@ -834,6 +834,18 @@ export function createApiClient(token: string | null | undefined) {
         body: JSON.stringify({ reason }),
       }),
 
+    updateAdminUser: (userId: string, body: { email?: string; firstName?: string; lastName?: string }) =>
+      request<AdminUser>(`/admin/users/${userId}`, token, {
+        method: 'PUT',
+        body: JSON.stringify(body),
+      }),
+
+    deleteAdminUser: (userId: string, reason?: string) =>
+      request<{ ok: boolean }>(`/admin/users/${userId}`, token, {
+        method: 'DELETE',
+        body: JSON.stringify({ reason }),
+      }),
+
     listAdminAudit: (limit = 50) =>
       request<AdminAuditEvent[]>(`/admin/users/audit?limit=${limit}`, token),
 
