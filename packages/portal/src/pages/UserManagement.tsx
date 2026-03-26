@@ -71,6 +71,7 @@ export default function UserManagement() {
           <thead>
             <tr className="border-b border-gray-100 dark:border-slate-800 text-left text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">
               <th className="px-4 py-3">User</th>
+              <th className="px-4 py-3">Organization</th>
               <th className="px-4 py-3">Roles</th>
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3">Actions</th>
@@ -86,6 +87,9 @@ export default function UserManagement() {
                   <td className="px-4 py-3">
                     <p className="font-medium text-gray-900 dark:text-slate-100">{u.email ?? u.username ?? u.id}</p>
                     <p className="text-xs text-gray-500 dark:text-slate-400">{u.firstName} {u.lastName}</p>
+                  </td>
+                  <td className="px-4 py-3">
+                    <p className="text-xs text-gray-700 dark:text-slate-300">{(u as any).attributes?.organization?.[0] ?? '—'}</p>
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-1">
@@ -145,7 +149,7 @@ export default function UserManagement() {
               );
             })}
             {users.length === 0 && !loadError && (
-              <tr><td colSpan={4} className="px-4 py-8 text-center text-xs text-gray-500 dark:text-slate-400">No users found.</td></tr>
+              <tr><td colSpan={5} className="px-4 py-8 text-center text-xs text-gray-500 dark:text-slate-400">No users found.</td></tr>
             )}
           </tbody>
         </table>

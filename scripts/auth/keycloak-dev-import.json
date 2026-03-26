@@ -10,9 +10,15 @@
   "rememberMe": true,
   "roles": {
     "realm": [
-      { "name": "owner" },
-      { "name": "operator" },
-      { "name": "driver" }
+      {
+        "name": "owner"
+      },
+      {
+        "name": "operator"
+      },
+      {
+        "name": "driver"
+      }
     ]
   },
   "clients": [
@@ -25,8 +31,14 @@
       "secret": "dev-portal-client-secret-01",
       "standardFlowEnabled": true,
       "directAccessGrantsEnabled": true,
-      "redirectUris": ["http://localhost:5173/*", "http://localhost:3001/*"],
-      "webOrigins": ["http://localhost:5173", "http://localhost:3001"],
+      "redirectUris": [
+        "http://localhost:5173/*",
+        "http://localhost:3001/*"
+      ],
+      "webOrigins": [
+        "http://localhost:5173",
+        "http://localhost:3001"
+      ],
       "protocolMappers": [
         {
           "name": "realm-roles",
@@ -70,7 +82,18 @@
           "temporary": false
         }
       ],
-      "realmRoles": ["owner"]
+      "realmRoles": [
+        "owner"
+      ]
     }
-  ]
+  ],
+  "serviceAccountClientRoles": {
+    "ev-charger-admin": {
+      "realm-management": [
+        "manage-users",
+        "view-users",
+        "query-users"
+      ]
+    }
+  }
 }

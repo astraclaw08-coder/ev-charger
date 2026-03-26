@@ -144,14 +144,66 @@ function SecondaryButton({ children, ...props }: React.ButtonHTMLAttributes<HTML
 
 // ─── Tab: Users ───────────────────────────────────────────────────────────────
 function UsersTab() {
+  const [showCreate, setShowCreate] = useState(false);
+  const getToken = useToken();
+
+  async function handleCreateUser(data: { email: string; firstName: string; lastName: string }) {
+    try {
+      const token = await getToken();
+      const api = createApiClient(token);
+      await api.createAdminUser({ email: data.email, firstName: data.firstName, lastName: data.lastName, sendInvite: true });
+      window.alert('User created successfully.');
+      setShowCreate(false);
+      // UserManagement will auto-refresh on next render
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Failed to create user');
+    }
+  }
+
   return (
     <SectionCard
       title="Users"
       description="Manage user accounts, roles, organizations, and access levels."
-      actions={<PrimaryButton>+ User</PrimaryButton>}
+      actions={<PrimaryButton onClick={() => setShowCreate((v) => !v)}>+ User</PrimaryButton>}
     >
+      {showCreate && <UserCreateInline onSubmit={handleCreateUser} onCancel={() => setShowCreate(false)} />}
       <UserManagement />
     </SectionCard>
+  );
+}
+
+function UserCreateInline({ onSubmit, onCancel }: { onSubmit: (data: { email: string; firstName: string; lastName: string }) => void; onCancel: () => void }) {
+  const [email, setEmail] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+
+  return (
+    <div className="mb-5 rounded-lg border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/40 p-4">
+      <div className="flex items-center justify-between mb-3">
+        <h4 className="text-sm font-semibold text-gray-900 dark:text-slate-100">New User</h4>
+        <button onClick={onCancel} className="text-xs text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200">Cancel</button>
+      </div>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+        <label className="block text-sm">
+          <span className="font-medium text-gray-700 dark:text-slate-300">Email</span>
+          <input type="email" placeholder="user@company.com" value={email} onChange={(e) => setEmail(e.target.value)}
+            className="mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100 placeholder-gray-400 dark:placeholder-slate-500" />
+        </label>
+        <label className="block text-sm">
+          <span className="font-medium text-gray-700 dark:text-slate-300">First Name</span>
+          <input placeholder="Jane" value={firstName} onChange={(e) => setFirstName(e.target.value)}
+            className="mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100 placeholder-gray-400 dark:placeholder-slate-500" />
+        </label>
+        <label className="block text-sm">
+          <span className="font-medium text-gray-700 dark:text-slate-300">Last Name</span>
+          <input placeholder="Smith" value={lastName} onChange={(e) => setLastName(e.target.value)}
+            className="mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100 placeholder-gray-400 dark:placeholder-slate-500" />
+        </label>
+        <div className="flex items-end">
+          <PrimaryButton disabled={!email.trim()} onClick={() => onSubmit({ email: email.trim(), firstName, lastName })} className="w-full">Create & Invite</PrimaryButton>
+        </div>
+      </div>
+    </div>
   );
 }
 

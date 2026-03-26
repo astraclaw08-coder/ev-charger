@@ -7,6 +7,7 @@ type KeycloakUser = {
   enabled?: boolean;
   emailVerified?: boolean;
   createdTimestamp?: number;
+  attributes?: Record<string, string[]>;
 };
 
 type KeycloakRole = { id?: string; name: string };
