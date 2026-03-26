@@ -23,13 +23,18 @@ export const clientRegistry = {
       console.warn(
         `[Registry] Superseding existing session for ${ocppId} ` +
         `(was connected ${durationSec}s, boot=${existing.bootReceived}, hb=${existing.heartbeatCount}). ` +
-        `Closing old connection.`,
+        `Closing old socket in 5s.`,
       );
-      try {
-        existing.client.close?.(1000, 'Superseded by new connection');
-      } catch {
-        // Best effort — old socket may already be dead
-      }
+      // Close the stale socket after a short grace period to avoid racing
+      // with any in-flight messages on the old connection.
+      const staleClient = existing.client;
+      setTimeout(() => {
+        try {
+          staleClient.close?.(1000, 'Superseded by new connection');
+        } catch {
+          // Best effort — old socket may already be dead
+        }
+      }, 5_000);
       clients.delete(ocppId);
     }
 

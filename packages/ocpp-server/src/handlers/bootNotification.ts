@@ -35,6 +35,25 @@ export async function handleBootNotification(
 
   await recordUptimeEvent(chargerId, 'ONLINE', { reason: 'BootNotification accepted' });
 
+  // Configure charger's WS ping interval to 30s so the charger sends WS-level
+  // pings to the server. This keeps the connection alive through Railway's ~60s
+  // idle proxy timeout. The server never sends pings (charger firmware doesn't
+  // pong), so keepalive is entirely charger-initiated.
+  if (ocppId) {
+    const client = clientRegistry.get(ocppId);
+    if (client) {
+      try {
+        const result = await client.call('ChangeConfiguration', {
+          key: 'WebSocketPingInterval',
+          value: '30',
+        });
+        console.log(`[BootNotification] ChangeConfiguration WebSocketPingInterval=30 for ${ocppId}: ${result?.status ?? 'no response'}`);
+      } catch (err: any) {
+        console.warn(`[BootNotification] Failed to set WebSocketPingInterval for ${ocppId}: ${err?.message ?? err}`);
+      }
+    }
+  }
+
   // Reset smart charging state to PENDING_OFFLINE on boot so the heartbeat gate
   // forces a fresh GetConfiguration-style re-apply cycle after the charger reboots.
   // Without this, the idempotency check sees status=APPLIED from the prior session
@@ -46,10 +65,9 @@ export async function handleBootNotification(
 
   return {
     currentTime: new Date().toISOString(),
-    // 900s OCPP heartbeat interval. The WebSocket is kept alive independently
-    // via server-side WS ping frames (pingIntervalMs: 55s in RPCServer config),
-    // so the OCPP Heartbeat is only needed for application-level liveness checks
-    // — not as a proxy keepalive workaround.
+    // 900s OCPP heartbeat interval. The WebSocket is kept alive by charger-side
+    // WS pings (WebSocketPingInterval=30s, set above via ChangeConfiguration).
+    // OCPP Heartbeat is only for application-level liveness — not keepalive.
     interval: 900,
     status: 'Accepted',
   };

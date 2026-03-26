@@ -10,7 +10,7 @@ export default function Chargers() {
   const [rows, setRows] = useState<ChargerListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'ONLINE' | 'DEGRADED' | 'OFFLINE' | 'FAULTED'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'ONLINE' | 'OFFLINE' | 'FAULTED'>('ALL');
   const [query, setQuery] = useState('');
 
   useEffect(() => {
@@ -47,7 +47,6 @@ export default function Chargers() {
   const summary = useMemo(() => ({
     total: rows.length,
     online: rows.filter((r) => r.status === 'ONLINE').length,
-    degraded: rows.filter((r) => r.status === 'DEGRADED').length,
     offline: rows.filter((r) => r.status === 'OFFLINE').length,
     faulted: rows.filter((r) => r.status === 'FAULTED').length,
   }), [rows]);
@@ -70,7 +69,7 @@ export default function Chargers() {
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <Stat label="Total" value={summary.total} />
         <Stat label="Online" value={summary.online} tone="green" />
-        <Stat label="Degraded" value={summary.degraded} tone="amber" />
+
         <Stat label="Offline" value={summary.offline} tone="slate" />
         <Stat label="Faulted" value={summary.faulted} tone="red" />
       </div>
@@ -102,7 +101,7 @@ export default function Chargers() {
             >
               <option value="ALL">All statuses</option>
               <option value="ONLINE">Online</option>
-              <option value="DEGRADED">Degraded</option>
+
               <option value="OFFLINE">Offline</option>
               <option value="FAULTED">Faulted</option>
             </select>
@@ -145,9 +144,7 @@ export default function Chargers() {
 function StatusPill({ status }: { status: ChargerListItem['status'] }) {
   const cls = status === 'ONLINE'
     ? 'text-green-600 dark:text-green-400'
-    : status === 'DEGRADED'
-      ? 'text-amber-600 dark:text-amber-400'
-      : status === 'OFFLINE'
+    : status === 'OFFLINE'
         ? 'text-slate-500 dark:text-slate-400'
         : 'text-red-600 dark:text-red-400';
 

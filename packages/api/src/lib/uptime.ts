@@ -37,39 +37,15 @@ export async function ensureChargerLiveness(chargerId: string) {
   const offlineEligible = ageMs > offlineAfterMs;
 
   if (stale && charger.status === 'ONLINE') {
-    await prisma.charger.update({ where: { id: charger.id }, data: { status: 'DEGRADED' } });
+    await prisma.charger.update({ where: { id: charger.id }, data: { status: 'OFFLINE' } });
     await prisma.uptimeEvent.create({
       data: {
         chargerId: charger.id,
-        event: 'DEGRADED',
-        reason: `Heartbeat stale (> ${HEARTBEAT_THRESHOLD_SECONDS + OFFLINE_GRACE_SECONDS}s); awaiting offline confirmation`,
+        event: 'OFFLINE',
+        reason: `Heartbeat stale (> ${HEARTBEAT_THRESHOLD_SECONDS + OFFLINE_GRACE_SECONDS}s)`,
       },
     });
-    return { ...charger, status: 'DEGRADED' as const };
-  }
-
-  if (offlineEligible && charger.status === 'DEGRADED') {
-    const recentDisconnectSignal = await prisma.uptimeEvent.findFirst({
-      where: {
-        chargerId: charger.id,
-        event: 'DEGRADED',
-        reason: { contains: 'disconnected' },
-        createdAt: { gte: new Date(now - offlineAfterMs - 5 * 60 * 1000) },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    if (recentDisconnectSignal) {
-      await prisma.charger.update({ where: { id: charger.id }, data: { status: 'OFFLINE' } });
-      await prisma.uptimeEvent.create({
-        data: {
-          chargerId: charger.id,
-          event: 'OFFLINE',
-          reason: `Confirmed unreachable after disconnect + stale heartbeat (> ${HEARTBEAT_THRESHOLD_SECONDS + OFFLINE_GRACE_SECONDS + OFFLINE_CONFIRM_SECONDS}s)`,
-        },
-      });
-      return { ...charger, status: 'OFFLINE' as const };
-    }
+    return { ...charger, status: 'OFFLINE' as const };
   }
 
   return charger;
@@ -108,13 +84,9 @@ function computePercent(sums: DailySums): number {
 // ─── Legacy fallback (timeline walk) for chargers with no UptimeDaily rows ──
 
 function toStatus(event: UptimeEventType): ChargerStatus {
-  return event === 'ONLINE' || event === 'RECOVERED'
-    ? 'ONLINE'
-    : event === 'FAULTED'
-      ? 'FAULTED'
-      : event === 'DEGRADED'
-        ? 'DEGRADED'
-        : 'OFFLINE';
+  if (event === 'ONLINE' || event === 'RECOVERED') return 'ONLINE';
+  if (event === 'FAULTED') return 'FAULTED';
+  return 'OFFLINE';
 }
 
 function legacyCalcPct(
@@ -176,8 +148,15 @@ export async function getChargerUptime(chargerId: string) {
   let breakdown7d: DailySums | null = sums7d;
   let breakdown30d: DailySums | null = sums30d;
 
-  if (sums24h && sums7d && sums30d) {
-    // Use materialized data
+  // Only use materialized data if it covers enough of the requested window.
+  // UptimeDaily rows are per-day; require at least 1d for 24h, 5d for 7d, 20d for 30d.
+  const rows24h = sums24h ? await prisma.uptimeDaily.count({ where: { chargerId, date: { gte: d1ago, lte: today } } }) : 0;
+  const rows7d = sums7d ? await prisma.uptimeDaily.count({ where: { chargerId, date: { gte: d7ago, lte: today } } }) : 0;
+  const rows30d = sums30d ? await prisma.uptimeDaily.count({ where: { chargerId, date: { gte: d30ago, lte: today } } }) : 0;
+  const materializedCoverageOk = rows24h >= 1 && rows7d >= 5 && rows30d >= 20;
+
+  if (materializedCoverageOk && sums24h && sums7d && sums30d) {
+    // Use materialized data — sufficient coverage
     uptimePercent24h = computePercent(sums24h);
     uptimePercent7d = computePercent(sums7d);
     uptimePercent30d = computePercent(sums30d);
@@ -214,7 +193,7 @@ export async function getChargerUptime(chargerId: string) {
   });
 
   const incidents: UptimeIncident[] = incidentEvents
-    .filter((e: any) => e.event === 'OFFLINE' || e.event === 'FAULTED' || e.event === 'DEGRADED'
+    .filter((e: any) => e.event === 'OFFLINE' || e.event === 'FAULTED'
       || e.event === 'SCHEDULED_MAINTENANCE' || e.event === 'UTILITY_INTERRUPTION'
       || e.event === 'VEHICLE_FAULT' || e.event === 'VANDALISM' || e.event === 'FORCE_MAJEURE')
     .slice(-20)

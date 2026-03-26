@@ -282,7 +282,7 @@ export interface FavoriteListResponse {
 
 export interface ChargerUptime {
   chargerId: string;
-  currentStatus: 'ONLINE' | 'OFFLINE' | 'FAULTED' | 'DEGRADED';
+  currentStatus: 'ONLINE' | 'OFFLINE' | 'FAULTED';
   lastOnlineAt: string | null;
   uptimePercent24h: number;
   uptimePercent7d: number;

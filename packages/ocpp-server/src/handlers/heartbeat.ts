@@ -18,7 +18,7 @@ export async function handleHeartbeat(
   if (ocppId) clientRegistry.markHeartbeat(ocppId);
 
   const current = await prisma.charger.findUnique({ where: { id: chargerId }, select: { status: true } });
-  const shouldRecover = current?.status === 'DEGRADED' || current?.status === 'OFFLINE';
+  const shouldRecover = current?.status === 'OFFLINE';
 
   await prisma.$transaction(async (tx: any) => {
     await tx.charger.update({

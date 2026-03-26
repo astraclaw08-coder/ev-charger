@@ -24,16 +24,11 @@ export async function startServer(port: number): Promise<OcppServerHandle> {
   const server = new RPCServer({
     protocols: ['ocpp1.6'],
     strictMode: false,  // lenient for real-world charger quirks
-    // Send a WS-level ping frame every 55s. Railway's reverse proxy drops idle
-    // WebSocket connections at ~60s; 55s gives a 5s margin for network jitter.
-    // This is the maximum safe interval — do not raise above 58s.
-    // WS pings are protocol-level (a few bytes) and invisible to OCPP.
-    // deferPingsOnActivity DISABLED: always send pings on the 55s cadence
-    // regardless of charger activity. This ensures consistent keepalive
-    // behavior and eliminates edge cases where deferred pings could allow
-    // an idle gap long enough for Railway proxy to close the connection.
-    pingIntervalMs: 55_000,
-    deferPingsOnActivity: false,
+    // DISABLE ocpp-rpc's built-in keepAlive entirely. Its ping-timeout logic
+    // calls ws.terminate() if no pong within 2 intervals — we never want the
+    // server to forcibly kill a charger WebSocket due to missing pongs.
+    // Keepalive pings are sent manually below (per-client, no terminate).
+    pingIntervalMs: 0,
   });
 
   // ── Authentication ──────────────────────────────────────────────────────────
@@ -85,6 +80,35 @@ export async function startServer(port: number): Promise<OcppServerHandle> {
 
     console.log(`[Server] Connected: ${ocppId} (db=${chargerId})`);
     clientRegistry.register(ocppId, client);
+
+    // ── Ping/Pong instrumentation ─────────────────────────────────────────────
+    // Log all WS-level ping/pong frames for diagnostics.
+    // ── Manual keepalive pings (no terminate on missing pong) ───────────────
+    // Send WS ping every 30s to keep Railway proxy alive (~60s idle timeout).
+    // If the charger doesn't pong, we log it but NEVER kill the connection.
+    // The charger or Railway proxy decides when the socket dies.
+    const ws = client._ws;
+    let pingInterval: ReturnType<typeof setInterval> | null = null;
+    if (ws) {
+      ws.on('pong', () => {
+        console.log(`[WS pong] ← ${ocppId} responded to our ping`);
+      });
+
+      ws.on('ping', (data: Buffer) => {
+        console.log(`[WS ping] ← ${ocppId} sent us a ping (${data.length} bytes)`);
+      });
+
+      pingInterval = setInterval(() => {
+        if (ws.readyState === 1 /* OPEN */) {
+          try {
+            ws.ping();
+            console.log(`[WS ping] → ${ocppId} sending ping to charger`);
+          } catch (err: any) {
+            console.warn(`[WS ping] → ${ocppId} ping failed: ${err?.message}`);
+          }
+        }
+      }, 30_000);
+    }
 
     const registerInboundHandler = (
       action: string,
@@ -159,6 +183,9 @@ export async function startServer(port: number): Promise<OcppServerHandle> {
     });
 
     client.on('disconnect', (...args: any[]) => {
+      // Clean up our manual ping interval
+      if (pingInterval) { clearInterval(pingInterval); pingInterval = null; }
+
       const [rawCode, rawReason] = args;
 
       const parsedCode = typeof rawCode === 'number'
@@ -195,14 +222,14 @@ export async function startServer(port: number): Promise<OcppServerHandle> {
 
       prisma.charger.update({
         where: { id: chargerId },
-        data: { status: 'DEGRADED' },
+        data: { status: 'OFFLINE' },
       }).catch(console.error);
 
       prisma.uptimeEvent.create({
         data: {
           chargerId,
-          event: 'DEGRADED',
-          reason: 'WebSocket disconnected; pending offline confirmation window',
+          event: 'OFFLINE',
+          reason: 'WebSocket disconnected',
         },
       }).catch(console.error);
     });

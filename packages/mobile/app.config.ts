@@ -21,7 +21,14 @@ const androidPackage = isProd ? 'app.evcharger.app' : isRC ? 'rc.evcharger.app' 
 const defaultApiUrl = isProd || isRC
   ? 'https://api-production-26cf.up.railway.app'
   : 'http://127.0.0.1:3001';
-const apiUrl = process.env.EXPO_PUBLIC_API_URL || defaultApiUrl;
+// For RC/prod, always use the prod API URL — don't let .env override it
+const apiUrl = isProd || isRC
+  ? (process.env.EXPO_PUBLIC_API_URL || defaultApiUrl)
+  : (process.env.EXPO_PUBLIC_API_URL || defaultApiUrl);
+// Guard: if EXPO_PUBLIC_API_URL points to localhost but we're in RC/prod, ignore it
+const resolvedApiUrl = (isProd || isRC) && apiUrl.includes('127.0.0.1')
+  ? 'https://api-production-26cf.up.railway.app'
+  : apiUrl;
 
 const iosGoogleMapsApiKey = process.env.GOOGLE_MAPS_API_KEY_IOS || '';
 const androidGoogleMapsApiKey = process.env.GOOGLE_MAPS_API_KEY_ANDROID || '';
@@ -85,7 +92,7 @@ const config: ExpoConfig = {
   },
   extra: {
     appEnv,
-    apiUrl,
+    apiUrl: resolvedApiUrl,
     authMode: 'keycloak',
     envLabel: isProd ? 'PROD' : isRC ? 'RC' : 'DEV',
     eas: {
