@@ -3,13 +3,44 @@ import { createApiClient, type AdminUser } from '../api/client';
 import { useToken } from '../auth/TokenContext';
 import { cn } from '../lib/utils';
 
-const ROLES = ['owner', 'operator', 'customer_support', 'network_reliability', 'analyst'];
+// Must match shared RBAC_ROLES (excluding super_admin for portal assignment)
+const ASSIGNABLE_ROLES = [
+  'owner',
+  'operator',
+  'customer_service',
+  'network_reliability_engineer',
+  'data_analyst',
+] as const;
+
+const ROLE_LABELS: Record<string, string> = {
+  super_admin: 'Super Admin',
+  owner: 'Owner',
+  operator: 'Operator',
+  customer_service: 'Customer Service',
+  network_reliability_engineer: 'Network Reliability Engineer',
+  data_analyst: 'Data Analyst',
+};
+
+const ROLE_DESCRIPTIONS: Record<string, string> = {
+  owner: 'Full access within org. Users, sites, billing, RBAC.',
+  operator: 'Day-to-day ops. Sites, chargers, sessions.',
+  customer_service: 'Read access + session refunds.',
+  network_reliability_engineer: 'Charger control + incident management.',
+  data_analyst: 'Read-only analytics + data export.',
+};
+
+/** Given a user's realm roles, return their single RBAC role (if any). */
+function getUserRole(user: AdminUser): string | null {
+  const all = new Set(ASSIGNABLE_ROLES as readonly string[]);
+  all.add('super_admin');
+  return user.realmRoles?.find((r) => all.has(r)) ?? null;
+}
 
 interface EditForm {
   email: string;
   firstName: string;
   lastName: string;
-  roles: string[];
+  role: string;
   roleReason: string;
 }
 
@@ -22,7 +53,7 @@ export default function UserManagement() {
 
   // Edit modal state
   const [editingUser, setEditingUser] = useState<AdminUser | null>(null);
-  const [editForm, setEditForm] = useState<EditForm>({ email: '', firstName: '', lastName: '', roles: [], roleReason: '' });
+  const [editForm, setEditForm] = useState<EditForm>({ email: '', firstName: '', lastName: '', role: '', roleReason: '' });
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
 
@@ -49,7 +80,7 @@ export default function UserManagement() {
       email: user.email ?? '',
       firstName: user.firstName ?? '',
       lastName: user.lastName ?? '',
-      roles: user.realmRoles ?? [],
+      role: getUserRole(user) ?? '',
       roleReason: '',
     });
     setEditError(null);
@@ -79,18 +110,11 @@ export default function UserManagement() {
         await api.updateAdminUser(editingUser.id, updates);
       }
 
-      // Sync roles
-      const currentRoles = editingUser.realmRoles ?? [];
-      const reason = editForm.roleReason.trim() || 'Updated via admin portal';
-
-      const toAdd = editForm.roles.filter((r) => !currentRoles.includes(r));
-      const toRemove = currentRoles.filter((r) => !editForm.roles.includes(r) && ROLES.includes(r));
-
-      for (const role of toAdd) {
-        await api.addAdminUserRole(editingUser.id, role, reason);
-      }
-      for (const role of toRemove) {
-        await api.removeAdminUserRole(editingUser.id, role, { reason, confirmPrivilegedRoleRemoval: role === 'owner' });
+      // Single-role assignment (API handles swap internally)
+      const currentRole = getUserRole(editingUser);
+      if (editForm.role && editForm.role !== currentRole) {
+        const reason = editForm.roleReason.trim() || 'Updated via admin portal';
+        await api.addAdminUserRole(editingUser.id, editForm.role, reason);
       }
 
       await refresh();
@@ -103,7 +127,7 @@ export default function UserManagement() {
   }
 
   async function handleDeactivate() {
-    if (!editingUser || !confirm(`Deactivate ${editingUser.email ?? editingUser.username}?`)) return;
+    if (!editingUser || !confirm(`${editingUser.enabled ? 'Deactivate' : 'Reactivate'} ${editingUser.email ?? editingUser.username}?`)) return;
     setEditSaving(true);
     try {
       const token = await getToken();
@@ -141,13 +165,6 @@ export default function UserManagement() {
     }
   }
 
-  function toggleRole(role: string) {
-    setEditForm((f) => ({
-      ...f,
-      roles: f.roles.includes(role) ? f.roles.filter((r) => r !== role) : [...f.roles, role],
-    }));
-  }
-
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3">
@@ -178,43 +195,44 @@ export default function UserManagement() {
             <tr className="border-b border-gray-100 dark:border-slate-800 text-left text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">
               <th className="px-4 py-3">User</th>
               <th className="px-4 py-3">Organization</th>
-              <th className="px-4 py-3">Roles</th>
+              <th className="px-4 py-3">Role</th>
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50 dark:divide-slate-800">
-            {users.map((u) => (
-              <tr key={u.id} className="hover:bg-gray-50 dark:hover:bg-slate-800/40">
-                <td className="px-4 py-3">
-                  <p className="font-medium text-gray-900 dark:text-slate-100">{u.email ?? u.username ?? u.id}</p>
-                  <p className="text-xs text-gray-500 dark:text-slate-400">{u.firstName} {u.lastName}</p>
-                </td>
-                <td className="px-4 py-3">
-                  <p className="text-xs text-gray-700 dark:text-slate-300">{(u as any).attributes?.organization?.[0] ?? '—'}</p>
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex flex-wrap gap-1">
-                    {(u.realmRoles?.length ? u.realmRoles : ['none']).map((r) => (
-                      <span key={r} className="rounded-full border border-gray-200 dark:border-slate-700 px-2 py-0.5 text-xs text-gray-700 dark:text-slate-300">{r}</span>
-                    ))}
-                  </div>
-                </td>
-                <td className="px-4 py-3">
-                  <span className={cn('text-xs font-semibold', u.enabled ? 'text-green-600 dark:text-green-400' : 'text-slate-500 dark:text-slate-400')}>
-                    {u.enabled ? 'Active' : 'Disabled'}
-                  </span>
-                </td>
-                <td className="px-4 py-3">
-                  <button
-                    className="rounded-md border border-gray-300 dark:border-slate-600 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
-                    onClick={() => openEdit(u)}
-                  >
-                    Edit
-                  </button>
-                </td>
-              </tr>
-            ))}
+            {users.map((u) => {
+              const role = getUserRole(u);
+              return (
+                <tr key={u.id} className="hover:bg-gray-50 dark:hover:bg-slate-800/40">
+                  <td className="px-4 py-3">
+                    <p className="font-medium text-gray-900 dark:text-slate-100">{u.email ?? u.username ?? u.id}</p>
+                    <p className="text-xs text-gray-500 dark:text-slate-400">{u.firstName} {u.lastName}</p>
+                  </td>
+                  <td className="px-4 py-3">
+                    <p className="text-xs text-gray-700 dark:text-slate-300">{(u as any).attributes?.organization?.[0] ?? '—'}</p>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="rounded-full border border-gray-200 dark:border-slate-700 px-2 py-0.5 text-xs text-gray-700 dark:text-slate-300">
+                      {role ? (ROLE_LABELS[role] ?? role) : 'No role'}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={cn('text-xs font-semibold', u.enabled ? 'text-green-600 dark:text-green-400' : 'text-slate-500 dark:text-slate-400')}>
+                      {u.enabled ? 'Active' : 'Disabled'}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <button
+                      className="rounded-md border border-gray-300 dark:border-slate-600 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
+                      onClick={() => openEdit(u)}
+                    >
+                      Edit
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
             {users.length === 0 && !loadError && (
               <tr><td colSpan={5} className="px-4 py-8 text-center text-xs text-gray-500 dark:text-slate-400">No users found.</td></tr>
             )}
@@ -266,36 +284,56 @@ export default function UserManagement() {
                 </div>
               </div>
 
+              {/* Single-role selection */}
               <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-slate-300 mb-1">Roles</label>
-                <div className="flex flex-wrap gap-2">
-                  {ROLES.map((role) => (
-                    <button
+                <label className="block text-xs font-medium text-gray-700 dark:text-slate-300 mb-2">Role</label>
+                <div className="space-y-1.5">
+                  {ASSIGNABLE_ROLES.map((role) => (
+                    <label
                       key={role}
-                      type="button"
                       className={cn(
-                        'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
-                        editForm.roles.includes(role)
-                          ? 'border-blue-400 bg-blue-50 text-blue-700 dark:border-blue-600 dark:bg-blue-900/30 dark:text-blue-300'
-                          : 'border-gray-200 bg-white text-gray-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 hover:border-gray-300 dark:hover:border-slate-600',
+                        'flex items-start gap-3 rounded-lg border px-3 py-2.5 cursor-pointer transition-colors',
+                        editForm.role === role
+                          ? 'border-blue-400 bg-blue-50/50 dark:border-blue-600 dark:bg-blue-900/20'
+                          : 'border-gray-200 dark:border-slate-700 hover:border-gray-300 dark:hover:border-slate-600',
                       )}
-                      onClick={() => toggleRole(role)}
                     >
-                      {role}
-                    </button>
+                      <input
+                        type="radio"
+                        name="user-role"
+                        value={role}
+                        checked={editForm.role === role}
+                        onChange={() => setEditForm((f) => ({ ...f, role }))}
+                        className="mt-0.5 accent-blue-600"
+                      />
+                      <div className="min-w-0">
+                        <p className={cn(
+                          'text-sm font-medium',
+                          editForm.role === role
+                            ? 'text-blue-700 dark:text-blue-300'
+                            : 'text-gray-900 dark:text-slate-100',
+                        )}>
+                          {ROLE_LABELS[role]}
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">{ROLE_DESCRIPTIONS[role]}</p>
+                      </div>
+                    </label>
                   ))}
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-slate-300 mb-1">Reason for role changes</label>
-                <input
-                  className="w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100 placeholder-gray-400 dark:placeholder-slate-500"
-                  placeholder="Required if adding/removing roles"
-                  value={editForm.roleReason}
-                  onChange={(e) => setEditForm((f) => ({ ...f, roleReason: e.target.value }))}
-                />
-              </div>
+              {/* Reason — only show if role changed */}
+              {editForm.role !== getUserRole(editingUser) && editForm.role && (
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-slate-300 mb-1">Reason for role change</label>
+                  <input
+                    className="w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100 placeholder-gray-400 dark:placeholder-slate-500"
+                    placeholder="Required"
+                    value={editForm.roleReason}
+                    onChange={(e) => setEditForm((f) => ({ ...f, roleReason: e.target.value }))}
+                  />
+                </div>
+              )}
             </div>
 
             {/* Footer */}
