@@ -86,6 +86,29 @@ export async function startServer(port: number): Promise<OcppServerHandle> {
     console.log(`[Server] Connected: ${ocppId} (db=${chargerId})`);
     clientRegistry.register(ocppId, client);
 
+    // ── Ping/Pong instrumentation ─────────────────────────────────────────────
+    // Log all WS-level ping/pong frames for diagnostics.
+    // client._ws is the underlying WebSocket from the 'ws' library.
+    const ws = client._ws;
+    if (ws) {
+      // Server sends ping → charger should reply with pong
+      ws.on('pong', () => {
+        console.log(`[WS pong] ← ${ocppId} responded to our ping`);
+      });
+
+      // Charger sends ping → server auto-replies with pong (ws library default)
+      ws.on('ping', (data: Buffer) => {
+        console.log(`[WS ping] ← ${ocppId} sent us a ping (${data.length} bytes)`);
+      });
+
+      // Hook into outbound pings from ocpp-rpc's keepAlive
+      const origPing = ws.ping.bind(ws);
+      ws.ping = (...args: any[]) => {
+        console.log(`[WS ping] → ${ocppId} sending ping to charger`);
+        return origPing(...args);
+      };
+    }
+
     const registerInboundHandler = (
       action: string,
       fn: (params: any) => Promise<any> | any,
