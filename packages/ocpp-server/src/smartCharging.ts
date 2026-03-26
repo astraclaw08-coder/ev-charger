@@ -1,12 +1,20 @@
 import { prisma, parseSmartChargingSchedule, resolveEffectiveSmartChargingLimit, type SmartChargingProfileLike } from '@ev-charger/shared';
 import { remoteClearChargingProfile, remoteSetChargingProfile } from './remote';
+import { clientRegistry } from './clientRegistry';
 
 const SAFE_LIMIT_KW = Number(process.env.SMART_CHARGING_SAFE_LIMIT_KW ?? '7.2') || 7.2;
 const STACK_LEVEL = Number.parseInt(process.env.SMART_CHARGING_STACK_LEVEL ?? '50', 10) || 50;
 const MIN_HEARTBEATS_AFTER_BOOT = Number.parseInt(process.env.SMART_CHARGING_MIN_HEARTBEATS_AFTER_BOOT ?? '1', 10) || 1;
 const MIN_SECONDS_AFTER_BOOT = Number.parseInt(process.env.SMART_CHARGING_MIN_SECONDS_AFTER_BOOT ?? '0', 10) || 0;
 
-async function connectionReadyForSmartCharging(chargerId: string): Promise<{ ready: boolean; reason: string }> {
+async function connectionReadyForSmartCharging(chargerId: string, ocppId: string): Promise<{ ready: boolean; reason: string }> {
+  // If charger has an active WS connection in the registry, it's ready.
+  // This handles reconnections that skip BootNotification (e.g. after server
+  // redeploy where the charger reconnects without a full boot cycle).
+  if (clientRegistry.has(ocppId)) {
+    return { ready: true, reason: 'Active WS connection in registry' };
+  }
+
   const latestBoot = await prisma.ocppEventOutbox.findFirst({
     where: { chargerId, eventType: 'BootNotification' },
     orderBy: { createdAt: 'desc' },
@@ -179,7 +187,7 @@ export async function applySmartChargingForCharger(chargerId: string, trigger: s
   });
 
   if (charger.status === 'ONLINE') {
-    const readiness = await connectionReadyForSmartCharging(charger.id);
+    const readiness = await connectionReadyForSmartCharging(charger.id, charger.ocppId);
     if (!readiness.ready) {
       status = 'PENDING_OFFLINE';
       lastError = readiness.reason;

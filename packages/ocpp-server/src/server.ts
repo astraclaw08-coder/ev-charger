@@ -10,6 +10,7 @@ import { handleStartTransaction } from './handlers/startTransaction';
 import { handleStopTransaction } from './handlers/stopTransaction';
 import { handleMeterValues } from './handlers/meterValues';
 import { logOcppMessage } from './ocppLogger';
+import { applySmartChargingForCharger } from './smartCharging';
 
 // ocpp-rpc ships as CommonJS without bundled TS types
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -80,6 +81,15 @@ export async function startServer(port: number): Promise<OcppServerHandle> {
 
     console.log(`[Server] Connected: ${ocppId} (db=${chargerId})`);
     clientRegistry.register(ocppId, client);
+
+    // Trigger smart charging apply 10s after connect to handle reconnections
+    // that skip BootNotification (e.g. after server redeploy). The delay
+    // gives the charger time to send BootNotification/StatusNotification first.
+    setTimeout(() => {
+      applySmartChargingForCharger(chargerId, 'reconnect').catch((err) => {
+        console.warn(`[SmartCharging] reconnect apply failed for ${ocppId}: ${err?.message}`);
+      });
+    }, 10_000);
 
     // ── Ping/Pong instrumentation ─────────────────────────────────────────────
     // Log all WS-level ping/pong frames for diagnostics.
