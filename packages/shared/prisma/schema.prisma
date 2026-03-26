@@ -117,6 +117,7 @@ model Charger {
   stateTransitions ConnectorStateTransition[]
   ocppLogs        OcppLog[]
   uptimeEvents    UptimeEvent[]
+  uptimeDaily     UptimeDaily[]
   outboxEvents    OcppEventOutbox[]
   chargingProfiles SmartChargingProfile[]
   smartChargingState SmartChargingState?
@@ -468,6 +469,24 @@ model UptimeEvent {
   @@index([chargerId, createdAt])
   @@index([createdAt])
   @@index([event])
+}
+
+model UptimeDaily {
+  id                    String   @id @default(uuid())
+  chargerId             String
+  charger               Charger  @relation(fields: [chargerId], references: [id], onDelete: Cascade)
+  date                  DateTime @db.Date
+  totalSeconds          Int
+  availableSeconds      Int
+  outageSeconds         Int
+  excludedOutageSeconds Int      @default(0)
+  uptimePercent         Float
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@unique([chargerId, date])
+  @@index([chargerId])
+  @@index([date])
 }
 
 model AdminAuditEvent {
