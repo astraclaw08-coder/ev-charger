@@ -144,124 +144,75 @@ function SecondaryButton({ children, ...props }: React.ButtonHTMLAttributes<HTML
 
 // ─── Tab: Users ───────────────────────────────────────────────────────────────
 function UsersTab() {
+  const [showCreate, setShowCreate] = useState(false);
+
   return (
     <div className="space-y-6">
-      <SectionCard title="User Management" description="Add, edit, and manage user accounts, access levels, and site assignments.">
+      <SectionCard
+        title="Users"
+        description="Manage user accounts, roles, and access levels."
+        actions={<PrimaryButton onClick={() => setShowCreate((v) => !v)}>+ User</PrimaryButton>}
+      >
+        {showCreate && (
+          <div className="mb-6 rounded-lg border border-brand-200 dark:border-brand-700 bg-brand-50/30 dark:bg-brand-900/10 p-4">
+            <UserInviteForm onClose={() => setShowCreate(false)} />
+          </div>
+        )}
         <UserManagement />
-      </SectionCard>
-      <SectionCard title="Invite / Create User" description="Create a new user with organization, portfolio, site access, and privilege assignment.">
-        <UserInviteForm />
       </SectionCard>
     </div>
   );
 }
 
-function UserInviteForm() {
+function UserInviteForm({ onClose }: { onClose: () => void }) {
   const [form, setForm] = useState({
-    email: '',
-    firstName: '',
-    lastName: '',
-    role: 'operator',
-    organization: '',
-    portfolio: '',
-    siteAccess: 'all', // 'all' | 'selected'
-    selectedSites: '',
-    privilege: 'read',  // 'read' | 'read_write' | 'admin'
+    email: '', firstName: '', lastName: '', role: 'operator',
+    organization: '', portfolio: '', siteAccess: 'all', selectedSites: '', privilege: 'read',
   });
 
   const roles = [
-    { value: 'super_admin', label: 'Super Admin', description: 'Full platform access across all organizations' },
-    { value: 'admin', label: 'Admin', description: 'Full access within assigned organizations' },
-    { value: 'org_admin', label: 'Organization Admin', description: 'Manage users and sites within their organization' },
-    { value: 'operator', label: 'Operator', description: 'Operate and monitor assigned sites/chargers' },
-    { value: 'analyst', label: 'Analyst', description: 'Read-only access to analytics and reports' },
-    { value: 'support', label: 'Support Agent', description: 'Customer support workflows only' },
-  ];
-
-  const privileges = [
-    { value: 'read', label: 'Read Only', description: 'View dashboards, reports, and charger status' },
-    { value: 'read_write', label: 'Read & Write', description: 'View + manage chargers, sessions, pricing' },
-    { value: 'admin', label: 'Full Admin', description: 'All permissions including user management' },
+    { value: 'super_admin', label: 'Super Admin' },
+    { value: 'admin', label: 'Admin' },
+    { value: 'org_admin', label: 'Org Admin' },
+    { value: 'operator', label: 'Operator' },
+    { value: 'analyst', label: 'Analyst' },
+    { value: 'support', label: 'Support' },
   ];
 
   return (
-    <div className="space-y-5">
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <FieldRow label="Email">
-          <Input type="email" placeholder="user@company.com" value={form.email} onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))} />
-        </FieldRow>
-        <FieldRow label="First Name">
-          <Input placeholder="Jane" value={form.firstName} onChange={(e) => setForm((p) => ({ ...p, firstName: e.target.value }))} />
-        </FieldRow>
-        <FieldRow label="Last Name">
-          <Input placeholder="Smith" value={form.lastName} onChange={(e) => setForm((p) => ({ ...p, lastName: e.target.value }))} />
-        </FieldRow>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h4 className="text-sm font-semibold text-gray-900 dark:text-slate-100">New User</h4>
+        <button onClick={onClose} className="text-xs text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200">Cancel</button>
+      </div>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+        <FieldRow label="Email"><Input type="email" placeholder="user@company.com" value={form.email} onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))} /></FieldRow>
+        <FieldRow label="First Name"><Input placeholder="Jane" value={form.firstName} onChange={(e) => setForm((p) => ({ ...p, firstName: e.target.value }))} /></FieldRow>
+        <FieldRow label="Last Name"><Input placeholder="Smith" value={form.lastName} onChange={(e) => setForm((p) => ({ ...p, lastName: e.target.value }))} /></FieldRow>
         <FieldRow label="Role">
-          <select
-            className="w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100"
-            value={form.role}
-            onChange={(e) => setForm((p) => ({ ...p, role: e.target.value }))}
-          >
-            {roles.map((r) => (
-              <option key={r.value} value={r.value}>{r.label}</option>
-            ))}
+          <select className="w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100" value={form.role} onChange={(e) => setForm((p) => ({ ...p, role: e.target.value }))}>
+            {roles.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
           </select>
-          <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">{roles.find((r) => r.value === form.role)?.description}</p>
         </FieldRow>
       </div>
-
-      <div className="border-t border-gray-100 dark:border-slate-800 pt-4">
-        <h4 className="text-xs font-semibold text-gray-700 dark:text-slate-300 uppercase tracking-wide mb-3">Access Scope</h4>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <FieldRow label="Organization">
-            <Input placeholder="Organization name or ID" value={form.organization} onChange={(e) => setForm((p) => ({ ...p, organization: e.target.value }))} />
-            <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">Org admins can only assign their own organization.</p>
-          </FieldRow>
-          <FieldRow label="Portfolio">
-            <Input placeholder="Portfolio name (optional)" value={form.portfolio} onChange={(e) => setForm((p) => ({ ...p, portfolio: e.target.value }))} />
-          </FieldRow>
-          <FieldRow label="Site Access">
-            <select
-              className="w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100"
-              value={form.siteAccess}
-              onChange={(e) => setForm((p) => ({ ...p, siteAccess: e.target.value }))}
-            >
-              <option value="all">All sites in organization</option>
-              <option value="selected">Selected sites only</option>
-            </select>
-          </FieldRow>
-          {form.siteAccess === 'selected' && (
-            <FieldRow label="Selected Sites">
-              <Input placeholder="Comma-separated site IDs or names" value={form.selectedSites} onChange={(e) => setForm((p) => ({ ...p, selectedSites: e.target.value }))} />
-            </FieldRow>
-          )}
-        </div>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+        <FieldRow label="Organization"><Input placeholder="Org name" value={form.organization} onChange={(e) => setForm((p) => ({ ...p, organization: e.target.value }))} /></FieldRow>
+        <FieldRow label="Portfolio"><Input placeholder="Portfolio (optional)" value={form.portfolio} onChange={(e) => setForm((p) => ({ ...p, portfolio: e.target.value }))} /></FieldRow>
+        <FieldRow label="Site Access">
+          <select className="w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100" value={form.siteAccess} onChange={(e) => setForm((p) => ({ ...p, siteAccess: e.target.value }))}>
+            <option value="all">All org sites</option><option value="selected">Selected sites</option>
+          </select>
+        </FieldRow>
+        <FieldRow label="Privilege">
+          <select className="w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100" value={form.privilege} onChange={(e) => setForm((p) => ({ ...p, privilege: e.target.value }))}>
+            <option value="read">Read Only</option><option value="read_write">Read & Write</option><option value="admin">Full Admin</option>
+          </select>
+        </FieldRow>
       </div>
-
-      <div className="border-t border-gray-100 dark:border-slate-800 pt-4">
-        <h4 className="text-xs font-semibold text-gray-700 dark:text-slate-300 uppercase tracking-wide mb-3">Privileges</h4>
-        <div className="space-y-2">
-          {privileges.map((p) => (
-            <label key={p.value} className="flex items-start gap-3 cursor-pointer rounded-lg border border-gray-100 dark:border-slate-800 bg-gray-50 dark:bg-slate-800/40 px-4 py-3">
-              <input
-                type="radio"
-                name="user-privilege"
-                checked={form.privilege === p.value}
-                onChange={() => setForm((prev) => ({ ...prev, privilege: p.value }))}
-                className="mt-0.5 h-4 w-4 border-gray-300 dark:border-slate-600 text-brand-600"
-              />
-              <div>
-                <p className="text-sm font-medium text-gray-900 dark:text-slate-100">{p.label}</p>
-                <p className="text-xs text-gray-500 dark:text-slate-400">{p.description}</p>
-              </div>
-            </label>
-          ))}
-        </div>
-      </div>
-
-      <div className="pt-2">
-        <PrimaryButton disabled={!form.email.trim() || !form.firstName.trim()}>Create User</PrimaryButton>
-      </div>
+      {form.siteAccess === 'selected' && (
+        <FieldRow label="Selected Sites"><Input placeholder="Comma-separated site IDs or names" value={form.selectedSites} onChange={(e) => setForm((p) => ({ ...p, selectedSites: e.target.value }))} /></FieldRow>
+      )}
+      <PrimaryButton disabled={!form.email.trim() || !form.firstName.trim()}>Create User</PrimaryButton>
     </div>
   );
 }
@@ -271,13 +222,16 @@ function OrganizationsTab({ org, setOrg, onSave, valid }: {
   org: OrgDraft; setOrg: React.Dispatch<React.SetStateAction<OrgDraft>>; onSave: () => void; valid: boolean;
 }) {
   const [orgSearch, setOrgSearch] = useState('');
-  // Mock org list — in real implementation this would come from API
+  const [showCreate, setShowCreate] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  // Mock org list — in production this comes from API
   const orgList = [
-    { id: '1', name: org.organizationName || 'Default Organization', billingAddress: org.organizationBillingAddress, contactEmail: org.supportContactEmail, sites: org.organizationPortfolio || '—' },
+    { id: '1', name: org.organizationName || 'Default Organization', sites: 2, chargers: 4, contactEmail: org.supportContactEmail, status: 'Active' as const },
   ].filter((o) => o.name);
 
   const filteredOrgs = orgList.filter((o) =>
-    !orgSearch || o.name.toLowerCase().includes(orgSearch.toLowerCase()) || o.contactEmail.toLowerCase().includes(orgSearch.toLowerCase()),
+    !orgSearch || o.name.toLowerCase().includes(orgSearch.toLowerCase()),
   );
 
   const orgFields: Array<{ key: keyof OrgDraft; label: string; placeholder: string }> = [
@@ -292,46 +246,92 @@ function OrganizationsTab({ org, setOrg, onSave, valid }: {
   ];
 
   return (
-    <div className="space-y-6">
-      <SectionCard title="Organizations" description="View and manage registered organizations.">
-        <div className="mb-4">
-          <Input placeholder="Search organizations by name or email…" value={orgSearch} onChange={(e) => setOrgSearch(e.target.value)} />
-        </div>
-        {filteredOrgs.length === 0 ? (
-          <p className="text-xs text-gray-500 dark:text-slate-400 text-center py-6">No organizations found.</p>
-        ) : (
-          <div className="space-y-2">
-            {filteredOrgs.map((o) => (
-              <div key={o.id} className="flex items-center justify-between rounded-lg border border-gray-100 dark:border-slate-800 bg-gray-50 dark:bg-slate-800/40 px-4 py-3">
-                <div>
-                  <p className="text-sm font-medium text-gray-900 dark:text-slate-100">{o.name}</p>
-                  <p className="text-xs text-gray-500 dark:text-slate-400">{o.contactEmail || '—'} · Sites: {o.sites}</p>
-                </div>
-                <span className="rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-2 py-0.5 text-xs font-medium">Active</span>
-              </div>
+    <SectionCard
+      title="Organizations"
+      description="Manage registered organizations, portfolios, and site assignments."
+      actions={<PrimaryButton onClick={() => setShowCreate((v) => !v)}>+ Organization</PrimaryButton>}
+    >
+      {showCreate && (
+        <div className="mb-6 rounded-lg border border-brand-200 dark:border-brand-700 bg-brand-50/30 dark:bg-brand-900/10 p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-sm font-semibold text-gray-900 dark:text-slate-100">New Organization</h4>
+            <button onClick={() => setShowCreate(false)} className="text-xs text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200">Cancel</button>
+          </div>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            {orgFields.slice(0, 4).map(({ key, label, placeholder }) => (
+              <FieldRow key={key} label={label}><Input placeholder={placeholder} value={org[key]} onChange={(e) => setOrg((p) => ({ ...p, [key]: e.target.value }))} /></FieldRow>
             ))}
           </div>
-        )}
-      </SectionCard>
+          <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+            {orgFields.slice(4).map(({ key, label, placeholder }) => (
+              <FieldRow key={key} label={label}><Input placeholder={placeholder} value={org[key]} onChange={(e) => setOrg((p) => ({ ...p, [key]: e.target.value }))} /></FieldRow>
+            ))}
+          </div>
+          <div className="mt-3">
+            <FieldRow label="Change Reason (required)"><Input placeholder="Reason" value={org.reason} onChange={(e) => setOrg((p) => ({ ...p, reason: e.target.value }))} /></FieldRow>
+          </div>
+          <div className="mt-3"><PrimaryButton disabled={!valid} onClick={() => { onSave(); setShowCreate(false); }}>Create Organization</PrimaryButton></div>
+        </div>
+      )}
 
-      <SectionCard title="Organization Profile" description="Edit organization details, portfolio assignments, and contact information.">
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          {orgFields.map(({ key, label, placeholder }) => (
-            <FieldRow key={key} label={label}>
-              <Input placeholder={placeholder} value={org[key]} onChange={(e) => setOrg((p) => ({ ...p, [key]: e.target.value }))} />
-            </FieldRow>
-          ))}
-          <div className="md:col-span-2">
-            <FieldRow label="Change Reason (required for audit)">
-              <Input placeholder="Reason for update" value={org.reason} onChange={(e) => setOrg((p) => ({ ...p, reason: e.target.value }))} />
-            </FieldRow>
+      <div className="mb-4">
+        <Input placeholder="Search organizations…" value={orgSearch} onChange={(e) => setOrgSearch(e.target.value)} />
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-gray-100 dark:border-slate-800 text-left text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">
+              <th className="px-4 py-3">Organization</th>
+              <th className="px-4 py-3">Sites</th>
+              <th className="px-4 py-3">Chargers</th>
+              <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3"></th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-50 dark:divide-slate-800">
+            {filteredOrgs.map((o) => (
+              <tr key={o.id} className="hover:bg-gray-50 dark:hover:bg-slate-800/40">
+                <td className="px-4 py-3">
+                  <p className="font-medium text-gray-900 dark:text-slate-100">{o.name}</p>
+                  <p className="text-xs text-gray-500 dark:text-slate-400">{o.contactEmail || '—'}</p>
+                </td>
+                <td className="px-4 py-3 text-gray-700 dark:text-slate-300">{o.sites}</td>
+                <td className="px-4 py-3 text-gray-700 dark:text-slate-300">{o.chargers}</td>
+                <td className="px-4 py-3">
+                  <span className="rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-2 py-0.5 text-xs font-medium">{o.status}</span>
+                </td>
+                <td className="px-4 py-3">
+                  <SecondaryButton onClick={() => setEditingId(editingId === o.id ? null : o.id)}>Edit</SecondaryButton>
+                </td>
+              </tr>
+            ))}
+            {filteredOrgs.length === 0 && (
+              <tr><td colSpan={5} className="px-4 py-8 text-center text-xs text-gray-500 dark:text-slate-400">No organizations found.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {editingId && (
+        <div className="mt-4 rounded-lg border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/40 p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-sm font-semibold text-gray-900 dark:text-slate-100">Edit Organization</h4>
+            <button onClick={() => setEditingId(null)} className="text-xs text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200">Close</button>
+          </div>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            {orgFields.map(({ key, label, placeholder }) => (
+              <FieldRow key={key} label={label}><Input placeholder={placeholder} value={org[key]} onChange={(e) => setOrg((p) => ({ ...p, [key]: e.target.value }))} /></FieldRow>
+            ))}
+          </div>
+          <div className="mt-3"><FieldRow label="Change Reason (required)"><Input placeholder="Reason" value={org.reason} onChange={(e) => setOrg((p) => ({ ...p, reason: e.target.value }))} /></FieldRow></div>
+          <div className="mt-3 flex gap-2">
+            <PrimaryButton disabled={!valid} onClick={onSave}>Save</PrimaryButton>
+            <SecondaryButton onClick={() => setEditingId(null)}>Cancel</SecondaryButton>
           </div>
         </div>
-        <div className="mt-4">
-          <PrimaryButton disabled={!valid} onClick={onSave}>Save Organization</PrimaryButton>
-        </div>
-      </SectionCard>
-    </div>
+      )}
+    </SectionCard>
   );
 }
 
@@ -592,6 +592,7 @@ function ChargerModelsTab({ models, newModel, setNewModel, modelValid, onAdd, on
   onToggle: (model: ChargerModelCatalogItem, isActive: boolean) => void;
 }) {
   const [modelSearch, setModelSearch] = useState('');
+  const [showCreate, setShowCreate] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<{ displayName: string; maxKw: string; connectorType: string } | null>(null);
 
@@ -603,96 +604,110 @@ function ChargerModelsTab({ models, newModel, setNewModel, modelValid, onAdd, on
     m.connectorType.toLowerCase().includes(modelSearch.toLowerCase()),
   );
 
+  function deriveType(kw: number): string {
+    return kw > 22 ? 'DC' : 'AC';
+  }
+
   function startEdit(m: ChargerModelCatalogItem) {
     setEditingId(m.id);
     setEditDraft({ displayName: m.displayName, maxKw: String(m.maxKw), connectorType: m.connectorType });
   }
 
-  function cancelEdit() {
-    setEditingId(null);
-    setEditDraft(null);
-  }
+  function cancelEdit() { setEditingId(null); setEditDraft(null); }
 
   async function saveEdit(m: ChargerModelCatalogItem) {
     if (!editDraft) return;
-    // For now just show the updated values — full API save requires backend endpoint
     window.alert(`Edit saved (display only): ${m.modelCode} → ${editDraft.displayName}, ${editDraft.maxKw} kW, ${editDraft.connectorType}`);
     cancelEdit();
   }
 
   return (
-    <div className="space-y-6">
-      <SectionCard title="Add Charger Model" description="Register new hardware models in the catalog.">
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          <FieldRow label="Model Code"><Input placeholder="EX-1762-1A32" value={newModel.modelCode} onChange={(e) => setNewModel((p) => ({ ...p, modelCode: e.target.value }))} /></FieldRow>
-          <FieldRow label="Vendor"><Input placeholder="LOOP" value={newModel.vendor} onChange={(e) => setNewModel((p) => ({ ...p, vendor: e.target.value }))} /></FieldRow>
-          <FieldRow label="Display Name"><Input placeholder="LOOP Level 2 AC" value={newModel.displayName} onChange={(e) => setNewModel((p) => ({ ...p, displayName: e.target.value }))} /></FieldRow>
-          <FieldRow label="Max Power (kW)"><Input type="number" placeholder="7.2" value={newModel.maxKw} onChange={(e) => setNewModel((p) => ({ ...p, maxKw: e.target.value }))} /></FieldRow>
-          <FieldRow label="Connector Type">
-            <select className="w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100" value={newModel.connectorType} onChange={(e) => setNewModel((p) => ({ ...p, connectorType: e.target.value }))}>
-              <option value="NACS">NACS</option><option value="J1772">J1772</option><option value="CCS1">CCS1</option><option value="CCS2">CCS2</option><option value="CHAdeMO">CHAdeMO</option>
-            </select>
-          </FieldRow>
-          <FieldRow label="Reason"><Input placeholder="Why adding this model?" value={newModel.reason} onChange={(e) => setNewModel((p) => ({ ...p, reason: e.target.value }))} /></FieldRow>
-        </div>
-        <div className="mt-3"><PrimaryButton disabled={!modelValid} onClick={onAdd}>Add Model</PrimaryButton></div>
-      </SectionCard>
-
-      <SectionCard
-        title="Registered Models"
-        description="View, search, and edit existing charger models."
-        actions={<span className="text-xs text-gray-500 dark:text-slate-400">{models.length} model{models.length !== 1 ? 's' : ''}</span>}
-      >
-        <div className="mb-4">
-          <Input placeholder="Search models by code, vendor, name, or connector…" value={modelSearch} onChange={(e) => setModelSearch(e.target.value)} />
-        </div>
-        {filteredModels.length === 0 ? (
-          <p className="text-xs text-gray-500 dark:text-slate-400 text-center py-6">No charger models found.</p>
-        ) : (
-          <div className="space-y-2">
-            {filteredModels.map((m) => (
-              <div key={m.id} className="rounded-lg border border-gray-100 dark:border-slate-800 bg-gray-50 dark:bg-slate-800/40 px-4 py-3">
-                {editingId === m.id && editDraft ? (
-                  <div className="space-y-3">
-                    <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                      <FieldRow label="Display Name">
-                        <Input value={editDraft.displayName} onChange={(e) => setEditDraft((p) => p ? { ...p, displayName: e.target.value } : p)} />
-                      </FieldRow>
-                      <FieldRow label="Max Power (kW)">
-                        <Input type="number" value={editDraft.maxKw} onChange={(e) => setEditDraft((p) => p ? { ...p, maxKw: e.target.value } : p)} />
-                      </FieldRow>
-                      <FieldRow label="Connector Type">
-                        <select className="w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100" value={editDraft.connectorType} onChange={(e) => setEditDraft((p) => p ? { ...p, connectorType: e.target.value } : p)}>
-                          <option value="NACS">NACS</option><option value="J1772">J1772</option><option value="CCS1">CCS1</option><option value="CCS2">CCS2</option><option value="CHAdeMO">CHAdeMO</option>
-                        </select>
-                      </FieldRow>
-                    </div>
-                    <div className="flex gap-2">
-                      <PrimaryButton onClick={() => saveEdit(m)}>Save</PrimaryButton>
-                      <SecondaryButton onClick={cancelEdit}>Cancel</SecondaryButton>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-900 dark:text-slate-100">{m.vendor} · {m.modelCode}</p>
-                      <p className="text-xs text-gray-500 dark:text-slate-400">{m.displayName} · {m.maxKw} kW · {m.connectorType}</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className={cn('rounded-full px-2 py-0.5 text-xs font-medium', m.isActive ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-gray-100 dark:bg-slate-800 text-gray-500 dark:text-slate-400')}>
-                        {m.isActive ? 'Active' : 'Inactive'}
-                      </span>
-                      <SecondaryButton onClick={() => startEdit(m)}>Edit</SecondaryButton>
-                      <SecondaryButton onClick={() => onToggle(m, !m.isActive)}>{m.isActive ? 'Deactivate' : 'Activate'}</SecondaryButton>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))}
+    <SectionCard
+      title="Charger Models"
+      description="Hardware catalog — make, model, power ratings, and connector types."
+      actions={<PrimaryButton onClick={() => setShowCreate((v) => !v)}>+ Charger</PrimaryButton>}
+    >
+      {showCreate && (
+        <div className="mb-6 rounded-lg border border-brand-200 dark:border-brand-700 bg-brand-50/30 dark:bg-brand-900/10 p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-sm font-semibold text-gray-900 dark:text-slate-100">New Charger Model</h4>
+            <button onClick={() => setShowCreate(false)} className="text-xs text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200">Cancel</button>
           </div>
-        )}
-      </SectionCard>
-    </div>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            <FieldRow label="Make / Vendor"><Input placeholder="LOOP" value={newModel.vendor} onChange={(e) => setNewModel((p) => ({ ...p, vendor: e.target.value }))} /></FieldRow>
+            <FieldRow label="Model Code"><Input placeholder="EX-1762-1A32" value={newModel.modelCode} onChange={(e) => setNewModel((p) => ({ ...p, modelCode: e.target.value }))} /></FieldRow>
+            <FieldRow label="Display Name"><Input placeholder="LOOP Level 2 AC" value={newModel.displayName} onChange={(e) => setNewModel((p) => ({ ...p, displayName: e.target.value }))} /></FieldRow>
+            <FieldRow label="Max Power (kW)"><Input type="number" placeholder="7.2" value={newModel.maxKw} onChange={(e) => setNewModel((p) => ({ ...p, maxKw: e.target.value }))} /></FieldRow>
+            <FieldRow label="Connector Type">
+              <select className="w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100" value={newModel.connectorType} onChange={(e) => setNewModel((p) => ({ ...p, connectorType: e.target.value }))}>
+                <option value="NACS">NACS</option><option value="J1772">J1772</option><option value="CCS1">CCS1</option><option value="CCS2">CCS2</option><option value="CHAdeMO">CHAdeMO</option>
+              </select>
+            </FieldRow>
+            <FieldRow label="Reason"><Input placeholder="Why adding this model?" value={newModel.reason} onChange={(e) => setNewModel((p) => ({ ...p, reason: e.target.value }))} /></FieldRow>
+          </div>
+          <div className="mt-3"><PrimaryButton disabled={!modelValid} onClick={() => { onAdd(); setShowCreate(false); }}>Add Charger Model</PrimaryButton></div>
+        </div>
+      )}
+
+      <div className="mb-4">
+        <Input placeholder="Search by make, model, name, or connector…" value={modelSearch} onChange={(e) => setModelSearch(e.target.value)} />
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-gray-100 dark:border-slate-800 text-left text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">
+              <th className="px-4 py-3">Make</th>
+              <th className="px-4 py-3">Model</th>
+              <th className="px-4 py-3">Power (kW)</th>
+              <th className="px-4 py-3">Type</th>
+              <th className="px-4 py-3">Connector</th>
+              <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3"></th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-50 dark:divide-slate-800">
+            {filteredModels.map((m) => (
+              <tr key={m.id} className="hover:bg-gray-50 dark:hover:bg-slate-800/40">
+                {editingId === m.id && editDraft ? (
+                  <>
+                    <td className="px-4 py-3 text-gray-900 dark:text-slate-100 font-medium">{m.vendor}</td>
+                    <td className="px-4 py-3 text-gray-700 dark:text-slate-300">{m.modelCode}</td>
+                    <td className="px-4 py-3"><Input type="number" value={editDraft.maxKw} onChange={(e) => setEditDraft((p) => p ? { ...p, maxKw: e.target.value } : p)} className="w-20" /></td>
+                    <td className="px-4 py-3 text-gray-700 dark:text-slate-300">{deriveType(Number(editDraft.maxKw))}</td>
+                    <td className="px-4 py-3">
+                      <select className="rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-2 py-1 text-sm text-gray-900 dark:text-slate-100" value={editDraft.connectorType} onChange={(e) => setEditDraft((p) => p ? { ...p, connectorType: e.target.value } : p)}>
+                        <option value="NACS">NACS</option><option value="J1772">J1772</option><option value="CCS1">CCS1</option><option value="CCS2">CCS2</option><option value="CHAdeMO">CHAdeMO</option>
+                      </select>
+                    </td>
+                    <td className="px-4 py-3"></td>
+                    <td className="px-4 py-3">
+                      <div className="flex gap-1">
+                        <PrimaryButton onClick={() => saveEdit(m)} className="px-2 py-1 text-xs">Save</PrimaryButton>
+                        <SecondaryButton onClick={cancelEdit} className="px-2 py-1 text-xs">Cancel</SecondaryButton>
+                      </div>
+                    </td>
+                  </>
+                ) : (
+                  <>
+                    <td className="px-4 py-3 font-medium text-gray-900 dark:text-slate-100">{m.vendor}</td>
+                    <td className="px-4 py-3 text-gray-700 dark:text-slate-300">{m.modelCode}<br /><span className="text-xs text-gray-400 dark:text-slate-500">{m.displayName}</span></td>
+                    <td className="px-4 py-3 text-gray-700 dark:text-slate-300">{m.maxKw}</td>
+                    <td className="px-4 py-3"><span className={cn('rounded-full px-2 py-0.5 text-xs font-medium', deriveType(m.maxKw) === 'DC' ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400' : 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400')}>{deriveType(m.maxKw)}</span></td>
+                    <td className="px-4 py-3 text-gray-700 dark:text-slate-300">{m.connectorType}</td>
+                    <td className="px-4 py-3"><span className={cn('rounded-full px-2 py-0.5 text-xs font-medium', m.isActive ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-gray-100 dark:bg-slate-800 text-gray-500 dark:text-slate-400')}>{m.isActive ? 'Active' : 'Inactive'}</span></td>
+                    <td className="px-4 py-3"><SecondaryButton onClick={() => startEdit(m)} className="px-2 py-1 text-xs">Edit</SecondaryButton></td>
+                  </>
+                )}
+              </tr>
+            ))}
+            {filteredModels.length === 0 && (
+              <tr><td colSpan={7} className="px-4 py-8 text-center text-xs text-gray-500 dark:text-slate-400">No charger models found.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </SectionCard>
   );
 }
 

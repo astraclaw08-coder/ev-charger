@@ -2,8 +2,26 @@ import { useState } from 'react';
 import CustomerSupport from './CustomerSupport';
 import NetworkOps from './NetworkOps';
 import Notifications from './Notifications';
+import { cn } from '../lib/utils';
 
 type OpsTab = 'incidents' | 'support' | 'notifications';
+
+function TabButton({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'rounded-lg px-3 py-2 text-sm font-medium transition',
+        active
+          ? 'bg-gray-100 text-gray-900 dark:bg-brand-500/20 dark:text-brand-200'
+          : 'bg-white dark:bg-slate-900 text-gray-500 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800 hover:text-gray-900 dark:hover:text-slate-100',
+      )}
+    >
+      {label}
+    </button>
+  );
+}
 
 export default function Operations() {
   const [tab, setTab] = useState<OpsTab>('incidents');
@@ -34,22 +52,5 @@ export default function Operations() {
       {tab === 'support' && <CustomerSupport />}
       {tab === 'notifications' && <Notifications />}
     </div>
-  );
-}
-
-function TabButton({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={[
-        'rounded-lg px-3 py-2 text-sm font-medium transition',
-        active
-          ? 'bg-brand-50 text-brand-700 dark:bg-brand-500/20 dark:text-brand-200'
-          : 'bg-white dark:bg-slate-900 text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800 hover:text-gray-900 dark:hover:text-slate-100',
-      ].join(' ')}
-    >
-      {label}
-    </button>
   );
 }
