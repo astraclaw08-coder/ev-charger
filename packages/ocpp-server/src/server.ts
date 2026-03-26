@@ -24,15 +24,11 @@ export async function startServer(port: number): Promise<OcppServerHandle> {
   const server = new RPCServer({
     protocols: ['ocpp1.6'],
     strictMode: false,  // lenient for real-world charger quirks
-    // 30s WS ping interval (ocpp-rpc default). Confirmed working: 1A32 charger
-    // responds to pongs at 30s but NOT at 55s (likely firmware processing delay
-    // under load). Railway proxy idle timeout is ~60s, so 30s gives ample margin.
-    //
-    // Note: ocpp-rpc calls ws.terminate() if no pong within 2 intervals (60s).
-    // At 30s this is safe since the charger pongs well within 30s.
-    // Do NOT raise above 30s without re-testing pong behavior.
-    pingIntervalMs: 30_000,
-    deferPingsOnActivity: false,
+    // DISABLE ocpp-rpc's built-in keepAlive entirely. Its ping-timeout logic
+    // calls ws.terminate() if no pong within 2 intervals — we never want the
+    // server to forcibly kill a charger WebSocket due to missing pongs.
+    // Keepalive pings are sent manually below (per-client, no terminate).
+    pingIntervalMs: 0,
   });
 
   // ── Authentication ──────────────────────────────────────────────────────────
@@ -87,25 +83,31 @@ export async function startServer(port: number): Promise<OcppServerHandle> {
 
     // ── Ping/Pong instrumentation ─────────────────────────────────────────────
     // Log all WS-level ping/pong frames for diagnostics.
-    // client._ws is the underlying WebSocket from the 'ws' library.
+    // ── Manual keepalive pings (no terminate on missing pong) ───────────────
+    // Send WS ping every 30s to keep Railway proxy alive (~60s idle timeout).
+    // If the charger doesn't pong, we log it but NEVER kill the connection.
+    // The charger or Railway proxy decides when the socket dies.
     const ws = client._ws;
+    let pingInterval: ReturnType<typeof setInterval> | null = null;
     if (ws) {
-      // Server sends ping → charger should reply with pong
       ws.on('pong', () => {
         console.log(`[WS pong] ← ${ocppId} responded to our ping`);
       });
 
-      // Charger sends ping → server auto-replies with pong (ws library default)
       ws.on('ping', (data: Buffer) => {
         console.log(`[WS ping] ← ${ocppId} sent us a ping (${data.length} bytes)`);
       });
 
-      // Hook into outbound pings from ocpp-rpc's keepAlive
-      const origPing = ws.ping.bind(ws);
-      ws.ping = (...args: any[]) => {
-        console.log(`[WS ping] → ${ocppId} sending ping to charger`);
-        return origPing(...args);
-      };
+      pingInterval = setInterval(() => {
+        if (ws.readyState === 1 /* OPEN */) {
+          try {
+            ws.ping();
+            console.log(`[WS ping] → ${ocppId} sending ping to charger`);
+          } catch (err: any) {
+            console.warn(`[WS ping] → ${ocppId} ping failed: ${err?.message}`);
+          }
+        }
+      }, 30_000);
     }
 
     const registerInboundHandler = (
@@ -181,6 +183,9 @@ export async function startServer(port: number): Promise<OcppServerHandle> {
     });
 
     client.on('disconnect', (...args: any[]) => {
+      // Clean up our manual ping interval
+      if (pingInterval) { clearInterval(pingInterval); pingInterval = null; }
+
       const [rawCode, rawReason] = args;
 
       const parsedCode = typeof rawCode === 'number'
