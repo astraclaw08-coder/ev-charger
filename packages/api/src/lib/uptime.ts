@@ -87,8 +87,8 @@ async function sumUptimeDaily(chargerId: string, fromDate: Date, toDate: Date): 
 
   if (rows.length === 0) return null;
 
-  return rows.reduce<DailySums>(
-    (acc, r) => ({
+  return (rows as DailySums[]).reduce(
+    (acc: DailySums, r: DailySums) => ({
       totalSeconds: acc.totalSeconds + r.totalSeconds,
       availableSeconds: acc.availableSeconds + r.availableSeconds,
       outageSeconds: acc.outageSeconds + r.outageSeconds,

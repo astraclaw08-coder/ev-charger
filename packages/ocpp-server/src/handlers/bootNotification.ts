@@ -15,7 +15,7 @@ export async function handleBootNotification(
   const ocppId = (await prisma.charger.findUnique({ where: { id: chargerId }, select: { ocppId: true } }))?.ocppId;
   if (ocppId) clientRegistry.markBoot(ocppId);
 
-  await prisma.$transaction(async (tx) => {
+  await prisma.$transaction(async (tx: any) => {
     await tx.charger.update({
       where: { id: chargerId },
       data: {

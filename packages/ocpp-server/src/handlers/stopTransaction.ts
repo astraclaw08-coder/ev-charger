@@ -114,7 +114,7 @@ export async function handleStopTransaction(
       : (session.ratePerKwh ?? site.pricePerKwhUsd ?? 0);
   const estimatedEnergyAmountUsd = kwhDelivered * weightedRatePerKwh;
 
-  await prisma.$transaction(async (tx) => {
+  await prisma.$transaction(async (tx: any) => {
     await tx.session.update({
       where: { id: session.id },
       data: {

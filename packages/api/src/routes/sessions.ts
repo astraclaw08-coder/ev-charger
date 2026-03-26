@@ -484,7 +484,7 @@ export async function sessionRoutes(app: FastifyInstance) {
     });
     const sessionTimings = resolveSessionStatusTimings(
       session,
-      statusLogs.map((row) => ({ chargerId: row.chargerId, createdAt: row.createdAt, payload: row.payload })),
+      statusLogs.map((row: { chargerId: string; createdAt: Date; payload: unknown }) => ({ chargerId: row.chargerId, createdAt: row.createdAt, payload: row.payload })),
     );
 
     const billingStoppedAt = sessionTimings.idleStartedAt

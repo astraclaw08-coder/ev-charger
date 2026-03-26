@@ -401,9 +401,9 @@ export async function siteRoutes(app: FastifyInstance) {
 
       if (dailyRows.length === 0) return 0;
 
-      const totalSec = dailyRows.reduce((s, r) => s + r.totalSeconds, 0);
-      const outageSec = dailyRows.reduce((s, r) => s + r.outageSeconds, 0);
-      const excludedSec = dailyRows.reduce((s, r) => s + r.excludedOutageSeconds, 0);
+      const totalSec = dailyRows.reduce((s: number, r: any) => s + r.totalSeconds, 0);
+      const outageSec = dailyRows.reduce((s: number, r: any) => s + r.outageSeconds, 0);
+      const excludedSec = dailyRows.reduce((s: number, r: any) => s + r.excludedOutageSeconds, 0);
       if (totalSec <= 0) return 0;
 
       const countedOutage = Math.max(0, outageSec - excludedSec);

@@ -97,7 +97,7 @@ export async function handleStartTransaction(
   }
 
   // Mark connector as Charging and enqueue OCPP event for downstream processing.
-  await prisma.$transaction(async (tx) => {
+  await prisma.$transaction(async (tx: any) => {
     await tx.connector.update({
       where: { id: connector.id },
       data: { status: 'CHARGING' },
