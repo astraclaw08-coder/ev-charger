@@ -132,7 +132,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                       : 'text-slate-400 dark:text-slate-500',
                   )}
                 />
-                {item.label}
+                <span className={active ? 'text-white' : undefined}>{item.label}</span>
               </Link>
             );
           })}
