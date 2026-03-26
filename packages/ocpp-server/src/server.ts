@@ -24,19 +24,15 @@ export async function startServer(port: number): Promise<OcppServerHandle> {
   const server = new RPCServer({
     protocols: ['ocpp1.6'],
     strictMode: false,  // lenient for real-world charger quirks
-    // pingIntervalMs DISABLED. ocpp-rpc's built-in keepAlive sends WS pings
-    // and calls ws.terminate() if the charger doesn't pong within one interval.
-    // Real OCPP chargers (e.g. 1A32 / LOOP firmware) do NOT respond to
-    // server-initiated WS pings — their WS stack ignores ping frames entirely.
-    // This caused deterministic 110s disconnects (2 × 55s ping interval).
+    // 30s WS ping interval (ocpp-rpc default). Confirmed working: 1A32 charger
+    // responds to pongs at 30s but NOT at 55s (likely firmware processing delay
+    // under load). Railway proxy idle timeout is ~60s, so 30s gives ample margin.
     //
-    // Keepalive strategy: charger-side websocketpinginterval (set to 30s via
-    // OCPP ChangeConfiguration) sends pings TO the server. The ws library
-    // auto-replies with pongs. Railway proxy sees bidirectional traffic every
-    // 30s — well within its ~60s idle timeout.
-    //
-    // The server NEVER actively kills a WebSocket. Disconnects are left to
-    // the charger firmware, TCP stack, or Railway proxy.
+    // Note: ocpp-rpc calls ws.terminate() if no pong within 2 intervals (60s).
+    // At 30s this is safe since the charger pongs well within 30s.
+    // Do NOT raise above 30s without re-testing pong behavior.
+    pingIntervalMs: 30_000,
+    deferPingsOnActivity: false,
   });
 
   // ── Authentication ──────────────────────────────────────────────────────────
