@@ -1,4 +1,4 @@
-import { prisma } from '@ev-charger/shared';
+import { prisma, splitTouDuration, captureSessionBillingSnapshot } from '@ev-charger/shared';
 import { recordUptimeEvent, toUptimeEvent } from '../uptimeEvents';
 import { enqueueOcppEvent } from '../outbox';
 import type { StatusNotificationRequest, ChargerStatus, ConnectorStatus } from '@ev-charger/shared';
@@ -34,6 +34,8 @@ export async function handleStatusNotification(
   const { connectorId, status, errorCode } = params;
   console.log(`[StatusNotification] chargerId=${chargerId} connector=${connectorId} status=${status} error=${errorCode}`);
 
+  let orphanSessionIdToSnapshot: string | null = null;
+
   await prisma.$transaction(async (tx: any) => {
     if (connectorId === 0) {
       // ConnectorId 0 = the charger itself
@@ -67,7 +69,7 @@ export async function handleStatusNotification(
         const transitionType = (() => {
           if (prevStatus === 'AVAILABLE' && nextStatus === 'PREPARING') return 'PLUG_IN';
           if (
-            (prevStatus === 'FINISHING' || prevStatus === 'SUSPENDED_EV' || prevStatus === 'SUSPENDED_EVSE')
+            (prevStatus === 'FINISHING' || prevStatus === 'SUSPENDED_EV' || prevStatus === 'SUSPENDED_EVSE' || prevStatus === 'CHARGING')
             && nextStatus === 'AVAILABLE'
           ) return 'PLUG_OUT';
           if (prevStatus === 'CHARGING' && (nextStatus === 'SUSPENDED_EV' || nextStatus === 'SUSPENDED_EVSE')) return 'IDLE_START';
@@ -94,6 +96,83 @@ export async function handleStatusNotification(
           },
         });
       }
+
+      // ── Auto-close orphaned ACTIVE sessions ──────────────────────────
+      // When connector reaches Available or Preparing there cannot be a live
+      // charging session.  If StopTransaction was lost, finalize here using
+      // whatever meter data we have on the session row.
+      const SESSION_CLOSE_STATUSES: ConnectorStatus[] = ['AVAILABLE', 'PREPARING'];
+      if (SESSION_CLOSE_STATUSES.includes(nextStatus)) {
+        const orphan = await tx.session.findFirst({
+          where: {
+            connector: { chargerId, connectorId },
+            status: 'ACTIVE',
+          },
+          include: {
+            connector: {
+              include: {
+                charger: {
+                  include: {
+                    site: {
+                      select: {
+                        pricingMode: true,
+                        pricePerKwhUsd: true,
+                        idleFeePerMinUsd: true,
+                        touWindows: true,
+                        timeZone: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        });
+
+        if (orphan) {
+          const payloadTs = params.timestamp ? new Date(params.timestamp) : null;
+          const closedAt = payloadTs && Number.isFinite(payloadTs.getTime()) ? payloadTs : new Date();
+
+          // Use best available meter data for kWh
+          const meterStart = orphan.meterStart ?? 0;
+          const meterStop = orphan.meterStop ?? meterStart;
+          const kwhDelivered = Math.max(0, (meterStop - meterStart) / 1000);
+
+          // Compute billing rate
+          const site = orphan.connector.charger.site;
+          const durationSegments = splitTouDuration({
+            startedAt: orphan.startedAt,
+            stoppedAt: closedAt.toISOString(),
+            pricingMode: site.pricingMode,
+            defaultPricePerKwhUsd: site.pricePerKwhUsd,
+            defaultIdleFeePerMinUsd: site.idleFeePerMinUsd,
+            touWindows: site.touWindows,
+            timeZone: site.timeZone ?? 'America/Los_Angeles',
+          });
+          const totalSegMinutes = durationSegments.reduce((s, seg) => s + seg.minutes, 0);
+          const weightedRate =
+            totalSegMinutes > 0
+              ? durationSegments.reduce((s, seg) => s + (seg.minutes / totalSegMinutes) * seg.pricePerKwhUsd, 0)
+              : (orphan.ratePerKwh ?? site.pricePerKwhUsd ?? 0);
+
+          await tx.session.update({
+            where: { id: orphan.id },
+            data: {
+              status: 'COMPLETED',
+              stoppedAt: closedAt,
+              kwhDelivered,
+              ratePerKwh: weightedRate,
+            },
+          });
+
+          console.log(
+            `[StatusNotification] Auto-closed orphan session ${orphan.id} (txn=${orphan.transactionId}) on connector ${connectorId} → ${nextStatus}. kWh=${kwhDelivered.toFixed(3)} rate=$${weightedRate.toFixed(4)}/kWh`,
+          );
+
+          // Queue billing snapshot outside the tx (non-blocking)
+          orphanSessionIdToSnapshot = orphan.id;
+        }
+      }
     }
 
     await enqueueOcppEvent(tx, {
@@ -103,6 +182,15 @@ export async function handleStatusNotification(
       idempotencyKey: `${chargerId}:StatusNotification:${connectorId}:${status}:${params.timestamp ?? 'na'}`,
     });
   });
+
+  // Capture billing snapshot for auto-closed orphan session (non-blocking, outside tx)
+  if (orphanSessionIdToSnapshot) {
+    try {
+      await captureSessionBillingSnapshot(orphanSessionIdToSnapshot);
+    } catch (snapErr) {
+      console.error(`[StatusNotification] Failed to capture billing snapshot for auto-closed session ${orphanSessionIdToSnapshot}:`, snapErr);
+    }
+  }
 
   if (connectorId === 0) {
     await recordUptimeEvent(chargerId, toUptimeEvent(status), { reason: `StatusNotification connector=0 status=${status}`, errorCode });
