@@ -103,8 +103,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen bg-gray-50 dark:bg-slate-950">
       {/* Sidebar */}
-      <aside className="flex w-56 flex-col border-r border-slate-200 bg-white/95 dark:border-slate-800 dark:bg-slate-950/95">
-        <div className="flex h-14 items-center border-b border-slate-200 px-4 dark:border-slate-800">
+      <aside className="flex w-56 flex-col border-r border-slate-700 bg-slate-900 dark:border-slate-800 dark:bg-slate-950/95">
+        <div className="flex h-14 items-center border-b border-slate-700 px-4 dark:border-slate-800">
           <BrandMark className="w-[140px]" />
         </div>
 
@@ -120,8 +120,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 className={cn(
                   'group flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/70 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-slate-950',
                   active
-                    ? 'bg-gray-800 text-white shadow-sm dark:bg-slate-700 dark:text-white'
-                    : 'text-slate-600 dark:text-slate-400',
+                    ? 'bg-slate-700 text-white shadow-sm dark:bg-slate-700 dark:text-white'
+                    : 'text-slate-300 dark:text-slate-400',
                 )}
               >
                 <item.Icon
@@ -129,7 +129,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                     'h-[19px] w-[19px] shrink-0 transition-all',
                     active
                       ? 'text-white dark:text-white'
-                      : 'text-slate-500 dark:text-slate-500',
+                      : 'text-slate-400 dark:text-slate-500',
                   )}
                 />
                 {item.label}
@@ -138,7 +138,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
-        <div className="border-t border-slate-200 p-3 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+        <div className="border-t border-slate-700 p-3 text-xs text-slate-500 dark:border-slate-800 dark:text-slate-500">
           <div>OCPP 1.6J Central System</div>
           <div className="mt-1">Version {portalVersion}</div>
         </div>
