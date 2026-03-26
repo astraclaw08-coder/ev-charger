@@ -161,11 +161,8 @@ export default function NetworkOps() {
                   <span className={`text-xs font-semibold ${c.status==='ONLINE'?'text-green-600 dark:text-green-400':c.status==='OFFLINE'?'text-slate-500 dark:text-slate-400':'text-red-600 dark:text-red-400'}`}>{c.status}</span>
                 </div>
                 <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">Last heartbeat: {c.lastHeartbeat ? new Date(c.lastHeartbeat).toLocaleString() : 'never'}</p>
-                {c.status === 'DEGRADED' && (
-                  <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">Pending offline confirmation (heartbeat stale/disconnect window).</p>
-                )}
                 {c.status === 'OFFLINE' && (
-                  <p className="mt-1 text-xs text-yellow-700">Confirmed unreachable after heartbeat timeout window.</p>
+                  <p className="mt-1 text-xs text-yellow-700 dark:text-yellow-400">Offline — no active connection or recent heartbeat.</p>
                 )}
                 <div className="mt-2 flex flex-wrap gap-2">
                   <button className="rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800/60 px-2 py-1 text-xs text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700" onClick={()=>{
