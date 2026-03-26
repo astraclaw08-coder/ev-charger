@@ -1,17 +1,14 @@
 import { prisma, type UptimeEventType, type ChargerStatus } from '@ev-charger/shared';
 
 /**
- * Uptime Materializer — OCA/NEVI §680.116
+ * Uptime Materializer — NEVI §680.116
  *
  * Computes daily uptime counters per charger into UptimeDaily.
  * Runs periodically (every 5 min) to keep today + yesterday current.
  *
- * Availability definition (OCA v1.1 / NEVI §680.116):
- *   AVAILABLE (UP): ONLINE, RECOVERED, DEGRADED
- *     — A charger is "available" if it can accept a charge session.
- *     — DEGRADED (stale heartbeat) doesn't mean the charger can't charge.
- *   DOWN (outage): OFFLINE, FAULTED
- *     — Confirmed unreachable or hardware fault.
+ * Availability (binary):
+ *   UP:   ONLINE — active WS connection or recent heartbeat, non-faulted, non-unavailable
+ *   DOWN: everything else — OFFLINE (no WS / no recent heartbeat), FAULTED, DEGRADED, UNAVAILABLE
  *
  * Excluded outage types (per §680.116(b)(3)):
  *   SCHEDULED_MAINTENANCE, UTILITY_INTERRUPTION, VEHICLE_FAULT, VANDALISM, FORCE_MAJEURE
@@ -31,17 +28,18 @@ const EXCLUDED_EVENT_TYPES: Set<string> = new Set([
 const DAY_SECONDS = 86400;
 
 /**
- * OCA/NEVI availability: ONLINE, DEGRADED, and RECOVERED all count as "available".
- * This is the single canonical availability check — all uptime code must use this.
+ * Binary availability: only ONLINE is "up".
+ * DEGRADED, OFFLINE, FAULTED are all "down".
  */
 export function isAvailable(status: ChargerStatus): boolean {
-  return status === 'ONLINE' || status === 'DEGRADED';
+  return status === 'ONLINE';
 }
 
 function toChargerStatus(event: UptimeEventType): ChargerStatus {
   if (event === 'ONLINE' || event === 'RECOVERED') return 'ONLINE';
   if (event === 'FAULTED') return 'FAULTED';
-  if (event === 'DEGRADED') return 'DEGRADED';
+  // DEGRADED = no WS / stale heartbeat = not confirmed online = OFFLINE for uptime
+  if (event === 'DEGRADED') return 'OFFLINE';
   return 'OFFLINE';
 }
 
