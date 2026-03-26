@@ -23,13 +23,11 @@ export const clientRegistry = {
       console.warn(
         `[Registry] Superseding existing session for ${ocppId} ` +
         `(was connected ${durationSec}s, boot=${existing.bootReceived}, hb=${existing.heartbeatCount}). ` +
-        `Closing old connection.`,
+        `Replacing registry entry only — NOT closing old socket.`,
       );
-      try {
-        existing.client.close?.(1000, 'Superseded by new connection');
-      } catch {
-        // Best effort — old socket may already be dead
-      }
+      // Do NOT call existing.client.close() or terminate().
+      // The server never actively kills a WebSocket. Let the old socket
+      // die naturally via TCP timeout or charger-side close.
       clients.delete(ocppId);
     }
 
