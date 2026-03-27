@@ -313,7 +313,12 @@ export function computeMergedSchedule(args: {
 
   for (let h = 0; h < 24; h++) {
     const slotTime = new Date(at);
-    slotTime.setHours(h, 30, 0, 0); // mid-hour sample
+    // Use UTC hours when no timezone specified (matches isWindowActive UTC fallback)
+    if (timeZone) {
+      slotTime.setHours(h, 30, 0, 0);
+    } else {
+      slotTime.setUTCHours(h, 30, 0, 0);
+    }
 
     let minLimit = Infinity;
     const activeIds: string[] = [];
