@@ -534,14 +534,27 @@ export default function LoadManagement() {
                 statusColor = 'text-gray-500 dark:text-slate-400';
             }
           } else if (matchingStates.length > 0 && matchingStates.some((s) => s.status === 'APPLIED' || s.status === 'FALLBACK_APPLIED')) {
-            // Charger is online and has an applied state, but from a different (higher-priority) profile.
-            // This profile was still sent to the charger as part of the reconcile — it's applied.
-            const lastApplied = matchingStates.find((s) => s.lastAppliedAt)?.lastAppliedAt;
-            statusLabel = lastApplied ? `✅ Applied ${new Date(lastApplied).toLocaleString()}` : '✅ Applied';
-            statusColor = 'text-green-600 dark:text-green-400';
-          } else {
-            statusLabel = '⏳ Pending — charger offline';
+            // A different higher-priority profile is the active source — this profile is overridden.
+            const activeSourceProfile = matchingStates.find((s) => s.status === 'APPLIED' || s.status === 'FALLBACK_APPLIED');
+            const sourceName = activeSourceProfile?.sourceProfileId ? profileById[activeSourceProfile.sourceProfileId]?.name : undefined;
+            statusLabel = sourceName ? `⚠️ Overridden by "${sourceName}"` : '⚠️ Overridden by higher-priority profile';
             statusColor = 'text-amber-600 dark:text-amber-400';
+          } else if (matchingStates.length > 0) {
+            // State exists but not applied — show its actual status
+            const s = matchingStates[0];
+            if (s.status === 'PENDING_OFFLINE') {
+              statusLabel = '⏳ Pending — charger offline';
+              statusColor = 'text-amber-600 dark:text-amber-400';
+            } else if (s.status === 'ERROR') {
+              statusLabel = `❌ Failed${s.lastError ? `: ${s.lastError}` : ''}`;
+              statusColor = 'text-red-600 dark:text-red-400';
+            } else {
+              statusLabel = s.status ?? '⏳ Pending';
+              statusColor = 'text-gray-500 dark:text-slate-400';
+            }
+          } else {
+            statusLabel = '⏳ Not pushed yet';
+            statusColor = 'text-gray-400 dark:text-slate-500';
           }
 
           return { profile: p, targetLabel, targetDetail, windowSummary, statusLabel, statusColor, targetChargerIds };
