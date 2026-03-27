@@ -56,7 +56,7 @@ export function attachInternalRoutes(httpServer: http.Server): void {
     }
 
     if (url === '/remote-start' || url === '/remote-stop' || url === '/reset' || url === '/trigger-message' || url === '/get-configuration' || url === '/set-charging-profile' ||
-        url === '/charger-reset-password' || url === '/charger-clear-password' || url === '/charger-add' || url === '/get-composite-schedule') {
+        url === '/charger-reset-password' || url === '/charger-clear-password' || url === '/charger-add' || url === '/get-composite-schedule' || url === '/reconcile-smart-charging') {
       if (method !== 'POST') {
         return sendJson(res, 405, { error: 'Method not allowed' });
       }
@@ -197,6 +197,20 @@ export function attachInternalRoutes(httpServer: http.Server): void {
 
           console.log(`[InternalHTTP] Password cleared for charger ocppId=${ocppId}`);
           return sendJson(res, 200, { ocppId, note: 'Password cleared. Charger can now connect without a password.' });
+        }
+
+        if (url === '/reconcile-smart-charging') {
+          const { chargerId } = body as { chargerId: string };
+          if (!chargerId) return sendJson(res, 400, { error: 'chargerId required' });
+
+          const { applySmartChargingForCharger } = await import('./smartCharging');
+          try {
+            await applySmartChargingForCharger(chargerId, 'api_manual_reconcile');
+            return sendJson(res, 200, { ok: true, chargerId, trigger: 'api_manual_reconcile' });
+          } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : String(err);
+            return sendJson(res, 500, { error: msg });
+          }
         }
 
         if (url === '/get-composite-schedule') {

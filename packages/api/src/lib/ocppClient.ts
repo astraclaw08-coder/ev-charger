@@ -96,6 +96,16 @@ export async function setChargingProfile(
   }
 }
 
+export async function reconcileSmartChargingViaOcpp(chargerId: string): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const data = await post<{ ok: boolean; error?: string }>('/reconcile-smart-charging', { chargerId });
+    return data;
+  } catch (err) {
+    console.error('[OcppClient] reconcileSmartCharging failed:', err);
+    return { ok: false, error: 'OCPP server call failed' };
+  }
+}
+
 export async function getCompositeSchedule(
   ocppId: string,
   payload: { connectorId?: number; duration?: number; chargingRateUnit?: string },

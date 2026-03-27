@@ -367,7 +367,20 @@ export async function smartChargingRoutes(app: FastifyInstance) {
       return reply.status(403).send({ error: 'Forbidden' });
     }
 
-    return reconcileSmartChargingForCharger(req.params.chargerId, 'manual_reconcile');
+    // Delegate to OCPP server for stacking-aware reconcile
+    const { reconcileSmartChargingViaOcpp } = await import('../lib/ocppClient');
+    const result = await reconcileSmartChargingViaOcpp(req.params.chargerId);
+    if (!result.ok) {
+      // Fallback to API-side legacy reconcile if OCPP server unreachable
+      return reconcileSmartChargingForCharger(req.params.chargerId, 'manual_reconcile');
+    }
+
+    // Return fresh state from DB
+    const states = await db.smartChargingState.findMany({
+      where: { chargerId: req.params.chargerId },
+      include: { sourceProfile: { select: { id: true, name: true, scope: true } } },
+    });
+    return { ok: true, trigger: 'manual_reconcile', states };
   });
 
   app.get<{
