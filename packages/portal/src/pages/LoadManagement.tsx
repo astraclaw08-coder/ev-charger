@@ -16,24 +16,43 @@ import StatusBadge from '../components/StatusBadge';
 type Scope = 'CHARGER' | 'GROUP' | 'SITE';
 const DEFAULT_PRIORITY = 10;
 
+/* ─── UTC → local hour conversion for merged schedule display ─────────── */
+
+function utcHourToLocal(utcHour: number): number {
+  const d = new Date();
+  d.setUTCHours(utcHour, 0, 0, 0);
+  return d.getHours();
+}
+
+function formatLocalHour(utcHour: number): string {
+  const local = utcHourToLocal(utcHour);
+  const suffix = local >= 12 ? 'PM' : 'AM';
+  const h12 = local === 0 ? 12 : local > 12 ? local - 12 : local;
+  return `${h12}${suffix}`;
+}
+
 /* ─── Effective Schedule Timeline Bar ─────────────────────────────────── */
 
 function ScheduleTimeline({ slots, maxKw }: { slots: MergedScheduleSlot[]; maxKw: number }) {
   if (slots.length === 0) return null;
   const ceil = Math.max(maxKw, ...slots.map((s) => s.effectiveLimitKw));
+  // Re-sort slots by local hour so the timeline reads left-to-right in local time
+  const localSlots = slots
+    .map((s) => ({ ...s, localHour: utcHourToLocal(s.hour) }))
+    .sort((a, b) => a.localHour - b.localHour);
   return (
     <div className="flex items-end gap-px h-10 w-full">
-      {slots.map((s) => {
+      {localSlots.map((s) => {
         const pct = ceil > 0 ? (s.effectiveLimitKw / ceil) * 100 : 0;
         return (
           <div
             key={s.hour}
             className="flex-1 rounded-t bg-brand-500 dark:bg-brand-400 relative group"
             style={{ height: `${pct}%`, minHeight: '2px' }}
-            title={`${s.hour}:00 — ${s.effectiveLimitKw} kW`}
+            title={`${formatLocalHour(s.hour)} — ${s.effectiveLimitKw} kW`}
           >
             <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 hidden group-hover:block bg-gray-900 dark:bg-slate-100 text-white dark:text-slate-900 text-[10px] rounded px-1.5 py-0.5 whitespace-nowrap z-10">
-              {s.hour}:00 — {s.effectiveLimitKw} kW
+              {formatLocalHour(s.hour)} — {s.effectiveLimitKw} kW
             </div>
           </div>
         );
@@ -96,7 +115,7 @@ function ActiveLimitsSection({
       targetChargerIds = [p.chargerId];
     } else if (p.scope === 'GROUP' && p.chargerGroupId) {
       const g = groups.find((x) => x.id === p.chargerGroupId);
-      targetChargerIds = g?.chargerIds ?? [];
+      targetChargerIds = (g?.chargers ?? []).map((c) => c.id);
     } else if (p.scope === 'SITE' && p.siteId) {
       targetChargerIds = chargers.filter((c) => c.siteId === p.siteId).map((c) => c.id);
     }
@@ -278,6 +297,7 @@ function RecommendedFlow() {
 
 export default function LoadManagement() {
   const getToken = useToken();
+  const [currentToken, setCurrentToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -409,6 +429,7 @@ export default function LoadManagement() {
     try {
       setLoading(true);
       const token = await getToken();
+      setCurrentToken(token);
       const api = createApiClient(token);
       const [siteRows, chargerRows, groupRows, profileRows, stateRows] = await Promise.all([
         api.getSites(),
@@ -701,7 +722,7 @@ export default function LoadManagement() {
         groups={groups}
         sites={sites}
         onPush={handlePush}
-        token={token}
+        token={currentToken}
         utcTimeToLocal={utcTimeToLocal}
         to12h={to12h}
       />
