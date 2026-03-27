@@ -74,8 +74,10 @@ function toProfileLike(profile: any): SmartChargingProfileLike {
   };
 }
 
-function toW(limitKw: number): number {
-  return Math.max(1, Math.round(limitKw * 1000));
+// Convert kW to Amps (single-phase, using nominal voltage from env or 240V default)
+const NOMINAL_VOLTAGE = Number(process.env.SMART_CHARGING_NOMINAL_VOLTAGE ?? '240') || 240;
+function toA(limitKw: number): number {
+  return Math.max(1, Math.round((limitKw * 1000) / NOMINAL_VOLTAGE));
 }
 
 function startOfUtcWeek(at: Date): Date {
@@ -96,7 +98,7 @@ function buildRecurringWeeklyPayload(profile: SmartChargingProfileLike, fallback
   if (parsed.windows.length === 0) return null;
 
   const baseLimitKw = (profile.defaultLimitKw != null && profile.defaultLimitKw > 0) ? profile.defaultLimitKw : fallbackLimitKw;
-  const periods: Array<{ startPeriod: number; limit: number }> = [{ startPeriod: 0, limit: toW(baseLimitKw) }];
+  const periods: Array<{ startPeriod: number; limit: number }> = [{ startPeriod: 0, limit: toA(baseLimitKw) }];
 
   for (const w of parsed.windows) {
     const startSecInDay = hhmmToSec(w.startTime);
@@ -104,13 +106,13 @@ function buildRecurringWeeklyPayload(profile: SmartChargingProfileLike, fallback
 
     for (const day of w.daysOfWeek) {
       const dayBase = day * 86400;
-      periods.push({ startPeriod: dayBase + startSecInDay, limit: toW(w.limitKw) });
+      periods.push({ startPeriod: dayBase + startSecInDay, limit: toA(w.limitKw) });
       if (startSecInDay < endSecInDay) {
-        periods.push({ startPeriod: dayBase + endSecInDay, limit: toW(baseLimitKw) });
+        periods.push({ startPeriod: dayBase + endSecInDay, limit: toA(baseLimitKw) });
       } else if (startSecInDay > endSecInDay) {
         // Overnight window: restore next day
         const restore = ((day + 1) % 7) * 86400 + endSecInDay;
-        periods.push({ startPeriod: restore, limit: toW(baseLimitKw) });
+        periods.push({ startPeriod: restore, limit: toA(baseLimitKw) });
       }
     }
   }
@@ -132,7 +134,7 @@ function buildRecurringWeeklyPayload(profile: SmartChargingProfileLike, fallback
       chargingSchedule: {
         startSchedule: startOfUtcWeek(at).toISOString(),
         duration: 7 * 24 * 3600,
-        chargingRateUnit: 'W',
+        chargingRateUnit: 'A',
         chargingSchedulePeriod: Array.from(unique.entries()).map(([startPeriod, limit]) => ({ startPeriod, limit })),
       },
     },
@@ -150,8 +152,8 @@ function buildConstantPayload(limitKw: number, profile?: SmartChargingProfileLik
       ...(profile?.validFrom ? { validFrom: profile.validFrom.toISOString() } : {}),
       ...(profile?.validTo ? { validTo: profile.validTo.toISOString() } : {}),
       chargingSchedule: {
-        chargingRateUnit: 'W',
-        chargingSchedulePeriod: [{ startPeriod: 0, limit: toW(limitKw) }],
+        chargingRateUnit: 'A',
+        chargingSchedulePeriod: [{ startPeriod: 0, limit: toA(limitKw) }],
       },
     },
   };
@@ -343,7 +345,7 @@ function buildRecurringWeeklyPayloadStacked(entry: StackedProfileEntry, fallback
   if (parsed.windows.length === 0) return null;
 
   const baseLimitKw = (entry.profile.defaultLimitKw != null && entry.profile.defaultLimitKw > 0) ? entry.profile.defaultLimitKw : fallbackLimitKw;
-  const periods: Array<{ startPeriod: number; limit: number }> = [{ startPeriod: 0, limit: toW(baseLimitKw) }];
+  const periods: Array<{ startPeriod: number; limit: number }> = [{ startPeriod: 0, limit: toA(baseLimitKw) }];
 
   for (const w of parsed.windows) {
     const startSecInDay = hhmmToSec(w.startTime);
@@ -351,12 +353,12 @@ function buildRecurringWeeklyPayloadStacked(entry: StackedProfileEntry, fallback
 
     for (const day of w.daysOfWeek) {
       const dayBase = day * 86400;
-      periods.push({ startPeriod: dayBase + startSecInDay, limit: toW(w.limitKw) });
+      periods.push({ startPeriod: dayBase + startSecInDay, limit: toA(w.limitKw) });
       if (startSecInDay < endSecInDay) {
-        periods.push({ startPeriod: dayBase + endSecInDay, limit: toW(baseLimitKw) });
+        periods.push({ startPeriod: dayBase + endSecInDay, limit: toA(baseLimitKw) });
       } else if (startSecInDay > endSecInDay) {
         const restore = ((day + 1) % 7) * 86400 + endSecInDay;
-        periods.push({ startPeriod: restore, limit: toW(baseLimitKw) });
+        periods.push({ startPeriod: restore, limit: toA(baseLimitKw) });
       }
     }
   }
@@ -377,7 +379,7 @@ function buildRecurringWeeklyPayloadStacked(entry: StackedProfileEntry, fallback
       chargingSchedule: {
         startSchedule: startOfUtcWeek(at).toISOString(),
         duration: 7 * 24 * 3600,
-        chargingRateUnit: 'W',
+        chargingRateUnit: 'A',
         chargingSchedulePeriod: Array.from(unique.entries()).map(([startPeriod, limit]) => ({ startPeriod, limit })),
       },
     },
@@ -396,8 +398,8 @@ function buildConstantPayloadStacked(entry: StackedProfileEntry) {
       ...(entry.profile.validFrom ? { validFrom: entry.profile.validFrom.toISOString() } : {}),
       ...(entry.profile.validTo ? { validTo: entry.profile.validTo.toISOString() } : {}),
       chargingSchedule: {
-        chargingRateUnit: 'W',
-        chargingSchedulePeriod: [{ startPeriod: 0, limit: toW(limitKw) }],
+        chargingRateUnit: 'A',
+        chargingSchedulePeriod: [{ startPeriod: 0, limit: toA(limitKw) }],
       },
     },
   };
