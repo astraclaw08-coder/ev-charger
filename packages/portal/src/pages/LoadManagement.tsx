@@ -146,6 +146,15 @@ function ActiveLimitsSection({
     } catch { /* best effort */ }
   }, [token, previewData]);
 
+  // Eagerly fetch preview for all chargers so "Effective now" is accurate on first render
+  useEffect(() => {
+    if (!token) return;
+    for (const { charger: c } of chargerRows) {
+      if (!previewData[c.id]) fetchPreview(c.id);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, chargerRows.length]);
+
   return (
     <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm">
       <div className="border-b border-gray-300 dark:border-slate-700 px-5 py-4">
@@ -156,11 +165,28 @@ function ActiveLimitsSection({
         {chargerRows.map(({ charger: c, profileEntries }) => {
           const isExpanded = expandedCharger === c.id;
           const appliedCount = profileEntries.filter((e) => e.state?.status === 'APPLIED' || e.state?.status === 'FALLBACK_APPLIED').length;
-          const effectiveMin = profileEntries.reduce((min, e) => {
-            const lim = e.profile.defaultLimitKw;
-            return lim != null && lim < min ? lim : min;
-          }, Infinity);
           const preview = previewData[c.id];
+
+          // Show the real effective limit for the current hour from the merged schedule,
+          // falling back to the minimum window/default limit across profiles
+          let effectiveNow: number | null = null;
+          if (preview?.merged && preview.merged.length > 0) {
+            const nowUtcHour = new Date().getUTCHours();
+            const slot = preview.merged.find((s) => s.hour === nowUtcHour);
+            if (slot) effectiveNow = slot.effectiveLimitKw;
+          }
+          if (effectiveNow == null) {
+            // Scan both defaultLimitKw AND schedule window limits
+            for (const e of profileEntries) {
+              const def = e.profile.defaultLimitKw;
+              if (def != null && (effectiveNow == null || def < effectiveNow)) effectiveNow = def;
+              const sched = Array.isArray(e.profile.schedule) ? e.profile.schedule : [];
+              for (const w of sched) {
+                const wLim = (w as any).limitKw;
+                if (wLim != null && (effectiveNow == null || wLim < effectiveNow)) effectiveNow = wLim;
+              }
+            }
+          }
 
           return (
             <div key={c.id}>
@@ -180,7 +206,7 @@ function ActiveLimitsSection({
                     <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">{c.ocppId}</p>
                     <p className="text-xs text-gray-500 dark:text-slate-400">
                       {profileEntries.length} profile{profileEntries.length !== 1 ? 's' : ''} · {appliedCount} applied
-                      {Number.isFinite(effectiveMin) ? ` · Effective: ${effectiveMin} kW` : ''}
+                      {effectiveNow != null ? ` · Effective now: ${effectiveNow} kW` : ''}
                     </p>
                   </div>
                 </div>
