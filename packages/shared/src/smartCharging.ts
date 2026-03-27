@@ -226,3 +226,129 @@ export function resolveEffectiveSmartChargingLimit(args: {
     invalidProfileIds,
   };
 }
+
+// --- Stacking support ---
+
+const SCOPE_STACK_BASE: Record<SmartChargingScope, number> = {
+  SITE: 10,
+  GROUP: 30,
+  CHARGER: 50,
+};
+
+export type StackedProfileEntry = {
+  profile: SmartChargingProfileLike;
+  scope: SmartChargingScope;
+  ocppStackLevel: number;
+  ocppChargingProfileId: number;
+};
+
+/**
+ * Returns ALL enabled+valid profiles for a charger with deterministic OCPP stackLevel
+ * and chargingProfileId assignments. Used for multi-push stacking.
+ *
+ * stackLevel = scope base (SITE=10, GROUP=30, CHARGER=50) + profile.priority
+ * chargingProfileId = 1-based index in returned array (stable per reconcile call)
+ */
+export function resolveAllActiveProfiles(args: {
+  chargerProfiles: SmartChargingProfileLike[];
+  groupProfiles: SmartChargingProfileLike[];
+  siteProfiles: SmartChargingProfileLike[];
+  at?: Date;
+  timeZone?: string | null;
+}): StackedProfileEntry[] {
+  const at = args.at ?? new Date();
+  const results: StackedProfileEntry[] = [];
+
+  const scopeOrder: Array<{ scope: SmartChargingScope; profiles: SmartChargingProfileLike[] }> = [
+    { scope: 'CHARGER', profiles: sortProfiles(args.chargerProfiles) },
+    { scope: 'GROUP', profiles: sortProfiles(args.groupProfiles) },
+    { scope: 'SITE', profiles: sortProfiles(args.siteProfiles) },
+  ];
+
+  for (const bucket of scopeOrder) {
+    for (const profile of bucket.profiles) {
+      if (!profile.enabled) continue;
+      if (!isProfileWithinValidityWindow(profile, at)) continue;
+
+      const parsed = parseSmartChargingSchedule(profile.schedule);
+      if (parsed.errors.length > 0) continue; // skip invalid
+
+      // Profile has either a schedule or a default limit — it's applicable
+      const hasScheduleWindows = parsed.windows.length > 0;
+      const hasDefaultLimit = profile.defaultLimitKw != null && Number.isFinite(profile.defaultLimitKw) && profile.defaultLimitKw > 0;
+
+      if (!hasScheduleWindows && !hasDefaultLimit) continue; // no actionable limit
+
+      results.push({
+        profile,
+        scope: bucket.scope,
+        ocppStackLevel: SCOPE_STACK_BASE[bucket.scope] + profile.priority,
+        ocppChargingProfileId: 0, // assigned below
+      });
+    }
+  }
+
+  // Assign deterministic 1-based chargingProfileId
+  for (let i = 0; i < results.length; i++) {
+    results[i].ocppChargingProfileId = i + 1;
+  }
+
+  return results;
+}
+
+/**
+ * Compute the merged effective schedule (what the charger should enforce)
+ * for a set of stacked profiles over a 24h period. Returns hourly slots.
+ * At each slot, the effective limit is the MINIMUM across all active profiles.
+ */
+export function computeMergedSchedule(args: {
+  stackedProfiles: StackedProfileEntry[];
+  at?: Date;
+  timeZone?: string | null;
+  fallbackLimitKw: number;
+}): Array<{ hour: number; effectiveLimitKw: number; sourceProfileIds: string[] }> {
+  const at = args.at ?? new Date();
+  const timeZone = args.timeZone;
+  const slots: Array<{ hour: number; effectiveLimitKw: number; sourceProfileIds: string[] }> = [];
+
+  for (let h = 0; h < 24; h++) {
+    const slotTime = new Date(at);
+    // Use UTC hours when no timezone specified (matches isWindowActive UTC fallback)
+    if (timeZone) {
+      slotTime.setHours(h, 30, 0, 0);
+    } else {
+      slotTime.setUTCHours(h, 30, 0, 0);
+    }
+
+    let minLimit = Infinity;
+    const activeIds: string[] = [];
+
+    for (const entry of args.stackedProfiles) {
+      const parsed = parseSmartChargingSchedule(entry.profile.schedule);
+      const activeWindow = parsed.windows.find((w) => isWindowActive(w, slotTime, timeZone));
+
+      let limitForSlot: number | null = null;
+      if (activeWindow) {
+        limitForSlot = activeWindow.limitKw;
+      } else if (entry.profile.defaultLimitKw != null && entry.profile.defaultLimitKw > 0) {
+        limitForSlot = entry.profile.defaultLimitKw;
+      }
+
+      if (limitForSlot != null && limitForSlot < minLimit) {
+        minLimit = limitForSlot;
+        activeIds.length = 0;
+        activeIds.push(entry.profile.id);
+      } else if (limitForSlot != null && Math.abs(limitForSlot - minLimit) < 0.001) {
+        activeIds.push(entry.profile.id);
+      }
+    }
+
+    slots.push({
+      hour: h,
+      effectiveLimitKw: Number.isFinite(minLimit) ? minLimit : args.fallbackLimitKw,
+      sourceProfileIds: activeIds.length > 0 ? activeIds : [],
+    });
+  }
+
+  return slots;
+}

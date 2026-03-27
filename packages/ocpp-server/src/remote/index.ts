@@ -162,3 +162,27 @@ export async function remoteSetChargingProfile(
     return 'Rejected';
   }
 }
+
+export async function remoteGetCompositeSchedule(
+  ocppId: string,
+  payload: { connectorId: number; duration: number; chargingRateUnit?: string },
+): Promise<{ status: string; connectorId?: number; scheduleStart?: string; chargingSchedule?: unknown } | null> {
+  const client = clientRegistry.get(ocppId);
+  if (!client) {
+    console.warn(`[RemoteGetCompositeSchedule] Charger ${ocppId} is not connected`);
+    return null;
+  }
+
+  try {
+    const result = await client.call('GetCompositeSchedule', {
+      connectorId: payload.connectorId,
+      duration: payload.duration,
+      ...(payload.chargingRateUnit ? { chargingRateUnit: payload.chargingRateUnit } : {}),
+    });
+    console.log(`[RemoteGetCompositeSchedule] Charger ${ocppId} responded: ${result.status}`);
+    return result as { status: string; connectorId?: number; scheduleStart?: string; chargingSchedule?: unknown };
+  } catch (err) {
+    console.error(`[RemoteGetCompositeSchedule] Error calling charger ${ocppId}:`, err);
+    return null;
+  }
+}

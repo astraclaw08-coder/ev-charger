@@ -396,4 +396,35 @@ export async function smartChargingRoutes(app: FastifyInstance) {
 
     return states.filter((state: any) => hasSiteAccess(state.charger.siteId, req.currentOperator?.claims?.siteIds));
   });
+
+  // Composite schedule — ask the charger for its own merged schedule view
+  app.get<{ Params: { chargerId: string }; Querystring: { duration?: string } }>('/smart-charging/chargers/:chargerId/composite-schedule', {
+    preHandler: [requireOperator, requirePolicy('charger.status.read')],
+  }, async (req, reply) => {
+    const charger = await db.charger.findUnique({ where: { id: req.params.chargerId }, select: { siteId: true, ocppId: true } });
+    if (!charger) return reply.status(404).send({ error: 'Charger not found' });
+    if (!hasSiteAccess(charger.siteId, req.currentOperator?.claims?.siteIds)) {
+      return reply.status(403).send({ error: 'Forbidden' });
+    }
+
+    const { getCompositeSchedule: getComposite } = await import('../lib/ocppClient');
+    const duration = Number(req.query.duration) || 86400;
+    const result = await getComposite(charger.ocppId, { connectorId: 0, duration });
+    if (!result) return reply.status(502).send({ error: 'Charger not connected or call failed' });
+    return result;
+  });
+
+  // Stacking preview — server-side merged schedule for all active profiles on a charger
+  app.get<{ Params: { chargerId: string }; Querystring: { at?: string } }>('/smart-charging/chargers/:chargerId/stacking-preview', {
+    preHandler: [requireOperator, requirePolicy('charger.status.read')],
+  }, async (req, reply) => {
+    const charger = await db.charger.findUnique({ where: { id: req.params.chargerId }, select: { siteId: true } });
+    if (!charger) return reply.status(404).send({ error: 'Charger not found' });
+    if (!hasSiteAccess(charger.siteId, req.currentOperator?.claims?.siteIds)) {
+      return reply.status(403).send({ error: 'Forbidden' });
+    }
+
+    const at = req.query.at ? new Date(req.query.at) : undefined;
+    return previewEffectiveSmartChargingLimit(req.params.chargerId, at);
+  });
 }

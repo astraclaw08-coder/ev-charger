@@ -88,6 +88,44 @@ export const ROLE_POLICIES: RolePolicyMap = {
   ],
 };
 
+/** Role hierarchy — highest privilege first. Used for enforcement:
+ *  an actor can only assign roles below their own level. */
+export const ROLE_HIERARCHY: readonly RbacRole[] = [
+  'super_admin',
+  'owner',
+  'operator',
+  'customer_service',
+  'network_reliability_engineer',
+  'data_analyst',
+] as const;
+
+export const RBAC_ROLE_LABELS: Record<RbacRole, string> = {
+  super_admin: 'Super Admin',
+  owner: 'Owner',
+  operator: 'Operator',
+  customer_service: 'Customer Service',
+  network_reliability_engineer: 'Network Reliability Engineer',
+  data_analyst: 'Data Analyst',
+};
+
+export const RBAC_ROLE_DESCRIPTIONS: Record<RbacRole, string> = {
+  super_admin: 'Full platform access. All permissions, all orgs/sites.',
+  owner: 'Organization admin. Full access within org scope.',
+  operator: 'Day-to-day operations. Sites, chargers, sessions.',
+  customer_service: 'Read access + session refunds. No write operations.',
+  network_reliability_engineer: 'Charger control + incident management.',
+  data_analyst: 'Read-only analytics + data export.',
+};
+
+/** Returns the hierarchy rank (0 = highest). -1 if not found. */
+export function roleRank(role: string): number {
+  const idx = (ROLE_HIERARCHY as readonly string[]).indexOf(role);
+  return idx >= 0 ? idx : -1;
+}
+
+/** Assignable roles — everything except super_admin. */
+export const ASSIGNABLE_ROLES: readonly RbacRole[] = ROLE_HIERARCHY.filter((r) => r !== 'super_admin');
+
 export type PermissionGuardContract = {
   anyOf?: RbacPermission[];
   allOf?: RbacPermission[];

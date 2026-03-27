@@ -1,0 +1,15 @@
+appId: rc.evcharger.app
+---
+- launchApp:
+    clearState: false
+- waitForAnimationToEnd:
+    timeout: 8000
+- tapOn:
+    text: "Continue as Guest"
+    optional: true
+- tapOn:
+    text: "Find Charger"
+    optional: true
+- assertVisible:
+    id: "map-search-input"
+- takeScreenshot: "rc-map-spacing-check"

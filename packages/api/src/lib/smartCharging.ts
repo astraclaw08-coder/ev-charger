@@ -1,6 +1,6 @@
-import { prisma, resolveEffectiveSmartChargingLimit, parseSmartChargingSchedule, type SmartChargingProfileLike } from '@ev-charger/shared';
+import { prisma, resolveEffectiveSmartChargingLimit, resolveAllActiveProfiles, parseSmartChargingSchedule, computeMergedSchedule, type SmartChargingProfileLike, type StackedProfileEntry } from '@ev-charger/shared';
 import type { SmartChargingScope } from '@ev-charger/shared';
-import { setChargingProfile } from './ocppClient';
+import { setChargingProfile, getCompositeSchedule, reconcileSmartChargingViaOcpp } from './ocppClient';
 
 export type SmartChargingApplyStatus = 'APPLIED' | 'PENDING_OFFLINE' | 'ERROR' | 'FALLBACK_APPLIED';
 const db: any = prisma;
@@ -124,15 +124,41 @@ export async function previewEffectiveSmartChargingLimit(chargerId: string, at?:
     fallbackLimitKw: SAFE_LIMIT_KW,
   });
 
-  const persisted = await db.smartChargingState.findUnique({
+  const persistedStates = await db.smartChargingState.findMany({
     where: { chargerId },
     include: { sourceProfile: { select: { id: true, name: true, scope: true } } },
+  });
+
+  // Stacking preview
+  const stackedProfiles = resolveAllActiveProfiles({
+    chargerProfiles: scoped.chargerProfiles,
+    groupProfiles: scoped.groupProfiles,
+    siteProfiles: scoped.siteProfiles,
+    at,
+    timeZone: scoped.siteTimeZone,
+  });
+
+  const mergedSchedule = computeMergedSchedule({
+    stackedProfiles,
+    at,
+    timeZone: scoped.siteTimeZone,
+    fallbackLimitKw: SAFE_LIMIT_KW,
   });
 
   return {
     charger: scoped.charger,
     calculated: resolution,
-    persisted,
+    persisted: persistedStates[0] ?? null, // backward compat: first state
+    persistedStates,
+    stackedProfiles: stackedProfiles.map((e) => ({
+      profileId: e.profile.id,
+      profileName: e.profile.name,
+      scope: e.scope,
+      ocppStackLevel: e.ocppStackLevel,
+      ocppChargingProfileId: e.ocppChargingProfileId,
+      defaultLimitKw: e.profile.defaultLimitKw,
+    })),
+    mergedSchedule,
     config: {
       safeFallbackLimitKw: SAFE_LIMIT_KW,
       ocppStackLevel: STACK_LEVEL,
@@ -142,6 +168,28 @@ export async function previewEffectiveSmartChargingLimit(chargerId: string, at?:
 }
 
 export async function reconcileSmartChargingForCharger(chargerId: string, trigger: string) {
+  // Prefer OCPP server reconcile (stacking-aware)
+  try {
+    const ocppResult = await reconcileSmartChargingViaOcpp(chargerId);
+    if (ocppResult.ok) {
+      // Return fresh state from DB
+      const states = await db.smartChargingState.findMany({
+        where: { chargerId },
+        include: { sourceProfile: { select: { id: true, name: true, scope: true } } },
+        orderBy: { updatedAt: 'desc' },
+      });
+      return {
+        chargerId,
+        trigger,
+        delegated: 'ocpp-server',
+        states,
+      };
+    }
+  } catch {
+    // OCPP server unreachable — fall through to legacy
+  }
+
+  // Legacy fallback
   const scoped = await loadScopeProfiles(chargerId);
   const now = new Date();
 
@@ -177,7 +225,7 @@ export async function reconcileSmartChargingForCharger(chargerId: string, trigge
   const sourceReason = `${resolution.sourceReason}; trigger=${trigger}; invalidProfiles=${resolution.invalidProfileIds.length}`;
 
   const persisted = await db.smartChargingState.upsert({
-    where: { chargerId: scoped.charger.id },
+    where: { chargerId_sourceProfileId: { chargerId: scoped.charger.id, sourceProfileId: resolution.sourceProfileId ?? '__legacy__' } },
     create: {
       chargerId: scoped.charger.id,
       effectiveLimitKw: resolution.effectiveLimitKw,

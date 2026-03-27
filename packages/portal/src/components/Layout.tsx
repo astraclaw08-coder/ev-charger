@@ -57,9 +57,10 @@ function SessionsIcon({ className }: IconProps) {
 function ChargersIcon({ className }: IconProps) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={ICON_STROKE} className={className} aria-hidden="true">
-      <rect x="6" y="3" width="10" height="18" rx="2" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M9 7h4M16 8h2v4h-2M18 12l1.5 1.5v2" />
-      <circle cx="11" cy="17" r="0.8" fill="currentColor" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M7 5.5A2.5 2.5 0 0 1 9.5 3h3A2.5 2.5 0 0 1 15 5.5V7h1a2 2 0 0 1 2 2v3.2a2 2 0 0 1-.6 1.4l-1.4 1.4V19a2 2 0 0 1-2 2h-6a2 2 0 0 1-2-2V5.5Z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M10 6h2M9.5 11.5h3M16 9h2v4h-2" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M18 13l1.5 1.5V17" />
+      <circle cx="11" cy="17.25" r="1" fill="currentColor" stroke="none" />
     </svg>
   );
 }
@@ -78,8 +79,9 @@ function LoadManagementIcon({ className }: IconProps) {
 function SettingsIcon({ className }: IconProps) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={ICON_STROKE} className={className} aria-hidden="true">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 8.5A3.5 3.5 0 1 1 8.5 12 3.5 3.5 0 0 1 12 8.5Z" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M19.4 15a7.7 7.7 0 0 0 .1-1 7.7 7.7 0 0 0-.1-1l2-1.6-2-3.4-2.4 1a8 8 0 0 0-1.7-1L13.9 4h-3.8L9.8 7a8 8 0 0 0-1.7 1l-2.4-1-2 3.4 2 1.6a7.7 7.7 0 0 0-.1 1 7.7 7.7 0 0 0 .1 1l-2 1.6 2 3.4 2.4-1a8 8 0 0 0 1.7 1l.3 3h3.8l.3-3a8 8 0 0 0 1.7-1l2.4 1 2-3.4Z" />
+      <circle cx="12" cy="12" r="3" strokeLinecap="round" strokeLinejoin="round" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 3.5v2.2M12 18.3v2.2M20.5 12h-2.2M5.7 12H3.5M17.96 6.04l-1.56 1.56M7.6 16.4l-1.56 1.56M17.96 17.96 16.4 16.4M7.6 7.6 6.04 6.04" />
+      <circle cx="12" cy="12" r="8" strokeLinecap="round" strokeLinejoin="round" opacity="0.9" />
     </svg>
   );
 }
@@ -104,7 +106,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     <div className="flex min-h-screen bg-gray-50 dark:bg-slate-950">
       {/* Sidebar */}
       <aside className="flex w-56 flex-col border-r border-slate-700 bg-slate-900 dark:border-slate-800 dark:bg-slate-950/95">
-        <div className="flex h-14 items-center border-b border-slate-700 px-4 dark:border-slate-800">
+        <div className="flex h-14 items-center px-4">
           <BrandMark className="w-[140px]" />
         </div>
 

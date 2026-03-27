@@ -442,9 +442,28 @@ export interface SmartChargingState {
   lastAttemptAt: string;
   lastAppliedAt: string | null;
   lastError: string | null;
+  ocppChargingProfileId?: number | null;
+  ocppStackLevel?: number | null;
+  compositeScheduleVerified?: boolean;
+  compositeScheduleVerifiedAt?: string | null;
   updatedAt: string;
   charger: { id: string; ocppId: string; siteId: string; status: string };
   sourceProfile?: { id: string; name: string; scope: 'CHARGER' | 'GROUP' | 'SITE' } | null;
+}
+
+export interface StackedProfileInfo {
+  profileId: string;
+  profileName: string;
+  scope: 'CHARGER' | 'GROUP' | 'SITE';
+  ocppStackLevel: number;
+  ocppChargingProfileId: number;
+  defaultLimitKw: number | null;
+}
+
+export interface MergedScheduleSlot {
+  hour: number;
+  effectiveLimitKw: number;
+  sourceProfileIds: string[];
 }
 
 export interface SmartChargingEffectiveResponse {
@@ -459,7 +478,20 @@ export interface SmartChargingEffectiveResponse {
     invalidProfileIds: string[];
   };
   persisted: SmartChargingState | null;
+  persistedStates?: SmartChargingState[];
+  stackedProfiles?: StackedProfileInfo[];
+  mergedSchedule?: MergedScheduleSlot[];
   config: { safeFallbackLimitKw: number; ocppStackLevel: number; timezone: string };
+}
+
+export interface CompositeScheduleResponse {
+  status: string;
+  connectorId?: number;
+  scheduleStart?: string;
+  chargingSchedule?: {
+    chargingRateUnit?: string;
+    chargingSchedulePeriod?: Array<{ startPeriod: number; limit: number }>;
+  };
 }
 
 // ─── Client ──────────────────────────────────────────────────────────────────
@@ -785,6 +817,12 @@ export function createApiClient(token: string | null | undefined) {
       return request<SmartChargingState[]>(`/smart-charging/states${qs.toString() ? `?${qs}` : ''}`, token);
     },
 
+    getCompositeSchedule: (chargerId: string, duration?: number) =>
+      request<CompositeScheduleResponse>(`/smart-charging/chargers/${chargerId}/composite-schedule${duration ? `?duration=${duration}` : ''}`, token),
+
+    getStackingPreview: (chargerId: string, at?: string) =>
+      request<SmartChargingEffectiveResponse>(`/smart-charging/chargers/${chargerId}/stacking-preview${at ? `?at=${at}` : ''}`, token),
+
     listAdminUsers: (params?: { search?: string; max?: number }) => {
       const qs = new URLSearchParams();
       if (params?.search) qs.set('search', params.search);
@@ -831,6 +869,18 @@ export function createApiClient(token: string | null | undefined) {
     revokeAdminUserSessions: (userId: string, reason?: string) =>
       request<{ ok: boolean }>(`/admin/users/${userId}/revoke-sessions`, token, {
         method: 'POST',
+        body: JSON.stringify({ reason }),
+      }),
+
+    updateAdminUser: (userId: string, body: { email?: string; firstName?: string; lastName?: string }) =>
+      request<AdminUser>(`/admin/users/${userId}`, token, {
+        method: 'PUT',
+        body: JSON.stringify(body),
+      }),
+
+    deleteAdminUser: (userId: string, reason?: string) =>
+      request<{ ok: boolean }>(`/admin/users/${userId}`, token, {
+        method: 'DELETE',
         body: JSON.stringify({ reason }),
       }),
 

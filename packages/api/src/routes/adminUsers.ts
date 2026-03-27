@@ -1,16 +1,24 @@
 import type { FastifyInstance } from 'fastify';
-import { prisma } from '@ev-charger/shared';
+import { prisma, ASSIGNABLE_ROLES, RBAC_ROLES, ROLE_HIERARCHY, roleRank } from '@ev-charger/shared';
 import { requireOperator } from '../plugins/auth';
 import { requirePolicy } from '../plugins/authorization';
 import { getKeycloakAdminClient } from '../lib/keycloakAdmin';
 import { recordSensitiveAction } from '../lib/sensitiveActionLimiter';
 import { writeAdminAudit } from '../lib/adminAudit';
 
-const DEFAULT_ASSIGNABLE_ROLES = ['owner', 'operator', 'customer_support', 'network_reliability', 'analyst'];
-
-function getAssignableRoles() {
+function getAssignableRoles(): string[] {
   const fromEnv = process.env.KEYCLOAK_ASSIGNABLE_ROLES?.split(',').map((v) => v.trim()).filter(Boolean);
-  return fromEnv?.length ? fromEnv : DEFAULT_ASSIGNABLE_ROLES;
+  return fromEnv?.length ? fromEnv : [...ASSIGNABLE_ROLES];
+}
+
+/** Get the acting operator's highest role rank (0 = super_admin, lower = higher privilege). */
+function actorHighestRank(claims: { roles: string[] }): number {
+  let best = Infinity;
+  for (const r of claims.roles) {
+    const rank = roleRank(r);
+    if (rank >= 0 && rank < best) best = rank;
+  }
+  return best === Infinity ? 999 : best;
 }
 
 function normalizeEmail(email: string) {
@@ -130,15 +138,39 @@ export async function adminUserRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: 'Non-empty reason is required for role changes' });
     }
 
+    // ── Hierarchy enforcement ──────────────────────────────────────────────
+    const actorRank = actorHighestRank(req.currentOperator!.claims!);
+    const targetRoleRank = roleRank(role);
+    if (targetRoleRank >= 0 && targetRoleRank <= actorRank) {
+      return reply.status(403).send({
+        error: `Cannot assign role '${role}' — it is equal to or higher than your own privilege level`,
+      });
+    }
+
     const kc = getKeycloakAdminClient();
-    const beforeRoles = uniqueSorted((await kc.listRealmRolesForUser(req.params.userId)).map((r) => r.name).filter(Boolean));
-    await kc.addRealmRole(req.params.userId, role);
+    const currentKeycloakRoles = await kc.listRealmRolesForUser(req.params.userId);
+    const beforeRoles = uniqueSorted(currentKeycloakRoles.map((r) => r.name).filter(Boolean));
+
+    // ── Single-role enforcement: remove any existing RBAC role first ──────
+    const rbacRoleSet = new Set<string>(RBAC_ROLES as readonly string[]);
+    const existingRbacRoles = currentKeycloakRoles.filter((r) => rbacRoleSet.has(r.name));
+    for (const existing of existingRbacRoles) {
+      if (existing.name !== role) {
+        await kc.removeRealmRole(req.params.userId, existing.name);
+      }
+    }
+
+    // Add the new role (skip if already assigned)
+    if (!existingRbacRoles.some((r) => r.name === role)) {
+      await kc.addRealmRole(req.params.userId, role);
+    }
+
     await kc.logoutUser(req.params.userId);
     const afterRoles = uniqueSorted((await kc.listRealmRolesForUser(req.params.userId)).map((r) => r.name).filter(Boolean));
 
     await writeAdminAudit({
       operatorId: req.currentOperator!.id,
-      action: 'keycloak.user.role.add',
+      action: 'keycloak.user.role.assign',
       targetUserId: req.params.userId,
       metadata: {
         actor: { operatorId: req.currentOperator!.id },
@@ -148,6 +180,7 @@ export async function adminUserRoutes(app: FastifyInstance) {
         reason,
         before: { roles: beforeRoles },
         after: { roles: afterRoles },
+        swapped: existingRbacRoles.filter((r) => r.name !== role).map((r) => r.name),
         sessionsRevoked: true,
       },
     });
@@ -276,6 +309,60 @@ export async function adminUserRoutes(app: FastifyInstance) {
       },
     });
     return { ok: true };
+  });
+
+  // ── Update user ────────────────────────────────────────────────────────────
+  app.put<{
+    Params: { userId: string };
+    Body: { email?: string; firstName?: string; lastName?: string };
+  }>('/admin/users/:userId', {
+    preHandler: [requireOperator, requirePolicy('admin.users.write'), guardSensitiveAction as any],
+  }, async (req, reply) => {
+    const kc = getKeycloakAdminClient();
+    const patch: Record<string, unknown> = {};
+    if (req.body.email) {
+      const email = normalizeEmail(req.body.email);
+      if (!isValidEmail(email)) return reply.status(400).send({ error: 'Valid email is required' });
+      patch.email = email;
+      patch.username = email.toLowerCase();
+    }
+    if (req.body.firstName !== undefined) patch.firstName = req.body.firstName.trim();
+    if (req.body.lastName !== undefined) patch.lastName = req.body.lastName.trim();
+
+    await kc.updateUser(req.params.userId, patch);
+
+    await writeAdminAudit({
+      operatorId: req.currentOperator!.id,
+      action: 'keycloak.user.update',
+      targetUserId: req.params.userId,
+      metadata: { fields: Object.keys(patch) },
+    });
+
+    const updated = await kc.getUser(req.params.userId);
+    return reply.send(updated);
+  });
+
+  // ── Delete user ───────────────────────────────────────────────────────────
+  app.delete<{
+    Params: { userId: string };
+    Body: { reason?: string };
+  }>('/admin/users/:userId', {
+    preHandler: [requireOperator, requirePolicy('admin.users.write'), guardSensitiveAction as any],
+  }, async (req, reply) => {
+    const kc = getKeycloakAdminClient();
+    const user = await kc.getUser(req.params.userId);
+
+    await kc.deleteUser(req.params.userId);
+
+    await writeAdminAudit({
+      operatorId: req.currentOperator!.id,
+      action: 'keycloak.user.delete',
+      targetUserId: req.params.userId,
+      targetEmail: user.email,
+      metadata: { reason: parseOptionalReason(req.body?.reason) },
+    });
+
+    return reply.send({ ok: true });
   });
 
   app.get<{ Querystring: { limit?: string } }>('/admin/users/audit', {
