@@ -118,7 +118,7 @@ export default function MapScreen() {
   // active-session layout — reused for both states so the gap is identical.
   const BANNER_H = 50;
   const BANNER_GAP = 8;
-  const TAB_CONTENT_OFFSET = 88;  // RC-verified: tabBar container bottom → search bar bottom
+  const TAB_CONTENT_OFFSET = 79;  // 88 * 0.9 — proportional to 10% shorter nav bar
   const SEARCH_TO_LOCATE = 56;
 
   const tabBarBottom = activeSession

@@ -69,9 +69,9 @@ function FloatingTabBar({
           style={{
             borderTopWidth: 0,
             backgroundColor: 'transparent',
-            paddingTop: 8,
-            paddingBottom: Math.max(safeAreaBottom, 4),
-            minHeight: 56 + Math.max(safeAreaBottom, 6),
+            paddingTop: 4,
+            paddingBottom: Math.max(Math.round(safeAreaBottom * 0.7), 4),
+            minHeight: Math.round((56 + Math.max(safeAreaBottom, 6)) * 0.9),
           }}
         />
       </View>
