@@ -100,7 +100,11 @@ export function ChargingNotificationsProvider({ children }: { children: React.Re
     queryKey: ['sessions'],
     queryFn: () => api.sessions.list(20, 0),
     enabled: !isGuest,
-    staleTime: 15_000,
+    staleTime: 0,
+    refetchInterval: (query) => {
+      const hasActive = query.state.data?.sessions?.some((s: Session) => s.status === 'ACTIVE');
+      return hasActive ? 5_000 : false;
+    },
   });
 
   const activeSession = useMemo(() => data?.sessions.find((s) => s.status === 'ACTIVE') ?? null, [data]);
