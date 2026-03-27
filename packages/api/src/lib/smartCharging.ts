@@ -162,7 +162,7 @@ export async function previewEffectiveSmartChargingLimit(chargerId: string, at?:
     config: {
       safeFallbackLimitKw: SAFE_LIMIT_KW,
       ocppStackLevel: STACK_LEVEL,
-      timezone: 'UTC',
+      timezone: scoped.siteTimeZone ?? 'UTC',
     },
   };
 }
