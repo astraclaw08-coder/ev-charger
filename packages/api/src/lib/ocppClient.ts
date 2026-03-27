@@ -95,3 +95,19 @@ export async function setChargingProfile(
     return 'Rejected';
   }
 }
+
+export async function getCompositeSchedule(
+  ocppId: string,
+  payload: { connectorId?: number; duration?: number; chargingRateUnit?: string },
+): Promise<{ status: string; connectorId?: number; scheduleStart?: string; chargingSchedule?: unknown } | null> {
+  try {
+    const data = await post<{ status: string; connectorId?: number; scheduleStart?: string; chargingSchedule?: unknown }>(
+      '/get-composite-schedule',
+      { ocppId, ...payload },
+    );
+    return data;
+  } catch (err) {
+    console.error('[OcppClient] getCompositeSchedule failed:', err);
+    return null;
+  }
+}

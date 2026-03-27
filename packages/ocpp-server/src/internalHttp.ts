@@ -56,7 +56,7 @@ export function attachInternalRoutes(httpServer: http.Server): void {
     }
 
     if (url === '/remote-start' || url === '/remote-stop' || url === '/reset' || url === '/trigger-message' || url === '/get-configuration' || url === '/set-charging-profile' ||
-        url === '/charger-reset-password' || url === '/charger-clear-password' || url === '/charger-add') {
+        url === '/charger-reset-password' || url === '/charger-clear-password' || url === '/charger-add' || url === '/get-composite-schedule') {
       if (method !== 'POST') {
         return sendJson(res, 405, { error: 'Method not allowed' });
       }
@@ -197,6 +197,22 @@ export function attachInternalRoutes(httpServer: http.Server): void {
 
           console.log(`[InternalHTTP] Password cleared for charger ocppId=${ocppId}`);
           return sendJson(res, 200, { ocppId, note: 'Password cleared. Charger can now connect without a password.' });
+        }
+
+        if (url === '/get-composite-schedule') {
+          const { ocppId, connectorId, duration, chargingRateUnit } = body as {
+            ocppId: string; connectorId?: number; duration?: number; chargingRateUnit?: string;
+          };
+          if (!ocppId) return sendJson(res, 400, { error: 'ocppId required' });
+
+          const { remoteGetCompositeSchedule: getComposite } = await import('./remote');
+          const result = await getComposite(ocppId, {
+            connectorId: connectorId ?? 0,
+            duration: duration ?? 86400,
+            chargingRateUnit,
+          });
+          if (!result) return sendJson(res, 502, { error: 'Charger not connected or call failed' });
+          return sendJson(res, 200, result);
         }
       } catch (err: unknown) {
         console.error('[InternalHTTP] Error:', err);

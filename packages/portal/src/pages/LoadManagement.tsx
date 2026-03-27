@@ -3,16 +3,240 @@ import { Link } from 'react-router-dom';
 import {
   createApiClient,
   type ChargerListItem,
+  type MergedScheduleSlot,
   type SiteListItem,
   type SmartChargingGroup,
   type SmartChargingProfile,
   type SmartChargingState,
+  type StackedProfileInfo,
 } from '../api/client';
 import { useToken } from '../auth/TokenContext';
 import StatusBadge from '../components/StatusBadge';
 
 type Scope = 'CHARGER' | 'GROUP' | 'SITE';
 const DEFAULT_PRIORITY = 10;
+
+/* ─── Effective Schedule Timeline Bar ─────────────────────────────────── */
+
+function ScheduleTimeline({ slots, maxKw }: { slots: MergedScheduleSlot[]; maxKw: number }) {
+  if (slots.length === 0) return null;
+  const ceil = Math.max(maxKw, ...slots.map((s) => s.effectiveLimitKw));
+  return (
+    <div className="flex items-end gap-px h-10 w-full">
+      {slots.map((s) => {
+        const pct = ceil > 0 ? (s.effectiveLimitKw / ceil) * 100 : 0;
+        return (
+          <div
+            key={s.hour}
+            className="flex-1 rounded-t bg-brand-500 dark:bg-brand-400 relative group"
+            style={{ height: `${pct}%`, minHeight: '2px' }}
+            title={`${s.hour}:00 — ${s.effectiveLimitKw} kW`}
+          >
+            <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 hidden group-hover:block bg-gray-900 dark:bg-slate-100 text-white dark:text-slate-900 text-[10px] rounded px-1.5 py-0.5 whitespace-nowrap z-10">
+              {s.hour}:00 — {s.effectiveLimitKw} kW
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ─── Per-Profile Status Label ────────────────────────────────────────── */
+
+function profileStatusLabel(state: SmartChargingState | undefined): { label: string; color: string } {
+  if (!state) return { label: '⏳ Not pushed yet', color: 'text-gray-400 dark:text-slate-500' };
+  switch (state.status) {
+    case 'APPLIED':
+    case 'FALLBACK_APPLIED':
+      return {
+        label: state.lastAppliedAt ? `✅ Applied ${new Date(state.lastAppliedAt).toLocaleString()}` : '✅ Applied',
+        color: 'text-green-600 dark:text-green-400',
+      };
+    case 'PENDING_OFFLINE':
+      return { label: '⏳ Pending — charger offline', color: 'text-amber-600 dark:text-amber-400' };
+    case 'ERROR':
+      return {
+        label: `❌ Failed${state.lastError ? `: ${state.lastError}` : ''}`,
+        color: 'text-red-600 dark:text-red-400',
+      };
+    default:
+      return { label: state.status ?? '—', color: 'text-gray-500 dark:text-slate-400' };
+  }
+}
+
+/* ─── Active Limits Section (charger-grouped, expandable) ─────────────── */
+
+function ActiveLimitsSection({
+  profiles, profileById, states, chargers, groups, sites, onPush, token,
+  utcTimeToLocal, to12h,
+}: {
+  profiles: SmartChargingProfile[];
+  profileById: Record<string, SmartChargingProfile>;
+  states: SmartChargingState[];
+  chargers: ChargerListItem[];
+  groups: SmartChargingGroup[];
+  sites: SiteListItem[];
+  onPush: (chargerId: string) => void;
+  token: string | null;
+  utcTimeToLocal: (t: string) => { time: string; dayShift: number };
+  to12h: (t: string) => string;
+}) {
+  const [expandedCharger, setExpandedCharger] = useState<string | null>(null);
+  const [previewData, setPreviewData] = useState<Record<string, { stacked: StackedProfileInfo[]; merged: MergedScheduleSlot[] }>>({});
+
+  // Build charger → profiles mapping
+  const chargerProfileMap = new Map<string, { charger: ChargerListItem; profileEntries: Array<{ profile: SmartChargingProfile; scope: Scope; state: SmartChargingState | undefined }> }>();
+
+  for (const p of profiles.filter((p) => p.enabled)) {
+    let targetChargerIds: string[] = [];
+    let scope: Scope = p.scope as Scope;
+
+    if (p.scope === 'CHARGER' && p.chargerId) {
+      targetChargerIds = [p.chargerId];
+    } else if (p.scope === 'GROUP' && p.chargerGroupId) {
+      const g = groups.find((x) => x.id === p.chargerGroupId);
+      targetChargerIds = g?.chargerIds ?? [];
+    } else if (p.scope === 'SITE' && p.siteId) {
+      targetChargerIds = chargers.filter((c) => c.siteId === p.siteId).map((c) => c.id);
+    }
+
+    for (const cId of targetChargerIds) {
+      if (!chargerProfileMap.has(cId)) {
+        const c = chargers.find((x) => x.id === cId);
+        if (!c) continue;
+        chargerProfileMap.set(cId, { charger: c, profileEntries: [] });
+      }
+      const state = states.find((s) => s.chargerId === cId && s.sourceProfileId === p.id);
+      chargerProfileMap.get(cId)!.profileEntries.push({ profile: p, scope, state });
+    }
+  }
+
+  const chargerRows = Array.from(chargerProfileMap.values());
+  if (chargerRows.length === 0) return null;
+
+  // Fetch stacking preview when expanding
+  const fetchPreview = useCallback(async (chargerId: string) => {
+    if (!token || previewData[chargerId]) return;
+    try {
+      const api = createApiClient(token);
+      const data = await api.getStackingPreview(chargerId);
+      if (data.stackedProfiles && data.mergedSchedule) {
+        setPreviewData((prev) => ({ ...prev, [chargerId]: { stacked: data.stackedProfiles!, merged: data.mergedSchedule! } }));
+      }
+    } catch { /* best effort */ }
+  }, [token, previewData]);
+
+  return (
+    <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm">
+      <div className="border-b border-gray-300 dark:border-slate-700 px-5 py-4">
+        <h2 className="text-sm font-semibold text-gray-700 dark:text-slate-300">Active Limits</h2>
+        <p className="mt-0.5 text-xs text-gray-500 dark:text-slate-400">Per-charger view of all stacked load profiles and their OCPP push status.</p>
+      </div>
+      <div className="divide-y divide-gray-100 dark:divide-slate-800">
+        {chargerRows.map(({ charger: c, profileEntries }) => {
+          const isExpanded = expandedCharger === c.id;
+          const appliedCount = profileEntries.filter((e) => e.state?.status === 'APPLIED' || e.state?.status === 'FALLBACK_APPLIED').length;
+          const effectiveMin = profileEntries.reduce((min, e) => {
+            const lim = e.profile.defaultLimitKw;
+            return lim != null && lim < min ? lim : min;
+          }, Infinity);
+          const preview = previewData[c.id];
+
+          return (
+            <div key={c.id}>
+              {/* Charger header row */}
+              <button
+                type="button"
+                className="w-full flex items-center justify-between px-5 py-3 hover:bg-gray-50 dark:hover:bg-slate-800 text-left"
+                onClick={() => {
+                  const next = isExpanded ? null : c.id;
+                  setExpandedCharger(next);
+                  if (next) fetchPreview(next);
+                }}
+              >
+                <div className="flex items-center gap-3">
+                  <span className={`h-2 w-2 rounded-full ${c.status === 'ONLINE' ? 'bg-green-500' : 'bg-gray-300 dark:bg-slate-600'}`} />
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">{c.ocppId}</p>
+                    <p className="text-xs text-gray-500 dark:text-slate-400">
+                      {profileEntries.length} profile{profileEntries.length !== 1 ? 's' : ''} · {appliedCount} applied
+                      {Number.isFinite(effectiveMin) ? ` · Effective: ${effectiveMin} kW` : ''}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onPush(c.id); }}
+                    className="rounded-md border border-brand-200 dark:border-brand-700 px-2 py-1 text-xs font-medium text-brand-700 dark:text-brand-300 hover:bg-brand-50 dark:hover:bg-brand-900/20"
+                  >
+                    Re-push all
+                  </button>
+                  <span className="text-xs text-gray-400">{isExpanded ? '▲' : '▼'}</span>
+                </div>
+              </button>
+
+              {/* Expanded detail */}
+              {isExpanded && (
+                <div className="bg-gray-50/50 dark:bg-slate-800/40 px-5 pb-4">
+                  {/* Profile rows */}
+                  <table className="w-full text-sm mt-1">
+                    <thead>
+                      <tr className="text-left text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-slate-500">
+                        <th className="py-2 pr-3">Profile</th>
+                        <th className="py-2 pr-3">Scope</th>
+                        <th className="py-2 pr-3">Stack Level</th>
+                        <th className="py-2 pr-3">Schedule</th>
+                        <th className="py-2">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 dark:divide-slate-700">
+                      {profileEntries.map((e) => {
+                        const schedule = Array.isArray(e.profile.schedule) ? e.profile.schedule : [];
+                        const windowSummary = schedule.map((w: any) => {
+                          const days = (w.daysOfWeek ?? []).length === 7 ? 'Daily' : `${(w.daysOfWeek ?? []).length} days/wk`;
+                          const localStart = w.startTime ? utcTimeToLocal(w.startTime).time : w.startTime;
+                          const localEnd = w.endTime ? utcTimeToLocal(w.endTime).time : w.endTime;
+                          return `${to12h(localStart)}–${to12h(localEnd)} ${days} @ ${w.limitKw} kW`;
+                        }).join('; ') || (e.profile.defaultLimitKw != null ? `${e.profile.defaultLimitKw} kW always` : '—');
+                        const { label, color } = profileStatusLabel(e.state);
+                        const stackLevel = e.state?.ocppStackLevel ?? (e.scope === 'CHARGER' ? 50 : e.scope === 'GROUP' ? 30 : 10) + e.profile.priority;
+
+                        return (
+                          <tr key={e.profile.id}>
+                            <td className="py-2 pr-3">
+                              <p className="text-xs font-medium text-gray-700 dark:text-slate-300">{e.profile.name}</p>
+                              <p className="text-[11px] text-gray-400 dark:text-slate-500">Priority: {e.profile.priority}</p>
+                            </td>
+                            <td className="py-2 pr-3"><ScopePill scope={e.scope} /></td>
+                            <td className="py-2 pr-3 text-xs text-gray-600 dark:text-slate-300 font-mono">{stackLevel}</td>
+                            <td className="py-2 pr-3 text-xs text-gray-600 dark:text-slate-300">{windowSummary}</td>
+                            <td className="py-2"><p className={`text-xs font-medium ${color}`}>{label}</p></td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+
+                  {/* Merged schedule timeline */}
+                  {preview?.merged && preview.merged.length > 0 && (
+                    <div className="mt-3">
+                      <p className="text-xs font-medium text-gray-600 dark:text-slate-400 mb-1">Effective schedule (24h) — charger enforces lowest limit</p>
+                      <ScheduleTimeline slots={preview.merged} maxKw={preview.merged.reduce((m, s) => Math.max(m, s.effectiveLimitKw), 0)} />
+                      <div className="flex justify-between text-[10px] text-gray-400 dark:text-slate-500 mt-0.5">
+                        <span>12 AM</span><span>6 AM</span><span>12 PM</span><span>6 PM</span><span>12 AM</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 const SCOPE_LABELS: Record<Scope, string> = {
   CHARGER: 'Charger',
@@ -468,152 +692,19 @@ export default function LoadManagement() {
 
       <RecommendedFlow />
 
-      {/* Active Limits — derived from all enabled profiles with charger/group/site assignments */}
-      {(() => {
-        // Build rows from profiles: each enabled profile assigned to a target gets a row
-        const activeRows = profiles.filter((p) => p.enabled && (p.chargerId || p.chargerGroupId || p.siteId)).map((p) => {
-          // Determine target charger IDs for this profile
-          let targetChargerIds: string[] = [];
-          let targetLabel = '';
-          let targetDetail = '';
-
-          if (p.scope === 'CHARGER' && p.chargerId) {
-            targetChargerIds = [p.chargerId];
-            const c = chargers.find((x) => x.id === p.chargerId);
-            targetLabel = c?.ocppId ?? p.chargerId;
-            targetDetail = c ? `${c.status}` : '';
-          } else if (p.scope === 'GROUP' && p.chargerGroupId) {
-            const g = groups.find((x) => x.id === p.chargerGroupId);
-            targetLabel = g?.name ?? p.chargerGroupId;
-            targetChargerIds = g?.chargerIds ?? [];
-            targetDetail = `${targetChargerIds.length} charger${targetChargerIds.length !== 1 ? 's' : ''}`;
-          } else if (p.scope === 'SITE' && p.siteId) {
-            const s = sites.find((x) => x.id === p.siteId);
-            targetLabel = s?.name ?? p.siteId;
-            const siteChargers = chargers.filter((c) => c.siteId === p.siteId);
-            targetChargerIds = siteChargers.map((c) => c.id);
-            targetDetail = `${targetChargerIds.length} charger${targetChargerIds.length !== 1 ? 's' : ''}`;
-          }
-
-          // Find matching state(s) — check if this profile is the current source for any target charger
-          const matchingStates = states.filter((s) => targetChargerIds.includes(s.chargerId));
-          const isCurrentSource = matchingStates.some((s) => s.sourceProfileId === p.id);
-          const activeState = matchingStates.find((s) => s.sourceProfileId === p.id);
-
-          // Determine schedule description (convert UTC → local for display)
-          const schedule = Array.isArray(p.schedule) ? p.schedule : [];
-          const windowSummary = schedule.map((w: any) => {
-            const days = (w.daysOfWeek ?? []).length === 7 ? 'Daily' : `${(w.daysOfWeek ?? []).length} days/wk`;
-            const localStart = w.startTime ? utcTimeToLocal(w.startTime).time : w.startTime;
-            const localEnd = w.endTime ? utcTimeToLocal(w.endTime).time : w.endTime;
-            return `${to12h(localStart)}–${to12h(localEnd)} ${days} @ ${w.limitKw} kW`;
-          }).join('; ') || (p.defaultLimitKw != null ? `${p.defaultLimitKw} kW always` : 'No schedule');
-
-          // Determine status
-          let statusLabel = '';
-          let statusColor = '';
-          // Status reflects whether the charger has confirmed acceptance of this profile.
-          // The schedule column already shows when the limit takes effect.
-          if (isCurrentSource && activeState) {
-            switch (activeState.status) {
-              case 'APPLIED':
-              case 'FALLBACK_APPLIED':
-                statusLabel = activeState.lastAppliedAt ? `✅ Applied ${new Date(activeState.lastAppliedAt).toLocaleString()}` : '✅ Applied';
-                statusColor = 'text-green-600 dark:text-green-400';
-                break;
-              case 'PENDING_OFFLINE':
-                statusLabel = '⏳ Pending — charger offline';
-                statusColor = 'text-amber-600 dark:text-amber-400';
-                break;
-              case 'ERROR':
-                statusLabel = `❌ Failed${activeState.lastError ? `: ${activeState.lastError}` : ''}`;
-                statusColor = 'text-red-600 dark:text-red-400';
-                break;
-              default:
-                statusLabel = activeState.status ?? '—';
-                statusColor = 'text-gray-500 dark:text-slate-400';
-            }
-          } else if (matchingStates.length > 0 && matchingStates.some((s) => s.status === 'APPLIED' || s.status === 'FALLBACK_APPLIED')) {
-            // A different higher-priority profile is the active source — this profile is overridden.
-            const activeSourceProfile = matchingStates.find((s) => s.status === 'APPLIED' || s.status === 'FALLBACK_APPLIED');
-            const sourceName = activeSourceProfile?.sourceProfileId ? profileById[activeSourceProfile.sourceProfileId]?.name : undefined;
-            statusLabel = sourceName ? `⚠️ Overridden by "${sourceName}"` : '⚠️ Overridden by higher-priority profile';
-            statusColor = 'text-amber-600 dark:text-amber-400';
-          } else if (matchingStates.length > 0) {
-            // State exists but not applied — show its actual status
-            const s = matchingStates[0];
-            if (s.status === 'PENDING_OFFLINE') {
-              statusLabel = '⏳ Pending — charger offline';
-              statusColor = 'text-amber-600 dark:text-amber-400';
-            } else if (s.status === 'ERROR') {
-              statusLabel = `❌ Failed${s.lastError ? `: ${s.lastError}` : ''}`;
-              statusColor = 'text-red-600 dark:text-red-400';
-            } else {
-              statusLabel = s.status ?? '⏳ Pending';
-              statusColor = 'text-gray-500 dark:text-slate-400';
-            }
-          } else {
-            statusLabel = '⏳ Not pushed yet';
-            statusColor = 'text-gray-400 dark:text-slate-500';
-          }
-
-          return { profile: p, targetLabel, targetDetail, windowSummary, statusLabel, statusColor, targetChargerIds };
-        });
-
-        if (activeRows.length === 0) return null;
-
-        return (
-        <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm">
-          <div className="border-b border-gray-300 dark:border-slate-700 px-5 py-4">
-            <h2 className="text-sm font-semibold text-gray-700 dark:text-slate-300">Active Limits</h2>
-            <p className="mt-0.5 text-xs text-gray-500 dark:text-slate-400">All load profiles assigned to chargers, groups, or sites — showing current and scheduled limits.</p>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-100 dark:border-slate-800 bg-gray-50 dark:bg-slate-800/60 text-left text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">
-                  <th className="px-5 py-3">Target</th>
-                  <th className="px-5 py-3">Profile</th>
-                  <th className="px-5 py-3">Schedule</th>
-                  <th className="px-5 py-3">Status</th>
-                  <th className="px-5 py-3">Push</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50 dark:divide-slate-800">
-                {activeRows.map((row) => (
-                  <tr key={row.profile.id} className="bg-white dark:bg-slate-800/60 hover:bg-gray-50 dark:hover:bg-slate-700">
-                    <td className="px-5 py-3">
-                      <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">{row.targetLabel}</p>
-                      <div className="flex items-center gap-1.5 mt-0.5">
-                        <ScopePill scope={row.profile.scope as Scope} />
-                        {row.targetDetail && <span className="text-xs text-gray-500 dark:text-slate-400">{row.targetDetail}</span>}
-                      </div>
-                    </td>
-                    <td className="px-5 py-3">
-                      <p className="text-xs font-medium text-gray-700 dark:text-slate-300">{row.profile.name}</p>
-                      <p className="text-xs text-gray-400 dark:text-slate-500">Priority: {row.profile.priority}</p>
-                    </td>
-                    <td className="px-5 py-3">
-                      <p className="text-xs text-gray-600 dark:text-slate-300">{row.windowSummary}</p>
-                    </td>
-                    <td className="px-5 py-3">
-                      <p className={`text-xs font-medium ${row.statusColor}`}>{row.statusLabel}</p>
-                    </td>
-                    <td className="px-5 py-3">
-                      {row.targetChargerIds.length > 0 && (
-                        <button onClick={() => handlePush(row.targetChargerIds[0])} className="rounded-md border border-brand-200 dark:border-brand-700 px-2 py-1 text-xs font-medium text-brand-700 dark:text-brand-300 hover:bg-brand-50 dark:hover:bg-brand-900/20">
-                          Re-push
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-        );
-      })()}
+      {/* Active Limits — charger-grouped view with stacking support */}
+      <ActiveLimitsSection
+        profiles={profiles}
+        profileById={profileById}
+        states={states}
+        chargers={chargers}
+        groups={groups}
+        sites={sites}
+        onPush={handlePush}
+        token={token}
+        utcTimeToLocal={utcTimeToLocal}
+        to12h={to12h}
+      />
 
       {/* Two-column layout: profiles + groups */}
       <div className="grid gap-6 lg:grid-cols-2">

@@ -124,7 +124,7 @@ model Charger {
   uptimeDaily     UptimeDaily[]
   outboxEvents    OcppEventOutbox[]
   chargingProfiles SmartChargingProfile[]
-  smartChargingState SmartChargingState?
+  smartChargingStates SmartChargingState[]
   sessionFacts    SessionFact[]
   rebateIntervals RebateInterval15m[]
   favoritedBy     UserFavoriteCharger[]
@@ -169,6 +169,7 @@ model SmartChargingProfile {
   charger             Charger?           @relation(fields: [chargerId], references: [id], onDelete: Cascade)
   createdByOperatorId String?
   updatedByOperatorId String?
+  ocppStackLevelBase  Int                @default(50)
   states              SmartChargingState[]
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
@@ -181,7 +182,7 @@ model SmartChargingProfile {
 
 model SmartChargingState {
   id              String              @id @default(uuid())
-  chargerId       String              @unique
+  chargerId       String
   charger         Charger             @relation(fields: [chargerId], references: [id], onDelete: Cascade)
   effectiveLimitKw Float
   fallbackApplied Boolean             @default(false)
@@ -194,9 +195,15 @@ model SmartChargingState {
   lastAttemptAt   DateTime
   lastAppliedAt   DateTime?
   lastError       String?
+  ocppChargingProfileId Int?
+  ocppStackLevel        Int?
+  compositeScheduleVerified   Boolean   @default(false)
+  compositeScheduleVerifiedAt DateTime?
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
 
+  @@unique([chargerId, sourceProfileId])
+  @@index([chargerId])
   @@index([status, updatedAt])
   @@index([sourceProfileId])
 }
