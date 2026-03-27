@@ -136,8 +136,11 @@ function scLocalDayMinute(at: Date, timeZone?: string | null): { day: number; mi
   return { day: dayMap[dayStr] ?? at.getUTCDay(), minuteOfDay: hour * 60 + minute };
 }
 
-function isWindowActive(window: SmartChargingWindow, at: Date, timeZone?: string | null): boolean {
-  const { day, minuteOfDay } = scLocalDayMinute(at, timeZone);
+function isWindowActive(window: SmartChargingWindow, at: Date, _timeZone?: string | null): boolean {
+  // Schedule times are stored in UTC (portal converts local→UTC on save).
+  // Compare against UTC time — do NOT convert to local timezone.
+  const day = at.getUTCDay();
+  const minuteOfDay = at.getUTCHours() * 60 + at.getUTCMinutes();
 
   if (!window.daysOfWeek.includes(day)) return false;
 
@@ -176,6 +179,12 @@ export function resolveEffectiveSmartChargingLimit(args: {
     { scope: 'SITE', profiles: sortProfiles(args.siteProfiles) },
   ];
 
+  // Collect the effective limit from EACH valid profile (active window or default),
+  // then take the minimum. This ensures stacked profiles are all considered —
+  // e.g. if daytime has no active window (default 7.68) but nighttime has an active
+  // 6 kW window, the result should be 6 kW, not 7.68.
+  let best: SmartChargingResolution | null = null;
+
   for (const bucket of scopeOrder) {
     for (const profile of bucket.profiles) {
       if (!profile.enabled) continue;
@@ -189,29 +198,36 @@ export function resolveEffectiveSmartChargingLimit(args: {
 
       const activeWindow = parsed.windows.find((w) => isWindowActive(w, at, timeZone));
       if (activeWindow) {
-        return {
-          effectiveLimitKw: activeWindow.limitKw,
-          fallbackApplied: false,
-          sourceScope: bucket.scope,
-          sourceProfileId: profile.id,
-          sourceWindowId: activeWindow.id,
-          sourceReason: `Active ${bucket.scope.toLowerCase()} window ${activeWindow.id} from profile ${profile.name}`,
-          invalidProfileIds,
-        };
-      }
-
-      if (profile.defaultLimitKw != null && Number.isFinite(profile.defaultLimitKw) && profile.defaultLimitKw > 0) {
-        return {
-          effectiveLimitKw: profile.defaultLimitKw,
-          fallbackApplied: false,
-          sourceScope: bucket.scope,
-          sourceProfileId: profile.id,
-          sourceWindowId: null,
-          sourceReason: `Default ${bucket.scope.toLowerCase()} limit from profile ${profile.name}`,
-          invalidProfileIds,
-        };
+        if (!best || activeWindow.limitKw < best.effectiveLimitKw) {
+          best = {
+            effectiveLimitKw: activeWindow.limitKw,
+            fallbackApplied: false,
+            sourceScope: bucket.scope,
+            sourceProfileId: profile.id,
+            sourceWindowId: activeWindow.id,
+            sourceReason: `Active ${bucket.scope.toLowerCase()} window ${activeWindow.id} from profile ${profile.name}`,
+            invalidProfileIds,
+          };
+        }
+      } else if (profile.defaultLimitKw != null && Number.isFinite(profile.defaultLimitKw) && profile.defaultLimitKw > 0) {
+        if (!best || profile.defaultLimitKw < best.effectiveLimitKw) {
+          best = {
+            effectiveLimitKw: profile.defaultLimitKw,
+            fallbackApplied: false,
+            sourceScope: bucket.scope,
+            sourceProfileId: profile.id,
+            sourceWindowId: null,
+            sourceReason: `Default ${bucket.scope.toLowerCase()} limit from profile ${profile.name}`,
+            invalidProfileIds,
+          };
+        }
       }
     }
+  }
+
+  if (best) {
+    best.invalidProfileIds = invalidProfileIds;
+    return best;
   }
 
   return {
@@ -313,12 +329,8 @@ export function computeMergedSchedule(args: {
 
   for (let h = 0; h < 24; h++) {
     const slotTime = new Date(at);
-    // Use UTC hours when no timezone specified (matches isWindowActive UTC fallback)
-    if (timeZone) {
-      slotTime.setHours(h, 30, 0, 0);
-    } else {
-      slotTime.setUTCHours(h, 30, 0, 0);
-    }
+    // Schedule times are stored in UTC — always use UTC hours for slot evaluation
+    slotTime.setUTCHours(h, 30, 0, 0);
 
     let minLimit = Infinity;
     const activeIds: string[] = [];
