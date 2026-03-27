@@ -297,6 +297,7 @@ function RecommendedFlow() {
 
 export default function LoadManagement() {
   const getToken = useToken();
+  const [currentToken, setCurrentToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -428,6 +429,7 @@ export default function LoadManagement() {
     try {
       setLoading(true);
       const token = await getToken();
+      setCurrentToken(token);
       const api = createApiClient(token);
       const [siteRows, chargerRows, groupRows, profileRows, stateRows] = await Promise.all([
         api.getSites(),
@@ -720,7 +722,7 @@ export default function LoadManagement() {
         groups={groups}
         sites={sites}
         onPush={handlePush}
-        token={token}
+        token={currentToken}
         utcTimeToLocal={utcTimeToLocal}
         to12h={to12h}
       />
