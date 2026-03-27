@@ -115,7 +115,7 @@ function ActiveLimitsSection({
       targetChargerIds = [p.chargerId];
     } else if (p.scope === 'GROUP' && p.chargerGroupId) {
       const g = groups.find((x) => x.id === p.chargerGroupId);
-      targetChargerIds = g?.chargerIds ?? [];
+      targetChargerIds = (g?.chargers ?? []).map((c) => c.id);
     } else if (p.scope === 'SITE' && p.siteId) {
       targetChargerIds = chargers.filter((c) => c.siteId === p.siteId).map((c) => c.id);
     }
