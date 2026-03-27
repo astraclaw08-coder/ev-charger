@@ -28,7 +28,7 @@ function estimateActiveCostUsd(active: Session): number {
   return 0;
 }
 
-const TAB_CONTENT_SHIFT_Y = 13;
+const TAB_CONTENT_SHIFT_Y = 8;
 const ACTIVE_BANNER_STACK_HEIGHT = 50;
 const ACTIVE_BANNER_TO_TAB_GAP = 8;
 
@@ -62,6 +62,7 @@ function FloatingTabBar({
           shadowRadius: 12,
           shadowOffset: { width: 0, height: 6 },
           elevation: 10,
+          maxHeight: 72,
         }}
       >
         <BottomTabBar
@@ -69,9 +70,8 @@ function FloatingTabBar({
           style={{
             borderTopWidth: 0,
             backgroundColor: 'transparent',
-            paddingTop: 8,
-            paddingBottom: Math.max(safeAreaBottom, 4),
-            minHeight: 56 + Math.max(safeAreaBottom, 6),
+            paddingTop: 2,
+            paddingBottom: 6,
           }}
         />
       </View>
