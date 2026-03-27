@@ -2,7 +2,11 @@ import { prisma, parseSmartChargingSchedule, resolveEffectiveSmartChargingLimit,
 import { remoteClearChargingProfile, remoteSetChargingProfile, remoteGetCompositeSchedule } from './remote';
 import { clientRegistry } from './clientRegistry';
 
-const STACKING_ENABLED = process.env.SMART_CHARGING_STACKING === 'true';
+// Stacking ON by default — set SMART_CHARGING_STACKING=false to force legacy mode globally
+const STACKING_ENABLED = process.env.SMART_CHARGING_STACKING !== 'false';
+
+// Chargers that reject stacked profiles get added here at runtime (cleared on restart)
+const stackingUnsupportedChargers = new Set<string>();
 
 const SAFE_LIMIT_KW = Number(process.env.SMART_CHARGING_SAFE_LIMIT_KW ?? '7.2') || 7.2;
 const STACK_LEVEL = Number.parseInt(process.env.SMART_CHARGING_STACK_LEVEL ?? '50', 10) || 50;
@@ -154,8 +158,11 @@ function buildConstantPayload(limitKw: number, profile?: SmartChargingProfileLik
 }
 
 export async function applySmartChargingForCharger(chargerId: string, trigger: string): Promise<void> {
-  if (STACKING_ENABLED) {
+  if (STACKING_ENABLED && !stackingUnsupportedChargers.has(chargerId)) {
     return applySmartChargingStacked(chargerId, trigger);
+  }
+  if (stackingUnsupportedChargers.has(chargerId)) {
+    console.log(`[SmartCharging] ${chargerId} flagged as stacking-unsupported — using legacy flow`);
   }
   return applySmartChargingLegacy(chargerId, trigger);
 }
@@ -251,6 +258,11 @@ async function applySmartChargingStacked(chargerId: string, trigger: string): Pr
         if (ocppStatus === 'Accepted') {
           status = 'APPLIED';
           lastAppliedAt = now;
+        } else if (ocppStatus === 'NotSupported') {
+          // Charger doesn't support stacking — flag it and fallback to legacy
+          stackingUnsupportedChargers.add(chargerId);
+          console.warn(`[SmartCharging:Stacked] ${charger.ocppId} returned NotSupported — flagging for legacy fallback`);
+          return applySmartChargingLegacy(chargerId, trigger);
         } else {
           status = 'ERROR';
           lastError = `SetChargingProfile rejected (${ocppStatus})`;
