@@ -112,9 +112,11 @@ export default function MapScreen() {
     placeholderData: (prev) => prev,
   });
 
-  const activeBannerOffset = activeSession ? 58 + Math.max(insets.bottom, 8) : 0;
+  const activeBannerOffset = activeSession ? 50 + 8 + Math.max(insets.bottom, 8) : 0;
   const floatingTabBarBottom = activeBannerOffset + Math.max(insets.bottom, 8);
-  const controlsBottom = floatingTabBarBottom + tabBarHeight + 12;
+  const floatingTabBarVisualHeight = 72;
+  const controlsGapAboveTabBar = 10;
+  const controlsBottom = floatingTabBarBottom + floatingTabBarVisualHeight + controlsGapAboveTabBar;
   const locateButtonBottom = controlsBottom + 56;
 
   useEffect(() => {

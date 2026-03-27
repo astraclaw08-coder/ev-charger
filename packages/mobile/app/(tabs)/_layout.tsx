@@ -29,6 +29,8 @@ function estimateActiveCostUsd(active: Session): number {
 }
 
 const TAB_CONTENT_SHIFT_Y = 13;
+const ACTIVE_BANNER_STACK_HEIGHT = 50;
+const ACTIVE_BANNER_TO_TAB_GAP = 8;
 
 function FloatingTabBar({
   isDark,
@@ -43,7 +45,9 @@ function FloatingTabBar({
         position: 'absolute',
         left: 12,
         right: 12,
-        bottom: bannerVisible ? 58 + Math.max(safeAreaBottom, 8) : Math.max(safeAreaBottom, 8),
+        bottom: bannerVisible
+          ? ACTIVE_BANNER_STACK_HEIGHT + ACTIVE_BANNER_TO_TAB_GAP + Math.max(safeAreaBottom, 8)
+          : Math.max(safeAreaBottom, 8),
       }}
     >
       <View
