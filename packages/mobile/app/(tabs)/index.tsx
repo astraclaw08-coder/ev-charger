@@ -113,24 +113,20 @@ export default function MapScreen() {
   });
 
   // ── Map-control positioning ──────────────────────────────────────────
-  // Must mirror FloatingTabBar layout from _layout.tsx:
-  //   tab bar minHeight = 56 + Math.max(safeAreaBottom, 6)
-  //   + paddingTop 8 + outer container border/radius
-  // FloatingTabBar bottom = bannerVisible
-  //   ? BANNER_H(50) + BANNER_GAP(8) + Math.max(safeAreaBottom, 8)
-  //   : Math.max(safeAreaBottom, 8)
+  // Matches FloatingTabBar layout from _layout.tsx. TAB_CONTENT_OFFSET (88)
+  // is the exact distance from tabBarBottom to search bar bottom in the RC
+  // active-session layout — reused for both states so the gap is identical.
   const BANNER_H = 50;
   const BANNER_GAP = 8;
-  const TAB_BAR_RENDERED_HEIGHT = 56 + Math.max(insets.bottom, 6) + 8; // minHeight + paddingTop
-  const CONTROL_GAP = 12;
-  const SEARCH_BAR_HEIGHT = 46;
+  const TAB_CONTENT_OFFSET = 88;  // RC-verified: tabBar container bottom → search bar bottom
+  const SEARCH_TO_LOCATE = 56;
 
   const tabBarBottom = activeSession
     ? BANNER_H + BANNER_GAP + Math.max(insets.bottom, 8)
     : Math.max(insets.bottom, 8);
 
-  const controlsBottom = tabBarBottom + TAB_BAR_RENDERED_HEIGHT + CONTROL_GAP;
-  const locateButtonBottom = controlsBottom + SEARCH_BAR_HEIGHT + CONTROL_GAP;
+  const controlsBottom = tabBarBottom + TAB_CONTENT_OFFSET;
+  const locateButtonBottom = controlsBottom + SEARCH_TO_LOCATE;
 
   useEffect(() => {
     (async () => {
