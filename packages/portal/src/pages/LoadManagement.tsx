@@ -178,7 +178,7 @@ function ActiveLimitsSection({
 
               {/* Expanded detail */}
               {isExpanded && (
-                <div className="bg-gray-50/50 dark:bg-slate-800/40 px-5 pb-4">
+                <div className="bg-white dark:bg-slate-800/40 px-5 pb-4 border-t border-gray-100 dark:border-slate-700">
                   {/* Profile rows */}
                   <table className="w-full text-sm mt-1">
                     <thead>
