@@ -115,7 +115,7 @@ export default function MapScreen() {
   const activeBannerOffset = activeSession ? 50 + 8 + Math.max(insets.bottom, 8) : 0;
   const floatingTabBarBottom = activeBannerOffset + Math.max(insets.bottom, 8);
   const floatingTabBarVisualHeight = 72;
-  const controlsGapAboveTabBar = 10;
+  const controlsGapAboveTabBar = activeSession ? -18 : 10;
   const controlsBottom = floatingTabBarBottom + floatingTabBarVisualHeight + controlsGapAboveTabBar;
   const locateButtonBottom = controlsBottom + 56;
 
