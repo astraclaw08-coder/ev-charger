@@ -113,7 +113,9 @@ export default function MapScreen() {
   });
 
   const activeBannerOffset = activeSession ? 58 + Math.max(insets.bottom, 8) : 0;
-  const controlsBottom = tabBarHeight + activeBannerOffset + 44;
+  const floatingTabBarBottom = activeBannerOffset + Math.max(insets.bottom, 8);
+  const controlsBottom = floatingTabBarBottom + tabBarHeight + 12;
+  const locateButtonBottom = controlsBottom + 56;
 
   useEffect(() => {
     (async () => {
@@ -427,7 +429,7 @@ export default function MapScreen() {
           })}
         </MapView>
 
-        <View pointerEvents="box-none" style={[styles.mapControls, { bottom: controlsBottom + 72 }]}> 
+        <View pointerEvents="box-none" style={[styles.mapControls, { bottom: locateButtonBottom }]}> 
           <TouchableOpacity
             style={[
               styles.locateBtn,
