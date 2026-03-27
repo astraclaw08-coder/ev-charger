@@ -118,7 +118,7 @@ export default function MapScreen() {
   // active-session layout — reused for both states so the gap is identical.
   const BANNER_H = 50;
   const BANNER_GAP = 8;
-  const TAB_CONTENT_OFFSET = 80;  // nav bar height(~81) + small gap, proportional to 10% shrink
+  const TAB_CONTENT_OFFSET = 82;  // nav bar maxHeight(72) + 10px gap
   const SEARCH_TO_LOCATE = 56;
 
   const tabBarBottom = activeSession
