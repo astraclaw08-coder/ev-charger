@@ -376,6 +376,7 @@ export default function ChargerStartScreen() {
   const [countdownText, setCountdownText] = useState('02:00');
   const [activationTimedOut, setActivationTimedOut] = useState(false);
   const [activationModalDismissed, setActivationModalDismissed] = useState(false);
+  const [awaitingPlugIn, setAwaitingPlugIn] = useState(false);
   const activationPollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activationModalDismissedRef = useRef(false);
 
@@ -389,6 +390,7 @@ export default function ChargerStartScreen() {
     setActivationDeadlineMs(null);
     setActivationTimedOut(false);
     setActivationModalDismissed(false);
+    setAwaitingPlugIn(false);
   }, [isFlowing]);
 
   // Reset activation state when charger returns to Available with no active session
@@ -419,9 +421,15 @@ export default function ChargerStartScreen() {
   useEffect(() => {
     if (activeSession) return;
     if (selectedConnector?.status === 'AVAILABLE') {
+      if (activationPollRef.current) {
+        clearTimeout(activationPollRef.current);
+        activationPollRef.current = null;
+      }
       setActivationTimedOut(false);
       setShowActivationModal(false);
       setActivationDeadlineMs(null);
+      setActivationModalDismissed(false);
+      setAwaitingPlugIn(false);
     }
   }, [activeSession, selectedConnector?.status]);
 
@@ -487,6 +495,7 @@ export default function ChargerStartScreen() {
       setCountdownText('02:00');
       setActivationTimedOut(false);
       setActivationModalDismissed(false);
+      setAwaitingPlugIn(true);
       setStartError(null);
       setStarting(connectorId);
     },
@@ -524,12 +533,24 @@ export default function ChargerStartScreen() {
           const connector = freshCharger.connectors.find((c) => c.connectorId === variables.connectorId);
           const connectorIsCharging = connector?.status === 'CHARGING';
           const isPreparingWithoutCharging = connector?.status === 'PREPARING' || connector?.status === 'SUSPENDED_EV';
+          const connectorIsAvailable = connector?.status === 'AVAILABLE';
 
           if (connectorIsCharging) {
             setShowActivationModal(false);
             setActivationDeadlineMs(null);
             setActivationTimedOut(false);
             setActivationModalDismissed(false);
+            setAwaitingPlugIn(false);
+            return;
+          }
+
+          // Charger returned to AVAILABLE — no vehicle plugged in; clean up
+          if (connectorIsAvailable && Date.now() - startedAt >= 3000) {
+            setShowActivationModal(false);
+            setActivationDeadlineMs(null);
+            setActivationTimedOut(false);
+            setActivationModalDismissed(false);
+            setAwaitingPlugIn(false);
             return;
           }
 
@@ -545,6 +566,7 @@ export default function ChargerStartScreen() {
             setShowActivationModal(false);
             setActivationDeadlineMs(null);
             setActivationTimedOut(true);
+            setAwaitingPlugIn(false);
             return;
           }
 
@@ -570,6 +592,7 @@ export default function ChargerStartScreen() {
       setShowActivationModal(false);
       setActivationDeadlineMs(null);
       setActivationTimedOut(false);
+      setAwaitingPlugIn(false);
       const message = err.message || 'Unable to start charging right now.';
       setStartError(message);
 
@@ -675,9 +698,9 @@ export default function ChargerStartScreen() {
   // When the connector is back to AVAILABLE with no active session, always show
   // the idle/available state — never stay in awaitingPlug after a timeout.
   const haloMode: 'available' | 'charging' | 'faulted' | 'idle' | 'awaitingPlug' =
-    statusRaw === 'AVAILABLE' && !activeSession
+    statusRaw === 'AVAILABLE' && !activeSession && !awaitingPlugIn
       ? 'available'
-      : (showActivationModal || activationTimedOut)
+      : awaitingPlugIn
         ? 'awaitingPlug'
         : statusRaw === 'FAULTED' || statusRaw === 'UNAVAILABLE'
           ? 'faulted'
@@ -688,8 +711,8 @@ export default function ChargerStartScreen() {
               : 'available';
   const sliderLabel = activeSession
     ? 'Slide to stop'
-    : showActivationModal
-      ? 'Plug in to charge'
+    : awaitingPlugIn
+      ? 'Plug in to start'
       : 'Slide to charge';
   const paymentLabel = profile?.paymentProfile?.trim() || '';
   const hasPaymentMethod = Boolean(paymentLabel);
