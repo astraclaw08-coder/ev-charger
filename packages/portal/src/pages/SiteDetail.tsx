@@ -7,6 +7,7 @@ import { useToken } from '../auth/TokenContext';
 import ChargerMap from '../components/ChargerMap';
 import StatusBadge from '../components/StatusBadge';
 import AddChargerDialog from '../components/AddChargerDialog';
+import AddressAutocomplete from '../components/AddressAutocomplete';
 import { formatDate } from '../lib/utils';
 import { usePortalTheme } from '../theme/ThemeContext';
 
@@ -342,6 +343,7 @@ export default function SiteDetail() {
   const [showAddCharger, setShowAddCharger] = useState(false);
   const [showEditSite, setShowEditSite] = useState(false);
   const [editSiteForm, setEditSiteForm] = useState({ name: '', address: '', lat: '', lng: '', organizationName: '', portfolioName: '' });
+  const [editCoordsAutoFilled, setEditCoordsAutoFilled] = useState(false);
   const [chargerUptime, setChargerUptime] = useState<Record<string, ChargerUptime>>({});
   const [siteUptime, setSiteUptime] = useState<SiteUptime | null>(null);
   const [siteAnalytics, setSiteAnalytics] = useState<SiteAnalytics | null>(null);
@@ -567,13 +569,30 @@ export default function SiteDetail() {
               <input className="mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5" value={editSiteForm.name} onChange={(e) => setEditSiteForm((f) => ({ ...f, name: e.target.value }))} />
             </label>
             <label className="text-sm text-gray-700 dark:text-slate-300">Address
-              <input className="mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5" value={editSiteForm.address} onChange={(e) => setEditSiteForm((f) => ({ ...f, address: e.target.value }))} />
+              <div className="mt-1">
+                <AddressAutocomplete
+                  value={editSiteForm.address}
+                  className="w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5"
+                  placeholder="Start typing an address…"
+                  onRawChange={(v) => {
+                    setEditSiteForm((f) => ({ ...f, address: v }));
+                    if (editCoordsAutoFilled) {
+                      setEditCoordsAutoFilled(false);
+                      setEditSiteForm((f) => ({ ...f, lat: '', lng: '' }));
+                    }
+                  }}
+                  onChange={(address, lat, lng) => {
+                    setEditSiteForm((f) => ({ ...f, address, lat: String(lat), lng: String(lng) }));
+                    setEditCoordsAutoFilled(true);
+                  }}
+                />
+              </div>
             </label>
             <label className="text-sm text-gray-700 dark:text-slate-300">Latitude
-              <input type="number" step="0.000001" className="mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5" value={editSiteForm.lat} onChange={(e) => setEditSiteForm((f) => ({ ...f, lat: e.target.value }))} />
+              <input type="number" step="0.000001" className="mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5" value={editSiteForm.lat} readOnly={editCoordsAutoFilled} onChange={(e) => setEditSiteForm((f) => ({ ...f, lat: e.target.value }))} />
             </label>
             <label className="text-sm text-gray-700 dark:text-slate-300">Longitude
-              <input type="number" step="0.000001" className="mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5" value={editSiteForm.lng} onChange={(e) => setEditSiteForm((f) => ({ ...f, lng: e.target.value }))} />
+              <input type="number" step="0.000001" className="mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5" value={editSiteForm.lng} readOnly={editCoordsAutoFilled} onChange={(e) => setEditSiteForm((f) => ({ ...f, lng: e.target.value }))} />
             </label>
             <label className="text-sm text-gray-700 dark:text-slate-300">Organization
               <input className="mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5" value={editSiteForm.organizationName} onChange={(e) => setEditSiteForm((f) => ({ ...f, organizationName: e.target.value }))} />

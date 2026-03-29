@@ -17,6 +17,7 @@ import { Link } from 'react-router-dom';
 import { createApiClient, type SiteListItem } from '../api/client';
 import { useToken } from '../auth/TokenContext';
 import { shortId } from '../lib/shortId';
+import AddressAutocomplete from '../components/AddressAutocomplete';
 
 export default function Sites() {
   const getToken = useToken();
@@ -29,6 +30,7 @@ export default function Sites() {
   const [createLoading, setCreateLoading] = useState(false);
   const [createMsg, setCreateMsg] = useState('');
   const [form, setForm] = useState<CreateSiteForm>(EMPTY_FORM);
+  const [coordsAutoFilled, setCoordsAutoFilled] = useState(false);
   const [query, setQuery] = useState('');
 
   async function loadSites() {
@@ -199,23 +201,35 @@ export default function Sites() {
                 value={form.name}
                 onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
               />
-              <input
-                className="w-full rounded-md border border-gray-300 dark:border-slate-600 px-3 py-2 text-sm"
-                placeholder="Address"
+              <AddressAutocomplete
                 value={form.address}
-                onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
+                className="w-full rounded-md border border-gray-300 dark:border-slate-600 px-3 py-2 text-sm"
+                placeholder="Start typing an address…"
+                onRawChange={(v) => {
+                  setForm((f) => ({ ...f, address: v }));
+                  if (coordsAutoFilled) {
+                    setCoordsAutoFilled(false);
+                    setForm((f) => ({ ...f, lat: '', lng: '' }));
+                  }
+                }}
+                onChange={(address, lat, lng) => {
+                  setForm((f) => ({ ...f, address, lat: String(lat), lng: String(lng) }));
+                  setCoordsAutoFilled(true);
+                }}
               />
               <div className="grid grid-cols-2 gap-3">
                 <input
                   className="w-full rounded-md border border-gray-300 dark:border-slate-600 px-3 py-2 text-sm"
                   placeholder="Latitude"
                   value={form.lat}
+                  readOnly={coordsAutoFilled}
                   onChange={(e) => setForm((f) => ({ ...f, lat: e.target.value }))}
                 />
                 <input
                   className="w-full rounded-md border border-gray-300 dark:border-slate-600 px-3 py-2 text-sm"
                   placeholder="Longitude"
                   value={form.lng}
+                  readOnly={coordsAutoFilled}
                   onChange={(e) => setForm((f) => ({ ...f, lng: e.target.value }))}
                 />
               </div>

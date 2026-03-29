@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,9 @@ import {
   Alert,
   Modal,
   Pressable,
+  Platform,
 } from 'react-native';
+import { GooglePlacesAutocomplete, type GooglePlacesAutocompleteRef } from 'react-native-google-places-autocomplete';
 import { useRouter } from 'expo-router';
 import Constants from 'expo-constants';
 import { Ionicons } from '@expo/vector-icons';
@@ -48,6 +50,7 @@ const EMPTY: DriverProfile = {
 const expoVersion = Constants.expoConfig?.version || '1.0.0';
 const safeEnvLabel = typeof envLabel === 'string' && envLabel.trim().length > 0 ? envLabel : 'DEV';
 const mobileVersion = `${expoVersion} (${safeEnvLabel.toLowerCase()})`;
+const GOOGLE_PLACES_KEY = process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY ?? '';
 
 export default function ProfileScreen() {
   const { isDark, setMode } = useAppTheme();
@@ -59,6 +62,7 @@ export default function ProfileScreen() {
   const queryClient = useQueryClient();
   const { isGuest, signOut } = useAppAuth();
   const { unreadCount } = useChargingNotifications();
+  const placesRef = useRef<GooglePlacesAutocompleteRef | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ['me-profile'],
@@ -68,17 +72,21 @@ export default function ProfileScreen() {
 
   React.useEffect(() => {
     if (!data) return;
+    const addr = data.homeSiteAddress ?? data.homeAddress ?? '';
     setProfile({
       name: data.name ?? '',
       email: data.email ?? '',
       phone: data.phone ?? '',
       homeAddress: data.homeAddress ?? '',
-      homeSiteAddress: data.homeSiteAddress ?? data.homeAddress ?? '',
+      homeSiteAddress: addr,
       homeCity: data.homeCity ?? '',
       homeState: data.homeState ?? '',
       homeZipCode: data.homeZipCode ?? '',
       paymentProfile: data.paymentProfile ?? '',
     });
+    if (placesRef.current && addr) {
+      placesRef.current.setAddressText(addr);
+    }
   }, [data]);
 
   const hasProfileChanges = useMemo(() => {
@@ -231,7 +239,95 @@ export default function ProfileScreen() {
       <Field label="Name" value={profile.name} onChangeText={(v) => set('name', v)} isDark={isDark} autoCapitalize="words" />
       <Field label="Email" value={profile.email} onChangeText={(v) => set('email', v)} isDark={isDark} keyboardType="email-address" autoCapitalize="none" />
       <Field label="Phone" value={profile.phone} onChangeText={(v) => set('phone', v)} isDark={isDark} keyboardType="phone-pad" />
-      <Field label="Site Address" value={profile.homeSiteAddress} onChangeText={(v) => set('homeSiteAddress', v)} isDark={isDark} />
+      <View style={styles.fieldWrap}>
+        <Text style={[styles.label, { color: isDark ? '#d1d5db' : '#374151' }]}>Site Address</Text>
+        {GOOGLE_PLACES_KEY ? (
+          <GooglePlacesAutocomplete
+            ref={placesRef}
+            placeholder="Start typing an address…"
+            textInputProps={{
+              value: profile.homeSiteAddress,
+              onChangeText: (v: string) => set('homeSiteAddress', v),
+              placeholderTextColor: isDark ? '#6b7280' : '#9ca3af',
+            }}
+            onPress={(_data, detail) => {
+              if (!detail?.geometry?.location) return;
+              const formatted = detail.formatted_address ?? _data.description ?? '';
+              set('homeSiteAddress', formatted);
+              // Extract structured components
+              const get = (type: string, short = false) => {
+                const c = detail.address_components?.find((ac: any) => ac.types.includes(type));
+                return c ? (short ? c.short_name : c.long_name) : '';
+              };
+              const city = get('locality') || get('sublocality') || get('administrative_area_level_2');
+              const state = get('administrative_area_level_1', true);
+              const zip = get('postal_code');
+              if (city) set('homeCity', city);
+              if (state) set('homeState', state);
+              if (zip) set('homeZipCode', zip);
+            }}
+            query={{ key: GOOGLE_PLACES_KEY, language: 'en', types: 'address' }}
+            fetchDetails
+            enablePoweredByContainer={false}
+            debounce={300}
+            styles={{
+              container: { flex: 0, zIndex: 10 },
+              textInputContainer: { backgroundColor: 'transparent' },
+              textInput: {
+                backgroundColor: isDark ? '#111827' : '#ffffff',
+                borderColor: isDark ? '#374151' : '#d1d5db',
+                borderWidth: 1,
+                borderRadius: 12,
+                paddingHorizontal: 12,
+                paddingVertical: 10,
+                fontSize: 15,
+                color: isDark ? '#f9fafb' : '#111827',
+              },
+              listView: {
+                backgroundColor: isDark ? '#1f2937' : '#ffffff',
+                borderRadius: 8,
+                borderWidth: 1,
+                borderColor: isDark ? '#374151' : '#d1d5db',
+                marginTop: 4,
+                ...(Platform.OS === 'ios' ? {
+                  shadowColor: '#000',
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.1,
+                  shadowRadius: 4,
+                } : { elevation: 4 }),
+              },
+              row: {
+                backgroundColor: isDark ? '#1f2937' : '#ffffff',
+                paddingVertical: 10,
+                paddingHorizontal: 12,
+              },
+              description: {
+                color: isDark ? '#f9fafb' : '#111827',
+                fontSize: 14,
+              },
+              separator: {
+                backgroundColor: isDark ? '#374151' : '#e5e7eb',
+                height: StyleSheet.hairlineWidth,
+              },
+            }}
+          />
+        ) : (
+          <TextInput
+            value={profile.homeSiteAddress}
+            onChangeText={(v) => set('homeSiteAddress', v)}
+            placeholder="Site Address"
+            placeholderTextColor={isDark ? '#6b7280' : '#9ca3af'}
+            style={[
+              styles.input,
+              {
+                backgroundColor: isDark ? '#111827' : '#ffffff',
+                borderColor: isDark ? '#374151' : '#d1d5db',
+                color: isDark ? '#f9fafb' : '#111827',
+              },
+            ]}
+          />
+        )}
+      </View>
       <Field label="City" value={profile.homeCity} onChangeText={(v) => set('homeCity', v)} isDark={isDark} autoCapitalize="words" />
       <View style={styles.row}>
         <View style={styles.stateItem}>
