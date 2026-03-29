@@ -67,6 +67,9 @@ export interface SiteDetail {
   touWindows?: unknown;
   organizationName?: string | null;
   portfolioName?: string | null;
+  maxChargeDurationMin?: number | null;
+  maxIdleDurationMin?: number | null;
+  maxSessionCostUsd?: number | null;
   createdAt: string;
   chargers: ChargerInfo[];
 }
@@ -678,6 +681,9 @@ export function createApiClient(token: string | null | undefined) {
         touWindows?: unknown;
         organizationName?: string;
         portfolioName?: string;
+        maxChargeDurationMin?: number | null;
+        maxIdleDurationMin?: number | null;
+        maxSessionCostUsd?: number | null;
       },
     ) =>
       request<SiteDetail>(`/sites/${id}`, token, {

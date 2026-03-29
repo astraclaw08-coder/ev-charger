@@ -363,6 +363,15 @@ export default function SiteDetail() {
 
   const [auditEvents, setAuditEvents] = useState<SiteAuditEvent[]>([]);
 
+  // Session safety limits
+  const [safetyLimits, setSafetyLimits] = useState<{
+    maxChargeDurationMin: string;
+    maxIdleDurationMin: string;
+    maxSessionCostUsd: string;
+  }>({ maxChargeDurationMin: '', maxIdleDurationMin: '', maxSessionCostUsd: '' });
+  const [savedSafetyLimits, setSavedSafetyLimits] = useState<typeof safetyLimits | null>(null);
+  const [safetyMsg, setSafetyMsg] = useState('');
+
   const hasTariffEdits = !savedTariff || tariffFingerprint(tariff) !== tariffFingerprint(savedTariff);
 
   const load = useCallback(async () => {
@@ -386,6 +395,13 @@ export default function SiteDetail() {
         organizationName: data.organizationName ?? '',
         portfolioName: data.portfolioName ?? '',
       });
+      const loadedSafety = {
+        maxChargeDurationMin: data.maxChargeDurationMin != null ? String(data.maxChargeDurationMin) : '',
+        maxIdleDurationMin: data.maxIdleDurationMin != null ? String(data.maxIdleDurationMin) : '',
+        maxSessionCostUsd: data.maxSessionCostUsd != null ? String(data.maxSessionCostUsd) : '',
+      };
+      setSafetyLimits(loadedSafety);
+      setSavedSafetyLimits(loadedSafety);
       const loadedWindows: TouWindow[] = Array.isArray(data.touWindows)
         ? (data.touWindows as Array<Partial<TouWindow>>).map((w) => ({
             id: typeof w.id === 'string' && w.id.length > 0 ? w.id : crypto.randomUUID(),
@@ -1113,6 +1129,105 @@ export default function SiteDetail() {
           <div className="rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 text-center"><p className="text-xs text-gray-500 dark:text-slate-400">Total chargers</p><p className="mt-1 text-lg font-semibold text-gray-900 dark:text-slate-100">{site.chargers.length}</p></div>
         </div>
       )}
+
+      {/* ── Session Safety Limits ── */}
+      <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-5">
+        <h2 className="text-sm font-semibold text-gray-700 dark:text-slate-300">Session Safety Limits</h2>
+        <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">Auto-stop sessions when limits are reached. Leave blank for no limit.</p>
+        <div className="mt-4 grid gap-4 sm:grid-cols-3">
+          <label className="text-sm text-gray-700 dark:text-slate-300">
+            Max charge duration
+            <div className="relative mt-1">
+              <input
+                type="number"
+                min="1"
+                step="1"
+                placeholder="No limit"
+                className="w-full rounded-md border border-gray-300 dark:border-slate-600 px-3 py-1.5 pr-14 text-sm"
+                value={safetyLimits.maxChargeDurationMin}
+                onChange={(e) => setSafetyLimits({ ...safetyLimits, maxChargeDurationMin: e.target.value })}
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">min</span>
+            </div>
+          </label>
+          <label className="text-sm text-gray-700 dark:text-slate-300">
+            Max idle duration
+            <div className="relative mt-1">
+              <input
+                type="number"
+                min="1"
+                step="1"
+                placeholder="No limit"
+                className="w-full rounded-md border border-gray-300 dark:border-slate-600 px-3 py-1.5 pr-14 text-sm"
+                value={safetyLimits.maxIdleDurationMin}
+                onChange={(e) => setSafetyLimits({ ...safetyLimits, maxIdleDurationMin: e.target.value })}
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">min</span>
+            </div>
+          </label>
+          <label className="text-sm text-gray-700 dark:text-slate-300">
+            Max session cost
+            <div className="relative mt-1">
+              <input
+                type="number"
+                min="0.01"
+                step="0.01"
+                placeholder="No limit"
+                className="w-full rounded-md border border-gray-300 dark:border-slate-600 px-3 py-1.5 pl-7 text-sm"
+                value={safetyLimits.maxSessionCostUsd}
+                onChange={(e) => setSafetyLimits({ ...safetyLimits, maxSessionCostUsd: e.target.value })}
+              />
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">$</span>
+            </div>
+          </label>
+        </div>
+        {(safetyLimits.maxChargeDurationMin !== (savedSafetyLimits?.maxChargeDurationMin ?? '') ||
+          safetyLimits.maxIdleDurationMin !== (savedSafetyLimits?.maxIdleDurationMin ?? '') ||
+          safetyLimits.maxSessionCostUsd !== (savedSafetyLimits?.maxSessionCostUsd ?? '')) && (
+          <div className="mt-4 flex items-center gap-3">
+            <button
+              className="rounded-md bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+              onClick={async () => {
+                setSafetyMsg('');
+                try {
+                  const token = await getToken();
+                  const client = createApiClient(token);
+                  await client.updateSite(site.id, {
+                    name: site.name,
+                    address: site.address,
+                    lat: site.lat,
+                    lng: site.lng,
+                    maxChargeDurationMin: safetyLimits.maxChargeDurationMin ? parseInt(safetyLimits.maxChargeDurationMin, 10) : null,
+                    maxIdleDurationMin: safetyLimits.maxIdleDurationMin ? parseInt(safetyLimits.maxIdleDurationMin, 10) : null,
+                    maxSessionCostUsd: safetyLimits.maxSessionCostUsd ? parseFloat(safetyLimits.maxSessionCostUsd) : null,
+                  });
+                  setSavedSafetyLimits({ ...safetyLimits });
+                  setSafetyMsg('✅ Safety limits saved');
+                } catch (err: any) {
+                  setSafetyMsg(`❌ ${err.message ?? 'Failed to save'}`);
+                }
+              }}
+            >
+              Save limits
+            </button>
+            <button
+              className="rounded-md border border-gray-300 dark:border-slate-600 px-4 py-1.5 text-sm text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800"
+              onClick={() => {
+                if (savedSafetyLimits) setSafetyLimits({ ...savedSafetyLimits });
+                setSafetyMsg('');
+              }}
+            >
+              Reset
+            </button>
+            {safetyMsg && <span className="text-xs">{safetyMsg}</span>}
+          </div>
+        )}
+        {safetyMsg && !(safetyLimits.maxChargeDurationMin !== (savedSafetyLimits?.maxChargeDurationMin ?? '') ||
+          safetyLimits.maxIdleDurationMin !== (savedSafetyLimits?.maxIdleDurationMin ?? '') ||
+          safetyLimits.maxSessionCostUsd !== (savedSafetyLimits?.maxSessionCostUsd ?? '')) && (
+          <p className="mt-3 text-xs">{safetyMsg}</p>
+        )}
+      </div>
 
       {/* ── Map ── */}
       <ChargerMap lat={site.lat} lng={site.lng} siteName={site.name} chargers={site.chargers} />

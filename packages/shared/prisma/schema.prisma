@@ -92,6 +92,10 @@ model Site {
   timeZone         String              @default("America/Los_Angeles") // IANA timezone for TOU pricing + smart charging
   organizationName String?
   portfolioName    String?
+  // Session safety limits (null = no limit)
+  maxChargeDurationMin  Int?    // Auto-stop active charging after N minutes
+  maxIdleDurationMin    Int?    // Auto-stop/disconnect after N minutes idle post-charge
+  maxSessionCostUsd     Float?  // Auto-stop when estimated session cost reaches this cap (USD)
   chargers         Charger[]
   chargerGroups    ChargerGroup[]
   chargingProfiles SmartChargingProfile[]
@@ -597,4 +601,36 @@ model ChargerModelCatalog {
 
   @@unique([scopeKey, modelCode])
   @@index([scopeKey, isActive])
+}
+
+model AuthOtpChallenge {
+  id            String    @id @default(uuid())
+  channel       String    // EMAIL or SMS
+  identifier    String    // normalized email or E.164 phone
+  codeHash      String
+  maxAttempts   Int       @default(5)
+  attemptCount  Int       @default(0)
+  issuedIp      String?
+  lastSentAt    DateTime  @default(now())
+  expiresAt     DateTime
+  consumedAt    DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([identifier, channel])
+}
+
+model AuthSession {
+  id          String    @id @default(uuid())
+  userId      String
+  tokenHash   String    @unique
+  provider    String    // otp-email, otp-sms, keycloak-password
+  issuedIp    String?
+  userAgent   String?
+  expiresAt   DateTime
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
 }

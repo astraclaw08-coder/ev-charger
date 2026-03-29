@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { startServer } from './server';
 import { attachInternalRoutes } from './internalHttp';
+import { startSessionSafetyLoop } from './sessionSafety';
 
 const PORT = parseInt(process.env.OCPP_PORT ?? '9000', 10);
 
@@ -10,6 +11,9 @@ startServer(PORT)
     // On Railway, only the declared PORT is reachable on the private network,
     // so we can't run a separate management server on a different port.
     attachInternalRoutes(httpServer);
+
+    // Start session safety enforcement loop (checks active sessions against site limits)
+    startSessionSafetyLoop();
   })
   .catch((err: Error) => {
     console.error('[Startup] Failed to start OCPP server:', err);

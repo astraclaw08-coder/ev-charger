@@ -106,6 +106,9 @@ export async function siteRoutes(app: FastifyInstance) {
       touWindows: site.touWindows,
       organizationName: site.organizationName,
       portfolioName: site.portfolioName,
+      maxChargeDurationMin: site.maxChargeDurationMin,
+      maxIdleDurationMin: site.maxIdleDurationMin,
+      maxSessionCostUsd: site.maxSessionCostUsd,
       createdAt: site.createdAt,
       chargers: site.chargers.map(({ password: _pw, ...c }: { password: string; [k: string]: unknown }) => c),
     };
@@ -215,6 +218,9 @@ export async function siteRoutes(app: FastifyInstance) {
       touWindows?: unknown;
       organizationName?: string;
       portfolioName?: string;
+      maxChargeDurationMin?: number | null;
+      maxIdleDurationMin?: number | null;
+      maxSessionCostUsd?: number | null;
     };
   }>('/sites/:id', {
     preHandler: [requireOperator, requirePolicy('site.update', { getResourceSiteId: (req) => req.params.id })],
@@ -224,7 +230,7 @@ export async function siteRoutes(app: FastifyInstance) {
       return reply.status(404).send({ error: 'Site not found' });
     }
 
-    const { name, address, lat, lng, pricingMode, pricePerKwhUsd, idleFeePerMinUsd, activationFeeUsd, gracePeriodMin, softwareVendorFeeMode, softwareVendorFeeValue, softwareFeeIncludesActivation, touWindows, organizationName, portfolioName } = req.body;
+    const { name, address, lat, lng, pricingMode, pricePerKwhUsd, idleFeePerMinUsd, activationFeeUsd, gracePeriodMin, softwareVendorFeeMode, softwareVendorFeeValue, softwareFeeIncludesActivation, touWindows, organizationName, portfolioName, maxChargeDurationMin, maxIdleDurationMin, maxSessionCostUsd } = req.body;
 
     const touValidation = touWindows !== undefined ? validateTouWindows(touWindows) : null;
     if (touValidation && !touValidation.ok) {
@@ -246,6 +252,23 @@ export async function siteRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: 'softwareFeeIncludesActivation must be boolean' });
     }
 
+    // Session safety limits validation
+    if (maxChargeDurationMin !== undefined && maxChargeDurationMin !== null) {
+      if (!Number.isInteger(maxChargeDurationMin) || maxChargeDurationMin < 1) {
+        return reply.status(400).send({ error: 'maxChargeDurationMin must be a positive integer (minutes)' });
+      }
+    }
+    if (maxIdleDurationMin !== undefined && maxIdleDurationMin !== null) {
+      if (!Number.isInteger(maxIdleDurationMin) || maxIdleDurationMin < 1) {
+        return reply.status(400).send({ error: 'maxIdleDurationMin must be a positive integer (minutes)' });
+      }
+    }
+    if (maxSessionCostUsd !== undefined && maxSessionCostUsd !== null) {
+      if (!Number.isFinite(maxSessionCostUsd) || maxSessionCostUsd <= 0) {
+        return reply.status(400).send({ error: 'maxSessionCostUsd must be a positive number (USD)' });
+      }
+    }
+
     const site = await prisma.site.update({
       where: { id: resolvedId },
       data: {
@@ -264,6 +287,9 @@ export async function siteRoutes(app: FastifyInstance) {
         ...(touValidation?.ok ? { touWindows: touValidation.windows } : {}),
         ...(organizationName !== undefined ? { organizationName } : {}),
         ...(portfolioName !== undefined ? { portfolioName } : {}),
+        ...(maxChargeDurationMin !== undefined ? { maxChargeDurationMin: maxChargeDurationMin } : {}),
+        ...(maxIdleDurationMin !== undefined ? { maxIdleDurationMin: maxIdleDurationMin } : {}),
+        ...(maxSessionCostUsd !== undefined ? { maxSessionCostUsd: maxSessionCostUsd } : {}),
       },
     });
 
