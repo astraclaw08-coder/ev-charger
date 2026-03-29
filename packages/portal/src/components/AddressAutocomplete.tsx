@@ -56,20 +56,39 @@ export default function AddressAutocomplete({ value, onChange, onRawChange, plac
   }, []);
 
   useEffect(() => {
-    const input = inputRef.current;
-    if (!input || autocompleteRef.current) return;
-    if (!window.google?.maps?.places) return;
+    function tryInit() {
+      const input = inputRef.current;
+      if (!input || autocompleteRef.current) return true; // already initialized or no input
+      if (!window.google?.maps?.places) return false; // API not loaded yet
 
-    const ac = new google.maps.places.Autocomplete(input, {
-      types: ['address'],
-      fields: ['formatted_address', 'geometry', 'address_components'],
-    });
-    ac.addListener('place_changed', handlePlaceChanged);
-    autocompleteRef.current = ac;
+      const ac = new google.maps.places.Autocomplete(input, {
+        types: ['address'],
+        fields: ['formatted_address', 'geometry', 'address_components'],
+      });
+      ac.addListener('place_changed', handlePlaceChanged);
+      autocompleteRef.current = ac;
+      return true;
+    }
+
+    // Try immediately — if API is already loaded, init right away
+    if (tryInit()) return () => {
+      if (autocompleteRef.current) {
+        google.maps.event.clearInstanceListeners(autocompleteRef.current);
+        autocompleteRef.current = null;
+      }
+    };
+
+    // API not loaded yet — poll until it is (useJsApiLoader loads it async)
+    const interval = setInterval(() => {
+      if (tryInit()) clearInterval(interval);
+    }, 200);
 
     return () => {
-      google.maps.event.clearInstanceListeners(ac);
-      autocompleteRef.current = null;
+      clearInterval(interval);
+      if (autocompleteRef.current) {
+        google.maps.event.clearInstanceListeners(autocompleteRef.current);
+        autocompleteRef.current = null;
+      }
     };
   }, [handlePlaceChanged]);
 

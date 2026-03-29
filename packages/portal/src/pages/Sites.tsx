@@ -1,4 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useJsApiLoader } from '@react-google-maps/api';
+
+const GOOGLE_MAPS_LIBRARIES: ('places')[] = ['places'];
 
 type CreateSiteForm = {
   name: string;
@@ -21,6 +24,12 @@ import AddressAutocomplete from '../components/AddressAutocomplete';
 
 export default function Sites() {
   const getToken = useToken();
+  // Ensure Google Maps JS API (with Places library) is loaded for AddressAutocomplete
+  useJsApiLoader({
+    id: 'portal-google-maps-loader',
+    googleMapsApiKey: (import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined) ?? '',
+    libraries: GOOGLE_MAPS_LIBRARIES,
+  });
   const [sites, setSites] = useState<SiteListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
