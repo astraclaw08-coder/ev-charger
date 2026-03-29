@@ -1,31 +1,56 @@
-import * as LocalAuthentication from 'expo-local-authentication';
 import * as SecureStore from 'expo-secure-store';
+import { NativeModules, Platform } from 'react-native';
 
 const BIOMETRIC_ENABLED_KEY = 'mobile.biometric.enabled.v1';
 
-/** Supported biometric types on this device */
-export async function getSupportedBiometricTypes() {
-  const types = await LocalAuthentication.supportedAuthenticationTypesAsync();
-  return types;
+// Check if the native module exists BEFORE importing expo-local-authentication.
+// On dev builds compiled before expo-local-authentication was added, the native
+// module won't exist and importing it throws a fatal error that crashes the tree.
+function hasNativeModule(): boolean {
+  return !!NativeModules.ExpoLocalAuthentication;
+}
+
+// Cache the module once loaded
+let _cachedLA: typeof import('expo-local-authentication') | null = null;
+
+function getLocalAuth(): typeof import('expo-local-authentication') | null {
+  if (_cachedLA) return _cachedLA;
+  if (!hasNativeModule()) return null;
+  try {
+    _cachedLA = require('expo-local-authentication');
+    return _cachedLA;
+  } catch {
+    return null;
+  }
 }
 
 /** Whether device has any biometric hardware enrolled */
 export async function isBiometricAvailable(): Promise<boolean> {
-  const compatible = await LocalAuthentication.hasHardwareAsync();
-  if (!compatible) return false;
-  const enrolled = await LocalAuthentication.isEnrolledAsync();
-  return enrolled;
+  const LA = getLocalAuth();
+  if (!LA) return false;
+  try {
+    const compatible = await LA.hasHardwareAsync();
+    if (!compatible) return false;
+    const enrolled = await LA.isEnrolledAsync();
+    return enrolled;
+  } catch {
+    return false;
+  }
 }
 
 /** Human-readable label for the biometric type (Face ID, Touch ID, Biometrics) */
 export async function getBiometricLabel(): Promise<string> {
-  const types = await LocalAuthentication.supportedAuthenticationTypesAsync();
-  if (types.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION)) {
-    return 'Face ID';
-  }
-  if (types.includes(LocalAuthentication.AuthenticationType.FINGERPRINT)) {
-    return 'Touch ID';
-  }
+  const LA = getLocalAuth();
+  if (!LA) return 'Biometrics';
+  try {
+    const types = await LA.supportedAuthenticationTypesAsync();
+    if (types.includes(LA.AuthenticationType.FACIAL_RECOGNITION)) {
+      return 'Face ID';
+    }
+    if (types.includes(LA.AuthenticationType.FINGERPRINT)) {
+      return 'Touch ID';
+    }
+  } catch {}
   return 'Biometrics';
 }
 
@@ -33,11 +58,13 @@ export async function getBiometricLabel(): Promise<string> {
 export async function authenticateWithBiometrics(
   promptMessage?: string,
 ): Promise<{ success: boolean; error?: string }> {
+  const LA = getLocalAuth();
+  if (!LA) return { success: false, error: 'Biometrics not available' };
   try {
-    const result = await LocalAuthentication.authenticateAsync({
+    const result = await LA.authenticateAsync({
       promptMessage: promptMessage ?? 'Authenticate to sign in',
       cancelLabel: 'Cancel',
-      disableDeviceFallback: false, // allow passcode fallback
+      disableDeviceFallback: false,
       fallbackLabel: 'Use Passcode',
     });
     if (result.success) {
