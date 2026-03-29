@@ -60,7 +60,7 @@ export default function ProfileScreen() {
   const [profile, setProfile] = useState<DriverProfile>(EMPTY);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const queryClient = useQueryClient();
-  const { isGuest, signOut } = useAppAuth();
+  const { isGuest, signOut, biometricAvailable, biometricEnabled, biometricLabel, toggleBiometric } = useAppAuth();
   const { unreadCount } = useChargingNotifications();
   const placesRef = useRef<GooglePlacesAutocompleteRef | null>(null);
 
@@ -354,6 +354,45 @@ export default function ProfileScreen() {
         <Text style={[styles.saveText, !hasProfileChanges && { color: isDark ? '#d1d5db' : '#6b7280' }]}>Save Profile</Text>
       </TouchableOpacity>
 
+      {biometricAvailable && (
+        <View style={[styles.biometricRow, { backgroundColor: isDark ? '#111827' : '#fff', borderColor: isDark ? '#374151' : '#e5e7eb' }]}>
+          <View style={styles.biometricInfo}>
+            <Ionicons
+              name={biometricLabel === 'Face ID' ? 'scan-outline' : 'finger-print-outline'}
+              size={20}
+              color={isDark ? '#f9fafb' : '#111827'}
+            />
+            <View>
+              <Text style={[styles.biometricTitle, { color: isDark ? '#f9fafb' : '#111827' }]}>
+                {biometricLabel}
+              </Text>
+              <Text style={[styles.biometricSubtitle, { color: isDark ? '#9ca3af' : '#6b7280' }]}>
+                Unlock app with {biometricLabel.toLowerCase()}
+              </Text>
+            </View>
+          </View>
+          <TouchableOpacity
+            style={[
+              styles.biometricToggle,
+              biometricEnabled
+                ? { backgroundColor: '#10b981' }
+                : { backgroundColor: isDark ? '#374151' : '#d1d5db' },
+            ]}
+            onPress={toggleBiometric}
+            accessibilityRole="switch"
+            accessibilityState={{ checked: biometricEnabled }}
+            accessibilityLabel={`${biometricLabel} unlock ${biometricEnabled ? 'enabled' : 'disabled'}`}
+          >
+            <View
+              style={[
+                styles.biometricToggleThumb,
+                biometricEnabled ? { transform: [{ translateX: 20 }] } : { transform: [{ translateX: 2 }] },
+              ]}
+            />
+          </TouchableOpacity>
+        </View>
+      )}
+
       <TouchableOpacity
         style={[
           styles.logoutBtn,
@@ -492,6 +531,35 @@ const styles = StyleSheet.create({
   saveText: { color: '#fff', fontWeight: '700', fontSize: 16 },
   createAccountBtn: { backgroundColor: '#111827', borderRadius: 12, marginTop: 10, paddingVertical: 14, alignItems: 'center' },
   createAccountText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+  biometricRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 14,
+    marginTop: 16,
+  },
+  biometricInfo: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
+  biometricTitle: { fontSize: 15, fontWeight: '600' },
+  biometricSubtitle: { fontSize: 12, marginTop: 2 },
+  biometricToggle: {
+    width: 44,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: 'center',
+  },
+  biometricToggleThumb: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#fff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.15,
+    shadowRadius: 2,
+    elevation: 2,
+  },
   logoutBtn: { backgroundColor: '#991b1b', borderRadius: 12, marginTop: 12, paddingVertical: 14, alignItems: 'center' },
   logoutText: { color: '#fff', fontWeight: '700', fontSize: 16 },
   modalBackdrop: {
