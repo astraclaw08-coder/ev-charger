@@ -12,6 +12,7 @@ type AppAuthContextValue = {
   continueAsGuest?: () => void;
   signIn?: () => void;
   loginWithPassword?: (username: string, password: string) => Promise<boolean>;
+  loginWithOtp?: (accessToken: string, expiresIn: number) => Promise<boolean>;
 };
 
 type PasswordSession = {
@@ -173,6 +174,27 @@ function KeycloakAuthProvider({ children }: { children: React.ReactNode }) {
     isGuest: !session?.accessToken,
     loading,
     error,
+    loginWithOtp: async (accessToken: string, expiresIn: number) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const next: PasswordSession = {
+          accessToken,
+          expiresAtMs: Date.now() + Math.max(60, expiresIn) * 1000,
+          provider: 'keycloak-password' as const, // reuse session type — bearer token works the same
+        };
+        await persistSession(next);
+        setBearerToken(next.accessToken);
+        setGuestMode(false);
+        return true;
+      } catch (err) {
+        await clearSession();
+        setError(err instanceof Error ? err.message : 'OTP sign-in failed');
+        return false;
+      } finally {
+        setLoading(false);
+      }
+    },
     loginWithPassword: async (username: string, password: string) => {
       setLoading(true);
       setError(null);
