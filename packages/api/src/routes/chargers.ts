@@ -13,17 +13,64 @@ function hasSiteAccess(siteId: string, siteIds: string[] | undefined) {
   return siteIds.includes(siteId);
 }
 
-/** Resolve a charger by exact id OR by short prefix (first 8 chars of UUID). */
+/**
+ * Resolve a charger by exact UUID, exact ocppId/serialNumber,
+ * or partial prefix match on id/ocppId/serialNumber.
+ */
 async function resolveChargerId(param: string): Promise<string | null> {
-  if (param.length === 36 || (param.includes('-') && param.length > 12)) {
+  // 1. Exact UUID match
+  if (param.length === 36) {
     const c = await prisma.charger.findUnique({ where: { id: param }, select: { id: true } });
-    return c?.id ?? null;
+    if (c) return c.id;
   }
-  const c = await prisma.charger.findFirst({ where: { id: { startsWith: param } }, select: { id: true } });
-  return c?.id ?? null;
+
+  // 2. Exact ocppId match
+  const byOcpp = await prisma.charger.findUnique({ where: { ocppId: param }, select: { id: true } });
+  if (byOcpp) return byOcpp.id;
+
+  // 3. Exact serialNumber match
+  const bySerial = await prisma.charger.findUnique({ where: { serialNumber: param }, select: { id: true } });
+  if (bySerial) return bySerial.id;
+
+  // 4. Partial prefix match on id, ocppId, or serialNumber (case-insensitive)
+  const byPartial = await prisma.charger.findFirst({
+    where: {
+      OR: [
+        { id: { startsWith: param } },
+        { ocppId: { startsWith: param, mode: 'insensitive' } },
+        { serialNumber: { startsWith: param, mode: 'insensitive' } },
+      ],
+    },
+    select: { id: true },
+  });
+  return byPartial?.id ?? null;
 }
 
 export async function chargerRoutes(app: FastifyInstance) {
+  // GET /chargers/search?q=... — partial match on ocppId, serialNumber, or site name
+  app.get<{ Querystring: { q?: string; limit?: string } }>('/chargers/search', async (req) => {
+    const q = (req.query.q ?? '').trim();
+    const limit = Math.min(parseInt(req.query.limit ?? '10', 10) || 10, 25);
+    if (q.length < 2) return [];
+
+    const chargers = await prisma.charger.findMany({
+      where: {
+        OR: [
+          { ocppId: { contains: q, mode: 'insensitive' } },
+          { serialNumber: { contains: q, mode: 'insensitive' } },
+          { site: { name: { contains: q, mode: 'insensitive' } } },
+        ],
+      },
+      take: limit,
+      include: {
+        site: { select: { id: true, name: true, address: true } },
+        connectors: { select: { id: true, connectorId: true, status: true } },
+      },
+    });
+
+    return chargers.map(({ password: _pw, ...c }) => c);
+  });
+
   // GET /chargers — list chargers with optional bbox filter
   app.get<{
     Querystring: { minLat?: string; maxLat?: string; minLng?: string; maxLng?: string };

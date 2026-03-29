@@ -1,144 +1,102 @@
 # CLAUDE.md — ev-charger
 
 ## What It Is
-A full-stack EV charging platform using OCPP 1.6J (JSON over WebSocket).
-- **Drivers**: Mobile app to find chargers, start/stop sessions, pay
-- **Operators**: Web portal to register chargers, manage billing, view analytics
-- **Chargers**: Communicate with the backend via OCPP 1.6 WebSocket protocol
+Full-stack EV charging platform — OCPP 1.6J, mobile app (Expo/React Native), management portal (React/Vite), REST API (Fastify).
 
 ## Monorepo Structure
-
 ```
 ev-charger/
   packages/
-    shared/        # Shared TypeScript types, OCPP message schemas, utils
-    ocpp-server/   # Node.js OCPP 1.6 Central System (WebSocket server)
-    api/           # REST API — used by mobile app and portal
-    portal/        # React + Vite management dashboard (operators)
+    shared/        # Shared TS types, OCPP schemas, TOU/billing/smart-charging utils
+    ocpp-server/   # OCPP 1.6 Central System (WebSocket server, port 9000)
+    api/           # Fastify REST API (port 3001)
+    portal/        # React + Vite operator dashboard
     mobile/        # React Native + Expo driver app
-  docs/            # Architecture decisions, OCPP message flow diagrams
-  tasks/
-    todo.md        # Current sprint tasks
-    lessons.md     # Mistake log
-  docker-compose.yml
 ```
 
 ## Tech Stack
+| Layer | Tech |
+|-------|------|
+| OCPP Server | Node.js + TypeScript + `ocpp-rpc` |
+| REST API | Fastify + TypeScript |
+| Database | PostgreSQL + Prisma |
+| Auth | **Keycloak** (migrated from Clerk — no Clerk code remains) |
+| Portal | React + Vite + TailwindCSS + shadcn/ui |
+| Mobile | React Native + Expo |
+| Maps | Google Maps (iOS/Android/Web) + Mapbox (fallback) |
+| Payments | Stripe |
+| Backend hosting | Railway (auto-deploy on push) |
+| Portal hosting | Vercel (manual `vercel --prod` required) |
+| Mobile builds | Expo EAS |
 
-| Layer | Tech | Why |
-|-------|------|-----|
-| OCPP Server | Node.js + TypeScript + `ocpp-rpc` | Battle-tested OCPP-J implementation |
-| REST API | Fastify + TypeScript | Fast, schema-first, great TS support |
-| Database | PostgreSQL + Prisma | Relational data, excellent ORM |
-| Auth | Clerk | Handles mobile + web auth, webhooks |
-| Portal | React + Vite + TailwindCSS + shadcn/ui | Fast build, great component library |
-| Mobile | React Native + Expo | Cross-platform, easy OTA updates |
-| Maps | Mapbox | Free tier, React Native SDK |
-| Payments | Stripe | Industry standard, supports auth-hold billing |
-| Hosting | Railway (backend + DB) | Simple deploys, managed Postgres |
-| Mobile deploys | Expo EAS | OTA updates, easy builds |
+## Environments
 
-## OCPP 1.6 — Key Messages (MVP Scope)
+### Dev
+- API: `http://localhost:3001` | OCPP: `ws://localhost:9000/<ocppId>` | Portal: `http://localhost:5173`
+- DB: Local Postgres (docker-compose) | Auth: Keycloak realm `ev-charger`
+- Branch: `dev` | `prisma db push` OK here
 
-**Charger → Server:**
-- `BootNotification` — charger comes online, server accepts it
-- `Heartbeat` — keep-alive every 5min, server returns current time
-- `StatusNotification` — charger state changes (Available, Preparing, Charging, etc.)
-- `Authorize` — validate an idTag (driver token)
-- `StartTransaction` — charger confirms session started, gets a transactionId
-- `StopTransaction` — charger reports session ended with meter values
-- `MeterValues` — periodic energy readings during session
-
-**Server → Charger:**
-- `RemoteStartTransaction` — driver taps "Start" in app → server tells charger to start
-- `RemoteStopTransaction` — driver taps "Stop" → server tells charger to stop
-- `ChangeAvailability` — operator takes charger offline/online from portal
-- `Reset` — soft or hard reboot a charger
-
-## Data Models (Core)
-
-```
-Site → has many Chargers
-Charger → has many Connectors (1-4 ports)
-Connector → has many Sessions
-Session → has one Payment
-User (Driver) → has many Sessions
-Operator → manages Sites
-```
-
-## API Endpoints (MVP)
-
-**Public (driver app):**
-- `GET /chargers` — list chargers with status + location (with bbox filter)
-- `GET /chargers/:id` — charger detail
-- `POST /sessions/start` — remote start a session
-- `POST /sessions/:id/stop` — remote stop
-- `GET /sessions` — driver's session history
-- `POST /payments/setup-intent` — Stripe setup for saved card
-
-**Operator (portal):**
-- `POST /sites` — create a site
-- `POST /chargers` — register a charger to a site
-- `GET /sites/:id/analytics` — usage, revenue, uptime stats
-- `GET /chargers/:id/status` — real-time charger state
-- `POST /chargers/:id/reset` — reboot a charger
+### Prod
+- API: `https://api-production-26cf.up.railway.app`
+- OCPP: `wss://ocpp-server-fresh-production.up.railway.app/<ocppId>`
+- Portal: `https://portal.lumeopower.com`
+- DB: Railway managed Postgres | Auth: Keycloak realm `ev-charger-prod`
+- Branch: `main` | **Must use `prisma migrate deploy` — never `db push`**
 
 ## Quick Start
-
 ```bash
-# From project root
-npm install          # Install all workspace deps
-npm run dev          # Start all services (docker-compose + api + portal)
-npm run dev:ocpp     # Start OCPP server only
-npm run dev:portal   # Start portal only
-
-# Database
-npx prisma migrate dev     # Run migrations
-npx prisma studio          # Visual DB browser
-
-# Tests
-npm test             # Run all tests across packages
+npm install && npm run dev        # All services
+npm run dev:ocpp                  # OCPP server only
+npm run dev:portal                # Portal only
+npx prisma migrate dev            # Run migrations
+npx prisma studio                 # Visual DB browser
 ```
 
-## Environment Variables
-
-```bash
-# packages/ocpp-server/.env
-OCPP_PORT=9000
-DATABASE_URL=postgresql://...
-
-# packages/api/.env
-PORT=3001
-DATABASE_URL=postgresql://...
-CLERK_SECRET_KEY=
-STRIPE_SECRET_KEY=
-STRIPE_WEBHOOK_SECRET=
-
-# packages/portal/.env
-VITE_API_URL=http://localhost:3001
-VITE_CLERK_PUBLISHABLE_KEY=
-VITE_MAPBOX_TOKEN=
-
-# packages/mobile/.env
-EXPO_PUBLIC_API_URL=http://localhost:3001
-EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY=
-EXPO_PUBLIC_MAPBOX_TOKEN=
+## Data Models (Core)
+```
+Site → has many Chargers → has many Connectors → has many Sessions
+Session → has BillingSnapshot (TOU-aware receipt data)
+SmartChargingGroup → has many Chargers + SmartChargingProfiles
+User (Driver) → has many Sessions, Favorites
 ```
 
-## Key Constraints
+---
 
-- OCPP server and API are separate processes — communicate via DB + events (not in-process calls)
-- Never store raw card details — Stripe handles all PCI scope
-- Charger state is source of truth from OCPP messages — don't infer state from API calls
-- All OCPP message handling must be idempotent (chargers retry on no-ack)
-- Session billing: authorize a hold at start, capture at stop based on kWh metered
+## ⚠️ Hard Rules — Lessons from Production Incidents
 
-## Testing
+### OCPP Server
+1. **Boot gate:** Never send server commands until BootNotification + ≥1 Heartbeat confirmed. Real firmware disconnects on early commands.
+2. **Profiles are volatile:** `SetChargingProfile` lives in charger RAM. Always re-apply after boot (reset `smartChargingState.status` to `PENDING_OFFLINE` on BootNotification).
+3. **Scope defaults = "do nothing":** If no profile resolves for a charger, skip Clear/Set entirely. Never apply fallback to all chargers.
+4. **Orphan session cleanup:** When connector → Available/Preparing with an ACTIVE session → auto-close it. Charger disconnect doesn't guarantee StopTransaction.
+5. **Two smart-charging paths:** `ocpp-server/smartCharging.ts` (boot) and `api/lib/smartCharging.ts` (HTTP). Fix both or you fix neither.
+6. **Single process per port:** After restart, verify only one process on port 9000. Stale `dist/` processes serve old code.
+7. **WSS URL = `wss://host/<ocppId>`:** Exactly one path segment. No double-identity.
 
-```bash
-npm test                    # Unit tests
-npm run test:ocpp-sim       # Runs a simulated charger against local OCPP server
-npm run test:e2e            # End-to-end API tests
-```
+### Timezone / Billing
+8. **TOU must use site timezone:** `resolveTouRateAt()` needs `timeZone` param. Without it, PDT sessions evaluate at wrong UTC offset.
+9. **`isWindowActive()` in `shared/src/smartCharging.ts` uses UTC:** Needs timezone-aware fix (like `touPricing.ts` `localDayMinute` pattern).
+10. **Midnight = `"00:00"` not `"23:59"`:** Legacy values cause 1-min billing gaps.
 
-Always run `npm run test:ocpp-sim` after any OCPP server changes to validate message handling.
+### Mobile / Expo
+11. **Xcode ignores `.env`:** Build vars must be in `project.pbxproj` build settings. Empty Google Maps key → SIGABRT.
+12. **Dev key ≠ Prod key:** RC builds must use prod Google Maps API key.
+13. **React singleton:** Root `node_modules/react` must symlink → mobile's React. Duplicate = hook crashes.
+14. **Safe area ≠ visual height:** Don't use `tabBarHeight` for control positioning — use measured visual constants.
+
+### Database
+15. **Never `db push` in prod.** Generate migration in dev → commit → `prisma migrate deploy` in prod.
+16. **Schema drift check in CI.** Prevents deploying code referencing missing tables.
+
+### Deploy
+17. **Vercel does NOT auto-deploy.** After `main` merge: `cd packages/portal && vercel --prod --yes`.
+18. **Check endpoints post-deploy:** API `/health`, OCPP `/health`, OCPP `/status`.
+19. **Prod portal changes require PR.** No direct deploys from dev branch.
+
+### Auth (Keycloak)
+20. **Dev realm `ev-charger` / Prod realm `ev-charger-prod`.** Same env var names, different values.
+21. **`assertKeycloakConfig()` validates on startup.** No legacy Clerk aliases.
+
+### General
+22. **Verify full chain with curl before telling user to retry.**
+23. **QC gate mandatory:** build check, runtime UI verify, API/data verify, acceptance criteria, regression spot-check.

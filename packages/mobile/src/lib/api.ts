@@ -420,6 +420,10 @@ export const api = {
     uptime(id: string) {
       return request<ChargerUptime>(`/chargers/${id}/uptime`);
     },
+    async search(q: string) {
+      const rows = await request<Charger[]>(`/chargers/search?q=${encodeURIComponent(q)}`);
+      return rows.map(normalizeCharger);
+    },
   },
 
   sessions: {
