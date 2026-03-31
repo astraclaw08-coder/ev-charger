@@ -5,7 +5,7 @@
  *
  * Rules:
  * - PR base=main must come from head=dev, hotfix/*, or release/*
- * - PR base=dev must come from feature/*, fix/*, chore/*, hotfix/*, or dependabot/*
+ * - PR base=dev must come from feature/*, feat/*, fix/*, chore/*, hotfix/*, or dependabot/*
  */
 
 const fs = require('node:fs');
@@ -35,7 +35,7 @@ if (!base || !head) {
 }
 
 const allowedForMain = [/^dev$/, /^hotfix\/.+/, /^release\/.+/];
-const allowedForDev = [/^feature\/.+/, /^fix\/.+/, /^chore\/.+/, /^hotfix\/.+/, /^dependabot\/.+/];
+const allowedForDev = [/^feature\/.+/, /^feat\/.+/, /^fix\/.+/, /^chore\/.+/, /^hotfix\/.+/, /^dependabot\/.+/];
 
 if (base === 'main') {
   if (!allowedForMain.some((re) => re.test(head))) {
