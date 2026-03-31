@@ -101,17 +101,17 @@ export async function handleStopTransaction(
   const durationSegments = splitTouDuration({
     startedAt: session.startedAt,
     stoppedAt: timestamp,
-    pricingMode: site.pricingMode,
-    defaultPricePerKwhUsd: site.pricePerKwhUsd,
-    defaultIdleFeePerMinUsd: site.idleFeePerMinUsd,
-    touWindows: site.touWindows,
-    timeZone: site.timeZone ?? 'America/Los_Angeles',
+    pricingMode: site?.pricingMode,
+    defaultPricePerKwhUsd: site?.pricePerKwhUsd,
+    defaultIdleFeePerMinUsd: site?.idleFeePerMinUsd,
+    touWindows: site?.touWindows,
+    timeZone: site?.timeZone ?? 'America/Los_Angeles',
   });
   const totalSegmentMinutes = durationSegments.reduce((sum, seg) => sum + seg.minutes, 0);
   const weightedRatePerKwh =
     totalSegmentMinutes > 0
       ? durationSegments.reduce((sum, seg) => sum + (seg.minutes / totalSegmentMinutes) * seg.pricePerKwhUsd, 0)
-      : (session.ratePerKwh ?? site.pricePerKwhUsd ?? 0);
+      : (session.ratePerKwh ?? site?.pricePerKwhUsd ?? 0);
   const estimatedEnergyAmountUsd = kwhDelivered * weightedRatePerKwh;
 
   await prisma.$transaction(async (tx: any) => {

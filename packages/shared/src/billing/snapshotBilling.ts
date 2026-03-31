@@ -62,6 +62,10 @@ export async function captureSessionBillingSnapshot(sessionId: string): Promise<
   }
 
   const site = session.connector.charger.site;
+  if (!site) {
+    console.log(`[BillingSnapshot] Skipping — charger is not assigned to any site for session ${sessionId}`);
+    return false;
+  }
   const chargerId = session.connector.charger.id;
 
   // Fetch status logs for idle/plugOut timing
