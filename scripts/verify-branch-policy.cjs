@@ -4,7 +4,7 @@
  * Enforce dev/main GitFlow PR policy in CI.
  *
  * Rules:
- * - PR base=main must come from head=dev or hotfix/*
+ * - PR base=main must come from head=dev, hotfix/*, or release/*
  * - PR base=dev must come from feature/*, fix/*, chore/*, hotfix/*, or dependabot/*
  */
 
@@ -34,7 +34,7 @@ if (!base || !head) {
   fail(`Missing base/head refs (base=${base}, head=${head}).`);
 }
 
-const allowedForMain = [/^dev$/, /^hotfix\/.+/];
+const allowedForMain = [/^dev$/, /^hotfix\/.+/, /^release\/.+/];
 const allowedForDev = [/^feature\/.+/, /^fix\/.+/, /^chore\/.+/, /^hotfix\/.+/, /^dependabot\/.+/];
 
 if (base === 'main') {

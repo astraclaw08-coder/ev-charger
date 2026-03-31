@@ -203,10 +203,10 @@ async function applySmartChargingStacked(chargerId: string, trigger: string): Pr
 
   // Load existing state rows for this charger
   const existingStates = await prisma.smartChargingState.findMany({ where: { chargerId: charger.id } });
-  const existingByProfileId = new Map(existingStates.map((s) => [s.sourceProfileId, s]));
+  const existingByProfileId = new Map(existingStates.map((s: any) => [s.sourceProfileId, s]));
 
   // Determine stale states to clear (profiles no longer active)
-  const staleStates = existingStates.filter((s) => s.sourceProfileId && !activeProfileIds.has(s.sourceProfileId));
+  const staleStates = existingStates.filter((s: any) => s.sourceProfileId && !activeProfileIds.has(s.sourceProfileId));
 
   const isOnline = charger.status === 'ONLINE';
   let connectionReady = false;
@@ -234,7 +234,7 @@ async function applySmartChargingStacked(chargerId: string, trigger: string): Pr
 
   // Push each active profile
   for (const entry of activeEntries) {
-    const existing = existingByProfileId.get(entry.profile.id);
+    const existing: any = existingByProfileId.get(entry.profile.id);
     let status: string = 'PENDING_OFFLINE';
     let lastError: string | null = null;
     let lastAppliedAt: Date | null = existing?.lastAppliedAt ?? null;
