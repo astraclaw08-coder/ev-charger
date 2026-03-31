@@ -68,7 +68,7 @@ async function checkSessionLimits(): Promise<void> {
   }
 
   const now = new Date();
-  const activeIds = new Set(sessions.map((s) => s.id));
+  const activeIds = new Set(sessions.map((s: any) => s.id));
 
   // Clean up tracking for sessions that are no longer active
   for (const key of lastKnownMeter.keys()) {
