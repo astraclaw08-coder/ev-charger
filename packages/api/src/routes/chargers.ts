@@ -6,6 +6,7 @@ import { requirePolicy } from '../plugins/authorization';
 import { remoteReset, remoteStart, triggerHeartbeat, getConfiguration } from '../lib/ocppClient';
 import { getChargerUptime } from '../lib/uptime';
 import { computeSessionAmounts } from '../lib/sessionBilling';
+import { assessChargerHealth } from '../lib/chargerHealthAgent';
 
 function hasSiteAccess(siteId: string | null, siteIds: string[] | undefined) {
   if (!siteIds || siteIds.length === 0) return true;
@@ -397,6 +398,52 @@ export async function chargerRoutes(app: FastifyInstance) {
     const uptime = await getChargerUptime(req.params.id);
     if (!uptime) return reply.status(404).send({ error: 'Charger not found' });
     return uptime;
+  });
+
+  // GET /chargers/:id/health-assessment — AI-powered charger health diagnostic (operator only)
+  app.get<{
+    Params: { id: string };
+    Querystring: { connectorId?: string };
+  }>('/chargers/:id/health-assessment', {
+    preHandler: [requireOperator, requirePolicy('charger.status.read')],
+  }, async (req, reply) => {
+    const resolvedId = await resolveChargerId(req.params.id);
+    if (!resolvedId) return reply.status(404).send({ error: 'Charger not found' });
+
+    const charger = await prisma.charger.findUnique({
+      where: { id: resolvedId },
+      select: { siteId: true },
+    });
+    if (!charger) return reply.status(404).send({ error: 'Charger not found' });
+    if (!hasSiteAccess(charger.siteId, req.currentOperator?.claims?.siteIds)) {
+      return reply.status(403).send({
+        error: 'Forbidden',
+        denyReason: { code: 'SITE_OUT_OF_SCOPE', reason: `Site ${charger.siteId} is not in granted siteIds`, policy: 'charger.status.read' },
+      });
+    }
+
+    const connectorId = req.query.connectorId ? parseInt(req.query.connectorId, 10) : undefined;
+
+    try {
+      const report = await assessChargerHealth(resolvedId, connectorId);
+
+      // Persist assessment for audit trail
+      await prisma.chargerHealthAssessment.create({
+        data: {
+          chargerId: resolvedId,
+          connectorId: connectorId ?? null,
+          overallScore: report.overallScore,
+          overallStatus: report.overallStatus,
+          reportJson: report as any,
+          requestedBy: req.currentOperator?.id ?? 'unknown',
+        },
+      });
+
+      return report;
+    } catch (err: any) {
+      req.log.error({ err, chargerId: resolvedId }, 'Health assessment failed');
+      return reply.status(500).send({ error: 'Health assessment failed', detail: err?.message });
+    }
   });
 
   // POST /chargers/:id/reset — operator reboots a charger
