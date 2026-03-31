@@ -7,9 +7,10 @@ import { remoteReset, remoteStart, triggerHeartbeat, getConfiguration } from '..
 import { getChargerUptime } from '../lib/uptime';
 import { computeSessionAmounts } from '../lib/sessionBilling';
 
-function hasSiteAccess(siteId: string, siteIds: string[] | undefined) {
+function hasSiteAccess(siteId: string | null, siteIds: string[] | undefined) {
   if (!siteIds || siteIds.length === 0) return true;
   if (siteIds.includes('*')) return true;
+  if (!siteId) return true; // unassigned chargers are accessible to any scoped operator
   return siteIds.includes(siteId);
 }
 
@@ -222,6 +223,63 @@ export async function chargerRoutes(app: FastifyInstance) {
     });
   });
 
+  // POST /chargers/:id/unassign — remove charger from its site (preserves all historical sessions)
+  app.post<{
+    Params: { id: string };
+    Body: { reason?: string };
+  }>('/chargers/:id/unassign', {
+    preHandler: [requireOperator, requirePolicy('charger.register')],
+  }, async (req, reply) => {
+    const resolvedId = await resolveChargerId(req.params.id);
+    if (!resolvedId) return reply.status(404).send({ error: 'Charger not found' });
+
+    const charger = await prisma.charger.findUnique({
+      where: { id: resolvedId },
+      select: { id: true, ocppId: true, siteId: true, site: { select: { name: true } } },
+    });
+    if (!charger) return reply.status(404).send({ error: 'Charger not found' });
+    if (!charger.siteId) return reply.status(400).send({ error: 'Charger is not assigned to any site' });
+
+    if (!hasSiteAccess(charger.siteId, req.currentOperator?.claims?.siteIds)) {
+      return reply.status(403).send({
+        error: 'Forbidden',
+        denyReason: { code: 'SITE_OUT_OF_SCOPE', reason: `Site ${charger.siteId} is not in granted siteIds`, policy: 'charger.register' },
+      });
+    }
+
+    const previousSiteId = charger.siteId;
+    const previousSiteName = charger.site?.name ?? previousSiteId;
+
+    // Unassign: set siteId to null — sessions linked via Connector are preserved
+    await prisma.charger.update({
+      where: { id: resolvedId },
+      data: { siteId: null },
+    });
+
+    // Audit log
+    await prisma.adminAuditEvent.create({
+      data: {
+        operatorId: req.currentOperator?.id ?? 'unknown',
+        action: 'charger.unassign',
+        metadata: {
+          chargerId: resolvedId,
+          ocppId: charger.ocppId,
+          previousSiteId,
+          previousSiteName,
+          reason: req.body?.reason ?? null,
+        },
+      },
+    });
+
+    return {
+      unassigned: true,
+      chargerId: resolvedId,
+      ocppId: charger.ocppId,
+      previousSiteId,
+      previousSiteName,
+    };
+  });
+
   // GET /chargers/:id/sessions — recent sessions on this charger (operator only)
   app.get<{ Params: { id: string }; Querystring: { limit?: string } }>('/chargers/:id/sessions', {
     preHandler: [requireOperator, requirePolicy('charger.sessions.read')],
@@ -240,7 +298,7 @@ export async function chargerRoutes(app: FastifyInstance) {
 
     const connectorIds = charger.connectors.map((c: { id: string }) => c.id);
     const limit = Math.min(parseInt(req.query.limit ?? '20', 10), 100);
-    const site = await prisma.site.findUnique({
+    const site = charger.siteId ? await prisma.site.findUnique({
       where: { id: charger.siteId },
       select: {
         pricingMode: true,
@@ -253,7 +311,7 @@ export async function chargerRoutes(app: FastifyInstance) {
         softwareVendorFeeValue: true,
         softwareFeeIncludesActivation: true,
       },
-    });
+    }) : null;
 
     const sessions = await prisma.session.findMany({
       where: { connectorId: { in: connectorIds } },

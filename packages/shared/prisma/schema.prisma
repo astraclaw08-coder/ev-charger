@@ -110,8 +110,8 @@ model Site {
 
 model Charger {
   id              String              @id @default(uuid())
-  siteId          String
-  site            Site                @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  siteId          String?
+  site            Site?               @relation(fields: [siteId], references: [id], onDelete: SetNull)
   groupId         String?
   group           ChargerGroup?       @relation(fields: [groupId], references: [id], onDelete: SetNull)
   ocppId          String              @unique // used in OCPP WebSocket path: /ocpp/{ocppId}

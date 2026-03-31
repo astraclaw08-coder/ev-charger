@@ -703,6 +703,14 @@ export function createApiClient(token: string | null | undefined) {
         body: JSON.stringify(body),
       }),
 
+    unassignCharger: (id: string, reason?: string) =>
+      request<{ unassigned: boolean; chargerId: string; ocppId: string; previousSiteId: string; previousSiteName: string }>(
+        `/chargers/${id}/unassign`, token, {
+          method: 'POST',
+          body: JSON.stringify({ reason: reason ?? 'Unassigned from site via portal' }),
+        },
+      ),
+
     resetCharger: (id: string, type: 'Soft' | 'Hard' = 'Soft') =>
       request<{ status: string }>(`/chargers/${id}/reset`, token, {
         method: 'POST',
