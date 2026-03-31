@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { AntDesign, Ionicons } from '@expo/vector-icons';
-import { setBearerToken, setGuestMode } from '@/lib/api';
+import { api, setBearerToken, setGuestMode } from '@/lib/api';
 import { useAppAuth } from '@/providers/AuthProvider';
 import { useAppTheme } from '@/theme';
 
@@ -103,16 +103,45 @@ export default function SignInScreen() {
 }
 
 function KeycloakSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onContinueGuest: () => void }) {
-  const { loginWithPassword, loading, error } = useAppAuth();
+  const { loginWithPassword, loginWithOtp, loading: authLoading, error: authError } = useAppAuth();
   const router = useRouter();
   const [phone, setPhone] = useState('');
   const [showEmail, setShowEmail] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const usernameInputRef = useRef<TextInput>(null);
+  const codeInputRef = useRef<TextInput>(null);
+
+  // OTP state
   const [awaitingCode, setAwaitingCode] = useState(false);
   const [code, setCode] = useState('');
   const [otpTarget, setOtpTarget] = useState('');
+  const [challengeId, setChallengeId] = useState('');
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [otpError, setOtpError] = useState('');
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [verifying, setVerifying] = useState(false);
+  const resendTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const loading = authLoading || otpLoading || verifying;
+
+  // Resend cooldown timer
+  useEffect(() => {
+    if (resendCooldown <= 0) {
+      if (resendTimerRef.current) clearInterval(resendTimerRef.current);
+      return;
+    }
+    resendTimerRef.current = setInterval(() => {
+      setResendCooldown((prev) => {
+        if (prev <= 1) {
+          if (resendTimerRef.current) clearInterval(resendTimerRef.current);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => { if (resendTimerRef.current) clearInterval(resendTimerRef.current); };
+  }, [resendCooldown > 0]);
 
   async function handleSignIn() {
     const ok = await loginWithPassword?.(username, password);
@@ -124,20 +153,88 @@ function KeycloakSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onCo
     setTimeout(() => usernameInputRef.current?.focus(), 50);
   }
 
-  function handleNextOtp() {
+  const handleNextOtp = useCallback(async () => {
     const identifier = toPhoneIdentifier(phone);
     if (!identifier) {
       Alert.alert('Invalid phone number', 'Enter a complete phone number (example: (123) 456-7890).');
       return;
     }
-    setOtpTarget(identifier);
-    setAwaitingCode(true);
+
+    setOtpLoading(true);
+    setOtpError('');
+    try {
+      const result = await api.auth.otpSend(identifier);
+      setChallengeId(result.challengeId);
+      setOtpTarget(identifier);
+      setResendCooldown(result.resendAvailableInSeconds);
+      setAwaitingCode(true);
+      setCode('');
+      setTimeout(() => codeInputRef.current?.focus(), 100);
+    } catch (err: any) {
+      const msg = err?.message || 'Failed to send verification code';
+      setOtpError(msg);
+    } finally {
+      setOtpLoading(false);
+    }
+  }, [phone]);
+
+  const handleVerifyCode = useCallback(async (otpCode: string) => {
+    if (otpCode.length !== 6 || !challengeId) return;
+
+    setVerifying(true);
+    setOtpError('');
+    try {
+      const result = await api.auth.otpVerify(challengeId, otpCode);
+      const ok = await loginWithOtp?.(result.accessToken, result.expiresIn);
+      if (ok) {
+        router.replace('/(tabs)' as any);
+      } else {
+        setOtpError('Sign-in failed. Please try again.');
+      }
+    } catch (err: any) {
+      const msg = err?.message || 'Verification failed';
+      const remaining = err?.remainingAttempts;
+      setOtpError(remaining != null ? `${msg} (${remaining} attempt${remaining !== 1 ? 's' : ''} left)` : msg);
+      setCode('');
+      setTimeout(() => codeInputRef.current?.focus(), 100);
+    } finally {
+      setVerifying(false);
+    }
+  }, [challengeId, loginWithOtp, router]);
+
+  const handleResend = useCallback(async () => {
+    if (resendCooldown > 0 || !challengeId || !otpTarget) return;
+
+    setOtpLoading(true);
+    setOtpError('');
+    try {
+      const result = await api.auth.otpResend(challengeId, otpTarget);
+      setChallengeId(result.challengeId);
+      setResendCooldown(result.resendAvailableInSeconds);
+      setCode('');
+    } catch (err: any) {
+      const msg = err?.message || 'Failed to resend code';
+      setOtpError(msg);
+    } finally {
+      setOtpLoading(false);
+    }
+  }, [challengeId, otpTarget, resendCooldown]);
+
+  function handleCodeChange(value: string) {
+    const digits = value.replace(/\D/g, '').slice(0, 6);
+    setCode(digits);
+    if (digits.length === 6) {
+      handleVerifyCode(digits);
+    }
   }
 
-  useEffect(() => {
-    if (!awaitingCode || code.length !== 5) return;
-    Alert.alert('OTP', 'OTP verification is not enabled for this sign-in mode yet.');
-  }, [awaitingCode, code]);
+  function handleBackFromOtp() {
+    setAwaitingCode(false);
+    setCode('');
+    setChallengeId('');
+    setOtpError('');
+    setResendCooldown(0);
+  }
 
   if (awaitingCode) {
     return (
@@ -150,29 +247,49 @@ function KeycloakSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onCo
               borderColor: isDark ? '#334155' : '#d1d5db',
             },
           ]}
-          onPress={() => { setAwaitingCode(false); setCode(''); }}
+          onPress={handleBackFromOtp}
         >
           <Ionicons name="arrow-back" size={18} color={isDark ? '#f8fafc' : '#111827'} />
         </TouchableOpacity>
         <BrandHeader isDark={isDark} />
-        <Text style={[styles.helperText, styles.otpHelperText, { marginBottom: 12 }]}>Code was sent to {formatPhoneForDisplay(otpTarget)}</Text>
-        <Pressable style={styles.codeDotsWrap} onPress={() => {}}>
-          {Array.from({ length: 5 }).map((_, idx) => (
-            <View key={`kc-dot-${idx}`} style={styles.codeDot}>
-              <Text style={styles.codeDotText}>{code[idx] ? code[idx] : '•'}</Text>
+        <Text style={[styles.helperText, styles.otpHelperText, { marginBottom: 12 }]}>
+          Code was sent to {formatPhoneForDisplay(otpTarget)}
+        </Text>
+
+        {!!otpError && (
+          <Text style={styles.errorText}>{otpError}</Text>
+        )}
+
+        <Pressable style={styles.codeDotsWrap} onPress={() => codeInputRef.current?.focus()}>
+          {Array.from({ length: 6 }).map((_, idx) => (
+            <View key={`otp-dot-${idx}`} style={[styles.codeDot, code.length === idx && styles.codeDotActive]}>
+              <Text style={styles.codeDotText}>{code[idx] || '•'}</Text>
             </View>
           ))}
         </Pressable>
         <TextInput
+          ref={codeInputRef}
           style={styles.hiddenCodeInput}
           value={code}
-          onChangeText={(value) => setCode(value.replace(/\D/g, '').slice(0, 5))}
+          onChangeText={handleCodeChange}
           keyboardType="number-pad"
-          maxLength={5}
+          maxLength={6}
           autoFocus
+          editable={!verifying}
         />
-        <TouchableOpacity style={styles.oauthBtn} onPress={() => Alert.alert('OTP', `A new OTP would be sent to ${formatPhoneForDisplay(otpTarget)}`)}>
-          <Text style={styles.oauthText}>Request a new OTP</Text>
+
+        {verifying && (
+          <ActivityIndicator color="#10b981" style={{ marginBottom: 12 }} />
+        )}
+
+        <TouchableOpacity
+          style={[styles.oauthBtn, (resendCooldown > 0 || otpLoading) && { opacity: 0.5 }]}
+          onPress={handleResend}
+          disabled={resendCooldown > 0 || otpLoading}
+        >
+          <Text style={styles.oauthText}>
+            {otpLoading ? 'Sending...' : resendCooldown > 0 ? `Resend code (${resendCooldown}s)` : 'Resend code'}
+          </Text>
         </TouchableOpacity>
       </View>
     );
@@ -182,6 +299,10 @@ function KeycloakSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onCo
     <View style={styles.card}>
       <BrandHeader isDark={isDark} />
 
+      {!!otpError && (
+        <Text style={styles.errorText}>{otpError}</Text>
+      )}
+
       <View style={styles.phoneInputWrap}>
         <Ionicons name="call-outline" size={18} color="#64748b" />
         <TextInput
@@ -189,14 +310,15 @@ function KeycloakSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onCo
           placeholder="(123) 456-7890"
           placeholderTextColor="#94a3b8"
           value={phone}
-          onChangeText={(value) => setPhone(normalizePhoneInput(value))}
+          onChangeText={(value) => { setPhone(normalizePhoneInput(value)); setOtpError(''); }}
           keyboardType="phone-pad"
+          editable={!loading}
         />
       </View>
       <Text style={[styles.helperText, styles.centerText]}>A code will be sent to your phone for verification</Text>
 
-      <TouchableOpacity style={styles.button} onPress={handleNextOtp}>
-        <Text style={styles.buttonText}>Next</Text>
+      <TouchableOpacity style={[styles.button, loading && styles.buttonDisabled]} onPress={handleNextOtp} disabled={loading}>
+        {otpLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Next</Text>}
       </TouchableOpacity>
 
       <View style={styles.dividerWrap}>
@@ -229,9 +351,9 @@ function KeycloakSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onCo
             secureTextEntry
             testID="keycloak-password-input"
           />
-          {!!error && <Text style={{ color: '#dc2626', marginBottom: 8 }}>{error}</Text>}
+          {!!authError && <Text style={{ color: '#dc2626', marginBottom: 8 }}>{authError}</Text>}
           <TouchableOpacity style={[styles.button, styles.emailSignInButton, loading && styles.buttonDisabled]} onPress={handleSignIn} disabled={loading}>
-            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Sign In</Text>}
+            {authLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Sign In</Text>}
           </TouchableOpacity>
         </>
       )}
@@ -347,7 +469,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#f8fafc',
   },
+  codeDotActive: { borderColor: '#10b981', borderWidth: 2 },
   codeDotText: { fontSize: 20, fontWeight: '700', color: '#111827' },
+  errorText: { color: '#dc2626', fontSize: 13, textAlign: 'center', marginBottom: 10 },
   hiddenCodeInput: {
     position: 'absolute',
     opacity: 0,

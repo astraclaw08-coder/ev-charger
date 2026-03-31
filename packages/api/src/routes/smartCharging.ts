@@ -11,9 +11,10 @@ import {
 } from '../lib/smartCharging';
 const db: any = prisma;
 
-function hasSiteAccess(siteId: string, siteIds: string[] | undefined) {
+function hasSiteAccess(siteId: string | null, siteIds: string[] | undefined) {
   if (!siteIds || siteIds.length === 0) return true;
   if (siteIds.includes('*')) return true;
+  if (!siteId) return true; // unassigned chargers accessible
   return siteIds.includes(siteId);
 }
 

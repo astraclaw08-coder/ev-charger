@@ -6,24 +6,73 @@ import { requirePolicy } from '../plugins/authorization';
 import { remoteReset, remoteStart, triggerHeartbeat, getConfiguration } from '../lib/ocppClient';
 import { getChargerUptime } from '../lib/uptime';
 import { computeSessionAmounts } from '../lib/sessionBilling';
+import { assessChargerHealth } from '../lib/chargerHealthAgent';
 
-function hasSiteAccess(siteId: string, siteIds: string[] | undefined) {
+function hasSiteAccess(siteId: string | null, siteIds: string[] | undefined) {
   if (!siteIds || siteIds.length === 0) return true;
   if (siteIds.includes('*')) return true;
+  if (!siteId) return true; // unassigned chargers are accessible to any scoped operator
   return siteIds.includes(siteId);
 }
 
-/** Resolve a charger by exact id OR by short prefix (first 8 chars of UUID). */
+/**
+ * Resolve a charger by exact UUID, exact ocppId/serialNumber,
+ * or partial prefix match on id/ocppId/serialNumber.
+ */
 async function resolveChargerId(param: string): Promise<string | null> {
-  if (param.length === 36 || (param.includes('-') && param.length > 12)) {
+  // 1. Exact UUID match
+  if (param.length === 36) {
     const c = await prisma.charger.findUnique({ where: { id: param }, select: { id: true } });
-    return c?.id ?? null;
+    if (c) return c.id;
   }
-  const c = await prisma.charger.findFirst({ where: { id: { startsWith: param } }, select: { id: true } });
-  return c?.id ?? null;
+
+  // 2. Exact ocppId match
+  const byOcpp = await prisma.charger.findUnique({ where: { ocppId: param }, select: { id: true } });
+  if (byOcpp) return byOcpp.id;
+
+  // 3. Exact serialNumber match
+  const bySerial = await prisma.charger.findUnique({ where: { serialNumber: param }, select: { id: true } });
+  if (bySerial) return bySerial.id;
+
+  // 4. Partial prefix match on id, ocppId, or serialNumber (case-insensitive)
+  const byPartial = await prisma.charger.findFirst({
+    where: {
+      OR: [
+        { id: { startsWith: param } },
+        { ocppId: { startsWith: param, mode: 'insensitive' } },
+        { serialNumber: { startsWith: param, mode: 'insensitive' } },
+      ],
+    },
+    select: { id: true },
+  });
+  return byPartial?.id ?? null;
 }
 
 export async function chargerRoutes(app: FastifyInstance) {
+  // GET /chargers/search?q=... — partial match on ocppId, serialNumber, or site name
+  app.get<{ Querystring: { q?: string; limit?: string } }>('/chargers/search', async (req) => {
+    const q = (req.query.q ?? '').trim();
+    const limit = Math.min(parseInt(req.query.limit ?? '10', 10) || 10, 25);
+    if (q.length < 2) return [];
+
+    const chargers = await prisma.charger.findMany({
+      where: {
+        OR: [
+          { ocppId: { contains: q, mode: 'insensitive' } },
+          { serialNumber: { contains: q, mode: 'insensitive' } },
+          { site: { name: { contains: q, mode: 'insensitive' } } },
+        ],
+      },
+      take: limit,
+      include: {
+        site: { select: { id: true, name: true, address: true } },
+        connectors: { select: { id: true, connectorId: true, status: true } },
+      },
+    });
+
+    return chargers.map(({ password: _pw, ...c }: { password: unknown;[k: string]: unknown }) => c);
+  });
+
   // GET /chargers — list chargers with optional bbox filter
   app.get<{
     Querystring: { minLat?: string; maxLat?: string; minLng?: string; maxLng?: string };
@@ -175,6 +224,63 @@ export async function chargerRoutes(app: FastifyInstance) {
     });
   });
 
+  // POST /chargers/:id/unassign — remove charger from its site (preserves all historical sessions)
+  app.post<{
+    Params: { id: string };
+    Body: { reason?: string };
+  }>('/chargers/:id/unassign', {
+    preHandler: [requireOperator, requirePolicy('charger.register')],
+  }, async (req, reply) => {
+    const resolvedId = await resolveChargerId(req.params.id);
+    if (!resolvedId) return reply.status(404).send({ error: 'Charger not found' });
+
+    const charger = await prisma.charger.findUnique({
+      where: { id: resolvedId },
+      select: { id: true, ocppId: true, siteId: true, site: { select: { name: true } } },
+    });
+    if (!charger) return reply.status(404).send({ error: 'Charger not found' });
+    if (!charger.siteId) return reply.status(400).send({ error: 'Charger is not assigned to any site' });
+
+    if (!hasSiteAccess(charger.siteId, req.currentOperator?.claims?.siteIds)) {
+      return reply.status(403).send({
+        error: 'Forbidden',
+        denyReason: { code: 'SITE_OUT_OF_SCOPE', reason: `Site ${charger.siteId} is not in granted siteIds`, policy: 'charger.register' },
+      });
+    }
+
+    const previousSiteId = charger.siteId;
+    const previousSiteName = charger.site?.name ?? previousSiteId;
+
+    // Unassign: set siteId to null — sessions linked via Connector are preserved
+    await prisma.charger.update({
+      where: { id: resolvedId },
+      data: { siteId: null },
+    });
+
+    // Audit log
+    await prisma.adminAuditEvent.create({
+      data: {
+        operatorId: req.currentOperator?.id ?? 'unknown',
+        action: 'charger.unassign',
+        metadata: {
+          chargerId: resolvedId,
+          ocppId: charger.ocppId,
+          previousSiteId,
+          previousSiteName,
+          reason: req.body?.reason ?? null,
+        },
+      },
+    });
+
+    return {
+      unassigned: true,
+      chargerId: resolvedId,
+      ocppId: charger.ocppId,
+      previousSiteId,
+      previousSiteName,
+    };
+  });
+
   // GET /chargers/:id/sessions — recent sessions on this charger (operator only)
   app.get<{ Params: { id: string }; Querystring: { limit?: string } }>('/chargers/:id/sessions', {
     preHandler: [requireOperator, requirePolicy('charger.sessions.read')],
@@ -193,7 +299,7 @@ export async function chargerRoutes(app: FastifyInstance) {
 
     const connectorIds = charger.connectors.map((c: { id: string }) => c.id);
     const limit = Math.min(parseInt(req.query.limit ?? '20', 10), 100);
-    const site = await prisma.site.findUnique({
+    const site = charger.siteId ? await prisma.site.findUnique({
       where: { id: charger.siteId },
       select: {
         pricingMode: true,
@@ -206,7 +312,7 @@ export async function chargerRoutes(app: FastifyInstance) {
         softwareVendorFeeValue: true,
         softwareFeeIncludesActivation: true,
       },
-    });
+    }) : null;
 
     const sessions = await prisma.session.findMany({
       where: { connectorId: { in: connectorIds } },
@@ -292,6 +398,52 @@ export async function chargerRoutes(app: FastifyInstance) {
     const uptime = await getChargerUptime(req.params.id);
     if (!uptime) return reply.status(404).send({ error: 'Charger not found' });
     return uptime;
+  });
+
+  // GET /chargers/:id/health-assessment — AI-powered charger health diagnostic (operator only)
+  app.get<{
+    Params: { id: string };
+    Querystring: { connectorId?: string };
+  }>('/chargers/:id/health-assessment', {
+    preHandler: [requireOperator, requirePolicy('charger.status.read')],
+  }, async (req, reply) => {
+    const resolvedId = await resolveChargerId(req.params.id);
+    if (!resolvedId) return reply.status(404).send({ error: 'Charger not found' });
+
+    const charger = await prisma.charger.findUnique({
+      where: { id: resolvedId },
+      select: { siteId: true },
+    });
+    if (!charger) return reply.status(404).send({ error: 'Charger not found' });
+    if (!hasSiteAccess(charger.siteId, req.currentOperator?.claims?.siteIds)) {
+      return reply.status(403).send({
+        error: 'Forbidden',
+        denyReason: { code: 'SITE_OUT_OF_SCOPE', reason: `Site ${charger.siteId} is not in granted siteIds`, policy: 'charger.status.read' },
+      });
+    }
+
+    const connectorId = req.query.connectorId ? parseInt(req.query.connectorId, 10) : undefined;
+
+    try {
+      const report = await assessChargerHealth(resolvedId, connectorId);
+
+      // Persist assessment for audit trail
+      await prisma.chargerHealthAssessment.create({
+        data: {
+          chargerId: resolvedId,
+          connectorId: connectorId ?? null,
+          overallScore: report.overallScore,
+          overallStatus: report.overallStatus,
+          reportJson: report as any,
+          requestedBy: req.currentOperator?.id ?? 'unknown',
+        },
+      });
+
+      return report;
+    } catch (err: any) {
+      req.log.error({ err, chargerId: resolvedId }, 'Health assessment failed');
+      return reply.status(500).send({ error: 'Health assessment failed', detail: err?.message });
+    }
   });
 
   // POST /chargers/:id/reset — operator reboots a charger

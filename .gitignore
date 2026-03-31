@@ -5,3 +5,4 @@ dist/
 *.log
 .claude/
 .DS_Store
+packages/mobile/ios/build-rc/

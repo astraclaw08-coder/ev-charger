@@ -92,6 +92,10 @@ model Site {
   timeZone         String              @default("America/Los_Angeles") // IANA timezone for TOU pricing + smart charging
   organizationName String?
   portfolioName    String?
+  // Session safety limits (null = no limit)
+  maxChargeDurationMin  Int?    // Auto-stop active charging after N minutes
+  maxIdleDurationMin    Int?    // Auto-stop/disconnect after N minutes idle post-charge
+  maxSessionCostUsd     Float?  // Auto-stop when estimated session cost reaches this cap (USD)
   chargers         Charger[]
   chargerGroups    ChargerGroup[]
   chargingProfiles SmartChargingProfile[]
@@ -106,8 +110,8 @@ model Site {
 
 model Charger {
   id              String              @id @default(uuid())
-  siteId          String
-  site            Site                @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  siteId          String?
+  site            Site?               @relation(fields: [siteId], references: [id], onDelete: SetNull)
   groupId         String?
   group           ChargerGroup?       @relation(fields: [groupId], references: [id], onDelete: SetNull)
   ocppId          String              @unique // used in OCPP WebSocket path: /ocpp/{ocppId}
@@ -131,9 +135,25 @@ model Charger {
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
 
+  healthAssessments ChargerHealthAssessment[]
+
   @@index([siteId])
   @@index([groupId])
   @@index([status])
+}
+
+model ChargerHealthAssessment {
+  id             String   @id @default(uuid())
+  chargerId      String
+  charger        Charger  @relation(fields: [chargerId], references: [id], onDelete: Cascade)
+  connectorId    Int?
+  overallScore   Int
+  overallStatus  String   // healthy | degraded | critical | offline
+  reportJson     Json
+  requestedBy    String   // operator ID
+  createdAt      DateTime @default(now())
+
+  @@index([chargerId, createdAt])
 }
 
 model ChargerGroup {
@@ -285,6 +305,7 @@ model User {
   payments        Payment[]
   favoriteChargers UserFavoriteCharger[]
   inAppNotificationDeliveries InAppNotificationDelivery[]
+  authSessions    AuthSession[]
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 }
@@ -597,4 +618,36 @@ model ChargerModelCatalog {
 
   @@unique([scopeKey, modelCode])
   @@index([scopeKey, isActive])
+}
+
+model AuthOtpChallenge {
+  id            String    @id @default(uuid())
+  channel       String    // EMAIL or SMS
+  identifier    String    // normalized email or E.164 phone
+  codeHash      String
+  maxAttempts   Int       @default(5)
+  attemptCount  Int       @default(0)
+  issuedIp      String?
+  lastSentAt    DateTime  @default(now())
+  expiresAt     DateTime
+  consumedAt    DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([identifier, channel])
+}
+
+model AuthSession {
+  id          String    @id @default(uuid())
+  userId      String
+  tokenHash   String    @unique
+  provider    String    // otp-email, otp-sms, keycloak-password
+  issuedIp    String?
+  userAgent   String?
+  expiresAt   DateTime
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
 }

@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { getKeycloakAdminClient } from '../lib/keycloakAdmin';
 import { keycloakPasswordAuthEnabled, passwordGrantLogin, refreshGrantLogin } from '../lib/keycloakOidc';
 import { isBlocked, recordAuthFailure, recordAuthSuccess } from '../lib/authProtection';
+import { issueOtpChallenge, verifyOtpChallenge } from '../lib/otpAuth';
 
 type PasswordLoginBody = {
   username: string;
@@ -231,6 +232,118 @@ export async function authRoutes(app: FastifyInstance) {
       req.log.error({ event: 'bootstrap-super-admin-failed', ip: req.ip, err: error }, 'Super admin bootstrap failed');
       const message = error instanceof Error ? error.message : 'Bootstrap failed';
       return reply.status(400).send({ error: message });
+    }
+  });
+
+  // ── OTP Phone / Email Auth ─────────────────────────────────────────────────
+
+  type OtpSendBody = { phone?: string; email?: string; channel?: 'sms' | 'email' };
+  type OtpVerifyBody = { challengeId: string; code: string };
+  type OtpResendBody = { challengeId: string; phone?: string; email?: string; channel?: 'sms' | 'email' };
+
+  app.post<{ Body: OtpSendBody }>('/auth/otp/send', async (req, reply) => {
+    const blocked = isBlocked({ ip: req.ip, routeScope: 'otp-send' });
+    if (blocked.blocked) {
+      reply.header('Retry-After', String(blocked.retryAfterSeconds));
+      return reply.status(429).send({ error: 'Too many requests', retryAfterSeconds: blocked.retryAfterSeconds });
+    }
+
+    const channel: 'sms' | 'email' = req.body?.channel === 'email' ? 'email' : 'sms';
+    const identifier = channel === 'email' ? req.body?.email : req.body?.phone;
+    if (!identifier?.trim()) {
+      return reply.status(400).send({ error: `${channel === 'email' ? 'email' : 'phone'} is required` });
+    }
+
+    try {
+      const result = await issueOtpChallenge({ channel, identifier: identifier.trim(), ip: req.ip });
+      req.log.info({ event: 'otp-send-success', channel, ip: req.ip }, 'OTP challenge issued');
+      return result;
+    } catch (err: any) {
+      const statusCode = err.statusCode || (err.code === 'OTP_ISSUE_RATE_LIMIT' ? 429 : 400);
+      if (statusCode === 429) {
+        reply.header('Retry-After', String(err.retryAfterSeconds ?? 60));
+      }
+      req.log.warn({ event: 'otp-send-failed', channel, ip: req.ip, code: err.code }, err.message);
+      return reply.status(statusCode).send({ error: err.message, code: err.code });
+    }
+  });
+
+  app.post<{ Body: OtpVerifyBody }>('/auth/otp/verify', async (req, reply) => {
+    const blocked = isBlocked({ ip: req.ip, routeScope: 'otp-verify' });
+    if (blocked.blocked) {
+      reply.header('Retry-After', String(blocked.retryAfterSeconds));
+      return reply.status(429).send({ error: 'Too many requests', retryAfterSeconds: blocked.retryAfterSeconds });
+    }
+
+    const { challengeId, code } = req.body ?? {};
+    if (!challengeId || !code) {
+      return reply.status(400).send({ error: 'challengeId and code are required' });
+    }
+
+    try {
+      const result = await verifyOtpChallenge({
+        challengeId,
+        code,
+        ip: req.ip,
+        userAgent: req.headers['user-agent'],
+      });
+      recordAuthSuccess({ ip: req.ip, routeScope: 'otp-verify' });
+      req.log.info({ event: 'otp-verify-success', userId: result.user.id, ip: req.ip }, 'OTP verification success');
+      return {
+        ok: true,
+        accessToken: result.session.accessToken,
+        expiresIn: result.session.expiresIn,
+        tokenType: result.session.tokenType,
+        user: {
+          id: result.user.id,
+          email: result.user.email,
+          phone: result.user.phone,
+          name: result.user.name,
+        },
+      };
+    } catch (err: any) {
+      const statusCode = err.statusCode || 400;
+      if (statusCode === 401) {
+        recordAuthFailure({ ip: req.ip, routeScope: 'otp-verify' });
+      }
+      req.log.warn({ event: 'otp-verify-failed', ip: req.ip, code: err.code }, err.message);
+      return reply.status(statusCode).send({
+        error: err.message,
+        code: err.code,
+        remainingAttempts: err.remainingAttempts,
+      });
+    }
+  });
+
+  app.post<{ Body: OtpResendBody }>('/auth/otp/resend', async (req, reply) => {
+    const blocked = isBlocked({ ip: req.ip, routeScope: 'otp-send' });
+    if (blocked.blocked) {
+      reply.header('Retry-After', String(blocked.retryAfterSeconds));
+      return reply.status(429).send({ error: 'Too many requests', retryAfterSeconds: blocked.retryAfterSeconds });
+    }
+
+    const { challengeId } = req.body ?? {};
+    if (!challengeId) {
+      return reply.status(400).send({ error: 'challengeId is required' });
+    }
+
+    const channel: 'sms' | 'email' = req.body?.channel === 'email' ? 'email' : 'sms';
+    const identifier = channel === 'email' ? req.body?.email : req.body?.phone;
+    if (!identifier?.trim()) {
+      return reply.status(400).send({ error: `${channel === 'email' ? 'email' : 'phone'} is required for resend` });
+    }
+
+    try {
+      const result = await issueOtpChallenge({ channel, identifier: identifier.trim(), challengeId, ip: req.ip });
+      req.log.info({ event: 'otp-resend-success', channel, challengeId, ip: req.ip }, 'OTP resend success');
+      return result;
+    } catch (err: any) {
+      const statusCode = err.statusCode || (err.code === 'OTP_RESEND_COOLDOWN' ? 429 : 400);
+      if (statusCode === 429) {
+        reply.header('Retry-After', String(err.retryAfterSeconds ?? 30));
+      }
+      req.log.warn({ event: 'otp-resend-failed', channel, ip: req.ip, code: err.code }, err.message);
+      return reply.status(statusCode).send({ error: err.message, code: err.code, retryAfterSeconds: err.retryAfterSeconds });
     }
   });
 }

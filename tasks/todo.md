@@ -101,6 +101,86 @@
 
 ---
 
+---
+
+## Task 155: AI Diagnostics Agent — Proactive & Corrective Charger Maintenance
+> Goal: LLM-powered diagnostics for charger network health — per-user isolated sessions, OAuth-secured, built on existing stack
+
+### Architecture Decisions
+- **Single agent, not multi-agent** — one well-prompted agent with tool access (DB queries, RAG, OCPP commands via existing API)
+- **Per-user sessions** — each portal user gets isolated conversation context; no cross-user data leakage
+- **OAuth via Keycloak** — LLM hook endpoints use existing Keycloak OIDC; no separate auth system
+- **Existing infra only** — Postgres (pgvector extension), Fastify API, Railway; no new databases
+- **Batch + trigger, not streaming** — nightly health reports + on-demand diagnostics + error-triggered analysis; avoids runaway LLM costs
+- **PII redaction** — all charger logs/session data anonymized before LLM context (strip user IDs, payment info, VINs; use pseudonymized tokens)
+
+### Subtask 155.1: Database — Knowledge & Conversation Schema
+- [ ] Enable `pgvector` extension on Postgres
+- [ ] Add Prisma model `DiagKnowledgeDoc` — id, title, source (manual/ocpp-spec/past-fix), content, embedding (vector 1536), createdAt
+- [ ] Add Prisma model `DiagConversation` — id, userId (FK→User), title, createdAt, updatedAt
+- [ ] Add Prisma model `DiagMessage` — id, conversationId (FK→DiagConversation), role (user/assistant/system), content, toolCalls (JSON), createdAt
+- [ ] Add Prisma model `ChargerEvent` — id, chargerId (FK→Charger), eventType (error/anomaly/warning), ocppAction, errorCode, severity, payload (JSON), detectedAt
+- [ ] Migration + seed: ingest OCPP 1.6 spec docs + common error code reference as initial knowledge base
+- [ ] Add index on ChargerEvent(chargerId, detectedAt) and DiagKnowledgeDoc embedding (ivfflat)
+
+**Done when:** `prisma migrate` succeeds, pgvector queries return nearest-neighbor results on seeded docs.
+
+### Subtask 155.2: Event Ingestion Pipeline
+- [ ] Hook into existing OCPP handlers (StatusNotification, MeterValues, StopTransaction) to emit ChargerEvents on: error codes, fault status, anomalous meter readings (configurable thresholds), session failures
+- [ ] Threshold rules (no ML yet): voltage out of range, temperature spikes, repeated connector faults within window, session failure rate > X% per charger/day
+- [ ] Backfill script: scan existing OcppLog for historical error patterns → populate ChargerEvent
+
+**Done when:** Live OCPP traffic generates ChargerEvent rows; backfill populates historical events.
+
+### Subtask 155.3: RAG Retrieval Service
+- [ ] Embedding service: function to embed text chunks via Claude/OpenAI embeddings API (configurable provider)
+- [ ] Ingestion CLI: `npm run ingest-docs` — reads markdown/PDF files from `docs/knowledge-base/`, chunks, embeds, upserts into DiagKnowledgeDoc
+- [ ] Retrieval function: `retrieveRelevantDocs(query: string, topK: number)` — pgvector cosine similarity search
+- [ ] Include recent ChargerEvents for the target charger as structured context (not embedded, just fetched)
+
+**Done when:** Given a query like "connector fault code 3", returns relevant OCPP spec sections + past similar incidents.
+
+### Subtask 155.4: LLM Diagnostics API (OAuth-Secured, Per-User Sessions)
+- [ ] `POST /api/diagnostics/conversations` — create new conversation (auth: Keycloak Bearer token, scoped to authenticated user)
+- [ ] `POST /api/diagnostics/conversations/:id/messages` — send message, get AI response (auth required, verify conversation belongs to user)
+- [ ] `GET /api/diagnostics/conversations` — list user's conversations (auth required, returns only own)
+- [ ] `GET /api/diagnostics/conversations/:id` — get conversation with messages (auth required, ownership check)
+- [ ] `DELETE /api/diagnostics/conversations/:id` — delete conversation (auth required, ownership check)
+- [ ] LLM orchestration: receives user message → builds context (conversation history + RAG docs + recent charger telemetry) → calls Claude API with system prompt → stores response → returns structured JSON
+- [ ] System prompt: domain-expert role, structured output (issue_type, confidence, root_cause, recommended_action, severity), instruction to only use provided context
+- [ ] Tool definitions for the agent: `queryChargerStatus(chargerId)`, `getRecentEvents(chargerId, hours)`, `searchKnowledgeBase(query)`, `getSessionHistory(chargerId, days)`
+- [ ] PII redaction middleware: strip/pseudonymize user PII, payment data, VINs from all context before LLM call
+- [ ] Rate limiting: per-user message rate limit (e.g., 20 messages/hour) to control costs
+
+**Done when:** Authenticated portal user can have a multi-turn conversation about a charger's health, getting context-aware diagnostics. Different users cannot see each other's conversations.
+
+### Subtask 155.5: Scheduled Health Reports
+- [ ] Nightly cron (or scheduled Fastify task): for each active site, analyze last 24h of ChargerEvents + session metrics
+- [ ] Generate structured health report per site: charger uptime %, error trends, anomalies, predicted risks, recommended actions
+- [ ] Store report in DB (new `SiteHealthReport` model) + send summary to operator notification preferences
+- [ ] Portal endpoint: `GET /api/sites/:id/health-reports` — paginated list of reports
+
+**Done when:** Nightly report generates for test site with real telemetry data; viewable in portal.
+
+### Subtask 155.6: Portal UI — Diagnostics Chat + Health Dashboard
+- [ ] New portal page: `/diagnostics` — chat interface for conversational charger diagnostics
+- [ ] Conversation sidebar: list past conversations, create new, delete
+- [ ] Chat area: message bubbles, streaming response display, charger context cards
+- [ ] Charger selector: pick which charger(s) to diagnose (pre-fills context)
+- [ ] Health dashboard widget on site detail page: latest health report summary, trend sparklines, alert badges
+- [ ] Health reports page: `/sites/:id/health-reports` — full report history with drill-down
+
+**Done when:** Operator can open diagnostics, select a charger, ask "why is this charger faulting?", and get a contextual answer citing specific error events and documentation.
+
+### Out of Scope (Future)
+- Edge-deployed models / on-device inference
+- Multi-agent orchestration (single agent sufficient at current scale)
+- Real-time streaming telemetry analysis (batch + trigger is sufficient)
+- Autonomous remediation (human-in-the-loop only for now)
+- Fine-tuned domain models (RAG + good prompting first)
+
+---
+
 ## Backlog (Post-MVP)
 - OCPP 2.0.1 upgrade path
 - Multi-tenant operator accounts

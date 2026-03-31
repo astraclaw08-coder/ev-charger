@@ -395,6 +395,42 @@ export const api = {
         body: JSON.stringify({ refreshToken }),
       });
     },
+    otpSend(phone: string) {
+      return request<{
+        challengeId: string;
+        expiresInSeconds: number;
+        resendAvailableInSeconds: number;
+        destinationHint: string;
+        devOtpCode?: string;
+      }>('/auth/otp/send', {
+        method: 'POST',
+        body: JSON.stringify({ phone, channel: 'sms' }),
+      });
+    },
+    otpVerify(challengeId: string, code: string) {
+      return request<{
+        ok: boolean;
+        accessToken: string;
+        expiresIn: number;
+        tokenType: string;
+        user: { id: string; email: string; phone: string | null; name: string | null };
+      }>('/auth/otp/verify', {
+        method: 'POST',
+        body: JSON.stringify({ challengeId, code }),
+      });
+    },
+    otpResend(challengeId: string, phone: string) {
+      return request<{
+        challengeId: string;
+        expiresInSeconds: number;
+        resendAvailableInSeconds: number;
+        destinationHint: string;
+        devOtpCode?: string;
+      }>('/auth/otp/resend', {
+        method: 'POST',
+        body: JSON.stringify({ challengeId, phone, channel: 'sms' }),
+      });
+    },
   },
   analytics: {
     portfolioSummary(params?: { startDate?: string; endDate?: string }) {
@@ -419,6 +455,10 @@ export const api = {
     },
     uptime(id: string) {
       return request<ChargerUptime>(`/chargers/${id}/uptime`);
+    },
+    async search(q: string) {
+      const rows = await request<Charger[]>(`/chargers/search?q=${encodeURIComponent(q)}`);
+      return rows.map(normalizeCharger);
     },
   },
 

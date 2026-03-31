@@ -67,6 +67,9 @@ export interface SiteDetail {
   touWindows?: unknown;
   organizationName?: string | null;
   portfolioName?: string | null;
+  maxChargeDurationMin?: number | null;
+  maxIdleDurationMin?: number | null;
+  maxSessionCostUsd?: number | null;
   createdAt: string;
   chargers: ChargerInfo[];
 }
@@ -678,6 +681,9 @@ export function createApiClient(token: string | null | undefined) {
         touWindows?: unknown;
         organizationName?: string;
         portfolioName?: string;
+        maxChargeDurationMin?: number | null;
+        maxIdleDurationMin?: number | null;
+        maxSessionCostUsd?: number | null;
       },
     ) =>
       request<SiteDetail>(`/sites/${id}`, token, {
@@ -696,6 +702,14 @@ export function createApiClient(token: string | null | undefined) {
         method: 'POST',
         body: JSON.stringify(body),
       }),
+
+    unassignCharger: (id: string, reason?: string) =>
+      request<{ unassigned: boolean; chargerId: string; ocppId: string; previousSiteId: string; previousSiteName: string }>(
+        `/chargers/${id}/unassign`, token, {
+          method: 'POST',
+          body: JSON.stringify({ reason: reason ?? 'Unassigned from site via portal' }),
+        },
+      ),
 
     resetCharger: (id: string, type: 'Soft' | 'Hard' = 'Soft') =>
       request<{ status: string }>(`/chargers/${id}/reset`, token, {

@@ -13,6 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DATABASE_URL: postgresql://ev:ev@localhost:5432/evcharger
+      SHADOW_DATABASE_URL: postgresql://ev:ev@localhost:5432/evcharger_shadow
     services:
       postgres:
         image: postgres:15
@@ -40,6 +41,9 @@ jobs:
       - name: Generate Prisma client
         run: npx prisma generate --schema=packages/shared/prisma/schema.prisma
 
+      - name: Create shadow database
+        run: PGPASSWORD=ev psql -h localhost -U ev -d evcharger -c "CREATE DATABASE evcharger_shadow;"
+
       - name: Apply all migrations
         run: npx prisma migrate deploy --schema=packages/shared/prisma/schema.prisma
 
@@ -48,6 +52,7 @@ jobs:
           DRIFT=$(npx prisma migrate diff \
             --from-migrations ./packages/shared/prisma/migrations \
             --to-schema-datamodel ./packages/shared/prisma/schema.prisma \
+            --shadow-database-url "$SHADOW_DATABASE_URL" \
             --script 2>&1)
           if [ -n "$DRIFT" ] && [ "$DRIFT" != "-- This is an empty migration." ]; then
             echo "❌ Schema drift detected! Your schema.prisma has changes not covered by a migration."

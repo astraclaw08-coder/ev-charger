@@ -64,13 +64,14 @@ export async function handleStartTransaction(
   for (let attempt = 1; attempt <= TX_ID_MAX_ATTEMPTS; attempt++) {
     transactionId = randomFiveDigitTransactionId();
     try {
+      const cSite = connector.charger.site;
       const resolvedRate = resolveTouRateAt({
         at: timestamp,
-        pricingMode: connector.charger.site.pricingMode,
-        defaultPricePerKwhUsd: connector.charger.site.pricePerKwhUsd ?? DEFAULT_RATE_PER_KWH,
-        defaultIdleFeePerMinUsd: connector.charger.site.idleFeePerMinUsd ?? 0,
-        touWindows: connector.charger.site.touWindows,
-        timeZone: connector.charger.site.timeZone ?? 'America/Los_Angeles',
+        pricingMode: cSite?.pricingMode,
+        defaultPricePerKwhUsd: cSite?.pricePerKwhUsd ?? DEFAULT_RATE_PER_KWH,
+        defaultIdleFeePerMinUsd: cSite?.idleFeePerMinUsd ?? 0,
+        touWindows: cSite?.touWindows,
+        timeZone: cSite?.timeZone ?? 'America/Los_Angeles',
       });
       session = await prisma.session.create({
         data: {

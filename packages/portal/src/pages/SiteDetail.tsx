@@ -7,6 +7,7 @@ import { useToken } from '../auth/TokenContext';
 import ChargerMap from '../components/ChargerMap';
 import StatusBadge from '../components/StatusBadge';
 import AddChargerDialog from '../components/AddChargerDialog';
+import AddressAutocomplete from '../components/AddressAutocomplete';
 import { formatDate } from '../lib/utils';
 import { usePortalTheme } from '../theme/ThemeContext';
 
@@ -342,6 +343,7 @@ export default function SiteDetail() {
   const [showAddCharger, setShowAddCharger] = useState(false);
   const [showEditSite, setShowEditSite] = useState(false);
   const [editSiteForm, setEditSiteForm] = useState({ name: '', address: '', lat: '', lng: '', organizationName: '', portfolioName: '' });
+  const [editCoordsAutoFilled, setEditCoordsAutoFilled] = useState(false);
   const [chargerUptime, setChargerUptime] = useState<Record<string, ChargerUptime>>({});
   const [siteUptime, setSiteUptime] = useState<SiteUptime | null>(null);
   const [siteAnalytics, setSiteAnalytics] = useState<SiteAnalytics | null>(null);
@@ -360,6 +362,19 @@ export default function SiteDetail() {
   const isSuperAdmin = true; // TODO: wire to real role claim when auth matures
 
   const [auditEvents, setAuditEvents] = useState<SiteAuditEvent[]>([]);
+
+  // Charger unassign state
+  const [unassignTarget, setUnassignTarget] = useState<{ id: string; ocppId: string } | null>(null);
+  const [unassignBusy, setUnassignBusy] = useState(false);
+
+  // Session safety limits
+  const [safetyLimits, setSafetyLimits] = useState<{
+    maxChargeDurationMin: string;
+    maxIdleDurationMin: string;
+    maxSessionCostUsd: string;
+  }>({ maxChargeDurationMin: '', maxIdleDurationMin: '', maxSessionCostUsd: '' });
+  const [savedSafetyLimits, setSavedSafetyLimits] = useState<typeof safetyLimits | null>(null);
+  const [safetyMsg, setSafetyMsg] = useState('');
 
   const hasTariffEdits = !savedTariff || tariffFingerprint(tariff) !== tariffFingerprint(savedTariff);
 
@@ -384,6 +399,13 @@ export default function SiteDetail() {
         organizationName: data.organizationName ?? '',
         portfolioName: data.portfolioName ?? '',
       });
+      const loadedSafety = {
+        maxChargeDurationMin: data.maxChargeDurationMin != null ? String(data.maxChargeDurationMin) : '',
+        maxIdleDurationMin: data.maxIdleDurationMin != null ? String(data.maxIdleDurationMin) : '',
+        maxSessionCostUsd: data.maxSessionCostUsd != null ? String(data.maxSessionCostUsd) : '',
+      };
+      setSafetyLimits(loadedSafety);
+      setSavedSafetyLimits(loadedSafety);
       const loadedWindows: TouWindow[] = Array.isArray(data.touWindows)
         ? (data.touWindows as Array<Partial<TouWindow>>).map((w) => ({
             id: typeof w.id === 'string' && w.id.length > 0 ? w.id : crypto.randomUUID(),
@@ -520,6 +542,22 @@ export default function SiteDetail() {
     localStorage.setItem(auditKey(site.id), JSON.stringify(next.slice(0, 250)));
   };
 
+  const handleUnassignCharger = async () => {
+    if (!unassignTarget) return;
+    setUnassignBusy(true);
+    try {
+      const token = await getToken();
+      await createApiClient(token).unassignCharger(unassignTarget.id);
+      pushAudit('charger.unassign', `Unassigned charger ${unassignTarget.ocppId} from this site`);
+      setUnassignTarget(null);
+      await load(); // refresh site data
+    } catch (e: any) {
+      alert(`Failed to unassign charger: ${e?.message ?? 'Unknown error'}`);
+    } finally {
+      setUnassignBusy(false);
+    }
+  };
+
   const totalKwh = siteAnalytics?.kwhDelivered ?? 0;
   const totalRevenue = (siteAnalytics?.revenueCents ?? 0) / 100;
   const utilizationPct = siteUtilizationPct;
@@ -567,13 +605,30 @@ export default function SiteDetail() {
               <input className="mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5" value={editSiteForm.name} onChange={(e) => setEditSiteForm((f) => ({ ...f, name: e.target.value }))} />
             </label>
             <label className="text-sm text-gray-700 dark:text-slate-300">Address
-              <input className="mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5" value={editSiteForm.address} onChange={(e) => setEditSiteForm((f) => ({ ...f, address: e.target.value }))} />
+              <div className="mt-1">
+                <AddressAutocomplete
+                  value={editSiteForm.address}
+                  className="w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5"
+                  placeholder="Start typing an address…"
+                  onRawChange={(v) => {
+                    setEditSiteForm((f) => ({ ...f, address: v }));
+                    if (editCoordsAutoFilled) {
+                      setEditCoordsAutoFilled(false);
+                      setEditSiteForm((f) => ({ ...f, lat: '', lng: '' }));
+                    }
+                  }}
+                  onChange={(address, lat, lng) => {
+                    setEditSiteForm((f) => ({ ...f, address, lat: String(lat), lng: String(lng) }));
+                    setEditCoordsAutoFilled(true);
+                  }}
+                />
+              </div>
             </label>
             <label className="text-sm text-gray-700 dark:text-slate-300">Latitude
-              <input type="number" step="0.000001" className="mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5" value={editSiteForm.lat} onChange={(e) => setEditSiteForm((f) => ({ ...f, lat: e.target.value }))} />
+              <input type="number" step="0.000001" className="mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5" value={editSiteForm.lat} readOnly={editCoordsAutoFilled} onChange={(e) => setEditSiteForm((f) => ({ ...f, lat: e.target.value }))} />
             </label>
             <label className="text-sm text-gray-700 dark:text-slate-300">Longitude
-              <input type="number" step="0.000001" className="mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5" value={editSiteForm.lng} onChange={(e) => setEditSiteForm((f) => ({ ...f, lng: e.target.value }))} />
+              <input type="number" step="0.000001" className="mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5" value={editSiteForm.lng} readOnly={editCoordsAutoFilled} onChange={(e) => setEditSiteForm((f) => ({ ...f, lng: e.target.value }))} />
             </label>
             <label className="text-sm text-gray-700 dark:text-slate-300">Organization
               <input className="mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5" value={editSiteForm.organizationName} onChange={(e) => setEditSiteForm((f) => ({ ...f, organizationName: e.target.value }))} />
@@ -1095,6 +1150,105 @@ export default function SiteDetail() {
         </div>
       )}
 
+      {/* ── Session Safety Limits ── */}
+      <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-5">
+        <h2 className="text-sm font-semibold text-gray-700 dark:text-slate-300">Session Safety Limits</h2>
+        <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">Auto-stop sessions when limits are reached. Leave blank for no limit.</p>
+        <div className="mt-4 grid gap-4 sm:grid-cols-3">
+          <label className="text-sm text-gray-700 dark:text-slate-300">
+            Max charge duration
+            <div className="relative mt-1">
+              <input
+                type="number"
+                min="1"
+                step="1"
+                placeholder="No limit"
+                className="w-full rounded-md border border-gray-300 dark:border-slate-600 px-3 py-1.5 pr-14 text-sm"
+                value={safetyLimits.maxChargeDurationMin}
+                onChange={(e) => setSafetyLimits({ ...safetyLimits, maxChargeDurationMin: e.target.value })}
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">min</span>
+            </div>
+          </label>
+          <label className="text-sm text-gray-700 dark:text-slate-300">
+            Max idle duration
+            <div className="relative mt-1">
+              <input
+                type="number"
+                min="1"
+                step="1"
+                placeholder="No limit"
+                className="w-full rounded-md border border-gray-300 dark:border-slate-600 px-3 py-1.5 pr-14 text-sm"
+                value={safetyLimits.maxIdleDurationMin}
+                onChange={(e) => setSafetyLimits({ ...safetyLimits, maxIdleDurationMin: e.target.value })}
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">min</span>
+            </div>
+          </label>
+          <label className="text-sm text-gray-700 dark:text-slate-300">
+            Max session cost
+            <div className="relative mt-1">
+              <input
+                type="number"
+                min="0.01"
+                step="0.01"
+                placeholder="No limit"
+                className="w-full rounded-md border border-gray-300 dark:border-slate-600 px-3 py-1.5 pl-7 text-sm"
+                value={safetyLimits.maxSessionCostUsd}
+                onChange={(e) => setSafetyLimits({ ...safetyLimits, maxSessionCostUsd: e.target.value })}
+              />
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">$</span>
+            </div>
+          </label>
+        </div>
+        {(safetyLimits.maxChargeDurationMin !== (savedSafetyLimits?.maxChargeDurationMin ?? '') ||
+          safetyLimits.maxIdleDurationMin !== (savedSafetyLimits?.maxIdleDurationMin ?? '') ||
+          safetyLimits.maxSessionCostUsd !== (savedSafetyLimits?.maxSessionCostUsd ?? '')) && (
+          <div className="mt-4 flex items-center gap-3">
+            <button
+              className="rounded-md bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+              onClick={async () => {
+                setSafetyMsg('');
+                try {
+                  const token = await getToken();
+                  const client = createApiClient(token);
+                  await client.updateSite(site.id, {
+                    name: site.name,
+                    address: site.address,
+                    lat: site.lat,
+                    lng: site.lng,
+                    maxChargeDurationMin: safetyLimits.maxChargeDurationMin ? parseInt(safetyLimits.maxChargeDurationMin, 10) : null,
+                    maxIdleDurationMin: safetyLimits.maxIdleDurationMin ? parseInt(safetyLimits.maxIdleDurationMin, 10) : null,
+                    maxSessionCostUsd: safetyLimits.maxSessionCostUsd ? parseFloat(safetyLimits.maxSessionCostUsd) : null,
+                  });
+                  setSavedSafetyLimits({ ...safetyLimits });
+                  setSafetyMsg('✅ Safety limits saved');
+                } catch (err: any) {
+                  setSafetyMsg(`❌ ${err.message ?? 'Failed to save'}`);
+                }
+              }}
+            >
+              Save limits
+            </button>
+            <button
+              className="rounded-md border border-gray-300 dark:border-slate-600 px-4 py-1.5 text-sm text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800"
+              onClick={() => {
+                if (savedSafetyLimits) setSafetyLimits({ ...savedSafetyLimits });
+                setSafetyMsg('');
+              }}
+            >
+              Reset
+            </button>
+            {safetyMsg && <span className="text-xs">{safetyMsg}</span>}
+          </div>
+        )}
+        {safetyMsg && !(safetyLimits.maxChargeDurationMin !== (savedSafetyLimits?.maxChargeDurationMin ?? '') ||
+          safetyLimits.maxIdleDurationMin !== (savedSafetyLimits?.maxIdleDurationMin ?? '') ||
+          safetyLimits.maxSessionCostUsd !== (savedSafetyLimits?.maxSessionCostUsd ?? '')) && (
+          <p className="mt-3 text-xs">{safetyMsg}</p>
+        )}
+      </div>
+
       {/* ── Map ── */}
       <ChargerMap lat={site.lat} lng={site.lng} siteName={site.name} chargers={site.chargers} />
 
@@ -1129,12 +1283,12 @@ export default function SiteDetail() {
               <span className="text-right">Action</span>
             </div>
             <div className="divide-y divide-gray-100 dark:divide-slate-800">
-              {site.chargers.map((charger) => <ChargerListRow key={charger.id} charger={charger} uptime={chargerUptime[charger.id]} />)}
+              {site.chargers.map((charger) => <ChargerListRow key={charger.id} charger={charger} uptime={chargerUptime[charger.id]} onUnassign={() => setUnassignTarget({ id: charger.id, ocppId: charger.ocppId })} />)}
             </div>
           </div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {site.chargers.map((charger) => <ChargerCard key={charger.id} charger={charger} uptime={chargerUptime[charger.id]} />)}
+            {site.chargers.map((charger) => <ChargerCard key={charger.id} charger={charger} uptime={chargerUptime[charger.id]} onUnassign={() => setUnassignTarget({ id: charger.id, ocppId: charger.ocppId })} />)}
           </div>
         )}
       </div>
@@ -1153,6 +1307,37 @@ export default function SiteDetail() {
           ))}
         </div>
       </div>
+
+      {/* ── Unassign charger confirmation dialog ── */}
+      {unassignTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-6 shadow-xl">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">Unassign Charger</h3>
+            <p className="mt-2 text-sm text-gray-600 dark:text-slate-400">
+              Are you sure you want to unassign <span className="font-mono font-semibold text-gray-900 dark:text-slate-100">{unassignTarget.ocppId}</span> from this site?
+            </p>
+            <p className="mt-1 text-xs text-gray-500 dark:text-slate-500">
+              All historical charging sessions will be preserved. The charger will appear as unassigned and can be reassigned to another site later.
+            </p>
+            <div className="mt-5 flex justify-end gap-3">
+              <button
+                onClick={() => setUnassignTarget(null)}
+                disabled={unassignBusy}
+                className="rounded-md border border-gray-300 dark:border-slate-700 px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleUnassignCharger}
+                disabled={unassignBusy}
+                className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                {unassignBusy ? 'Unassigning…' : 'Unassign'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showAddCharger && (
         <AddChargerDialog
@@ -1182,7 +1367,7 @@ function SiteKpiTile({ label, value, live }: { label: string; value: string; liv
   );
 }
 
-function ChargerListRow({ charger, uptime }: { charger: SiteDetailType['chargers'][number]; uptime?: ChargerUptime }) {
+function ChargerListRow({ charger, uptime, onUnassign }: { charger: SiteDetailType['chargers'][number]; uptime?: ChargerUptime; onUnassign?: () => void }) {
   return (
     <div className="grid gap-3 px-4 py-3 md:grid-cols-[1.6fr_1fr_1.8fr_0.8fr] md:items-center">
       <div>
@@ -1213,14 +1398,23 @@ function ChargerListRow({ charger, uptime }: { charger: SiteDetailType['chargers
         ))}
       </div>
 
-      <div className="md:text-right">
+      <div className="flex items-center justify-end gap-2">
+        {onUnassign && (
+          <button
+            onClick={onUnassign}
+            title="Unassign charger from this site"
+            className="inline-block rounded-md border border-red-300 dark:border-red-700/50 px-3 py-1.5 text-xs font-medium text-red-600 dark:text-red-400 bg-white dark:bg-slate-800/60 hover:bg-red-50 dark:hover:bg-red-900/20"
+          >
+            Unassign
+          </button>
+        )}
         <Link to={`/chargers/${shortId(charger.id)}`} className="inline-block rounded-md border border-gray-300 dark:border-slate-700 px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-slate-400 bg-white dark:bg-slate-800/60 hover:bg-gray-50 dark:hover:bg-slate-700">View Detail →</Link>
       </div>
     </div>
   );
 }
 
-function ChargerCard({ charger, uptime }: { charger: SiteDetailType['chargers'][number]; uptime?: ChargerUptime }) {
+function ChargerCard({ charger, uptime, onUnassign }: { charger: SiteDetailType['chargers'][number]; uptime?: ChargerUptime; onUnassign?: () => void }) {
   return (
     <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 shadow-sm">
       <div className="flex items-start justify-between">
@@ -1257,7 +1451,18 @@ function ChargerCard({ charger, uptime }: { charger: SiteDetailType['chargers'][
         </div>
       )}
 
-      <Link to={`/chargers/${shortId(charger.id)}`} className="mt-3 block rounded-md border border-gray-300 dark:border-slate-700 px-3 py-1.5 text-center text-xs font-medium text-gray-600 dark:text-slate-400 bg-white dark:bg-slate-800/60 hover:bg-gray-50 dark:hover:bg-slate-700">View Detail →</Link>
+      <div className="mt-3 flex gap-2">
+        {onUnassign && (
+          <button
+            onClick={onUnassign}
+            title="Unassign charger from this site"
+            className="flex-1 rounded-md border border-red-300 dark:border-red-700/50 px-3 py-1.5 text-center text-xs font-medium text-red-600 dark:text-red-400 bg-white dark:bg-slate-800/60 hover:bg-red-50 dark:hover:bg-red-900/20"
+          >
+            Unassign
+          </button>
+        )}
+        <Link to={`/chargers/${shortId(charger.id)}`} className="flex-1 rounded-md border border-gray-300 dark:border-slate-700 px-3 py-1.5 text-center text-xs font-medium text-gray-600 dark:text-slate-400 bg-white dark:bg-slate-800/60 hover:bg-gray-50 dark:hover:bg-slate-700">View Detail →</Link>
+      </div>
     </div>
   );
 }
