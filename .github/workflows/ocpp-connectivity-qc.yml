@@ -104,6 +104,11 @@ jobs:
             .catch(e => { console.error(e); process.exit(1); })
             .finally(() => p.\$disconnect());
           "
+      - name: Build OCPP server
+        run: |
+          npm run build --workspace=packages/shared
+          cd packages/ocpp-server && npx tsc --skipLibCheck
+
       - name: Start OCPP server (background)
         run: |
           cd packages/ocpp-server
