@@ -54,7 +54,7 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run Playwright smoke tests
-        run: npm run test:playwright --workspace=packages/portal
+        run: cd packages/portal && npx playwright test --project chromium
 
       - name: Upload Playwright HTML report
         if: always()
