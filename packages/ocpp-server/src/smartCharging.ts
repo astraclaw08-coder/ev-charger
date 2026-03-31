@@ -234,7 +234,7 @@ async function applySmartChargingStacked(chargerId: string, trigger: string): Pr
 
   // Push each active profile
   for (const entry of activeEntries) {
-    const existing = existingByProfileId.get(entry.profile.id);
+    const existing: any = existingByProfileId.get(entry.profile.id);
     let status: string = 'PENDING_OFFLINE';
     let lastError: string | null = null;
     let lastAppliedAt: Date | null = existing?.lastAppliedAt ?? null;
