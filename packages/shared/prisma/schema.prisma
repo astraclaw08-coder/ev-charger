@@ -135,9 +135,25 @@ model Charger {
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
 
+  healthAssessments ChargerHealthAssessment[]
+
   @@index([siteId])
   @@index([groupId])
   @@index([status])
+}
+
+model ChargerHealthAssessment {
+  id             String   @id @default(uuid())
+  chargerId      String
+  charger        Charger  @relation(fields: [chargerId], references: [id], onDelete: Cascade)
+  connectorId    Int?
+  overallScore   Int
+  overallStatus  String   // healthy | degraded | critical | offline
+  reportJson     Json
+  requestedBy    String   // operator ID
+  createdAt      DateTime @default(now())
+
+  @@index([chargerId, createdAt])
 }
 
 model ChargerGroup {

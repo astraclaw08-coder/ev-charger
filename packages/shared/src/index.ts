@@ -17,3 +17,4 @@ export * from './touPricing';
 export * from './billing/sessionBilling';
 export * from './billing/sessionTimings';
 export { captureSessionBillingSnapshot, backfillBillingSnapshots } from './billing/snapshotBilling';
+export * from './types/chargerHealth';
