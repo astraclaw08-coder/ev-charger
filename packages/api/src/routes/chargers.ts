@@ -70,7 +70,7 @@ export async function chargerRoutes(app: FastifyInstance) {
       },
     });
 
-    return chargers.map(({ password: _pw, ...c }) => c);
+    return chargers.map(({ password: _pw, ...c }: { password: unknown;[k: string]: unknown }) => c);
   });
 
   // GET /chargers — list chargers with optional bbox filter
