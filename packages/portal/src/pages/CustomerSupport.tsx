@@ -1,338 +1,592 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { createApiClient, type SessionRecord, type SiteListItem, type SiteDetail } from '../api/client';
+import React, { useCallback, useEffect, useState } from 'react';
+import { createApiClient, type SupportDriverSummary, type SupportDriverDetail, type SupportDriverSession, type SupportDriverSessionsResponse, type SupportDriverPaymentCard } from '../api/client';
 import { useToken } from '../auth/TokenContext';
 
-type CaseNote = {
-  id: string;
-  sessionId: string;
-  text: string;
-  createdAt: string;
-};
+// ── Tab type ─────────────────────────────────────────────────────────────
+type Tab = 'profile' | 'sessions' | 'ocpp' | 'payment' | 'activity';
 
-type SupportAudit = {
-  id: string;
-  sessionId: string;
-  action: 'refund-approved' | 'refund-denied' | 'investigate-payment';
-  reason: string;
-  createdAt: string;
-};
-
-function notesKey(chargerId: string) {
-  return `ev-portal:support:notes:${chargerId}`;
-}
-function auditKey(chargerId: string) {
-  return `ev-portal:support:audit:${chargerId}`;
+// ── Helpers ──────────────────────────────────────────────────────────────
+function fmtDate(d: string | null) {
+  if (!d) return '—';
+  return new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
-function loadNotes(chargerId: string): CaseNote[] {
-  try {
-    const raw = localStorage.getItem(notesKey(chargerId));
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as CaseNote[];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
+function StatusBadge({ status }: { status: string }) {
+  const colors: Record<string, string> = {
+    ACTIVE: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
+    COMPLETED: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
+    FAULTED: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
+    STOPPED: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300',
+  };
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${colors[status] ?? 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'}`}>
+      {status}
+    </span>
+  );
 }
 
-function saveNotes(chargerId: string, notes: CaseNote[]) {
-  localStorage.setItem(notesKey(chargerId), JSON.stringify(notes.slice(0, 200)));
-}
-
-function loadAudit(chargerId: string): SupportAudit[] {
-  try {
-    const raw = localStorage.getItem(auditKey(chargerId));
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as SupportAudit[];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveAudit(chargerId: string, items: SupportAudit[]) {
-  localStorage.setItem(auditKey(chargerId), JSON.stringify(items.slice(0, 300)));
-}
-
+// ── Main Component ───────────────────────────────────────────────────────
 export default function CustomerSupport() {
   const getToken = useToken();
-  const [sites, setSites] = useState<SiteListItem[]>([]);
-  const [site, setSite] = useState<SiteDetail | null>(null);
-  const [selectedChargerId, setSelectedChargerId] = useState('');
-  const [sessions, setSessions] = useState<SessionRecord[]>([]);
-  const [notes, setNotes] = useState<CaseNote[]>([]);
-  const [audit, setAudit] = useState<SupportAudit[]>([]);
   const [query, setQuery] = useState('');
-  const [noteText, setNoteText] = useState('');
-  const [triageReason, setTriageReason] = useState('Charge interruption with partial session completion');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [results, setResults] = useState<SupportDriverSummary[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState('');
+  const [searched, setSearched] = useState(false);
 
-  useEffect(() => {
-    async function bootstrap() {
-      try {
-        const token = await getToken();
-        const api = createApiClient(token);
-        const siteList = await api.getSites();
-        setSites(siteList);
-        if (!siteList.length) return;
+  // Selected driver
+  const [driver, setDriver] = useState<SupportDriverDetail | null>(null);
+  const [loadingDriver, setLoadingDriver] = useState(false);
+  const [tab, setTab] = useState<Tab>('profile');
 
-        const siteDetail = await api.getSite(siteList[0].id);
-        setSite(siteDetail);
-        if (!siteDetail.chargers.length) return;
+  // Profile editing
+  const [editing, setEditing] = useState(false);
+  const [editForm, setEditForm] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState('');
 
-        const firstCharger = siteDetail.chargers[0].id;
-        setSelectedChargerId(firstCharger);
-      } catch (err: unknown) {
-        setError(err instanceof Error ? err.message : 'Failed to load support workspace');
-      } finally {
-        setLoading(false);
-      }
+  // Sessions tab
+  const [sessionsData, setSessionsData] = useState<SupportDriverSessionsResponse | null>(null);
+  const [sessionsPage, setSessionsPage] = useState(1);
+  const [loadingSessions, setLoadingSessions] = useState(false);
+  const [sessionFilter, setSessionFilter] = useState<{ status: string; from: string; to: string }>({ status: '', from: '', to: '' });
+
+  // Payment tab
+  const [cards, setCards] = useState<SupportDriverPaymentCard[]>([]);
+  const [loadingCards, setLoadingCards] = useState(false);
+  const [cardsError, setCardsError] = useState('');
+
+  // ── Search ────────────────────────────────────────────────────────────
+  const handleSearch = useCallback(async () => {
+    if (!query.trim()) return;
+    setSearching(true);
+    setSearchError('');
+    setSearched(true);
+    setDriver(null);
+    try {
+      const token = await getToken();
+      const api = createApiClient(token);
+      const res = await api.supportDriverLookup(query.trim());
+      setResults(res);
+    } catch (e: any) {
+      setSearchError(e?.message ?? 'Search failed');
+      setResults([]);
+    } finally {
+      setSearching(false);
     }
-    bootstrap();
+  }, [query, getToken]);
+
+  // ── Load driver detail ────────────────────────────────────────────────
+  const selectDriver = useCallback(async (id: string) => {
+    setLoadingDriver(true);
+    setTab('profile');
+    setEditing(false);
+    setSaveMsg('');
+    try {
+      const token = await getToken();
+      const api = createApiClient(token);
+      const d = await api.supportDriverDetail(id);
+      setDriver(d);
+      setEditForm({
+        name: d.name ?? '',
+        phone: d.phone ?? '',
+        homeAddress: d.homeAddress ?? '',
+        homeCity: d.homeCity ?? '',
+        homeState: d.homeState ?? '',
+        homeZipCode: d.homeZipCode ?? '',
+        idTag: d.idTag ?? '',
+      });
+    } catch {
+      setDriver(null);
+    } finally {
+      setLoadingDriver(false);
+    }
   }, [getToken]);
 
-  useEffect(() => {
-    async function loadSessions() {
-      if (!selectedChargerId) return;
-      try {
-        const token = await getToken();
-        const api = createApiClient(token);
-        const list = await api.getChargerSessions(selectedChargerId);
-        setSessions(list);
-        setNotes(loadNotes(selectedChargerId));
-        setAudit(loadAudit(selectedChargerId));
-      } catch (err: unknown) {
-        setError(err instanceof Error ? err.message : 'Failed to load session timeline');
-      }
+  // ── Load sessions ─────────────────────────────────────────────────────
+  const loadSessions = useCallback(async (page = 1) => {
+    if (!driver) return;
+    setLoadingSessions(true);
+    try {
+      const token = await getToken();
+      const api = createApiClient(token);
+      const res = await api.supportDriverSessions(driver.id, {
+        page,
+        limit: 15,
+        status: sessionFilter.status || undefined,
+        from: sessionFilter.from || undefined,
+        to: sessionFilter.to || undefined,
+      });
+      setSessionsData(res);
+      setSessionsPage(page);
+    } catch {
+      setSessionsData(null);
+    } finally {
+      setLoadingSessions(false);
     }
-    loadSessions();
-  }, [selectedChargerId, getToken]);
+  }, [driver, getToken, sessionFilter]);
 
-  const filteredSessions = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return sessions;
-    return sessions.filter((s) => {
-      const email = s.user?.email?.toLowerCase() ?? '';
-      const name = s.user?.name?.toLowerCase() ?? '';
-      return (
-        s.id.toLowerCase().includes(q) ||
-        s.idTag.toLowerCase().includes(q) ||
-        email.includes(q) ||
-        name.includes(q)
-      );
-    });
-  }, [sessions, query]);
+  // ── Load payment methods ──────────────────────────────────────────────
+  const loadCards = useCallback(async () => {
+    if (!driver) return;
+    setLoadingCards(true);
+    setCardsError('');
+    try {
+      const token = await getToken();
+      const api = createApiClient(token);
+      const res = await api.supportDriverPaymentMethods(driver.id);
+      setCards(res.cards);
+    } catch (e: any) {
+      setCardsError(e?.message ?? 'Failed to load payment methods');
+      setCards([]);
+    } finally {
+      setLoadingCards(false);
+    }
+  }, [driver, getToken]);
 
-  const noteCountBySession = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const n of notes) map.set(n.sessionId, (map.get(n.sessionId) ?? 0) + 1);
-    return map;
-  }, [notes]);
+  // Tab data loading
+  useEffect(() => {
+    if (tab === 'sessions' && driver) loadSessions(1);
+    if (tab === 'payment' && driver) loadCards();
+  }, [tab, driver?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (loading) return <div className="text-sm text-gray-500 dark:text-slate-400">Loading customer support workspace…</div>;
-  if (error) return <div className="rounded-lg bg-red-50 dark:bg-red-900/20 p-4 text-sm text-red-700 dark:text-red-400">{error}</div>;
+  // ── Save profile ──────────────────────────────────────────────────────
+  const handleSave = useCallback(async () => {
+    if (!driver) return;
+    setSaving(true);
+    setSaveMsg('');
+    try {
+      const token = await getToken();
+      const api = createApiClient(token);
+      const updated = await api.supportDriverUpdate(driver.id, editForm as any);
+      setDriver(updated);
+      setEditing(false);
+      setSaveMsg('Profile updated.');
+      setTimeout(() => setSaveMsg(''), 3000);
+    } catch (e: any) {
+      setSaveMsg(`Error: ${e?.message ?? 'Save failed'}`);
+    } finally {
+      setSaving(false);
+    }
+  }, [driver, editForm, getToken]);
+
+  // ── Render ────────────────────────────────────────────────────────────
+  const tabs: { key: Tab; label: string }[] = [
+    { key: 'profile', label: 'Profile' },
+    { key: 'sessions', label: 'Sessions' },
+    { key: 'ocpp', label: 'OCPP IDs' },
+    { key: 'payment', label: 'Payment' },
+    { key: 'activity', label: 'Activity' },
+  ];
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div>
-        <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-slate-400">
-          <Link to="/overview" className="hover:text-gray-700 dark:hover:text-slate-200 dark:text-slate-300">Overview</Link>
-          <span>/</span>
-          <span className="text-gray-900 dark:text-slate-100">Customer Support</span>
-        </div>
-        <h1 className="mt-1 text-2xl font-bold text-gray-900 dark:text-slate-100">Customer Support Console</h1>
-        <p className="text-sm text-gray-500 dark:text-slate-400">Look up drivers, review session timelines, process refunds, and track support actions.</p>
+        <h1 className="text-2xl font-bold text-[var(--color-text-primary,#111)]">Customer Support</h1>
+        <p className="text-sm text-[var(--color-text-secondary,#6b7280)] mt-1">
+          Look up a driver by email or phone number to manage their account.
+        </p>
       </div>
 
-      <div className="grid gap-4 rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 md:grid-cols-3">
-        <div>
-          <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Site</label>
-          <select
-            className="w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-2 text-sm"
-            value={site?.id ?? ''}
-            onChange={async (e) => {
-              const id = e.target.value;
-              const token = await getToken();
-              const detail = await createApiClient(token).getSite(id);
-              setSite(detail);
-              const next = detail.chargers[0]?.id ?? '';
-              setSelectedChargerId(next);
-            }}
-          >
-            {sites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </select>
-        </div>
-
-        <div>
-          <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Charger</label>
-          <select
-            className="w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-2 text-sm"
-            value={selectedChargerId}
-            onChange={(e) => setSelectedChargerId(e.target.value)}
-          >
-            {site?.chargers.map((c) => (
-              <option key={c.id} value={c.id}>{c.ocppId} · {c.model}</option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Customer lookup</label>
+      {/* Search */}
+      <div className="flex gap-3 items-center">
+        <div className="relative flex-1 max-w-lg">
           <input
-            className="w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-2 text-sm"
-            placeholder="email, name, idTag, session id"
+            type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+            placeholder="Enter driver email or phone number..."
+            className="w-full px-4 py-2.5 rounded-lg border border-[var(--color-border,#d1d5db)] bg-[var(--color-bg-primary,#fff)] text-[var(--color-text-primary,#111)] placeholder-[var(--color-text-tertiary,#9ca3af)] focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition"
           />
+        </div>
+        <button
+          onClick={handleSearch}
+          disabled={searching || !query.trim()}
+          className="px-5 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
+        >
+          {searching ? 'Searching...' : 'Search'}
+        </button>
+      </div>
+
+      {searchError && (
+        <div className="p-3 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 text-sm">
+          {searchError}
+        </div>
+      )}
+
+      {/* Search Results */}
+      {searched && !searching && results.length === 0 && !searchError && (
+        <div className="p-8 text-center text-[var(--color-text-secondary,#6b7280)] bg-[var(--color-bg-secondary,#f9fafb)] rounded-lg">
+          No drivers found for "{query}".
+        </div>
+      )}
+
+      {results.length > 0 && !driver && (
+        <div className="border border-[var(--color-border,#e5e7eb)] rounded-lg overflow-hidden">
+          <div className="px-4 py-3 bg-[var(--color-bg-secondary,#f9fafb)] border-b border-[var(--color-border,#e5e7eb)]">
+            <span className="text-sm font-medium text-[var(--color-text-secondary,#6b7280)]">{results.length} result{results.length !== 1 ? 's' : ''}</span>
+          </div>
+          {results.map((r) => (
+            <button
+              key={r.id}
+              onClick={() => selectDriver(r.id)}
+              className="w-full flex items-center justify-between px-4 py-3 hover:bg-[var(--color-bg-secondary,#f9fafb)] transition border-b border-[var(--color-border,#e5e7eb)] last:border-b-0 text-left"
+            >
+              <div>
+                <div className="font-medium text-[var(--color-text-primary,#111)]">{r.name ?? 'Unnamed'}</div>
+                <div className="text-sm text-[var(--color-text-secondary,#6b7280)]">{r.email} {r.phone ? `· ${r.phone}` : ''}</div>
+              </div>
+              <div className="text-right">
+                <div className="text-xs text-[var(--color-text-tertiary,#9ca3af)]">idTag: {r.idTag}</div>
+                <div className="text-xs text-[var(--color-text-tertiary,#9ca3af)]">{r.sessionCount} sessions · Joined {fmtDate(r.createdAt)}</div>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Driver Detail */}
+      {loadingDriver && (
+        <div className="flex items-center justify-center py-12 text-[var(--color-text-secondary,#6b7280)]">Loading driver...</div>
+      )}
+
+      {driver && !loadingDriver && (
+        <div className="border border-[var(--color-border,#e5e7eb)] rounded-lg overflow-hidden">
+          {/* Driver header */}
+          <div className="px-5 py-4 bg-[var(--color-bg-secondary,#f9fafb)] border-b border-[var(--color-border,#e5e7eb)] flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-[var(--color-text-primary,#111)]">{driver.name ?? 'Unnamed Driver'}</h2>
+              <p className="text-sm text-[var(--color-text-secondary,#6b7280)]">{driver.email} {driver.phone ? `· ${driver.phone}` : ''}</p>
+            </div>
+            <button
+              onClick={() => { setDriver(null); setEditing(false); }}
+              className="text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+            >
+              ← Back to results
+            </button>
+          </div>
+
+          {/* Tabs */}
+          <div className="flex border-b border-[var(--color-border,#e5e7eb)]">
+            {tabs.map((t) => (
+              <button
+                key={t.key}
+                onClick={() => setTab(t.key)}
+                className={`px-5 py-3 text-sm font-medium transition border-b-2 ${tab === t.key
+                  ? 'border-blue-600 text-blue-600 dark:text-blue-400 dark:border-blue-400'
+                  : 'border-transparent text-[var(--color-text-secondary,#6b7280)] hover:text-[var(--color-text-primary,#111)] hover:border-gray-300'
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Tab content */}
+          <div className="p-5">
+            {tab === 'profile' && <ProfileTab driver={driver} editing={editing} setEditing={setEditing} editForm={editForm} setEditForm={setEditForm} saving={saving} onSave={handleSave} saveMsg={saveMsg} />}
+            {tab === 'sessions' && <SessionsTab data={sessionsData} loading={loadingSessions} page={sessionsPage} onPageChange={loadSessions} filter={sessionFilter} setFilter={setSessionFilter} onApplyFilter={() => loadSessions(1)} />}
+            {tab === 'ocpp' && <OcppTab driver={driver} editForm={editForm} setEditForm={setEditForm} saving={saving} onSave={handleSave} saveMsg={saveMsg} />}
+            {tab === 'payment' && <PaymentTab cards={cards} loading={loadingCards} error={cardsError} />}
+            {tab === 'activity' && <ActivityTab driver={driver} />}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Profile Tab ──────────────────────────────────────────────────────────
+function ProfileTab({ driver, editing, setEditing, editForm, setEditForm, saving, onSave, saveMsg }: {
+  driver: SupportDriverDetail; editing: boolean; setEditing: (v: boolean) => void;
+  editForm: Record<string, string>; setEditForm: (v: Record<string, string>) => void;
+  saving: boolean; onSave: () => void; saveMsg: string;
+}) {
+  const fields: { key: string; label: string; readonly?: boolean }[] = [
+    { key: 'email', label: 'Email', readonly: true },
+    { key: 'name', label: 'Name' },
+    { key: 'phone', label: 'Phone' },
+    { key: 'homeAddress', label: 'Street Address' },
+    { key: 'homeCity', label: 'City' },
+    { key: 'homeState', label: 'State' },
+    { key: 'homeZipCode', label: 'Zip Code' },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="font-semibold text-[var(--color-text-primary,#111)]">Driver Profile</h3>
+        {!editing && (
+          <button onClick={() => setEditing(true)} className="text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400">
+            Edit
+          </button>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {fields.map((f) => (
+          <div key={f.key}>
+            <label className="block text-xs font-medium text-[var(--color-text-secondary,#6b7280)] mb-1">{f.label}</label>
+            {editing && !f.readonly ? (
+              <input
+                value={editForm[f.key] ?? ''}
+                onChange={(e) => setEditForm({ ...editForm, [f.key]: e.target.value })}
+                className="w-full px-3 py-2 rounded-md border border-[var(--color-border,#d1d5db)] bg-[var(--color-bg-primary,#fff)] text-[var(--color-text-primary,#111)] text-sm focus:ring-2 focus:ring-blue-500/40"
+              />
+            ) : (
+              <div className="text-sm text-[var(--color-text-primary,#111)]">
+                {(driver as any)[f.key] || <span className="text-[var(--color-text-tertiary,#9ca3af)]">—</span>}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {editing && (
+        <div className="flex gap-3 pt-2">
+          <button onClick={onSave} disabled={saving} className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 transition">
+            {saving ? 'Saving...' : 'Save Changes'}
+          </button>
+          <button onClick={() => setEditing(false)} className="px-4 py-2 text-sm text-[var(--color-text-secondary,#6b7280)] hover:text-[var(--color-text-primary,#111)] transition">
+            Cancel
+          </button>
+        </div>
+      )}
+
+      {saveMsg && (
+        <p className={`text-sm ${saveMsg.startsWith('Error') ? 'text-red-600' : 'text-green-600'}`}>{saveMsg}</p>
+      )}
+
+      <div className="pt-4 border-t border-[var(--color-border,#e5e7eb)]">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+          <div>
+            <div className="text-2xl font-bold text-[var(--color-text-primary,#111)]">{driver.sessionCount}</div>
+            <div className="text-xs text-[var(--color-text-secondary,#6b7280)]">Total Sessions</div>
+          </div>
+          <div>
+            <div className="text-2xl font-bold text-[var(--color-text-primary,#111)]">{driver.paymentCount}</div>
+            <div className="text-xs text-[var(--color-text-secondary,#6b7280)]">Payments</div>
+          </div>
+          <div>
+            <div className="text-sm font-medium text-[var(--color-text-primary,#111)]">{fmtDate(driver.createdAt)}</div>
+            <div className="text-xs text-[var(--color-text-secondary,#6b7280)]">Joined</div>
+          </div>
+          <div>
+            <div className="text-sm font-medium text-[var(--color-text-primary,#111)]">{driver.paymentProfile ? 'Connected' : 'None'}</div>
+            <div className="text-xs text-[var(--color-text-secondary,#6b7280)]">Stripe</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Sessions Tab ─────────────────────────────────────────────────────────
+function SessionsTab({ data, loading, page, onPageChange, filter, setFilter, onApplyFilter }: {
+  data: SupportDriverSessionsResponse | null; loading: boolean; page: number;
+  onPageChange: (p: number) => void; filter: { status: string; from: string; to: string };
+  setFilter: (f: { status: string; from: string; to: string }) => void; onApplyFilter: () => void;
+}) {
+  return (
+    <div className="space-y-4">
+      {/* Filters */}
+      <div className="flex flex-wrap gap-3 items-end">
+        <div>
+          <label className="block text-xs text-[var(--color-text-secondary,#6b7280)] mb-1">Status</label>
+          <select
+            value={filter.status}
+            onChange={(e) => setFilter({ ...filter, status: e.target.value })}
+            className="px-3 py-2 rounded-md border border-[var(--color-border,#d1d5db)] bg-[var(--color-bg-primary,#fff)] text-sm text-[var(--color-text-primary,#111)]"
+          >
+            <option value="">All</option>
+            <option value="ACTIVE">Active</option>
+            <option value="COMPLETED">Completed</option>
+            <option value="STOPPED">Stopped</option>
+            <option value="FAULTED">Faulted</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs text-[var(--color-text-secondary,#6b7280)] mb-1">From</label>
+          <input type="date" value={filter.from} onChange={(e) => setFilter({ ...filter, from: e.target.value })} className="px-3 py-2 rounded-md border border-[var(--color-border,#d1d5db)] bg-[var(--color-bg-primary,#fff)] text-sm text-[var(--color-text-primary,#111)]" />
+        </div>
+        <div>
+          <label className="block text-xs text-[var(--color-text-secondary,#6b7280)] mb-1">To</label>
+          <input type="date" value={filter.to} onChange={(e) => setFilter({ ...filter, to: e.target.value })} className="px-3 py-2 rounded-md border border-[var(--color-border,#d1d5db)] bg-[var(--color-bg-primary,#fff)] text-sm text-[var(--color-text-primary,#111)]" />
+        </div>
+        <button onClick={onApplyFilter} className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition">
+          Apply
+        </button>
+      </div>
+
+      {loading && <div className="py-8 text-center text-[var(--color-text-secondary,#6b7280)]">Loading sessions...</div>}
+
+      {!loading && data && data.sessions.length === 0 && (
+        <div className="py-8 text-center text-[var(--color-text-secondary,#6b7280)]">No sessions found.</div>
+      )}
+
+      {!loading && data && data.sessions.length > 0 && (
+        <>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-[var(--color-border,#e5e7eb)]">
+                  <th className="text-left py-2 px-3 text-xs font-medium text-[var(--color-text-secondary,#6b7280)]">Date</th>
+                  <th className="text-left py-2 px-3 text-xs font-medium text-[var(--color-text-secondary,#6b7280)]">Status</th>
+                  <th className="text-left py-2 px-3 text-xs font-medium text-[var(--color-text-secondary,#6b7280)]">Site</th>
+                  <th className="text-left py-2 px-3 text-xs font-medium text-[var(--color-text-secondary,#6b7280)]">Charger</th>
+                  <th className="text-right py-2 px-3 text-xs font-medium text-[var(--color-text-secondary,#6b7280)]">Energy</th>
+                  <th className="text-right py-2 px-3 text-xs font-medium text-[var(--color-text-secondary,#6b7280)]">Cost</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.sessions.map((s) => (
+                  <tr key={s.id} className="border-b border-[var(--color-border,#e5e7eb)] hover:bg-[var(--color-bg-secondary,#f9fafb)]">
+                    <td className="py-2.5 px-3 text-[var(--color-text-primary,#111)]">{fmtDate(s.startedAt)}</td>
+                    <td className="py-2.5 px-3"><StatusBadge status={s.status} /></td>
+                    <td className="py-2.5 px-3 text-[var(--color-text-primary,#111)]">{s.siteName ?? '—'}</td>
+                    <td className="py-2.5 px-3 text-[var(--color-text-secondary,#6b7280)] font-mono text-xs">{s.chargerOcppId ?? '—'}</td>
+                    <td className="py-2.5 px-3 text-right text-[var(--color-text-primary,#111)]">{s.energyKwh != null ? `${s.energyKwh.toFixed(2)} kWh` : '—'}</td>
+                    <td className="py-2.5 px-3 text-right text-[var(--color-text-primary,#111)]">{s.costUsd != null ? `$${s.costUsd.toFixed(2)}` : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination */}
+          <div className="flex items-center justify-between pt-2">
+            <span className="text-xs text-[var(--color-text-secondary,#6b7280)]">
+              Page {data.page} of {data.pages} · {data.total} total
+            </span>
+            <div className="flex gap-2">
+              <button disabled={page <= 1} onClick={() => onPageChange(page - 1)} className="px-3 py-1 text-sm rounded border border-[var(--color-border,#d1d5db)] disabled:opacity-40 hover:bg-[var(--color-bg-secondary,#f9fafb)] transition">
+                Previous
+              </button>
+              <button disabled={page >= data.pages} onClick={() => onPageChange(page + 1)} className="px-3 py-1 text-sm rounded border border-[var(--color-border,#d1d5db)] disabled:opacity-40 hover:bg-[var(--color-bg-secondary,#f9fafb)] transition">
+                Next
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── OCPP IDs Tab ─────────────────────────────────────────────────────────
+function OcppTab({ driver, editForm, setEditForm, saving, onSave, saveMsg }: {
+  driver: SupportDriverDetail; editForm: Record<string, string>; setEditForm: (v: Record<string, string>) => void;
+  saving: boolean; onSave: () => void; saveMsg: string;
+}) {
+  const [editingIdTag, setEditingIdTag] = useState(false);
+
+  return (
+    <div className="space-y-4">
+      <h3 className="font-semibold text-[var(--color-text-primary,#111)]">OCPP Identifiers</h3>
+
+      <div className="p-4 rounded-lg bg-[var(--color-bg-secondary,#f9fafb)] border border-[var(--color-border,#e5e7eb)]">
+        <div className="flex items-center justify-between">
+          <div>
+            <label className="block text-xs font-medium text-[var(--color-text-secondary,#6b7280)] mb-1">idTag</label>
+            {editingIdTag ? (
+              <input
+                value={editForm.idTag ?? ''}
+                onChange={(e) => setEditForm({ ...editForm, idTag: e.target.value })}
+                maxLength={20}
+                className="px-3 py-2 rounded-md border border-[var(--color-border,#d1d5db)] bg-[var(--color-bg-primary,#fff)] text-sm text-[var(--color-text-primary,#111)] font-mono w-64 focus:ring-2 focus:ring-blue-500/40"
+              />
+            ) : (
+              <span className="text-sm font-mono text-[var(--color-text-primary,#111)]">{driver.idTag}</span>
+            )}
+          </div>
+          {!editingIdTag ? (
+            <button onClick={() => setEditingIdTag(true)} className="text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400">Edit</button>
+          ) : (
+            <div className="flex gap-2">
+              <button onClick={() => { onSave(); setEditingIdTag(false); }} disabled={saving} className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50">
+                {saving ? 'Saving...' : 'Save'}
+              </button>
+              <button onClick={() => setEditingIdTag(false)} className="px-3 py-1.5 text-sm text-[var(--color-text-secondary,#6b7280)]">Cancel</button>
+            </div>
+          )}
+        </div>
+        <p className="text-xs text-[var(--color-text-tertiary,#9ca3af)] mt-2">Max 20 characters. Used for OCPP authorization.</p>
+      </div>
+
+      {saveMsg && <p className={`text-sm ${saveMsg.startsWith('Error') ? 'text-red-600' : 'text-green-600'}`}>{saveMsg}</p>}
+
+      <div className="p-4 rounded-lg bg-[var(--color-bg-secondary,#f9fafb)] border border-[var(--color-border,#e5e7eb)]">
+        <label className="block text-xs font-medium text-[var(--color-text-secondary,#6b7280)] mb-1">Internal User ID</label>
+        <span className="text-sm font-mono text-[var(--color-text-secondary,#6b7280)]">{driver.id}</span>
+      </div>
+    </div>
+  );
+}
+
+// ── Payment Tab ──────────────────────────────────────────────────────────
+function PaymentTab({ cards, loading, error }: {
+  cards: SupportDriverPaymentCard[]; loading: boolean; error: string;
+}) {
+  if (loading) return <div className="py-8 text-center text-[var(--color-text-secondary,#6b7280)]">Loading payment methods...</div>;
+  if (error) return <div className="p-3 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 text-sm">{error}</div>;
+
+  return (
+    <div className="space-y-4">
+      <h3 className="font-semibold text-[var(--color-text-primary,#111)]">Payment Methods on File</h3>
+
+      {cards.length === 0 && (
+        <div className="py-8 text-center text-[var(--color-text-secondary,#6b7280)]">No payment methods found.</div>
+      )}
+
+      {cards.map((c) => (
+        <div key={c.id} className="flex items-center gap-4 p-4 rounded-lg bg-[var(--color-bg-secondary,#f9fafb)] border border-[var(--color-border,#e5e7eb)]">
+          <div className="w-12 h-8 rounded bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center text-white text-xs font-bold uppercase">
+            {c.brand.slice(0, 4)}
+          </div>
+          <div className="flex-1">
+            <div className="text-sm font-medium text-[var(--color-text-primary,#111)] capitalize">{c.brand} •••• {c.last4}</div>
+            <div className="text-xs text-[var(--color-text-secondary,#6b7280)]">Expires {String(c.expMonth).padStart(2, '0')}/{c.expYear}</div>
+          </div>
+        </div>
+      ))}
+
+      <p className="text-xs text-[var(--color-text-tertiary,#9ca3af)]">
+        Only redacted card details are shown. Full card numbers are never accessible.
+      </p>
+    </div>
+  );
+}
+
+// ── Activity Tab ─────────────────────────────────────────────────────────
+function ActivityTab({ driver }: { driver: SupportDriverDetail }) {
+  return (
+    <div className="space-y-4">
+      <h3 className="font-semibold text-[var(--color-text-primary,#111)]">Account Activity</h3>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="p-4 rounded-lg bg-[var(--color-bg-secondary,#f9fafb)] border border-[var(--color-border,#e5e7eb)]">
+          <label className="block text-xs font-medium text-[var(--color-text-secondary,#6b7280)] mb-1">Account Created</label>
+          <div className="text-sm text-[var(--color-text-primary,#111)]">{fmtDate(driver.createdAt)}</div>
+        </div>
+        <div className="p-4 rounded-lg bg-[var(--color-bg-secondary,#f9fafb)] border border-[var(--color-border,#e5e7eb)]">
+          <label className="block text-xs font-medium text-[var(--color-text-secondary,#6b7280)] mb-1">Total Sessions</label>
+          <div className="text-sm text-[var(--color-text-primary,#111)]">{driver.sessionCount}</div>
+        </div>
+        <div className="p-4 rounded-lg bg-[var(--color-bg-secondary,#f9fafb)] border border-[var(--color-border,#e5e7eb)]">
+          <label className="block text-xs font-medium text-[var(--color-text-secondary,#6b7280)] mb-1">Total Payments</label>
+          <div className="text-sm text-[var(--color-text-primary,#111)]">{driver.paymentCount}</div>
+        </div>
+        <div className="p-4 rounded-lg bg-[var(--color-bg-secondary,#f9fafb)] border border-[var(--color-border,#e5e7eb)]">
+          <label className="block text-xs font-medium text-[var(--color-text-secondary,#6b7280)] mb-1">Stripe Connected</label>
+          <div className="text-sm text-[var(--color-text-primary,#111)]">{driver.paymentProfile ? '✅ Yes' : '❌ No'}</div>
         </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <div className="lg:col-span-2 rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
-          <h2 className="mb-3 text-sm font-semibold text-gray-700 dark:text-slate-300">Session timeline + payment triage</h2>
-          <div className="space-y-3">
-            {filteredSessions.length === 0 && <p className="text-sm text-gray-500 dark:text-slate-400">No sessions found for this query.</p>}
-            {filteredSessions.map((s) => (
-              <div key={s.id} className="rounded-lg border border-gray-300 dark:border-slate-700 p-3">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-medium text-gray-900 dark:text-slate-100">{s.user?.email ?? s.idTag}</p>
-                  <span className="rounded-full bg-gray-100 dark:bg-slate-800 px-2 py-0.5 text-xs text-gray-700 dark:text-slate-300">{s.status}</span>
-                </div>
-                <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">Session {s.id} · Connector {s.connector.connectorId}</p>
-                <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
-                  {new Date(s.startedAt).toLocaleString()} → {s.stoppedAt ? new Date(s.stoppedAt).toLocaleString() : 'Active'}
-                </p>
-                <p className="mt-1 text-xs text-gray-600 dark:text-slate-400">
-                  Energy: {s.kwhDelivered ?? 0} kWh · Payment: {s.payment?.status ?? s.amountLabel ?? 'N/A'}
-                  {(s.effectiveAmountCents ?? s.estimatedAmountCents ?? s.payment?.amountCents) != null ? ` · $${(((s.effectiveAmountCents ?? s.estimatedAmountCents ?? s.payment?.amountCents) as number) / 100).toFixed(2)}` : ''}
-                  {s.amountState === 'PENDING' ? ' · Estimated while settlement is pending' : ''}
-                  {s.payment && ['CAPTURED', 'AUTHORIZED'].includes(String(s.payment.status)) ? ' · Refund eligible' : ''}
-                </p>
-                <p className="mt-1 text-xs text-brand-700 dark:text-brand-300">Case notes: {noteCountBySession.get(s.id) ?? 0}</p>
-
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    className="rounded-md border border-green-300 bg-green-50 dark:bg-green-900/20 px-2 py-1 text-xs text-green-700 dark:text-green-400 hover:bg-green-100"
-                    onClick={() => {
-                      if (!selectedChargerId) return;
-                      const canRefund = !!s.payment && ['CAPTURED', 'AUTHORIZED'].includes(String(s.payment.status));
-                      if (!canRefund) {
-                        window.alert('Refund unavailable: payment must be CAPTURED or AUTHORIZED.');
-                        return;
-                      }
-                      const ok = window.confirm(`Issue refund for session ${s.id}?`);
-                      if (!ok) return;
-
-                      const record: SupportAudit = {
-                        id: crypto.randomUUID(),
-                        sessionId: s.id,
-                        action: 'refund-approved',
-                        reason: triageReason,
-                        createdAt: new Date().toISOString(),
-                      };
-                      const next = [record, ...audit];
-                      setAudit(next);
-                      saveAudit(selectedChargerId, next);
-                    }}
-                  >Issue refund</button>
-                  <button
-                    type="button"
-                    className="rounded-md border border-red-300 bg-red-50 dark:bg-red-900/20 px-2 py-1 text-xs text-red-700 dark:text-red-400 hover:bg-red-100"
-                    onClick={() => {
-                      if (!selectedChargerId) return;
-                      const record: SupportAudit = {
-                        id: crypto.randomUUID(),
-                        sessionId: s.id,
-                        action: 'refund-denied',
-                        reason: triageReason,
-                        createdAt: new Date().toISOString(),
-                      };
-                      const next = [record, ...audit];
-                      setAudit(next);
-                      saveAudit(selectedChargerId, next);
-                    }}
-                  >Deny refund</button>
-                  <button
-                    type="button"
-                    className="rounded-md border border-yellow-300 bg-yellow-50 px-2 py-1 text-xs text-yellow-800 hover:bg-yellow-100"
-                    onClick={() => {
-                      if (!selectedChargerId) return;
-                      const record: SupportAudit = {
-                        id: crypto.randomUUID(),
-                        sessionId: s.id,
-                        action: 'investigate-payment',
-                        reason: triageReason,
-                        createdAt: new Date().toISOString(),
-                      };
-                      const next = [record, ...audit];
-                      setAudit(next);
-                      saveAudit(selectedChargerId, next);
-                    }}
-                  >Flag for payment investigation</button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="space-y-4">
-          <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
-            <h2 className="mb-3 text-sm font-semibold text-gray-700 dark:text-slate-300">Case notes</h2>
-            <textarea
-              className="h-24 w-full rounded-md border border-gray-300 dark:border-slate-600 p-2 text-sm"
-              placeholder="Write a support note..."
-              value={noteText}
-              onChange={(e) => setNoteText(e.target.value)}
-            />
-            <button
-              type="button"
-              className="mt-2 rounded-md bg-brand-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-700"
-              onClick={() => {
-                const target = filteredSessions[0]?.id;
-                if (!selectedChargerId || !target || !noteText.trim()) return;
-                const next: CaseNote[] = [
-                  {
-                    id: crypto.randomUUID(),
-                    sessionId: target,
-                    text: noteText.trim(),
-                    createdAt: new Date().toISOString(),
-                  },
-                  ...notes,
-                ];
-                setNotes(next);
-                saveNotes(selectedChargerId, next);
-                setNoteText('');
-              }}
-            >
-              Add note to top filtered session
-            </button>
-            <div className="mt-2">
-              <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Triage reason</label>
-              <input
-                className="w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-2 text-sm"
-                value={triageReason}
-                onChange={(e) => setTriageReason(e.target.value)}
-              />
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
-            <h2 className="mb-3 text-sm font-semibold text-gray-700 dark:text-slate-300">Support action audit history</h2>
-            <div className="space-y-2">
-              {audit.length === 0 && <p className="text-xs text-gray-500 dark:text-slate-400">No support actions recorded yet.</p>}
-              {audit.slice(0, 12).map((a) => (
-                <div key={a.id} className="rounded-md border border-gray-300 dark:border-slate-700 p-2">
-                  <p className="text-xs text-gray-500 dark:text-slate-400">{new Date(a.createdAt).toLocaleString()} · session {a.sessionId}</p>
-                  <p className="text-xs font-medium text-gray-800 dark:text-slate-200">{a.action}</p>
-                  <p className="text-xs text-gray-600 dark:text-slate-400">{a.reason}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+      <div className="p-4 rounded-lg bg-[var(--color-bg-secondary,#f9fafb)] border border-[var(--color-border,#e5e7eb)]">
+        <label className="block text-xs font-medium text-[var(--color-text-secondary,#6b7280)] mb-1">Auth Provider ID</label>
+        <div className="text-sm font-mono text-[var(--color-text-secondary,#6b7280)]">{driver.clerkId}</div>
       </div>
     </div>
   );

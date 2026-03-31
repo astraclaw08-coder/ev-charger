@@ -13,6 +13,7 @@ import { readModelRoutes } from './routes/readModels';
 import { smartChargingRoutes } from './routes/smartCharging';
 import { favoriteRoutes } from './routes/favorites';
 import { qrRedirectRoutes } from './routes/qrRedirect';
+import { supportDriverRoutes } from './routes/supportDrivers';
 // Temporarily disabled until notification Prisma models/types are aligned.
 // import { notificationRoutes } from './routes/notifications';
 import { prisma } from '@ev-charger/shared';
@@ -73,6 +74,7 @@ export async function buildServer() {
   await app.register(adminSettingsRoutes);
   await app.register(readModelRoutes);
   await app.register(smartChargingRoutes);
+  await app.register(supportDriverRoutes);
   await app.register(qrRedirectRoutes);
   // await app.register(notificationRoutes);
 
