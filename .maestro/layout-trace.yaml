@@ -1,0 +1,23 @@
+appId: dev.evcharger.app
+---
+# Navigate back then forward to trigger second mount, watch console for layout logs
+
+# Should be on charger detail already
+- waitForAnimationToEnd
+
+# Tap back
+- tapOn:
+    point: "8%,12%"
+
+- waitForAnimationToEnd
+- waitForAnimationToEnd
+
+# Navigate to charger detail again 
+# The site view should show charger cards — tap on the charger row
+- tapOn:
+    point: "50%,50%"
+
+- waitForAnimationToEnd
+- waitForAnimationToEnd
+- waitForAnimationToEnd
+- waitForAnimationToEnd

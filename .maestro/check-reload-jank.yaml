@@ -1,0 +1,33 @@
+appId: dev.evcharger.app
+---
+# Reproduce: load charger detail → back → load same charger → capture jerk
+
+# Should already be on charger detail. Take baseline.
+- takeScreenshot: reload-01-on-detail
+
+# Tap back button
+- tapOn:
+    point: "7%,6%"
+
+- waitForAnimationToEnd
+- takeScreenshot: reload-02-back-at-list
+
+# Now tap the same charger again (first charger card)
+# Wait a moment for the list to settle
+- waitForAnimationToEnd
+
+# Tap the charger card area
+- tapOn:
+    point: "50%,35%"
+
+# Rapid-fire screenshots during the second load
+- takeScreenshot: reload-03-second-load-frame1
+- takeScreenshot: reload-04-second-load-frame2
+- takeScreenshot: reload-05-second-load-frame3
+
+- waitForAnimationToEnd
+- takeScreenshot: reload-06-second-load-settled
+
+# Wait through a poll cycle
+- waitForAnimationToEnd
+- takeScreenshot: reload-07-after-poll

@@ -17,7 +17,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<PortalTheme>(() => {
     if (typeof window === 'undefined') return 'dark';
     const saved = window.localStorage.getItem(STORAGE_KEY);
-    return saved === 'light' || saved === 'dark' ? saved : 'dark';
+    if (saved === 'light' || saved === 'dark') return saved;
+    // Respect OS preference on first visit
+    return window.matchMedia?.('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
   });
 
   useEffect(() => {

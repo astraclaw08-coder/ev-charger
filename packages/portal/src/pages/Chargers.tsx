@@ -122,7 +122,7 @@ export default function Chargers() {
             </thead>
             <tbody>
               {filtered.map((row) => (
-                <tr key={row.id} className="border-t border-gray-300 dark:border-slate-700">
+                <tr key={row.id} className="hoverable stagger-item border-t border-gray-300 dark:border-slate-700">
                   <td className="py-2 font-medium">
                     <Link to={`/chargers/${row.id}`} className="hover:text-brand-700 hover:underline">{row.ocppId}</Link>
                   </td>
@@ -152,20 +152,22 @@ function StatusPill({ status }: { status: ChargerListItem['status'] }) {
 }
 
 function Stat({ label, value, tone = 'default' }: { label: string; value: number; tone?: 'default' | 'green' | 'amber' | 'slate' | 'red' }) {
-  const toneClass = tone === 'green'
-    ? 'text-green-600 dark:text-green-400'
-    : tone === 'amber'
-      ? 'text-amber-600 dark:text-amber-400'
-      : tone === 'slate'
-        ? 'text-slate-500 dark:text-slate-400'
-        : tone === 'red'
-          ? 'text-red-600 dark:text-red-400'
-          : 'text-gray-900 dark:text-slate-100';
+  const styles: Record<string, { card: string; value: string; dot: string }> = {
+    green:   { card: 'bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800/50', value: 'text-green-700 dark:text-green-400', dot: 'bg-green-500' },
+    amber:   { card: 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800/50', value: 'text-amber-700 dark:text-amber-400', dot: 'bg-amber-500' },
+    slate:   { card: 'bg-slate-50 dark:bg-slate-800/30 border-slate-200 dark:border-slate-700/50', value: 'text-slate-600 dark:text-slate-400', dot: 'bg-slate-400' },
+    red:     { card: 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800/50', value: 'text-red-700 dark:text-red-400', dot: 'bg-red-500' },
+    default: { card: 'bg-white dark:bg-slate-900 border-gray-200 dark:border-slate-700', value: 'text-gray-900 dark:text-slate-100', dot: 'bg-brand-500' },
+  };
+  const s = styles[tone] ?? styles.default;
 
   return (
-    <div className="rounded-xl border border-gray-300 dark:border-slate-700 p-4">
-      <p className="text-xs text-gray-500 dark:text-slate-400">{label}</p>
-      <p className={`mt-1 text-xl font-semibold ${toneClass}`}>{value}</p>
+    <div className={`rounded-xl border p-4 shadow-sm transition-shadow hover:shadow-md ${s.card}`}>
+      <div className="flex items-center gap-2">
+        <span className={`inline-block h-2 w-2 rounded-full ${s.dot}`} />
+        <p className="text-xs font-medium text-gray-500 dark:text-slate-400">{label}</p>
+      </div>
+      <p className={`mt-1.5 text-2xl font-bold tabular-nums tracking-tight font-mono ${s.value}`}>{value}</p>
     </div>
   );
 }

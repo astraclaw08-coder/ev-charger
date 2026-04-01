@@ -1,0 +1,53 @@
+appId: dev.evcharger.app
+---
+# Test: Charger detail top section — check for layout jank / jerking
+
+# Baseline screenshot
+- takeScreenshot: charger-detail-01-baseline
+
+# Wait for data load
+- extendedWaitUntil:
+    visible: "Total kWh"
+    timeout: 10000
+
+- takeScreenshot: charger-detail-02-after-load
+
+# Scroll down then back up
+- swipe:
+    direction: UP
+    duration: 500
+
+- takeScreenshot: charger-detail-03-scrolled-down
+
+- swipe:
+    direction: DOWN
+    duration: 500
+
+- takeScreenshot: charger-detail-04-scrolled-back-up
+
+# Wait for polling re-renders (refetchInterval: 2500ms)
+- waitForAnimationToEnd
+
+- takeScreenshot: charger-detail-05-after-poll-1
+
+- waitForAnimationToEnd
+
+- takeScreenshot: charger-detail-06-after-poll-2
+
+- waitForAnimationToEnd
+
+- takeScreenshot: charger-detail-07-after-poll-3
+
+# Tap site information to expand/collapse
+- tapOn: "Site information"
+
+- takeScreenshot: charger-detail-08-site-expanded
+
+- tapOn: "Site information"
+
+- takeScreenshot: charger-detail-09-site-collapsed
+
+# Final wait
+- waitForAnimationToEnd
+
+- takeScreenshot: charger-detail-10-final

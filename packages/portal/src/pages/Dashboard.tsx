@@ -22,7 +22,7 @@ export default function Dashboard() {
   const [error, setError] = useState('');
   const [fleetUptime, setFleetUptime] = useState<{ uptime24h: number; uptime7d: number; uptime30d: number } | null>(null);
   const [fleetKpis, setFleetKpis] = useState<{ totalSites: number; totalConnectors: number; totalKwh: number; totalRevenue: number; activeSessions: number; utilizationRatePct: number } | null>(null);
-  const [topUtilizedSites, setTopUtilizedSites] = useState<Array<{ id: string; name: string; utilizationPct: number }>>([]);
+  const [topUtilizedSites, setTopUtilizedSites] = useState<Array<{ id: string; name: string; utilizationPct: number; chargerCount: number }>>([]);
   const [fleetStatus, setFleetStatus] = useState<{
     totalChargers: number;
     totalConnectors: number;
@@ -195,7 +195,7 @@ export default function Dashboard() {
         const pct = sitePossibleSec > 0
           ? Math.round((siteChargingSec / sitePossibleSec) * 10000) / 100
           : 0;
-        return { id: site.id, name: site.name, utilizationPct: pct };
+        return { id: site.id, name: site.name, utilizationPct: pct, chargerCount: siteDetail?.chargers.length ?? 0 };
       });
 
       setTopUtilizedSites(
@@ -368,16 +368,26 @@ export default function Dashboard() {
           </div>
           <div className="mt-3 space-y-2">
             {topUtilizedSites.map((site, idx) => (
-              <div key={site.id} className="flex items-center gap-3 rounded-lg border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/60 px-3 py-2.5">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-100 dark:bg-brand-900/40 text-xs font-bold text-brand-700 dark:text-brand-300">{idx + 1}</span>
-                <span className="min-w-0 flex-1 truncate text-sm font-medium text-gray-900 dark:text-slate-100">{site.name}</span>
-                <span className="shrink-0 text-sm font-semibold text-brand-700 dark:text-brand-300">{site.utilizationPct.toFixed(1)}%</span>
-                <div className="hidden w-24 sm:block">
-                  <div className="h-2 rounded-full bg-gray-200 dark:bg-slate-700">
-                    <div className="h-2 rounded-full bg-brand-500" style={{ width: `${Math.min(site.utilizationPct, 100)}%` }} />
+              <a
+                key={site.id}
+                href={`/sites/${site.id}`}
+                className="flex items-center gap-3 rounded-lg border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/60 px-3 py-2.5 transition-colors hover:border-brand-300 hover:bg-brand-50 dark:hover:border-brand-600 dark:hover:bg-brand-900/20 cursor-pointer"
+              >
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gray-200 dark:bg-brand-900/40 text-xs font-bold text-gray-700 dark:text-brand-300">{idx + 1}</span>
+                <div className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium text-gray-900 dark:text-slate-100">{site.name}</span>
+                  <span className="text-xs text-gray-500 dark:text-slate-400">{site.chargerCount} charger{site.chargerCount !== 1 ? 's' : ''}</span>
+                </div>
+                <span className="shrink-0 text-sm font-bold text-gray-900 dark:text-slate-100">{site.utilizationPct.toFixed(1)}%</span>
+                <div className="hidden w-28 sm:block">
+                  <div className="h-2.5 rounded-full bg-gray-200 dark:bg-slate-700">
+                    <div
+                      className="h-2.5 rounded-full bg-emerald-500 dark:bg-emerald-400"
+                      style={{ width: `${Math.min(site.utilizationPct, 100)}%` }}
+                    />
                   </div>
                 </div>
-              </div>
+              </a>
             ))}
           </div>
         </div>

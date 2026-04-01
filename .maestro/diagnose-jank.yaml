@@ -1,0 +1,26 @@
+appId: dev.evcharger.app
+---
+# Reproduce: load charger detail → back → load same charger → observe jerk
+
+# We're on charger detail. Wait for full settle.
+- waitForAnimationToEnd
+
+# Tap back button (chevron-back icon area in header)
+- tapOn:
+    point: "8%,12%"
+
+- waitForAnimationToEnd
+- waitForAnimationToEnd
+
+# Now we should be on the site view with charger list.
+# Tap "ChargeStationOne" to navigate back to detail.
+- tapOn: "ChargeStationOne"
+
+# Rapid screenshots during second load to catch the jerk
+- takeScreenshot: jank-01-immediate
+- takeScreenshot: jank-02-frame2
+- takeScreenshot: jank-03-frame3
+- takeScreenshot: jank-04-frame4
+
+- waitForAnimationToEnd
+- takeScreenshot: jank-05-settled

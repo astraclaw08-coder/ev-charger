@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Modal } from '../components/Modal';
 import { Link } from 'react-router-dom';
 import { createApiClient, type EnrichedTransaction } from '../api/client';
 import { useToken } from '../auth/TokenContext';
@@ -272,12 +273,7 @@ function ReceiptModal({ row, onClose }: { row: EnrichedTransaction | null; onClo
     : 'Idle Subtotal';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4" onClick={onClose}>
-      <div className="max-h-[90vh] w-full max-w-2xl overflow-auto rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-5" onClick={(e) => e.stopPropagation()}>
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">Session Receipt</h3>
-          <button type="button" onClick={onClose} className="rounded-md px-2 py-1 text-sm text-gray-500 hover:bg-gray-100 dark:text-slate-400 dark:hover:bg-slate-800">✕</button>
-        </div>
+    <Modal open={!!row} onClose={onClose} title="Session Receipt" maxWidth="max-w-2xl">
 
         <div className="mb-4 space-y-1 text-sm text-gray-600 dark:text-slate-300">
           <p className="text-base font-semibold text-gray-900 dark:text-slate-100">{row.site.name}</p>
@@ -316,8 +312,7 @@ function ReceiptModal({ row, onClose }: { row: EnrichedTransaction | null; onClo
             <div className="pt-3 text-center text-sm font-medium text-gray-600 dark:text-slate-300">Thank you for charging with us!</div>
           </div>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -336,9 +331,9 @@ function toTime(iso: string) {
 
 function Tile({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
-      <p className="text-xs text-gray-500 dark:text-slate-400">{label}</p>
-      <p className="mt-1 text-xl font-semibold text-gray-900 dark:text-slate-100">{value}</p>
+    <div className="rounded-xl border border-gray-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-4 shadow-sm transition-shadow hover:shadow-md">
+      <p className="text-xs font-medium text-gray-500 dark:text-slate-400">{label}</p>
+      <p className="mt-1.5 text-2xl font-bold tracking-tight text-gray-900 dark:text-slate-100">{value}</p>
     </div>
   );
 }

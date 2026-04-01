@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Modal } from '../components/Modal';
 import { useJsApiLoader } from '@react-google-maps/api';
 
 const GOOGLE_MAPS_LIBRARIES: ('places')[] = ['places'];
@@ -198,12 +199,8 @@ export default function Sites() {
         </div>
       )}
 
-      {showAddSiteModal && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 p-4" onClick={() => setShowAddSiteModal(false)}>
-          <div className="w-full max-w-lg rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-5" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">Add Site</h2>
-            <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">Owner/Operator action — create a new charging site.</p>
-            <form className="mt-4 space-y-3" onSubmit={handleCreateSite}>
+      <Modal open={showAddSiteModal} onClose={() => setShowAddSiteModal(false)} title="Add Site" subtitle="Owner/Operator action — create a new charging site.">
+            <form className="space-y-3" onSubmit={handleCreateSite}>
               <input
                 className="w-full rounded-md border border-gray-300 dark:border-slate-600 px-3 py-2 text-sm"
                 placeholder="Site name"
@@ -263,9 +260,7 @@ export default function Sites() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
+      </Modal>
     </div>
   );
 }

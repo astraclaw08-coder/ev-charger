@@ -43,7 +43,7 @@ export default function Operations() {
       <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-2">
         <div className="flex flex-wrap gap-2">
           <TabButton label="Live Incidents" active={tab === 'incidents'} onClick={() => setTab('incidents')} />
-          <TabButton label="Support Queue" active={tab === 'support'} onClick={() => setTab('support')} />
+          <TabButton label="Driver Look Up" active={tab === 'support'} onClick={() => setTab('support')} />
           <TabButton label="Notifications" active={tab === 'notifications'} onClick={() => setTab('notifications')} />
         </div>
       </div>
