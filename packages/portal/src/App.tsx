@@ -137,36 +137,27 @@ function DevApp() {
 }
 
 function ThemedShell() {
-  const { themeClass } = usePortalTheme();
   const authMode = resolveAuthMode();
 
   if (import.meta.env.VITE_FORCE_LOGIN_SCREEN === '1') {
     return (
-      <div className={themeClass}>
-        <BrowserRouter>
-          <Routes>
-            <Route path="*" element={<Login />} />
-          </Routes>
-        </BrowserRouter>
-      </div>
+      <BrowserRouter>
+        <Routes>
+          <Route path="*" element={<Login />} />
+        </Routes>
+      </BrowserRouter>
     );
   }
 
   if (authMode === 'keycloak') {
     return (
-      <div className={themeClass}>
-        <PasswordAuthProvider>
-          <KeycloakOnlyApp />
-        </PasswordAuthProvider>
-      </div>
+      <PasswordAuthProvider>
+        <KeycloakOnlyApp />
+      </PasswordAuthProvider>
     );
   }
 
-  return (
-    <div className={themeClass}>
-      <DevApp />
-    </div>
-  );
+  return <DevApp />;
 }
 
 export default function App() {

@@ -3,6 +3,8 @@ import { useParams, Link } from 'react-router-dom';
 import { buildChargerQrRedirectUrl, createApiClient, type ChargerStatus, type SessionRecord, type ChargerUptime } from '../api/client';
 import { useToken } from '../auth/TokenContext';
 import StatusBadge from '../components/StatusBadge';
+import { PageHeader, ErrorState } from '../components/ui';
+import { PageSkeleton } from '../components/ui/LoadingState';
 import { formatDate, formatDuration } from '../lib/utils';
 import { shortId } from '../lib/shortId';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
@@ -221,12 +223,8 @@ export default function ChargerDetail() {
     a.remove();
   }
 
-  if (loading) {
-    return <div className="flex h-64 items-center justify-center text-gray-400 dark:text-slate-500">Loading charger…</div>;
-  }
-  if (error || !status) {
-    return <div className="rounded-lg bg-red-50 dark:bg-red-900/20 p-4 text-sm text-red-700 dark:text-red-400">{error || 'Charger not found'}</div>;
-  }
+  if (loading) return <PageSkeleton />;
+  if (error || !status) return <ErrorState message={error || 'Charger not found'} onRetry={() => { setLoading(true); load(); }} />;
 
   const days = rangeDays(rangePreset);
   const rangeStartMs = Date.now() - (days * 24 * 60 * 60 * 1000);
@@ -250,33 +248,20 @@ export default function ChargerDetail() {
   return (
     <div className="space-y-6">
       {/* Header */}
+      <PageHeader
+        title={status.ocppId}
+        breadcrumbs={[
+          { label: 'Overview', href: '/overview' },
+          { label: 'Sites', href: '/sites' },
+          ...(chargerSite ? [{ label: chargerSite.name, href: `/sites/${shortId(chargerSite.id)}` }] : []),
+          { label: status.ocppId },
+        ]}
+        description={status.lastHeartbeat ? `Last heartbeat: ${formatDate(status.lastHeartbeat)}` : undefined}
+        actions={<StatusBadge status={status.status} type="charger" />}
+      />
       <div>
         <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-slate-400">
-              <Link to="/overview" className="hover:text-gray-700 dark:hover:text-slate-200 dark:text-slate-300">Overview</Link>
-              <span>/</span>
-              <Link to="/sites" className="hover:text-gray-700 dark:hover:text-slate-200 dark:text-slate-300">Sites</Link>
-              <span>/</span>
-              {chargerSite ? (
-                <Link to={`/sites/${shortId(chargerSite.id)}`} className="hover:text-gray-700 dark:hover:text-slate-200 dark:text-slate-300">{chargerSite.name}</Link>
-              ) : (
-                <span>Site</span>
-              )}
-              <span>/</span>
-              <span className="text-gray-900 dark:text-slate-100 font-mono">{status.ocppId}</span>
-            </div>
-            <div className="mt-1 flex items-center gap-3">
-              <h1 className="text-2xl font-bold font-mono text-gray-900 dark:text-slate-100">{status.ocppId}</h1>
-              <StatusBadge status={status.status} type="charger" />
-
-            </div>
-            {status.lastHeartbeat && (
-              <p className="text-sm text-gray-500 dark:text-slate-400">
-                Last heartbeat: {formatDate(status.lastHeartbeat)}
-              </p>
-            )}
-          </div>
+          <div></div>
 
           <div className="flex flex-wrap items-end gap-2 self-end">
             <select
