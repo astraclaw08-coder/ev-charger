@@ -35,6 +35,26 @@ tr.hoverable { transition: background-color 0.1s ease; }
 tr.hoverable:hover { background-color: rgba(243, 244, 246, 0.7); }
 .dark tr.hoverable:hover { background-color: rgba(30, 41, 59, 0.5); }
 
+/* Page content entry animation */
+@keyframes pageEnter {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.page-enter {
+  animation: pageEnter 0.25s ease both;
+}
+
+/* Shimmer animation for skeleton loaders */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.skeleton-shimmer {
+  background: linear-gradient(90deg, transparent 0%, rgba(148,163,184,0.08) 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
 /* Marker badge used in Google map overlays */
 .site-count-marker {
   display: flex;
