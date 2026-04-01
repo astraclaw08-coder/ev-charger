@@ -5,6 +5,20 @@ import { useToken } from '../auth/TokenContext';
 import { usePortalScope } from '../context/PortalScopeContext';
 import { PageHeader, StatCard, FilterBar, ErrorState, EmptyState } from '../components/ui';
 import { StatCardSkeleton, TableSkeleton } from '../components/ui/LoadingState';
+import { exportToCsv, type CsvColumn } from '../lib/csvExport';
+
+const SESSION_CSV_COLUMNS: CsvColumn<EnrichedTransaction>[] = [
+  { header: 'Started', accessor: (r) => r.startedAt },
+  { header: 'Stopped', accessor: (r) => r.stoppedAt ?? '' },
+  { header: 'Transaction ID', accessor: (r) => r.transactionId ?? '' },
+  { header: 'Site', accessor: (r) => r.site.name },
+  { header: 'Charger', accessor: (r) => r.charger.ocppId },
+  { header: 'Status', accessor: (r) => r.status },
+  { header: 'Energy (kWh)', accessor: (r) => r.energyKwh?.toFixed(4) ?? '0' },
+  { header: 'Revenue (USD)', accessor: (r) => r.revenueUsd?.toFixed(2) ?? '0' },
+  { header: 'idTag', accessor: (r) => r.idTag },
+  { header: 'Duration (min)', accessor: (r) => r.durationMinutes ?? '' },
+];
 
 export default function Sessions() {
   const getToken = useToken();
@@ -162,6 +176,18 @@ export default function Sessions() {
         title="Sessions"
         breadcrumbs={[{ label: 'Overview', href: '/overview' }, { label: 'Sessions' }]}
         description="Commercial and reliability view of charging session outcomes."
+        actions={
+          <button
+            type="button"
+            onClick={() => exportToCsv(filtered, SESSION_CSV_COLUMNS, `sessions-${new Date().toISOString().slice(0, 10)}.csv`)}
+            disabled={filtered.length === 0}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            title="Export visible sessions as CSV"
+          >
+            <svg viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5"><path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+            Export CSV
+          </button>
+        }
       />
 
       <div className="grid gap-3 sm:grid-cols-3">

@@ -21,6 +21,7 @@ import Notifications from './pages/Notifications';
 import Operations from './pages/Operations';
 import Chargers from './pages/Chargers';
 import Sessions from './pages/Sessions';
+import CommandPalette from './components/CommandPalette';
 import { ThemeProvider, usePortalTheme } from './theme/ThemeContext';
 import { PortalScopeProvider } from './context/PortalScopeContext';
 import { getDefaultHomePath, getRolePreference } from './lib/portalPreferences';
@@ -38,6 +39,7 @@ function PortalRoutes() {
   return (
     <BrowserRouter>
       <PortalScopeProvider>
+        <CommandPalette />
         <Layout>
           <Routes>
           <Route path="/" element={<Navigate to={homePath} replace />} />

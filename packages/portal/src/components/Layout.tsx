@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { cn } from '../lib/utils';
 import BrandMark from './BrandMark';
 import { usePortalTheme } from '../theme/ThemeContext';
+import { createApiClient } from '../api/client';
+import { useToken } from '../auth/TokenContext';
 
 type IconProps = { className?: string };
 
@@ -116,11 +118,12 @@ const NAV = [
 
 const portalVersion = import.meta.env.VITE_APP_VERSION ?? 'dev-local';
 
-function SidebarContent({ location, theme, toggleTheme, onNavClick }: {
+function SidebarContent({ location, theme, toggleTheme, onNavClick, notificationCount }: {
   location: ReturnType<typeof useLocation>;
   theme: string;
   toggleTheme: () => void;
   onNavClick?: () => void;
+  notificationCount?: number;
 }) {
   return (
     <>
@@ -153,13 +156,28 @@ function SidebarContent({ location, theme, toggleTheme, onNavClick }: {
                     : 'text-gray-400 dark:text-slate-500',
                 )}
               />
-              <span>{item.label}</span>
+              <span className="flex-1">{item.label}</span>
+              {item.label === 'Operations' && !!notificationCount && notificationCount > 0 && (
+                <span className="ml-auto flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white tabular-nums">
+                  {notificationCount > 99 ? '99+' : notificationCount}
+                </span>
+              )}
             </Link>
           );
         })}
       </nav>
 
       <div className="border-t border-gray-200 p-3 dark:border-slate-800 shrink-0">
+        {/* Cmd+K search shortcut */}
+        <button
+          type="button"
+          onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }))}
+          className="mb-2 flex w-full items-center gap-2 rounded-md border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/50 px-3 py-1.5 text-xs text-gray-500 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors"
+        >
+          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.2-5.2M10 17a7 7 0 1 1 0-14 7 7 0 0 1 0 14Z" /></svg>
+          <span className="flex-1 text-left">Search…</span>
+          <kbd className="rounded border border-gray-300 dark:border-slate-600 px-1 py-0.5 text-[10px] font-medium">⌘K</kbd>
+        </button>
         <button
           type="button"
           onClick={toggleTheme}
@@ -191,6 +209,28 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const { theme, toggleTheme } = usePortalTheme();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [notificationCount, setNotificationCount] = useState(0);
+  const getToken = useToken();
+
+  // Poll notification count every 60s
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchCount() {
+      try {
+        const token = await getToken();
+        const api = createApiClient(token);
+        // Use notifications list length as badge count if available
+        const res = await (api as any).getNotifications?.().catch(() => null);
+        if (!cancelled && Array.isArray(res)) {
+          const unread = res.filter((n: any) => !n.readAt).length;
+          setNotificationCount(unread);
+        }
+      } catch { /* silent */ }
+    }
+    fetchCount();
+    const iv = setInterval(fetchCount, 60_000);
+    return () => { cancelled = true; clearInterval(iv); };
+  }, [getToken]);
 
   return (
     <div className="flex min-h-screen bg-gray-50 dark:bg-slate-950">
@@ -227,12 +267,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           theme={theme}
           toggleTheme={toggleTheme}
           onNavClick={() => setMobileOpen(false)}
+          notificationCount={notificationCount}
         />
       </aside>
 
       {/* Desktop sidebar */}
       <aside className="hidden lg:flex w-56 flex-col border-r border-gray-200 bg-white dark:border-slate-800 dark:bg-slate-950/95 shrink-0">
-        <SidebarContent location={location} theme={theme} toggleTheme={toggleTheme} />
+        <SidebarContent location={location} theme={theme} toggleTheme={toggleTheme} notificationCount={notificationCount} />
       </aside>
 
       {/* Main content */}
