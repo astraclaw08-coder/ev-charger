@@ -132,11 +132,13 @@ export default function ChargerDetailScreen() {
   const { data: charger, isLoading, refetch } = useQuery({
     queryKey: ['charger', id],
     queryFn: () => api.chargers.get(id),
+    placeholderData: (prev: any) => prev,   // keep stale data visible during refetch
   });
 
   const { data: allChargers = [], refetch: refetchAllChargers } = useQuery({
     queryKey: ['chargers'],
     queryFn: () => api.chargers.list(),
+    placeholderData: (prev: any) => prev,
   });
 
   const siteChargers = useMemo(() => {
@@ -172,17 +174,13 @@ export default function ChargerDetailScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      // Scroll reset must happen synchronously before React re-renders
-      // to avoid the visible "jerk" when reopening the same charger.
       scrollRef.current?.scrollTo({ y: 0, animated: false });
-
-      // Invalidate after a micro-delay so the scroll reset settles first
-      const t = setTimeout(() => {
-        queryClient.invalidateQueries({ queryKey: ['charger', id] });
-        queryClient.invalidateQueries({ queryKey: ['chargers'] });
-      }, 50);
-      return () => clearTimeout(t);
-    }, [id, queryClient]),
+      // Refetch (not invalidate) so stale data stays visible while fresh data loads.
+      // invalidateQueries nukes the cache → isLoading flips true → loading spinner
+      // renders for one frame → content pops back in = the "jerk".
+      refetch();
+      refetchAllChargers();
+    }, [id, refetch, refetchAllChargers]),
   );
 
   const onPullRefresh = useCallback(async () => {
