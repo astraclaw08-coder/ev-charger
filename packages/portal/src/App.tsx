@@ -22,7 +22,7 @@ import Operations from './pages/Operations';
 import Chargers from './pages/Chargers';
 import Sessions from './pages/Sessions';
 import CommandPalette from './components/CommandPalette';
-import { ThemeProvider, usePortalTheme } from './theme/ThemeContext';
+import { ThemeProvider } from './theme/ThemeContext';
 import { PortalScopeProvider } from './context/PortalScopeContext';
 import { getDefaultHomePath, getRolePreference } from './lib/portalPreferences';
 
@@ -162,20 +162,10 @@ function ThemedShell() {
   return <DevApp />;
 }
 
-function ThemedRoot() {
-  const { theme } = usePortalTheme();
-
-  return (
-    <div className={theme === 'dark' ? 'dark' : undefined}>
-      <ThemedShell />
-    </div>
-  );
-}
-
 export default function App() {
   return (
     <ThemeProvider>
-      <ThemedRoot />
+      <ThemedShell />
     </ThemeProvider>
   );
 }
