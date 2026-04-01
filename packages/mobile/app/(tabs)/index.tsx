@@ -236,12 +236,26 @@ export default function MapScreen() {
         return;
       }
 
-      const lastKnown = await Location.getLastKnownPositionAsync();
-      const current = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      const coords = current?.coords ?? lastKnown?.coords;
+      const lastKnown = await Location.getLastKnownPositionAsync().catch(() => null);
+
+      let current: Location.LocationObject | null = null;
+      try {
+        current = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      } catch {
+        current = null;
+      }
+
+      const coords = current?.coords ?? lastKnown?.coords ?? (userLocation
+        ? { latitude: userLocation.latitude, longitude: userLocation.longitude }
+        : null);
 
       if (!coords) {
-        Alert.alert('Location unavailable', 'We could not determine your current location right now. Please try again in a moment.');
+        Alert.alert(
+          'Location unavailable',
+          Platform.OS === 'ios'
+            ? 'We could not determine your current location. If you are on Simulator, set a simulated location in Features → Location and try again.'
+            : 'We could not determine your current location right now. Please try again in a moment.',
+        );
         return;
       }
 
