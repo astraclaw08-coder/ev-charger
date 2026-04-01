@@ -22,14 +22,17 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     return window.matchMedia?.('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
   });
 
+  function applyThemeClass(nextTheme: PortalTheme) {
+    const enableDark = nextTheme === 'dark';
+    document.documentElement.classList.toggle('dark', enableDark);
+    document.body.classList.toggle('dark', enableDark);
+    document.getElementById('root')?.classList.toggle('dark', enableDark);
+  }
+
   useEffect(() => {
     if (typeof window !== 'undefined') {
       window.localStorage.setItem(STORAGE_KEY, theme);
-      if (theme === 'dark') {
-        document.documentElement.classList.add('dark');
-      } else {
-        document.documentElement.classList.remove('dark');
-      }
+      applyThemeClass(theme);
     }
   }, [theme]);
 
@@ -38,11 +41,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     if (typeof window !== 'undefined') {
       const saved = window.localStorage.getItem(STORAGE_KEY);
       const initial = saved === 'light' || saved === 'dark' ? saved : 'dark';
-      if (initial === 'dark') {
-        document.documentElement.classList.add('dark');
-      } else {
-        document.documentElement.classList.remove('dark');
-      }
+      applyThemeClass(initial);
     }
   }, []);
 
