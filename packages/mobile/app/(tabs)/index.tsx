@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -223,8 +224,28 @@ export default function MapScreen() {
 
   async function recenterToUser() {
     try {
-      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      const target = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
+      let granted = hasLocation;
+      if (!granted) {
+        const permission = await Location.requestForegroundPermissionsAsync();
+        granted = permission.status === 'granted';
+        setHasLocation(granted);
+      }
+
+      if (!granted) {
+        Alert.alert('Location access needed', 'Enable location access to center the map on your current position.');
+        return;
+      }
+
+      const lastKnown = await Location.getLastKnownPositionAsync();
+      const current = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      const coords = current?.coords ?? lastKnown?.coords;
+
+      if (!coords) {
+        Alert.alert('Location unavailable', 'We could not determine your current location right now. Please try again in a moment.');
+        return;
+      }
+
+      const target = { latitude: coords.latitude, longitude: coords.longitude };
       setUserLocation(target);
       const targetRegion = {
         ...target,
@@ -234,7 +255,7 @@ export default function MapScreen() {
       regionRef.current = targetRegion;
       mapRef.current?.animateToRegion(targetRegion, 400);
     } catch {
-      // no-op
+      Alert.alert('Location unavailable', 'We could not center the map on your location. Please try again.');
     }
   }
 
@@ -442,6 +463,9 @@ export default function MapScreen() {
 
         <View pointerEvents="box-none" style={[styles.mapControls, { bottom: locateButtonBottom }]}> 
           <TouchableOpacity
+            testID="map-find-me-button"
+            accessibilityRole="button"
+            accessibilityLabel="Find my location"
             style={[
               styles.locateBtn,
               {
