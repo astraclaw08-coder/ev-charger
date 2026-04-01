@@ -841,8 +841,10 @@ export default function Settings() {
                 : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-100',
             )}
             title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
           >
             {theme === 'dark' ? <SunIcon /> : <MoonIcon />}
+            <span>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>
           </button>
           <button
             type="button"
