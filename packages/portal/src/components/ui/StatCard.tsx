@@ -20,9 +20,9 @@ export default function StatCard({ icon, value, label, trend, sparkline, classNa
     >
       <div className="flex items-start justify-between">
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-gray-500 dark:text-slate-400 truncate">{label}</p>
+          <p className="text-xs font-medium text-gray-500 dark:text-slate-400 truncate leading-tight">{label}</p>
           <div className="mt-1 flex items-baseline gap-2">
-            <span className="text-2xl font-bold font-mono text-gray-900 dark:text-slate-100 tabular-nums">
+            <span className="text-[clamp(1rem,1.6vw,1.5rem)] font-bold font-mono text-gray-900 dark:text-slate-100 tabular-nums truncate leading-tight">
               {value}
             </span>
             {trend && (

@@ -840,9 +840,9 @@ export default function Settings() {
                 ? 'border-gray-600 bg-gray-800 text-gray-100 hover:bg-gray-700'
                 : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-100',
             )}
-            title={theme === 'dark' ? 'Dark theme' : 'Light theme'}
+            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
           >
-            {theme === 'dark' ? <MoonIcon /> : <SunIcon />}
+            {theme === 'dark' ? <SunIcon /> : <MoonIcon />}
           </button>
           <button
             type="button"

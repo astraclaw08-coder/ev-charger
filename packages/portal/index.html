@@ -19,6 +19,14 @@
     <title>Lumeo — Operator Portal</title>
   </head>
   <body>
+    <script>
+      // Apply theme class before React renders to prevent flash
+      (function(){
+        var t = localStorage.getItem('portal.theme');
+        if (t === 'light') { /* no dark class */ }
+        else { document.documentElement.classList.add('dark'); }
+      })();
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
