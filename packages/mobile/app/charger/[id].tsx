@@ -172,13 +172,16 @@ export default function ChargerDetailScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      requestAnimationFrame(() => {
-        scrollRef.current?.scrollTo({ y: 0, animated: false });
-      });
+      // Scroll reset must happen synchronously before React re-renders
+      // to avoid the visible "jerk" when reopening the same charger.
+      scrollRef.current?.scrollTo({ y: 0, animated: false });
 
-      queryClient.invalidateQueries({ queryKey: ['charger', id] });
-      queryClient.invalidateQueries({ queryKey: ['chargers'] });
-      return undefined;
+      // Invalidate after a micro-delay so the scroll reset settles first
+      const t = setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['charger', id] });
+        queryClient.invalidateQueries({ queryKey: ['chargers'] });
+      }, 50);
+      return () => clearTimeout(t);
     }, [id, queryClient]),
   );
 
@@ -398,41 +401,55 @@ export default function ChargerDetailScreen() {
   })();
 
 
-  return (
-    <>
-      <Stack.Screen
-        options={{
-          title: 'Lumeo',
-          headerShown: true,
-          headerStyle: { backgroundColor: isDark ? '#0b1220' : '#ffffff' },
-          headerTintColor: isDark ? '#f9fafb' : '#111827',
-          headerShadowVisible: false,
-          headerTitleStyle: {
-            color: isDark ? '#ffffff' : '#000000',
-            fontWeight: '300',
-            letterSpacing: 1.5,
-            fontSize: 22,
-          } as any,
-          headerBackButtonDisplayMode: 'minimal',
-          headerLeft: () => (
-            <TouchableOpacity onPress={() => router.back()} style={{ paddingHorizontal: 4, paddingVertical: 4 }}>
-              <Ionicons name="chevron-back" size={30} color={isDark ? '#f9fafb' : '#111827'} />
-            </TouchableOpacity>
-          ),
-          headerRight: () => (
-            <HeartButton
-              isFavorited={isFav(selectedCharger?.id ?? charger.id)}
-              onToggle={async () => {
-                try {
-                  await toggle(selectedCharger?.id ?? charger.id);
-                } catch (e) {
-                  Alert.alert('Favorites update failed', e instanceof Error ? e.message : 'Please sign in again and retry.');
-                }
-              }}
-            />
-          ),
+  const headerLeft = useCallback(
+    () => (
+      <TouchableOpacity onPress={() => router.back()} style={{ paddingHorizontal: 4, paddingVertical: 4 }}>
+        <Ionicons name="chevron-back" size={30} color={isDark ? '#f9fafb' : '#111827'} />
+      </TouchableOpacity>
+    ),
+    [isDark, router],
+  );
+
+  const favTargetId = selectedCharger?.id ?? charger?.id ?? id;
+  const headerRight = useCallback(
+    () => (
+      <HeartButton
+        isFavorited={isFav(favTargetId)}
+        onToggle={async () => {
+          try {
+            await toggle(favTargetId);
+          } catch (e) {
+            Alert.alert('Favorites update failed', e instanceof Error ? e.message : 'Please sign in again and retry.');
+          }
         }}
       />
+    ),
+    [favTargetId, isFav, toggle],
+  );
+
+  const headerOptions = useMemo(
+    () => ({
+      title: 'Lumeo',
+      headerShown: true,
+      headerStyle: { backgroundColor: isDark ? '#0b1220' : '#ffffff' } as const,
+      headerTintColor: isDark ? '#f9fafb' : '#111827',
+      headerShadowVisible: false,
+      headerTitleStyle: {
+        color: isDark ? '#ffffff' : '#000000',
+        fontWeight: '300' as const,
+        letterSpacing: 1.5,
+        fontSize: 22,
+      },
+      headerBackButtonDisplayMode: 'minimal' as const,
+      headerLeft,
+      headerRight,
+    }),
+    [isDark, headerLeft, headerRight],
+  );
+
+  return (
+    <>
+      <Stack.Screen options={headerOptions} />
       <ScrollView
         key={String(id)}
         ref={scrollRef}
