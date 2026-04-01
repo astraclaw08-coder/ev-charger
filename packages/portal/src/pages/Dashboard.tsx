@@ -298,14 +298,12 @@ export default function Dashboard() {
         }
       />
 
-      {/* ── Hero KPIs ── */}
+      {/* ── Hero KPIs — single row of 6 tiles ── */}
       {fleetKpis && (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {/* Primary hero metrics — larger */}
+        <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
           <StatCard
-            label={`Total Revenue (${rangePreset})`}
+            label={`Revenue (${rangePreset})`}
             value={`$${fleetKpis.totalRevenue.toFixed(2)}`}
-            className="sm:col-span-1 lg:row-span-2 !p-6"
             icon={
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 2v20m5-17H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H7" />
@@ -313,7 +311,7 @@ export default function Dashboard() {
             }
           />
           <StatCard
-            label={`Energy Delivered (${rangePreset})`}
+            label={`Energy (${rangePreset})`}
             value={`${fleetKpis.totalKwh.toFixed(1)} kWh`}
             icon={
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">

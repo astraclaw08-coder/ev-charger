@@ -379,7 +379,7 @@ export default function SiteDetail() {
   const [savedSafetyLimits, setSavedSafetyLimits] = useState<typeof safetyLimits | null>(null);
   const [safetyMsg, setSafetyMsg] = useState('');
 
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState('chargers');
 
   const hasTariffEdits = !savedTariff || tariffFingerprint(tariff) !== tariffFingerprint(savedTariff);
 
@@ -595,10 +595,19 @@ export default function SiteDetail() {
         }
       />
 
+      {/* ── Site KPI tiles (always visible) ── */}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+        <SiteKpiTile label={`Total kWh (${rangePreset})`} value={`${totalKwh.toFixed(2)} kWh`} />
+        <SiteKpiTile label={`Total Revenue (${rangePreset})`} value={`$${totalRevenue.toFixed(2)}`} />
+        <SiteKpiTile label="Total Chargers" value={`${totalChargers}`} live />
+        <SiteKpiTile label="Active Sessions" value={`${activeSessions}`} live />
+        <SiteKpiTile label="Total Connectors" value={`${totalConnectors}`} live />
+        <SiteKpiTile label={`Utilization (${rangePreset})`} value={utilizationPct != null ? `${utilizationPct.toFixed(2)}%` : '—'} />
+      </div>
+
       {/* ── Tab Navigation ── */}
       <TabBar
         tabs={[
-          { id: 'overview', label: 'Overview' },
           { id: 'chargers', label: `Chargers (${site.chargers.length})` },
           { id: 'pricing', label: 'Pricing' },
           { id: 'analytics', label: 'Analytics' },
@@ -671,19 +680,7 @@ export default function SiteDetail() {
         </div>
       )}
 
-      {/* ── Overview Tab ── */}
-      {activeTab === 'overview' && <>
-      {/* ── KPI tiles (dashboard style) ── */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
-        <SiteKpiTile label={`Total kWh (${rangePreset})`} value={`${totalKwh.toFixed(2)} kWh`} />
-        <SiteKpiTile label={`Total Revenue (${rangePreset})`} value={`$${totalRevenue.toFixed(2)}`} />
-        <SiteKpiTile label="Total Chargers" value={`${totalChargers}`} live />
-        <SiteKpiTile label="Active Sessions" value={`${activeSessions}`} live />
-        <SiteKpiTile label="Total Connectors" value={`${totalConnectors}`} live />
-        <SiteKpiTile label={`Utilization (${rangePreset})`} value={utilizationPct != null ? `${utilizationPct.toFixed(2)}%` : '—'} />
-      </div>
 
-      </>}
 
       {/* ── Vendor Fee Modal (superadmin only — always rendered) ── */}
       {showFeeModal && isSuperAdmin && (
