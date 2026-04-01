@@ -817,7 +817,7 @@ export default function Settings() {
   if (loading) return <div className="flex h-64 items-center justify-center text-sm text-gray-500 dark:text-slate-400">Loading admin…</div>;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" data-theme-surface={theme}>
       {/* Header with theme toggle + logout */}
       <div className="flex items-start justify-between">
         <div>
@@ -842,6 +842,7 @@ export default function Settings() {
             )}
             title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
             aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            data-theme-toggle="settings-header"
           >
             {theme === 'dark' ? <SunIcon /> : <MoonIcon />}
             <span>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>
