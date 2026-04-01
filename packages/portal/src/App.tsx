@@ -162,10 +162,20 @@ function ThemedShell() {
   return <DevApp />;
 }
 
+function ThemedRoot() {
+  const { theme } = usePortalTheme();
+
+  return (
+    <div className={theme === 'dark' ? 'dark' : undefined}>
+      <ThemedShell />
+    </div>
+  );
+}
+
 export default function App() {
   return (
     <ThemeProvider>
-      <ThemedShell />
+      <ThemedRoot />
     </ThemeProvider>
   );
 }

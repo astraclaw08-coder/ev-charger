@@ -14,21 +14,21 @@ export default function StatCard({ icon, value, label, trend, sparkline, classNa
   return (
     <div
       className={cn(
-        'rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-5 shadow-sm transition-shadow hover:shadow-md',
+        'rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 shadow-sm transition-shadow hover:shadow-md',
         className,
       )}
     >
-      <div className="flex items-start justify-between">
+      <div className="flex items-start gap-2">
         <div className="flex-1 min-w-0">
-          <p className="text-xs font-medium text-gray-500 dark:text-slate-400 truncate leading-tight">{label}</p>
-          <div className="mt-1 flex items-baseline gap-2">
-            <span className="text-[clamp(1rem,1.6vw,1.5rem)] font-bold font-mono text-gray-900 dark:text-slate-100 tabular-nums truncate leading-tight">
+          <p className="text-[11px] font-medium text-gray-500 dark:text-slate-400 truncate leading-tight">{label}</p>
+          <div className="mt-1 flex items-baseline gap-1.5">
+            <span className="text-[clamp(0.85rem,1.4vw,1.35rem)] font-bold font-mono text-gray-900 dark:text-slate-100 tabular-nums truncate leading-tight">
               {value}
             </span>
             {trend && (
               <span
                 className={cn(
-                  'inline-flex items-center text-xs font-medium',
+                  'inline-flex items-center text-[10px] font-medium shrink-0',
                   trend.value > 0
                     ? 'text-green-600 dark:text-green-400'
                     : trend.value < 0
@@ -44,7 +44,7 @@ export default function StatCard({ icon, value, label, trend, sparkline, classNa
           </div>
         </div>
         {icon && (
-          <div className="ml-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-600 dark:bg-brand-500/10 dark:text-brand-400">
+          <div className="hidden lg:flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-brand-50 text-brand-600 dark:bg-brand-500/10 dark:text-brand-400 [&>svg]:h-3.5 [&>svg]:w-3.5 [&>span]:scale-75">
             {icon}
           </div>
         )}
