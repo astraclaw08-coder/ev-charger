@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { cn } from '../lib/utils';
 import BrandMark from './BrandMark';
@@ -87,6 +87,22 @@ function SettingsIcon({ className }: IconProps) {
   );
 }
 
+function MenuIcon({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={ICON_STROKE} className={className} aria-hidden="true">
+      <path strokeLinecap="round" d="M4 6h16M4 12h16M4 18h16" />
+    </svg>
+  );
+}
+
+function CloseIcon({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={ICON_STROKE} className={className} aria-hidden="true">
+      <path strokeLinecap="round" d="M18 6 6 18M6 6l12 12" />
+    </svg>
+  );
+}
+
 const NAV = [
   { label: 'Overview', href: '/overview', Icon: DashboardIcon },
   { label: 'Operations', href: '/operations', Icon: OperationsIcon },
@@ -100,77 +116,128 @@ const NAV = [
 
 const portalVersion = import.meta.env.VITE_APP_VERSION ?? 'dev-local';
 
+function SidebarContent({ location, theme, toggleTheme, onNavClick }: {
+  location: ReturnType<typeof useLocation>;
+  theme: string;
+  toggleTheme: () => void;
+  onNavClick?: () => void;
+}) {
+  return (
+    <>
+      <div className="flex h-14 items-center px-4 shrink-0">
+        <BrandMark className="w-[140px]" />
+      </div>
+
+      <nav className="flex-1 p-3 overflow-y-auto">
+        {NAV.map((item) => {
+          const active = item.href === '/overview'
+            ? location.pathname === '/overview' || location.pathname === '/'
+            : location.pathname.startsWith(item.href);
+          return (
+            <Link
+              key={item.href}
+              to={item.href}
+              onClick={onNavClick}
+              className={cn(
+                'group flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/70 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-slate-950',
+                active
+                  ? 'bg-gray-100 text-gray-900 shadow-sm dark:bg-slate-700 dark:text-white'
+                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200',
+              )}
+            >
+              <item.Icon
+                className={cn(
+                  'h-[19px] w-[19px] shrink-0 transition-all',
+                  active
+                    ? 'text-gray-900 dark:text-white'
+                    : 'text-gray-400 dark:text-slate-500',
+                )}
+              />
+              <span>{item.label}</span>
+            </Link>
+          );
+        })}
+      </nav>
+
+      <div className="border-t border-gray-200 p-3 dark:border-slate-800 shrink-0">
+        <button
+          type="button"
+          onClick={toggleTheme}
+          className="mb-3 flex items-center gap-2 rounded-md px-3 py-1.5 text-sm text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300 w-full"
+          title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+        >
+          {theme === 'dark' ? (
+            <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.9">
+              <circle cx="12" cy="12" r="4" />
+              <path d="M12 2v2.5M12 19.5V22M4.93 4.93l1.77 1.77M17.3 17.3l1.77 1.77M2 12h2.5M19.5 12H22M4.93 19.07 6.7 17.3M17.3 6.7l1.77-1.77" />
+            </svg>
+          ) : (
+            <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.9">
+              <path d="M21 14.2A8.8 8.8 0 1 1 9.8 3a7.2 7.2 0 1 0 11.2 11.2Z" />
+            </svg>
+          )}
+          <span>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>
+        </button>
+        <div className="text-xs text-slate-500 dark:text-slate-500">
+          <div>OCPP 1.6J Central System</div>
+          <div className="mt-1">Version {portalVersion}</div>
+        </div>
+      </div>
+    </>
+  );
+}
+
 export default function Layout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const { theme, toggleTheme } = usePortalTheme();
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
     <div className="flex min-h-screen bg-gray-50 dark:bg-slate-950">
-      {/* Sidebar */}
-      <aside className="flex w-56 flex-col border-r border-gray-200 bg-white dark:border-slate-800 dark:bg-slate-950/95">
-        <div className="flex h-14 items-center px-4">
-          <BrandMark className="w-[140px]" />
-        </div>
+      {/* Mobile hamburger header */}
+      <div className="fixed top-0 left-0 right-0 z-40 flex h-14 items-center justify-between border-b border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-4 lg:hidden">
+        <BrandMark className="w-[120px]" />
+        <button
+          type="button"
+          onClick={() => setMobileOpen((v) => !v)}
+          className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-600 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors"
+          aria-label="Toggle navigation"
+        >
+          {mobileOpen ? <CloseIcon className="h-5 w-5" /> : <MenuIcon className="h-5 w-5" />}
+        </button>
+      </div>
 
-        <nav className="flex-1 p-3">
-          {NAV.map((item) => {
-            const active = item.href === '/overview'
-              ? location.pathname === '/overview' || location.pathname === '/'
-              : location.pathname.startsWith(item.href);
-            return (
-              <Link
-                key={item.href}
-                to={item.href}
-                className={cn(
-                  'group flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/70 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-slate-950',
-                  active
-                    ? 'bg-gray-100 text-gray-900 shadow-sm dark:bg-slate-700 dark:text-white'
-                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200',
-                )}
-              >
-                <item.Icon
-                  className={cn(
-                    'h-[19px] w-[19px] shrink-0 transition-all',
-                    active
-                      ? 'text-gray-900 dark:text-white'
-                      : 'text-gray-400 dark:text-slate-500',
-                  )}
-                />
-                <span className={active ? 'text-white' : undefined}>{item.label}</span>
-              </Link>
-            );
-          })}
-        </nav>
+      {/* Mobile overlay */}
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm lg:hidden"
+          onClick={() => setMobileOpen(false)}
+        />
+      )}
 
-        <div className="border-t border-gray-200 p-3 dark:border-slate-800">
-          <button
-            type="button"
-            onClick={toggleTheme}
-            className="mb-3 flex items-center gap-2 rounded-md px-3 py-1.5 text-sm text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300 w-full"
-            title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
-          >
-            {theme === 'dark' ? (
-              <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.9">
-                <circle cx="12" cy="12" r="4" />
-                <path d="M12 2v2.5M12 19.5V22M4.93 4.93l1.77 1.77M17.3 17.3l1.77 1.77M2 12h2.5M19.5 12H22M4.93 19.07 6.7 17.3M17.3 6.7l1.77-1.77" />
-              </svg>
-            ) : (
-              <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.9">
-                <path d="M21 14.2A8.8 8.8 0 1 1 9.8 3a7.2 7.2 0 1 0 11.2 11.2Z" />
-              </svg>
-            )}
-            <span>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>
-          </button>
-          <div className="text-xs text-slate-500 dark:text-slate-500">
-            <div>OCPP 1.6J Central System</div>
-            <div className="mt-1">Version {portalVersion}</div>
-          </div>
-        </div>
+      {/* Mobile sidebar drawer */}
+      <aside
+        className={cn(
+          'fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-gray-200 bg-white dark:border-slate-800 dark:bg-slate-950 transition-transform duration-200 ease-out lg:hidden',
+          mobileOpen ? 'translate-x-0' : '-translate-x-full',
+        )}
+      >
+        <SidebarContent
+          location={location}
+          theme={theme}
+          toggleTheme={toggleTheme}
+          onNavClick={() => setMobileOpen(false)}
+        />
+      </aside>
+
+      {/* Desktop sidebar */}
+      <aside className="hidden lg:flex w-56 flex-col border-r border-gray-200 bg-white dark:border-slate-800 dark:bg-slate-950/95 shrink-0">
+        <SidebarContent location={location} theme={theme} toggleTheme={toggleTheme} />
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 overflow-auto bg-gray-50 dark:bg-slate-950">
-        <div className="mx-auto max-w-6xl p-6">{children}</div>
+      <main className="flex-1 overflow-auto bg-gray-50 dark:bg-slate-950 pt-14 lg:pt-0">
+        <div className="mx-auto max-w-6xl p-4 sm:p-6 page-enter">{children}</div>
       </main>
     </div>
   );

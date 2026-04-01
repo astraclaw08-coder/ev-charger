@@ -4,10 +4,12 @@ function Shimmer({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        'animate-pulse rounded-lg bg-gray-200 dark:bg-slate-700',
+        'rounded-lg bg-gray-200 dark:bg-slate-700 relative overflow-hidden',
         className,
       )}
-    />
+    >
+      <div className="absolute inset-0 skeleton-shimmer" />
+    </div>
   );
 }
 
