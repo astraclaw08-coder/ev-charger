@@ -116,6 +116,7 @@ export default function ChargerDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const queryClient = useQueryClient();
+  const scrollRef = useRef<ScrollView | null>(null);
   const [startingConnector, setStartingConnector] = useState<number | null>(null);
   const [activationMessage, setActivationMessage] = useState<string | null>(null);
   const [showActivationModal, setShowActivationModal] = useState(false);
@@ -171,6 +172,10 @@ export default function ChargerDetailScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      requestAnimationFrame(() => {
+        scrollRef.current?.scrollTo({ y: 0, animated: false });
+      });
+
       queryClient.invalidateQueries({ queryKey: ['charger', id] });
       queryClient.invalidateQueries({ queryKey: ['chargers'] });
       return undefined;
@@ -429,6 +434,9 @@ export default function ChargerDetailScreen() {
         }}
       />
       <ScrollView
+        key={String(id)}
+        ref={scrollRef}
+        contentOffset={{ x: 0, y: 0 }}
         style={[styles.container, { backgroundColor: isDark ? '#030712' : '#f9fafb' }]}
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={manualRefreshing} onRefresh={onPullRefresh} />}
