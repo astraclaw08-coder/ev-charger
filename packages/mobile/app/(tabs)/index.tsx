@@ -82,7 +82,7 @@ export default function MapScreen() {
   const searchInputRef = useRef<TextInput | null>(null);
   const regionRef = useRef<Region | null>(null);
   const { isDark } = useAppTheme();
-  const tabBarHeight = useBottomTabBarHeight();
+  const tabBarHeight = useBottomTabBarHeight(); // kept for potential other uses
   const insets = useSafeAreaInsets();
   const { activeSession } = useChargingNotifications();
 
@@ -636,7 +636,7 @@ export default function MapScreen() {
             style={[mapStyles.sheet, {
               backgroundColor: isDark ? '#111827' : '#ffffff',
               borderColor: isDark ? '#374151' : '#e5e7eb',
-              paddingBottom: Math.max(tabBarHeight + 8, 28),
+              paddingBottom: tabBarBottom + TAB_CONTENT_OFFSET + 12,
             }]}
             onPress={() => {
               setSelectedSite(null);
