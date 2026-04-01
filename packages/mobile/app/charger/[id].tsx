@@ -342,65 +342,7 @@ export default function ChargerDetailScreen() {
     startMutation.mutate({ chargerId, connectorId });
   }
 
-  if (isLoading) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#10b981" />
-      </View>
-    );
-  }
-
-  if (!charger) {
-    return (
-      <View style={styles.centered}>
-        <Text style={styles.errorText}>Charger not found.</Text>
-      </View>
-    );
-  }
-
-  const siteAvailableChargers = siteChargers.filter((c) =>
-    c.connectors.some((connector) => connector.status === 'AVAILABLE'),
-  ).length;
-
-  const hasDefaultPaymentMethod = Boolean(profile?.paymentProfile?.trim());
-  const pricePerKwhUsd = Number(selectedCharger?.site.pricePerKwhUsd ?? 0);
-  const idleFeePerMinUsd = Number(selectedCharger?.site.idleFeePerMinUsd ?? 0);
-  const activationFeeUsd = Number(
-    ((selectedCharger?.site as any)?.activationFeeUsd ?? ((selectedCharger?.site as any)?.activationFeeCents != null
-      ? Number((selectedCharger?.site as any).activationFeeCents) / 100
-      : 0)) ?? 0,
-  );
-  const hasBillablePricing = [pricePerKwhUsd, idleFeePerMinUsd, activationFeeUsd].some(
-    (value) => Number.isFinite(value) && value > 0,
-  );
-  const showPaymentSetupBanner = !hasDefaultPaymentMethod && hasBillablePricing;
-
-  const pricingMode = String((selectedCharger?.site as any)?.pricingMode ?? 'flat');
-  const touWindows = parseTouWindows((selectedCharger?.site as any)?.touWindows);
-  const nowTou = currentTouWindow(touWindows);
-  const displayedEnergyRate = pricingMode === 'tou' && nowTou ? nowTou.pricePerKwhUsd : (selectedCharger?.site.pricePerKwhUsd ?? RATE_PER_KWH);
-  const displayedIdleRate = pricingMode === 'tou' && nowTou ? nowTou.idleFeePerMinUsd : idleFeePerMinUsd;
-  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
-  // Collapse saved windows into one representative day-bar + applicable days list
-  const dayRows = Array.from({ length: 7 }, (_, day) => ({
-    day,
-    rows: touWindows.filter((w) => w.day === day).sort((a, b) => toMinutes(a.start) - toMinutes(b.start)),
-  })).filter((d) => d.rows.length > 0);
-
-  const signatureFor = (rows: TouWindowMobile[]) => rows.map((r) => `${r.start}-${r.end}-${r.pricePerKwhUsd.toFixed(4)}-${r.idleFeePerMinUsd.toFixed(4)}`).join('|');
-  const canonical = (() => {
-    if (dayRows.length === 0) return null as null | { rows: TouWindowMobile[]; days: number[] };
-    const bySig = new Map<string, { rows: TouWindowMobile[]; days: number[] }>();
-    for (const d of dayRows) {
-      const sig = signatureFor(d.rows);
-      if (!bySig.has(sig)) bySig.set(sig, { rows: d.rows, days: [] });
-      bySig.get(sig)!.days.push(d.day);
-    }
-    return Array.from(bySig.values()).sort((a, b) => b.days.length - a.days.length)[0] ?? null;
-  })();
-
-
+  // ── Hooks must be above all early returns (Rules of Hooks) ──────────
   const headerLeft = useCallback(
     () => (
       <TouchableOpacity onPress={() => router.back()} style={{ paddingHorizontal: 4, paddingVertical: 4 }}>
@@ -446,6 +388,65 @@ export default function ChargerDetailScreen() {
     }),
     [isDark, headerLeft, headerRight],
   );
+
+  // ── Early returns (after all hooks) ────────────────────────────────
+  if (isLoading) {
+    return (
+      <View style={styles.centered}>
+        <ActivityIndicator size="large" color="#10b981" />
+      </View>
+    );
+  }
+
+  if (!charger) {
+    return (
+      <View style={styles.centered}>
+        <Text style={styles.errorText}>Charger not found.</Text>
+      </View>
+    );
+  }
+
+  // ── Derived display values ─────────────────────────────────────────
+  const siteAvailableChargers = siteChargers.filter((c) =>
+    c.connectors.some((connector) => connector.status === 'AVAILABLE'),
+  ).length;
+
+  const hasDefaultPaymentMethod = Boolean(profile?.paymentProfile?.trim());
+  const pricePerKwhUsd = Number(selectedCharger?.site.pricePerKwhUsd ?? 0);
+  const idleFeePerMinUsd = Number(selectedCharger?.site.idleFeePerMinUsd ?? 0);
+  const activationFeeUsd = Number(
+    ((selectedCharger?.site as any)?.activationFeeUsd ?? ((selectedCharger?.site as any)?.activationFeeCents != null
+      ? Number((selectedCharger?.site as any).activationFeeCents) / 100
+      : 0)) ?? 0,
+  );
+  const hasBillablePricing = [pricePerKwhUsd, idleFeePerMinUsd, activationFeeUsd].some(
+    (value) => Number.isFinite(value) && value > 0,
+  );
+  const showPaymentSetupBanner = !hasDefaultPaymentMethod && hasBillablePricing;
+
+  const pricingMode = String((selectedCharger?.site as any)?.pricingMode ?? 'flat');
+  const touWindows = parseTouWindows((selectedCharger?.site as any)?.touWindows);
+  const nowTou = currentTouWindow(touWindows);
+  const displayedEnergyRate = pricingMode === 'tou' && nowTou ? nowTou.pricePerKwhUsd : (selectedCharger?.site.pricePerKwhUsd ?? RATE_PER_KWH);
+  const displayedIdleRate = pricingMode === 'tou' && nowTou ? nowTou.idleFeePerMinUsd : idleFeePerMinUsd;
+  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+  const dayRows = Array.from({ length: 7 }, (_, day) => ({
+    day,
+    rows: touWindows.filter((w) => w.day === day).sort((a, b) => toMinutes(a.start) - toMinutes(b.start)),
+  })).filter((d) => d.rows.length > 0);
+
+  const signatureFor = (rows: TouWindowMobile[]) => rows.map((r) => `${r.start}-${r.end}-${r.pricePerKwhUsd.toFixed(4)}-${r.idleFeePerMinUsd.toFixed(4)}`).join('|');
+  const canonical = (() => {
+    if (dayRows.length === 0) return null as null | { rows: TouWindowMobile[]; days: number[] };
+    const bySig = new Map<string, { rows: TouWindowMobile[]; days: number[] }>();
+    for (const d of dayRows) {
+      const sig = signatureFor(d.rows);
+      if (!bySig.has(sig)) bySig.set(sig, { rows: d.rows, days: [] });
+      bySig.get(sig)!.days.push(d.day);
+    }
+    return Array.from(bySig.values()).sort((a, b) => b.days.length - a.days.length)[0] ?? null;
+  })();
 
   return (
     <>
