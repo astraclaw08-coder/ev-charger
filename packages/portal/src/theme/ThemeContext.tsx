@@ -36,11 +36,14 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     }
   }, [theme]);
 
-  // Sync on mount (effect doesn't run during SSR/initial hydration)
+  // Sync on mount and preserve OS light preference on first visit.
+  // If no saved theme exists, mirror the same initializer logic instead of forcing dark.
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const saved = window.localStorage.getItem(STORAGE_KEY);
-      const initial = saved === 'light' || saved === 'dark' ? saved : 'dark';
+      const initial = saved === 'light' || saved === 'dark'
+        ? saved
+        : (window.matchMedia?.('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
       applyThemeClass(initial);
     }
   }, []);
