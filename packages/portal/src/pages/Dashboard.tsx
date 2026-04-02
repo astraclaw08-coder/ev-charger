@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { createApiClient, type DailyEntry, type SiteListItem } from '../api/client';
 import DashboardSitesMap, { type DashboardSiteMapItem } from '../components/DashboardSitesMap';
@@ -16,7 +16,7 @@ export default function Dashboard() {
   const [error, setError] = useState('');
   const [fleetUptime, setFleetUptime] = useState<{ uptime24h: number; uptime7d: number; uptime30d: number } | null>(null);
   const [fleetKpis, setFleetKpis] = useState<{ totalSites: number; totalConnectors: number; totalKwh: number; totalRevenue: number; activeSessions: number; utilizationRatePct: number } | null>(null);
-  const [topUtilizedSites, setTopUtilizedSites] = useState<Array<{ id: string; name: string; utilizationPct: number; chargerCount: number }>>([]);
+  const [topUtilizedSites, setTopUtilizedSites] = useState<Array<{ id: string; name: string; address: string; utilizationPct: number; chargerCount: number }>>([]);
   const [fleetStatus, setFleetStatus] = useState<{
     totalChargers: number;
     totalConnectors: number;
@@ -189,7 +189,7 @@ export default function Dashboard() {
         const pct = sitePossibleSec > 0
           ? Math.round((siteChargingSec / sitePossibleSec) * 10000) / 100
           : 0;
-        return { id: site.id, name: site.name, utilizationPct: pct, chargerCount: siteDetail?.chargers.length ?? 0 };
+        return { id: site.id, name: site.name, address: site.address, utilizationPct: pct, chargerCount: siteDetail?.chargers.length ?? 0 };
       });
 
       setTopUtilizedSites(
@@ -338,39 +338,61 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* ── Connector Status Bar ── */}
+      {/* ── Fleet Health ── */}
       {fleetStatus && (
         <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-5">
-          <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-            <h2 className="text-sm font-semibold text-gray-900 dark:text-slate-100">Connector Status</h2>
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <h2 className="text-sm font-semibold text-gray-900 dark:text-slate-100">Fleet Health</h2>
             <p className="text-xs text-gray-500 dark:text-slate-400">
               <span className="font-mono font-medium text-gray-700 dark:text-slate-300">{fleetStatus.totalChargers}</span> chargers · <span className="font-mono font-medium text-gray-700 dark:text-slate-300">{fleetStatus.totalConnectors}</span> connectors
             </p>
           </div>
 
-          {/* Status bar visualization */}
-          {fleetStatus.totalConnectors > 0 && (
-            <div className="mb-3 flex h-3 rounded-full overflow-hidden bg-gray-100 dark:bg-slate-800">
-              {fleetStatus.available > 0 && (
-                <div className="bg-emerald-500" style={{ width: `${(fleetStatus.available / fleetStatus.totalConnectors) * 100}%` }} title={`Available: ${fleetStatus.available}`} />
-              )}
-              {fleetStatus.charging > 0 && (
-                <div className="bg-brand-500" style={{ width: `${(fleetStatus.charging / fleetStatus.totalConnectors) * 100}%` }} title={`Charging: ${fleetStatus.charging}`} />
-              )}
-              {fleetStatus.faulted > 0 && (
-                <div className="bg-red-500" style={{ width: `${(fleetStatus.faulted / fleetStatus.totalConnectors) * 100}%` }} title={`Faulted: ${fleetStatus.faulted}`} />
-              )}
-              {fleetStatus.offline > 0 && (
-                <div className="bg-gray-400 dark:bg-slate-500" style={{ width: `${(fleetStatus.offline / fleetStatus.totalConnectors) * 100}%` }} title={`Offline: ${fleetStatus.offline}`} />
-              )}
-            </div>
-          )}
-
-          <div className="flex flex-wrap gap-4 text-sm">
-            <StatusDot color="bg-emerald-500" label="Available" count={fleetStatus.available} />
-            <StatusDot color="bg-brand-500" label="Charging" count={fleetStatus.charging} />
-            <StatusDot color="bg-red-500" label="Faulted" count={fleetStatus.faulted} />
-            <StatusDot color="bg-gray-400 dark:bg-slate-500" label="Offline" count={fleetStatus.offline} />
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <FleetHealthTile
+              label="Available"
+              count={fleetStatus.available}
+              total={fleetStatus.totalConnectors}
+              color="emerald"
+              icon={
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              }
+            />
+            <FleetHealthTile
+              label="Charging"
+              count={fleetStatus.charging}
+              total={fleetStatus.totalConnectors}
+              color="blue"
+              icon={
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13 2 3 14h9l-1 8 10-12h-9l1-8z" />
+                </svg>
+              }
+            />
+            <FleetHealthTile
+              label="Faulted"
+              count={fleetStatus.faulted}
+              total={fleetStatus.totalConnectors}
+              color="red"
+              icon={
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              }
+            />
+            <FleetHealthTile
+              label="Offline"
+              count={fleetStatus.offline}
+              total={fleetStatus.totalConnectors}
+              color="gray"
+              icon={
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 5.636a9 9 0 010 12.728M5.636 18.364L18.364 5.636" />
+                </svg>
+              }
+            />
           </div>
 
           {fleetStatus.byStatus
@@ -406,7 +428,8 @@ export default function Dashboard() {
                 <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gray-200 dark:bg-slate-700 text-xs font-bold font-mono text-gray-600 dark:text-slate-300">{idx + 1}</span>
                 <div className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium text-gray-900 dark:text-slate-100">{site.name}</span>
-                  <span className="text-xs text-gray-500 dark:text-slate-400">{site.chargerCount} charger{site.chargerCount !== 1 ? 's' : ''}</span>
+                  <span className="block truncate text-xs text-gray-500 dark:text-slate-400">{site.address}</span>
+                  <span className="text-xs text-gray-400 dark:text-slate-500">{site.chargerCount} charger{site.chargerCount !== 1 ? 's' : ''}</span>
                 </div>
                 <span className="shrink-0 text-sm font-bold font-mono tabular-nums text-gray-900 dark:text-slate-100">{site.utilizationPct.toFixed(1)}%</span>
                 <div className="hidden w-28 sm:block">
@@ -472,12 +495,51 @@ export default function Dashboard() {
   );
 }
 
-function StatusDot({ color, label, count }: { color: string; label: string; count: number }) {
+const healthColorMap: Record<string, { ring: string; bg: string; text: string; bar: string }> = {
+  emerald: {
+    ring: 'ring-emerald-100 dark:ring-emerald-900/40',
+    bg: 'bg-emerald-50 dark:bg-emerald-900/20',
+    text: 'text-emerald-600 dark:text-emerald-400',
+    bar: 'bg-emerald-500',
+  },
+  blue: {
+    ring: 'ring-blue-100 dark:ring-blue-900/40',
+    bg: 'bg-blue-50 dark:bg-blue-900/20',
+    text: 'text-blue-600 dark:text-blue-400',
+    bar: 'bg-blue-500',
+  },
+  red: {
+    ring: 'ring-red-100 dark:ring-red-900/40',
+    bg: 'bg-red-50 dark:bg-red-900/20',
+    text: 'text-red-600 dark:text-red-400',
+    bar: 'bg-red-500',
+  },
+  gray: {
+    ring: 'ring-gray-100 dark:ring-slate-700/40',
+    bg: 'bg-gray-50 dark:bg-slate-800/60',
+    text: 'text-gray-500 dark:text-slate-400',
+    bar: 'bg-gray-400 dark:bg-slate-500',
+  },
+};
+
+function FleetHealthTile({ label, count, total, color, icon }: { label: string; count: number; total: number; color: string; icon: React.ReactNode }) {
+  const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+  const c = healthColorMap[color] ?? healthColorMap.gray;
   return (
-    <span className="flex items-center gap-1.5 text-gray-600 dark:text-slate-400">
-      <span className={cn('h-2.5 w-2.5 rounded-full', color)} />
-      {label} <span className="font-mono font-medium text-gray-900 dark:text-slate-100">{count}</span>
-    </span>
+    <div className={cn('rounded-xl p-4 ring-1', c.ring, c.bg)}>
+      <div className="flex items-center gap-2 mb-2">
+        <span className={c.text}>{icon}</span>
+        <span className="text-xs font-medium text-gray-600 dark:text-slate-300">{label}</span>
+      </div>
+      <div className="flex items-baseline gap-1.5">
+        <span className={cn('text-2xl font-bold font-mono tabular-nums', c.text)}>{count}</span>
+        <span className="text-xs text-gray-400 dark:text-slate-500">/ {total}</span>
+      </div>
+      <div className="mt-2 h-1.5 rounded-full bg-gray-200 dark:bg-slate-700 overflow-hidden">
+        <div className={cn('h-full rounded-full transition-all', c.bar)} style={{ width: `${pct}%` }} />
+      </div>
+      <span className="mt-1 block text-[10px] font-medium text-gray-400 dark:text-slate-500">{pct}%</span>
+    </div>
   );
 }
 
