@@ -126,26 +126,13 @@ const NAV = [
 
 const portalVersion = import.meta.env.VITE_APP_VERSION ?? 'dev-local';
 
-function CollapseIcon({ className, collapsed }: IconProps & { collapsed?: boolean }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={ICON_STROKE} className={className} aria-hidden="true">
-      {collapsed ? (
-        <path strokeLinecap="round" strokeLinejoin="round" d="M13 5l5 7-5 7M6 5l5 7-5 7" />
-      ) : (
-        <path strokeLinecap="round" strokeLinejoin="round" d="M11 19l-5-7 5-7M18 19l-5-7 5-7" />
-      )}
-    </svg>
-  );
-}
-
-function SidebarContent({ location, theme, toggleTheme, onNavClick, notificationCount, collapsed, onToggleCollapse }: {
+function SidebarContent({ location, theme, toggleTheme, onNavClick, notificationCount, collapsed }: {
   location: ReturnType<typeof useLocation>;
   theme: string;
   toggleTheme: () => void;
   onNavClick?: () => void;
   notificationCount?: number;
   collapsed?: boolean;
-  onToggleCollapse?: () => void;
 }) {
   return (
     <>
@@ -257,22 +244,6 @@ function SidebarContent({ location, theme, toggleTheme, onNavClick, notification
             <div className="mt-1">Version {portalVersion}</div>
           </div>
         )}
-
-        {/* Collapse / Expand toggle */}
-        {onToggleCollapse && (
-          <button
-            type="button"
-            onClick={onToggleCollapse}
-            className={cn(
-              'mt-2 flex w-full items-center rounded-md py-1.5 text-xs font-medium text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300',
-              collapsed ? 'justify-center px-2' : 'gap-2 px-3',
-            )}
-            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          >
-            <CollapseIcon className="h-4 w-4 shrink-0" collapsed={collapsed} />
-            {!collapsed && <span>Collapse</span>}
-          </button>
-        )}
       </div>
     </>
   );
@@ -358,12 +329,30 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* Desktop sidebar */}
-      <aside className={cn(
-        'hidden lg:flex flex-col border-r border-gray-200 bg-white dark:border-slate-800 dark:bg-slate-950/95 shrink-0 transition-[width] duration-200 ease-out',
-        collapsed ? 'w-[60px]' : 'w-56',
-      )}>
-        <SidebarContent location={location} theme={theme} toggleTheme={toggleTheme} notificationCount={notificationCount} collapsed={collapsed} onToggleCollapse={toggleCollapse} />
-      </aside>
+      <div className="hidden lg:block relative shrink-0">
+        <aside className={cn(
+          'flex h-full flex-col border-r border-gray-200 bg-white dark:border-slate-800 dark:bg-slate-950/95 transition-[width] duration-200 ease-out',
+          collapsed ? 'w-[60px]' : 'w-56',
+        )}>
+          <SidebarContent location={location} theme={theme} toggleTheme={toggleTheme} notificationCount={notificationCount} collapsed={collapsed} />
+        </aside>
+        {/* Hover-reveal collapse/expand handle on the right edge */}
+        <button
+          type="button"
+          onClick={toggleCollapse}
+          className="group absolute top-1/2 -right-3 z-50 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full border border-gray-200 bg-white shadow-sm opacity-0 hover:opacity-100 focus:opacity-100 transition-opacity duration-150 dark:border-slate-700 dark:bg-slate-900 hover:bg-gray-50 dark:hover:bg-slate-800 hover:shadow-md sidebar-collapse-handle"
+          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="h-3 w-3 text-gray-400 dark:text-slate-500 group-hover:text-gray-600 dark:group-hover:text-slate-300 transition-colors" aria-hidden="true">
+            {collapsed ? (
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+            ) : (
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+            )}
+          </svg>
+        </button>
+      </div>
 
       {/* Main content */}
       <main className="flex-1 overflow-auto bg-gray-50 dark:bg-slate-950 pt-14 lg:pt-0">

@@ -197,3 +197,15 @@ tr.hoverable:hover { background-color: rgba(243, 244, 246, 0.7); }
   border-radius: 50%;
   display: inline-block;
 }
+
+/* Sidebar collapse handle — appears on hover near the sidebar edge */
+.sidebar-collapse-handle {
+  opacity: 0;
+  pointer-events: auto;
+  transition: opacity 150ms ease;
+}
+div:has(> aside):hover .sidebar-collapse-handle,
+.sidebar-collapse-handle:hover,
+.sidebar-collapse-handle:focus-visible {
+  opacity: 1;
+}

@@ -22,7 +22,18 @@ export type DashboardSiteMapItem = {
 const libraries: ('places')[] = ['places'];
 const mapContainerStyle = { width: '100%', height: '100%' };
 
+// Shared styles: hide POIs (stores, restaurants, etc.) and transit
+const CLEAN_MAP_STYLES: google.maps.MapTypeStyle[] = [
+  { featureType: 'poi', stylers: [{ visibility: 'off' }] },
+  { featureType: 'poi.park', stylers: [{ visibility: 'simplified' }] },
+  { featureType: 'transit', stylers: [{ visibility: 'off' }] },
+];
+
 // Google Maps styling arrays for light/dark
+const LIGHT_MAP_STYLES: google.maps.MapTypeStyle[] = [
+  ...CLEAN_MAP_STYLES,
+];
+
 const DARK_MAP_STYLES: google.maps.MapTypeStyle[] = [
   { elementType: 'geometry', stylers: [{ color: '#1f2937' }] },
   { elementType: 'labels.text.fill', stylers: [{ color: '#9ca3af' }] },
@@ -33,8 +44,7 @@ const DARK_MAP_STYLES: google.maps.MapTypeStyle[] = [
   { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#4b5563' }] },
   { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0f172a' }] },
   { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#6b7280' }] },
-  { featureType: 'poi', elementType: 'labels', stylers: [{ visibility: 'off' }] },
-  { featureType: 'transit', stylers: [{ visibility: 'off' }] },
+  ...CLEAN_MAP_STYLES,
 ];
 
 function availabilityColor(available: number, total: number): string {
@@ -112,7 +122,7 @@ export default function DashboardSitesMap({ sites }: { sites: DashboardSiteMapIt
               streetViewControl: false,
               fullscreenControl: false,
               clickableIcons: false,
-              styles: isDark ? DARK_MAP_STYLES : [],
+              styles: isDark ? DARK_MAP_STYLES : LIGHT_MAP_STYLES,
             }}
           >
             {sites.map((site) => {
