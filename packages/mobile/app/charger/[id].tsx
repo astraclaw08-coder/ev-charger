@@ -340,6 +340,11 @@ export default function ChargerDetailScreen() {
     startMutation.mutate({ chargerId, connectorId });
   }
 
+  // Only show loading spinner on truly cold first load (no cached data at all).
+  // On re-open of the same charger, cached data renders instantly via placeholderData
+  // while refetch happens silently in background — no spinner, no jerk.
+  const showLoadingSpinner = isLoading && !charger;
+
   // ── Hooks must be above all early returns (Rules of Hooks) ──────────
   const headerLeft = useCallback(
     () => (
@@ -388,7 +393,7 @@ export default function ChargerDetailScreen() {
   );
 
   // ── Early returns (after all hooks) ────────────────────────────────
-  if (isLoading) {
+  if (showLoadingSpinner) {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#10b981" />
