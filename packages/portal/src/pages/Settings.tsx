@@ -5,6 +5,7 @@ import UserManagement from './UserManagement';
 import { cn } from '../lib/utils';
 import { usePortalTheme } from '../theme/ThemeContext';
 import { usePasswordAuth } from '../auth/PasswordAuthContext';
+import { TabBar } from '../components/ui';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type OrgDraft = {
@@ -73,22 +74,6 @@ function MoonIcon() {
 }
 
 // ─── Shared UI ────────────────────────────────────────────────────────────────
-function TabButton({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        'rounded-lg px-3 py-2 text-sm font-medium transition',
-        active
-          ? 'bg-gray-100 text-gray-900 dark:bg-brand-500/20 dark:text-brand-200'
-          : 'bg-white dark:bg-slate-900 text-gray-500 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800 hover:text-gray-900 dark:hover:text-slate-100',
-      )}
-    >
-      {label}
-    </button>
-  );
-}
 
 function SectionCard({ title, description, actions, children }: { title: string; description?: string; actions?: React.ReactNode; children: React.ReactNode }) {
   return (
@@ -832,7 +817,7 @@ export default function Settings() {
   if (loading) return <div className="flex h-64 items-center justify-center text-sm text-gray-500 dark:text-slate-400">Loading admin…</div>;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" data-theme-surface={theme}>
       {/* Header with theme toggle + logout */}
       <div className="flex items-start justify-between">
         <div>
@@ -855,9 +840,12 @@ export default function Settings() {
                 ? 'border-gray-600 bg-gray-800 text-gray-100 hover:bg-gray-700'
                 : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-100',
             )}
-            title={theme === 'dark' ? 'Dark theme' : 'Light theme'}
+            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            data-theme-toggle="settings-header"
           >
-            {theme === 'dark' ? <MoonIcon /> : <SunIcon />}
+            {theme === 'dark' ? <SunIcon /> : <MoonIcon />}
+            <span>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>
           </button>
           <button
             type="button"
@@ -869,14 +857,8 @@ export default function Settings() {
         </div>
       </div>
 
-      {/* Top tab bar — matches Operations page style */}
-      <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-2">
-        <div className="flex flex-wrap gap-2">
-          {ADMIN_TABS.map((tab) => (
-            <TabButton key={tab.id} label={tab.label} active={activeTab === tab.id} onClick={() => setActiveTab(tab.id)} />
-          ))}
-        </div>
-      </div>
+      {/* Top tab bar — shared component */}
+      <TabBar tabs={ADMIN_TABS.map((t) => ({ id: t.id, label: t.label }))} activeTab={activeTab} onChange={(id) => setActiveTab(id as TabId)} />
 
       {/* Tab content */}
       {activeTab === 'users' && <UsersTab />}

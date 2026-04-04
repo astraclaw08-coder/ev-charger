@@ -1,0 +1,57 @@
+appId: dev.evcharger.app
+---
+# Full test: sign in as guest → navigate to charger → back → charger again
+
+# If on sign-in screen, tap Continue as Guest
+- tapOn:
+    text: "Continue as Guest"
+    optional: true
+
+- waitForAnimationToEnd
+- waitForAnimationToEnd
+
+# We should now be on the main map/list. Take a screenshot to see what we have.
+- takeScreenshot: jank-00-main-screen
+
+# Navigate to a charger from the list/map
+# Try tapping on a charger marker or list item
+- tapOn:
+    text: "ChargeStationOne"
+    optional: true
+
+- waitForAnimationToEnd
+
+# If ChargeStationOne doesn't exist, try other charger names  
+- tapOn:
+    text: "W1-1962-3LOG"
+    optional: true
+
+- waitForAnimationToEnd
+- takeScreenshot: jank-01-first-charger-load
+
+# Now tap back
+- tapOn:
+    point: "8%,12%"
+
+- waitForAnimationToEnd
+- waitForAnimationToEnd
+- takeScreenshot: jank-02-after-back
+
+# Re-enter the same charger detail
+- tapOn:
+    text: "ChargeStationOne"
+    optional: true
+
+- tapOn:
+    text: "W1-1962-3LOG"
+    optional: true
+
+- takeScreenshot: jank-03-second-load-frame1
+- takeScreenshot: jank-04-second-load-frame2
+- takeScreenshot: jank-05-second-load-frame3
+
+- waitForAnimationToEnd
+- takeScreenshot: jank-06-second-load-settled
+
+- waitForAnimationToEnd
+- takeScreenshot: jank-07-final

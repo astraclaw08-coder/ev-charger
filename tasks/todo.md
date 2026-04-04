@@ -181,6 +181,44 @@
 
 ---
 
+## Task 156: Privacy & Terms of Service — Mobile App + Portal
+
+> Goal: Provide legally required privacy policy, terms of service, and consent flows for end-users (mobile app) and operators (portal).
+
+### Subtask 156.1: Privacy Policy & Terms of Service Pages
+- [ ] Draft Privacy Policy covering: data collected (account info, payment, location, charging history, device info), data usage, third-party sharing (Stripe, Mapbox, analytics), data retention, user rights (access, deletion, correction), contact info
+- [ ] Draft Terms of Service covering: acceptable use, payment terms, liability limitations, dispute resolution, account termination, service availability
+- [ ] Host both as static pages accessible via URL (e.g., `/privacy`, `/terms` on portal domain)
+- [ ] Ensure pages are publicly accessible (no auth required)
+
+### Subtask 156.2: Mobile App Consent Flow
+- [ ] Add "I agree to the Privacy Policy and Terms of Service" checkbox on sign-up screen with links to both documents
+- [ ] Block registration until consent is given
+- [ ] Record consent timestamp + version in user record (new fields: `tosAcceptedAt`, `tosVersion`, `privacyAcceptedAt`, `privacyVersion`)
+- [ ] Add Privacy Policy and Terms links in app Settings/About screen
+- [ ] Handle re-consent: if policy version changes, prompt user to accept updated terms on next app open
+
+### Subtask 156.3: Portal Consent Flow
+- [ ] Add consent checkbox on portal sign-up / first-login flow with links to Privacy Policy and Terms
+- [ ] Record consent timestamp + version in operator user record
+- [ ] Add Privacy Policy and Terms links in portal footer and Settings page
+- [ ] Handle re-consent on policy version updates
+
+### Subtask 156.4: Data Rights & Account Deletion
+- [ ] `DELETE /api/users/me` — account deletion endpoint (anonymize PII, retain anonymized charging records for billing/compliance)
+- [ ] Add "Delete My Account" option in mobile app Settings
+- [ ] Add "Delete My Account" option in portal Settings
+- [ ] Confirmation flow with grace period notice (e.g., 30 days before permanent deletion)
+- [ ] Email confirmation on deletion request
+
+### Subtask 156.5: Prisma Schema Updates
+- [ ] Add to User model: `tosAcceptedAt DateTime?`, `tosVersion String?`, `privacyAcceptedAt DateTime?`, `privacyVersion String?`, `deletionRequestedAt DateTime?`
+- [ ] Migration
+
+**Done when:** Both apps require consent before use, link to hosted policy pages, support re-consent on updates, and users can request account deletion.
+
+---
+
 ## Backlog (Post-MVP)
 - OCPP 2.0.1 upgrade path
 - Multi-tenant operator accounts

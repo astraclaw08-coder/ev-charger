@@ -1,28 +1,22 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { createApiClient, type DailyEntry, type SiteListItem } from '../api/client';
 import DashboardSitesMap, { type DashboardSiteMapItem } from '../components/DashboardSitesMap';
 import { useToken } from '../auth/TokenContext';
 import { usePortalScope } from '../context/PortalScopeContext';
-import { usePortalTheme } from '../theme/ThemeContext';
+import { PageHeader, StatCard, ErrorState, ChartTooltip, useChartTheme } from '../components/ui';
+import { PageSkeleton } from '../components/ui/LoadingState';
+import { cn } from '../lib/utils';
 
 export default function Dashboard() {
-  const { theme } = usePortalTheme();
-  const isDark = theme === 'dark';
-  const chartColors = {
-    grid: isDark ? '#334155' : '#e2e8f0',
-    tick: isDark ? '#94a3b8' : '#64748b',
-    tooltip: isDark
-      ? { backgroundColor: '#1e293b', border: '1px solid #334155', color: '#f1f5f9' }
-      : { backgroundColor: '#ffffff', border: '1px solid #e2e8f0', color: '#1e293b' },
-  };
+  const { grid, tick, isDark } = useChartTheme();
   const getToken = useToken();
   const [sites, setSites] = useState<SiteListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [fleetUptime, setFleetUptime] = useState<{ uptime24h: number; uptime7d: number; uptime30d: number } | null>(null);
   const [fleetKpis, setFleetKpis] = useState<{ totalSites: number; totalConnectors: number; totalKwh: number; totalRevenue: number; activeSessions: number; utilizationRatePct: number } | null>(null);
-  const [topUtilizedSites, setTopUtilizedSites] = useState<Array<{ id: string; name: string; utilizationPct: number }>>([]);
+  const [topUtilizedSites, setTopUtilizedSites] = useState<Array<{ id: string; name: string; address: string; utilizationPct: number; chargerCount: number }>>([]);
   const [fleetStatus, setFleetStatus] = useState<{
     totalChargers: number;
     totalConnectors: number;
@@ -195,7 +189,7 @@ export default function Dashboard() {
         const pct = sitePossibleSec > 0
           ? Math.round((siteChargingSec / sitePossibleSec) * 10000) / 100
           : 0;
-        return { id: site.id, name: site.name, utilizationPct: pct };
+        return { id: site.id, name: site.name, address: site.address, utilizationPct: pct, chargerCount: siteDetail?.chargers.length ?? 0 };
       });
 
       setTopUtilizedSites(
@@ -268,146 +262,215 @@ export default function Dashboard() {
   }, [getToken, rangePreset, siteId]);
 
 
-  if (loading) {
-    return (
-      <div className="flex h-64 items-center justify-center text-gray-400 dark:text-slate-500">Loading sites…</div>
-    );
-  }
+  if (loading) return <PageSkeleton />;
 
   if (error) {
-    return (
-      <div className="rounded-lg bg-red-50 dark:bg-red-900/20 p-4 text-sm text-red-700 dark:text-red-400">{error}</div>
-    );
+    return <ErrorState message={error} onRetry={() => { setLoading(true); load(); }} />;
   }
 
   return (
-    <div>
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-slate-100">Overview</h1>
-          <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">Executive + operational snapshot for daily CPO decision-making across your portfolio.</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Portfolio scope</p>
+    <div className="space-y-5">
+      <PageHeader
+        title="Overview"
+        description="Executive + operational snapshot for daily CPO decision-making across your portfolio."
+        actions={
+          <div className="flex flex-wrap gap-2">
             <select
               value={siteId}
               onChange={(e) => setSiteId(e.target.value)}
-              className="mt-1 rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5 text-sm"
+              className="rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-700 dark:text-slate-200 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none transition-colors"
             >
               <option value="">All sites</option>
               {sites.map((site) => (
                 <option key={site.id} value={site.id}>{site.name}</option>
               ))}
             </select>
-          </div>
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">KPI time period</p>
             <select
               value={rangePreset}
               onChange={(e) => setRangePreset(e.target.value as '7d' | '30d' | '60d')}
-              className="mt-1 rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5 text-sm"
+              className="rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-700 dark:text-slate-200 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none transition-colors"
             >
               <option value="7d">Last 7 days</option>
               <option value="30d">Last 30 days</option>
               <option value="60d">Last 60 days</option>
             </select>
           </div>
-        </div>
-      </div>
+        }
+      />
 
+      {/* ── Hero KPIs — single row of 6 tiles ── */}
       {fleetKpis && (
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
-          <KpiTile label={`Total kWh (${rangePreset})`} value={`${fleetKpis.totalKwh.toFixed(1)}`} />
-          <KpiTile label={`Total Revenue (${rangePreset})`} value={`$${fleetKpis.totalRevenue.toFixed(2)}`} />
-          <KpiTile label="Total Sites" value={`${fleetKpis.totalSites}`} />
-          <KpiTile label="Total Connectors" value={`${fleetKpis.totalConnectors}`} live />
-          <KpiTile label="Active Sessions" value={`${fleetKpis.activeSessions}`} live />
-          <KpiTile label={`Utilization Rate (${rangePreset})`} value={`${fleetKpis.utilizationRatePct.toFixed(2)}%`} />
+        <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
+          <StatCard
+            label={`Revenue (${rangePreset})`}
+            value={`$${fleetKpis.totalRevenue.toFixed(2)}`}
+            icon={
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 2v20m5-17H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H7" />
+              </svg>
+            }
+          />
+          <StatCard
+            label={`Energy (${rangePreset})`}
+            value={`${fleetKpis.totalKwh.toFixed(1)} kWh`}
+            icon={
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13 2 3 14h9l-1 8 10-12h-9l1-8z" />
+              </svg>
+            }
+          />
+          <StatCard
+            label="Active Sessions"
+            value={fleetKpis.activeSessions}
+            icon={
+              <span className="relative flex h-3 w-3">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
+                <span className="relative inline-flex h-3 w-3 rounded-full bg-green-500" />
+              </span>
+            }
+          />
+          <StatCard label="Total Sites" value={fleetKpis.totalSites} />
+          <StatCard label="Total Connectors" value={fleetKpis.totalConnectors} />
+          <StatCard
+            label={`Utilization (${rangePreset})`}
+            value={`${fleetKpis.utilizationRatePct.toFixed(1)}%`}
+          />
         </div>
       )}
 
+      {/* ── Fleet Health ── */}
       {fleetStatus && (
-        <div className="mt-3 rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm font-semibold text-gray-700 dark:text-slate-300">Connector Statuses</p>
+        <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <h2 className="text-sm font-semibold text-gray-900 dark:text-slate-100">Fleet Health</h2>
             <p className="text-xs text-gray-500 dark:text-slate-400">
-              Chargers: <span className="font-semibold text-gray-900 dark:text-slate-100">{fleetStatus.totalChargers}</span>
-              {' · '}
-              Connectors: <span className="font-semibold text-gray-900 dark:text-slate-100">{fleetStatus.totalConnectors}</span>
+              <span className="font-mono font-medium text-gray-700 dark:text-slate-300">{fleetStatus.totalChargers}</span> chargers · <span className="font-mono font-medium text-gray-700 dark:text-slate-300">{fleetStatus.totalConnectors}</span> connectors
             </p>
           </div>
 
-          <div className="mt-2 text-sm text-gray-700 dark:text-slate-300">
-            <span className="font-medium text-emerald-600 dark:text-emerald-400">🟢 Available {fleetStatus.available}</span>
-            <span className="mx-2 text-gray-300 dark:text-slate-600">·</span>
-            <span className="font-medium text-amber-600 dark:text-amber-400">🟡 Charging {fleetStatus.charging}</span>
-            <span className="mx-2 text-gray-300 dark:text-slate-600">·</span>
-            <span className="font-medium text-red-600 dark:text-red-400">🔴 Faulted {fleetStatus.faulted}</span>
-            <span className="mx-2 text-gray-300 dark:text-slate-600">·</span>
-            <span className="font-semibold text-gray-700 dark:text-slate-300">⚫ Offline {fleetStatus.offline}</span>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <FleetHealthTile
+              label="Available"
+              count={fleetStatus.available}
+              total={fleetStatus.totalConnectors}
+              color="emerald"
+              icon={
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              }
+            />
+            <FleetHealthTile
+              label="Charging"
+              count={fleetStatus.charging}
+              total={fleetStatus.totalConnectors}
+              color="blue"
+              icon={
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13 2 3 14h9l-1 8 10-12h-9l1-8z" />
+                </svg>
+              }
+            />
+            <FleetHealthTile
+              label="Faulted"
+              count={fleetStatus.faulted}
+              total={fleetStatus.totalConnectors}
+              color="red"
+              icon={
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              }
+            />
+            <FleetHealthTile
+              label="Offline"
+              count={fleetStatus.offline}
+              total={fleetStatus.totalConnectors}
+              color="gray"
+              icon={
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 5.636a9 9 0 010 12.728M5.636 18.364L18.364 5.636" />
+                </svg>
+              }
+            />
           </div>
 
-          <div className="mt-3 flex flex-wrap gap-2">
-            {fleetStatus.byStatus
-              .filter((entry) => !['AVAILABLE', 'PREPARING', 'CHARGING', 'FINISHING', 'SUSPENDED_EV', 'SUSPENDED_EVSE', 'FAULTED', 'UNAVAILABLE', 'OFFLINE'].includes(entry.status))
-              .map((entry) => (
-                <span key={entry.status} className="rounded-full border border-gray-300 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/60 px-2.5 py-1 text-xs text-gray-700 dark:text-slate-300">
-                  {entry.status}: {entry.count}
-                </span>
-              ))}
-          </div>
+          {fleetStatus.byStatus
+            .filter((entry) => !['AVAILABLE', 'PREPARING', 'CHARGING', 'FINISHING', 'SUSPENDED_EV', 'SUSPENDED_EVSE', 'FAULTED', 'UNAVAILABLE', 'OFFLINE'].includes(entry.status))
+            .length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {fleetStatus.byStatus
+                .filter((entry) => !['AVAILABLE', 'PREPARING', 'CHARGING', 'FINISHING', 'SUSPENDED_EV', 'SUSPENDED_EVSE', 'FAULTED', 'UNAVAILABLE', 'OFFLINE'].includes(entry.status))
+                .map((entry) => (
+                  <span key={entry.status} className="rounded-full border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 px-2.5 py-1 text-xs font-medium text-gray-600 dark:text-slate-400">
+                    {entry.status}: <span className="font-mono">{entry.count}</span>
+                  </span>
+                ))}
+            </div>
+          )}
         </div>
       )}
 
+      {/* ── Top Utilized Sites ── */}
       {topUtilizedSites.length > 0 && (
-        <div className="mt-3 rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-sm font-semibold text-gray-700 dark:text-slate-300">Top utilized sites ({rangePreset})</p>
-            <a href="/sites" className="text-xs font-medium text-brand-700 hover:underline">View all sites</a>
+        <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-5">
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <h2 className="text-sm font-semibold text-gray-900 dark:text-slate-100">Top Utilized Sites ({rangePreset})</h2>
+            <a href="/sites" className="text-xs font-medium text-brand-600 dark:text-brand-400 hover:underline">View all →</a>
           </div>
-          <div className="mt-3 space-y-2">
+          <div className="space-y-2">
             {topUtilizedSites.map((site, idx) => (
-              <div key={site.id} className="flex items-center gap-3 rounded-lg border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/60 px-3 py-2.5">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-100 dark:bg-brand-900/40 text-xs font-bold text-brand-700 dark:text-brand-300">{idx + 1}</span>
-                <span className="min-w-0 flex-1 truncate text-sm font-medium text-gray-900 dark:text-slate-100">{site.name}</span>
-                <span className="shrink-0 text-sm font-semibold text-brand-700 dark:text-brand-300">{site.utilizationPct.toFixed(1)}%</span>
-                <div className="hidden w-24 sm:block">
+              <a
+                key={site.id}
+                href={`/sites/${site.id}`}
+                className="flex items-center gap-3 rounded-lg border border-gray-100 dark:border-slate-700/50 bg-gray-50/50 dark:bg-slate-800/40 px-3 py-2.5 transition-all hover:border-brand-300 hover:bg-brand-50 dark:hover:border-brand-600/50 dark:hover:bg-brand-900/20 hover:shadow-sm"
+              >
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gray-200 dark:bg-slate-700 text-xs font-bold font-mono text-gray-600 dark:text-slate-300">{idx + 1}</span>
+                <div className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium text-gray-900 dark:text-slate-100">{site.name}</span>
+                  <span className="block truncate text-xs text-gray-500 dark:text-slate-400">{site.address}</span>
+                  <span className="text-xs text-gray-400 dark:text-slate-500">{site.chargerCount} charger{site.chargerCount !== 1 ? 's' : ''}</span>
+                </div>
+                <span className="shrink-0 text-sm font-bold font-mono tabular-nums text-gray-900 dark:text-slate-100">{site.utilizationPct.toFixed(1)}%</span>
+                <div className="hidden w-28 sm:block">
                   <div className="h-2 rounded-full bg-gray-200 dark:bg-slate-700">
-                    <div className="h-2 rounded-full bg-brand-500" style={{ width: `${Math.min(site.utilizationPct, 100)}%` }} />
+                    <div
+                      className="h-2 rounded-full bg-emerald-500 dark:bg-emerald-400 transition-all"
+                      style={{ width: `${Math.min(site.utilizationPct, 100)}%` }}
+                    />
                   </div>
                 </div>
-              </div>
+              </a>
             ))}
           </div>
         </div>
       )}
 
+      {/* ── Sites Map ── */}
       <DashboardSitesMap sites={siteMapItems} />
 
-      <div className="mt-4 rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
-        <p className="text-sm font-semibold">
-          <span className="text-blue-600">Energy (kWh)</span>
-          <span className="text-gray-400 dark:text-slate-500"> | </span>
-          <span className="text-emerald-600">Revenue ($)</span>
-          <span className="text-gray-400 dark:text-slate-500"> | </span>
-          <span className="text-amber-500">Transactions</span>
-          <span className="ml-1 text-xs font-normal text-gray-400 dark:text-slate-500">({rangePreset})</span>
-        </p>
+      {/* ── Fleet Trend Chart ── */}
+      <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-5">
+        <div className="flex items-center gap-4 mb-4">
+          <h2 className="text-sm font-semibold text-gray-900 dark:text-slate-100">Fleet Trend</h2>
+          <div className="flex items-center gap-3 text-xs">
+            <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-blue-500" /> Energy (kWh)</span>
+            <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500" /> Revenue ($)</span>
+            <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-amber-500" /> Transactions</span>
+          </div>
+        </div>
 
-        <div className="mt-3 h-64">
-          {loading ? (
-            <div className="h-full animate-pulse rounded-lg bg-gray-100 dark:bg-slate-800" />
-          ) : fleetTrend.length === 0 ? (
+        <div className="h-64">
+          {fleetTrend.length === 0 ? (
             <div className="flex h-full items-center justify-center text-sm text-gray-400 dark:text-slate-500">No trend data for selected range.</div>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={fleetTrend} margin={{ top: 8, right: 16, left: 4, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} />
-                <XAxis dataKey="label" tick={{ fontSize: 11, fill: chartColors.tick }} />
-                <YAxis yAxisId="left" tick={{ fontSize: 11, fill: chartColors.tick }} />
-                <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: chartColors.tick }} />
-                <Tooltip contentStyle={chartColors.tooltip} />
+                <CartesianGrid strokeDasharray="3 3" stroke={grid} />
+                <XAxis dataKey="label" tick={{ fontSize: 11, fill: tick }} />
+                <YAxis yAxisId="left" tick={{ fontSize: 11, fill: tick }} />
+                <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: tick }} />
+                <Tooltip content={<ChartTooltip formatValue={(v, name) => name === 'Revenue ($)' ? `$${v.toFixed(2)}` : name === 'Energy (kWh)' ? `${v.toFixed(1)} kWh` : String(v)} />} />
                 <Bar yAxisId="left" dataKey="kwhDelivered" name="Energy (kWh)" fill="#3b82f6" radius={[4, 4, 0, 0]} />
                 <Line yAxisId="right" type="monotone" dataKey="revenueUsd" name="Revenue ($)" stroke="#10b981" strokeWidth={2} dot={false} />
                 <Line yAxisId="left" type="monotone" dataKey="sessions" name="Transactions" stroke="#f59e0b" strokeWidth={2} dot={false} />
@@ -417,32 +480,75 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* ── Fleet Uptime ── */}
       {fleetUptime && (
-        <div className="mt-4 rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
-          <p className="text-sm font-semibold text-gray-700 dark:text-slate-300">Fleet uptime summary (OCA v1.1)</p>
-          <div className="mt-2 grid gap-3 sm:grid-cols-3">
-            <div><p className="text-xs text-gray-500 dark:text-slate-400">24h</p><p className="text-lg font-semibold text-gray-900 dark:text-slate-100">{fleetUptime.uptime24h.toFixed(2)}%</p></div>
-            <div><p className="text-xs text-gray-500 dark:text-slate-400">7d</p><p className="text-lg font-semibold text-gray-900 dark:text-slate-100">{fleetUptime.uptime7d.toFixed(2)}%</p></div>
-            <div><p className="text-xs text-gray-500 dark:text-slate-400">30d</p><p className="text-lg font-semibold text-gray-900 dark:text-slate-100">{fleetUptime.uptime30d.toFixed(2)}%</p></div>
+        <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-5">
+          <h2 className="text-sm font-semibold text-gray-900 dark:text-slate-100 mb-3">Fleet Uptime (OCA v1.1)</h2>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <UptimeTile label="24h" value={fleetUptime.uptime24h} />
+            <UptimeTile label="7d" value={fleetUptime.uptime7d} />
+            <UptimeTile label="30d" value={fleetUptime.uptime30d} />
           </div>
         </div>
       )}
-
     </div>
   );
 }
 
-function KpiTile({ label, value, live }: { label: string; value: string; live?: boolean }) {
+const healthColorMap: Record<string, { ring: string; bg: string; text: string; bar: string }> = {
+  emerald: {
+    ring: 'ring-emerald-100 dark:ring-emerald-900/40',
+    bg: 'bg-emerald-50 dark:bg-emerald-900/20',
+    text: 'text-emerald-600 dark:text-emerald-400',
+    bar: 'bg-emerald-500',
+  },
+  blue: {
+    ring: 'ring-blue-100 dark:ring-blue-900/40',
+    bg: 'bg-blue-50 dark:bg-blue-900/20',
+    text: 'text-blue-600 dark:text-blue-400',
+    bar: 'bg-blue-500',
+  },
+  red: {
+    ring: 'ring-red-100 dark:ring-red-900/40',
+    bg: 'bg-red-50 dark:bg-red-900/20',
+    text: 'text-red-600 dark:text-red-400',
+    bar: 'bg-red-500',
+  },
+  gray: {
+    ring: 'ring-gray-100 dark:ring-slate-700/40',
+    bg: 'bg-gray-50 dark:bg-slate-800/60',
+    text: 'text-gray-500 dark:text-slate-400',
+    bar: 'bg-gray-400 dark:bg-slate-500',
+  },
+};
+
+function FleetHealthTile({ label, count, total, color, icon }: { label: string; count: number; total: number; color: string; icon: React.ReactNode }) {
+  const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+  const c = healthColorMap[color] ?? healthColorMap.gray;
   return (
-    <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
-      <div className="flex items-center gap-1.5">
-        <p className="truncate text-[11px] leading-tight text-gray-500 dark:text-slate-400">{label}</p>
-        {live && <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-500" title="Live" />}
+    <div className={cn('rounded-xl p-4 ring-1', c.ring, c.bg)}>
+      <div className="flex items-center gap-2 mb-2">
+        <span className={c.text}>{icon}</span>
+        <span className="text-xs font-medium text-gray-600 dark:text-slate-300">{label}</span>
       </div>
-      <p className="mt-1 truncate text-[clamp(1rem,1.6vw,1.25rem)] font-semibold leading-tight text-gray-900 dark:text-slate-100">{value}</p>
+      <div className="flex items-baseline gap-1.5">
+        <span className={cn('text-2xl font-bold font-mono tabular-nums', c.text)}>{count}</span>
+        <span className="text-xs text-gray-400 dark:text-slate-500">/ {total}</span>
+      </div>
+      <div className="mt-2 h-1.5 rounded-full bg-gray-200 dark:bg-slate-700 overflow-hidden">
+        <div className={cn('h-full rounded-full transition-all', c.bar)} style={{ width: `${pct}%` }} />
+      </div>
+      <span className="mt-1 block text-[10px] font-medium text-gray-400 dark:text-slate-500">{pct}%</span>
     </div>
   );
 }
 
-
-
+function UptimeTile({ label, value }: { label: string; value: number }) {
+  const color = value >= 99 ? 'text-emerald-600 dark:text-emerald-400' : value >= 95 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400';
+  return (
+    <div className="rounded-lg bg-gray-50 dark:bg-slate-800/60 p-3">
+      <p className="text-xs text-gray-500 dark:text-slate-400">{label}</p>
+      <p className={cn('text-xl font-bold font-mono tabular-nums mt-0.5', color)}>{value.toFixed(2)}%</p>
+    </div>
+  );
+}

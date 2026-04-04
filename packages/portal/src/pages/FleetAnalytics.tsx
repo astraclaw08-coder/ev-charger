@@ -22,6 +22,7 @@ import {
   type RebateInterval,
   type SiteListItem,
 } from '../api/client';
+import { exportToCsv, type CsvColumn } from '../lib/csvExport';
 import { useToken } from '../auth/TokenContext';
 import { usePortalTheme } from '../theme/ThemeContext';
 
@@ -337,47 +338,51 @@ export default function FleetAnalytics() {
         <KpiTile label="Uptime" value={`${summary.uptimePct.toFixed(2)}%`} />
       </div>
 
-      <ChartCard title="Sessions per Day">
-        <ResponsiveContainer width="100%" height={200}>
-          <LineChart data={chartData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} />
-            <XAxis dataKey="label" tick={{ fontSize: 11, fill: chartColors.tick }} tickLine={false} />
-            <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: chartColors.tick }} />
-            <Tooltip contentStyle={chartColors.tooltip} formatter={(v: number) => [v, 'Sessions']} labelFormatter={(l) => `Date: ${l}`} />
-            <Line type="monotone" dataKey="sessions" stroke="#16a34a" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
-          </LineChart>
-        </ResponsiveContainer>
-      </ChartCard>
-
-      <ChartCard title="kWh Delivered per Day">
-        <ResponsiveContainer width="100%" height={200}>
-          <AreaChart data={chartData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} />
-            <XAxis dataKey="label" tick={{ fontSize: 11, fill: chartColors.tick }} tickLine={false} />
-            <YAxis tick={{ fontSize: 11, fill: chartColors.tick }} />
-            <Tooltip contentStyle={chartColors.tooltip} formatter={(v: number) => [`${v} kWh`, 'Energy']} labelFormatter={(l) => `Date: ${l}`} />
-            <Area type="monotone" dataKey="kwhDelivered" stroke="#2563eb" fill={isDark ? '#1e3a5f' : '#dbeafe'} strokeWidth={2} />
-          </AreaChart>
-        </ResponsiveContainer>
-      </ChartCard>
-
-      <ChartCard title="Revenue per Day (USD)">
-        <ResponsiveContainer width="100%" height={200}>
-          <BarChart data={chartData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} />
-            <XAxis dataKey="label" tick={{ fontSize: 11, fill: chartColors.tick }} tickLine={false} />
-            <YAxis tick={{ fontSize: 11, fill: chartColors.tick }} tickFormatter={(v) => `$${v}`} />
-            <Tooltip contentStyle={chartColors.tooltip} formatter={(v: number) => [`$${v.toFixed(2)}`, 'Revenue']} labelFormatter={(l) => `Date: ${l}`} />
-            <Bar dataKey="revenueUsd" fill="#16a34a" radius={[3, 3, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
-      </ChartCard>
-
-      {/* Site performance breakdown table */}
+      {/* Site performance breakdown table — moved up below KPIs */}
       <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm">
-        <div className="border-b border-gray-300 dark:border-slate-700 px-5 py-4">
-          <h3 className="text-sm font-semibold text-gray-700 dark:text-slate-300">Site Performance Breakdown</h3>
-          <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">Revenue, energy, and utilization per site for the selected period.</p>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-300 dark:border-slate-700 px-5 py-4">
+          <div>
+            <h3 className="text-sm font-semibold text-gray-700 dark:text-slate-300">Site Performance Breakdown</h3>
+            <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">Revenue, energy, and utilization per site for the selected period.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              const csvColumns: CsvColumn<{ name: string; sessions: number; kwh: number; revenue: number; utilization: number; uptime: number; revPerKwh: number }>[] = [
+                { header: 'Site', accessor: (r) => r.name },
+                { header: 'Sessions', accessor: (r) => r.sessions },
+                { header: 'kWh', accessor: (r) => r.kwh },
+                { header: 'Revenue ($)', accessor: (r) => r.revenue },
+                { header: 'Utilization (%)', accessor: (r) => r.utilization },
+                { header: 'Uptime (%)', accessor: (r) => r.uptime },
+                { header: 'Rev/kWh ($)', accessor: (r) => r.revPerKwh },
+              ];
+              const csvRows = filteredSites
+                .map((site) => {
+                  const a = analyticsBySite[site.id];
+                  if (!a) return null;
+                  const revenueUsd = a.revenueCents / 100;
+                  return {
+                    name: site.name,
+                    sessions: a.sessionsCount,
+                    kwh: Number(a.kwhDelivered.toFixed(1)),
+                    revenue: Number(revenueUsd.toFixed(2)),
+                    utilization: Number(a.utilizationRatePct.toFixed(1)),
+                    uptime: Number(a.uptimePct.toFixed(1)),
+                    revPerKwh: Number((a.kwhDelivered > 0 ? revenueUsd / a.kwhDelivered : 0).toFixed(3)),
+                  };
+                })
+                .filter(Boolean) as { name: string; sessions: number; kwh: number; revenue: number; utilization: number; uptime: number; revPerKwh: number }[];
+              exportToCsv(csvRows, csvColumns, `site-performance-${timeFilter}-${new Date().toISOString().slice(0, 10)}.csv`);
+            }}
+            className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
+          >
+            <svg viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
+              <path d="M10.75 2.75a.75.75 0 00-1.5 0v8.614L6.295 8.235a.75.75 0 10-1.09 1.03l4.25 4.5a.75.75 0 001.09 0l4.25-4.5a.75.75 0 00-1.09-1.03l-2.955 3.129V2.75z" />
+              <path d="M3.5 12.75a.75.75 0 00-1.5 0v2.5A2.75 2.75 0 004.75 18h10.5A2.75 2.75 0 0018 15.25v-2.5a.75.75 0 00-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5z" />
+            </svg>
+            CSV
+          </button>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -425,6 +430,42 @@ export default function FleetAnalytics() {
           <span>📅 Total sessions in period: <strong className="text-gray-800 dark:text-slate-200">{summary.sessionsCount}</strong></span>
         </div>
         <DayOfWeekChart data={merged} chartColors={chartColors} isDark={isDark} />
+      </ChartCard>
+
+      <ChartCard title="Sessions per Day">
+        <ResponsiveContainer width="100%" height={200}>
+          <LineChart data={chartData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} />
+            <XAxis dataKey="label" tick={{ fontSize: 11, fill: chartColors.tick }} tickLine={false} />
+            <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: chartColors.tick }} />
+            <Tooltip contentStyle={chartColors.tooltip} formatter={(v: number) => [v, 'Sessions']} labelFormatter={(l) => `Date: ${l}`} />
+            <Line type="monotone" dataKey="sessions" stroke="#16a34a" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+          </LineChart>
+        </ResponsiveContainer>
+      </ChartCard>
+
+      <ChartCard title="kWh Delivered per Day">
+        <ResponsiveContainer width="100%" height={200}>
+          <AreaChart data={chartData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} />
+            <XAxis dataKey="label" tick={{ fontSize: 11, fill: chartColors.tick }} tickLine={false} />
+            <YAxis tick={{ fontSize: 11, fill: chartColors.tick }} />
+            <Tooltip contentStyle={chartColors.tooltip} formatter={(v: number) => [`${v} kWh`, 'Energy']} labelFormatter={(l) => `Date: ${l}`} />
+            <Area type="monotone" dataKey="kwhDelivered" stroke="#2563eb" fill={isDark ? '#1e3a5f' : '#dbeafe'} strokeWidth={2} />
+          </AreaChart>
+        </ResponsiveContainer>
+      </ChartCard>
+
+      <ChartCard title="Revenue per Day (USD)">
+        <ResponsiveContainer width="100%" height={200}>
+          <BarChart data={chartData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} />
+            <XAxis dataKey="label" tick={{ fontSize: 11, fill: chartColors.tick }} tickLine={false} />
+            <YAxis tick={{ fontSize: 11, fill: chartColors.tick }} tickFormatter={(v) => `$${v}`} />
+            <Tooltip contentStyle={chartColors.tooltip} formatter={(v: number) => [`$${v.toFixed(2)}`, 'Revenue']} labelFormatter={(l) => `Date: ${l}`} />
+            <Bar dataKey="revenueUsd" fill="#16a34a" radius={[3, 3, 0, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
       </ChartCard>
     </div>
   );

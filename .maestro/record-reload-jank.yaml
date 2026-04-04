@@ -1,0 +1,26 @@
+appId: dev.evcharger.app
+---
+# Record the exact back-then-forward navigation to catch the jerk
+
+# Should be on charger detail. Wait for it to settle fully.
+- waitForAnimationToEnd
+- waitForAnimationToEnd
+
+# Tap back
+- tapOn:
+    point: "7%,6%"
+
+# Wait for list to fully settle
+- waitForAnimationToEnd
+- waitForAnimationToEnd
+- waitForAnimationToEnd
+
+# Tap charger again
+- tapOn:
+    point: "50%,35%"
+
+# Now wait for it to settle - the jerk happens during this window
+- waitForAnimationToEnd
+- waitForAnimationToEnd
+- waitForAnimationToEnd
+- waitForAnimationToEnd

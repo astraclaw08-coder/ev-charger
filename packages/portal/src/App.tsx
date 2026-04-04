@@ -21,7 +21,8 @@ import Notifications from './pages/Notifications';
 import Operations from './pages/Operations';
 import Chargers from './pages/Chargers';
 import Sessions from './pages/Sessions';
-import { ThemeProvider, usePortalTheme } from './theme/ThemeContext';
+import CommandPalette from './components/CommandPalette';
+import { ThemeProvider } from './theme/ThemeContext';
 import { PortalScopeProvider } from './context/PortalScopeContext';
 import { getDefaultHomePath, getRolePreference } from './lib/portalPreferences';
 
@@ -38,6 +39,7 @@ function PortalRoutes() {
   return (
     <BrowserRouter>
       <PortalScopeProvider>
+        <CommandPalette />
         <Layout>
           <Routes>
           <Route path="/" element={<Navigate to={homePath} replace />} />
@@ -137,36 +139,27 @@ function DevApp() {
 }
 
 function ThemedShell() {
-  const { themeClass } = usePortalTheme();
   const authMode = resolveAuthMode();
 
   if (import.meta.env.VITE_FORCE_LOGIN_SCREEN === '1') {
     return (
-      <div className={themeClass}>
-        <BrowserRouter>
-          <Routes>
-            <Route path="*" element={<Login />} />
-          </Routes>
-        </BrowserRouter>
-      </div>
+      <BrowserRouter>
+        <Routes>
+          <Route path="*" element={<Login />} />
+        </Routes>
+      </BrowserRouter>
     );
   }
 
   if (authMode === 'keycloak') {
     return (
-      <div className={themeClass}>
-        <PasswordAuthProvider>
-          <KeycloakOnlyApp />
-        </PasswordAuthProvider>
-      </div>
+      <PasswordAuthProvider>
+        <KeycloakOnlyApp />
+      </PasswordAuthProvider>
     );
   }
 
-  return (
-    <div className={themeClass}>
-      <DevApp />
-    </div>
-  );
+  return <DevApp />;
 }
 
 export default function App() {

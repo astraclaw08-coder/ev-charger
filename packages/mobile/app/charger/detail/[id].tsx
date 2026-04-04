@@ -322,6 +322,7 @@ export default function ChargerStartScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const queryClient = useQueryClient();
+  const scrollRef = useRef<ScrollView | null>(null);
   const { isDark } = useAppTheme();
   const { isGuest, loading: authLoading } = useAppAuth();
   const { toggle, isFav } = useFavorites();
@@ -453,6 +454,13 @@ export default function ChargerStartScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      // Force a clean top-of-screen reset when re-opening the same charger.
+      // Without this, React Navigation / ScrollView can briefly restore the prior
+      // offset on remount, which reads as a downward "jerk" before layout settles.
+      requestAnimationFrame(() => {
+        scrollRef.current?.scrollTo({ y: 0, animated: false });
+      });
+
       queryClient.invalidateQueries({ queryKey: ['charger', id] });
       queryClient.invalidateQueries({ queryKey: ['sessions'] });
       return undefined;
@@ -757,6 +765,9 @@ export default function ChargerStartScreen() {
       />
 
       <ScrollView
+        key={String(id)}
+        ref={scrollRef}
+        contentOffset={{ x: 0, y: 0 }}
         style={[styles.container, { backgroundColor: isDark ? '#030712' : '#f8fafc' }]}
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={manualRefreshing} onRefresh={onPullRefresh} />}

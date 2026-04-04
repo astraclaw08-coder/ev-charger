@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useLayoutEffect, useMemo, useState } from 'react';
 
 export type PortalTheme = 'dark' | 'light';
 
@@ -13,43 +13,39 @@ type ThemeContextValue = {
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
+/** Synchronously toggle the .dark class on every relevant DOM node. */
+function applyThemeClass(nextTheme: PortalTheme) {
+  if (typeof document === 'undefined') return;
+  const enableDark = nextTheme === 'dark';
+  document.documentElement.classList.toggle('dark', enableDark);
+  document.body.classList.toggle('dark', enableDark);
+  document.getElementById('root')?.classList.toggle('dark', enableDark);
+}
+
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<PortalTheme>(() => {
     if (typeof window === 'undefined') return 'dark';
     const saved = window.localStorage.getItem(STORAGE_KEY);
-    return saved === 'light' || saved === 'dark' ? saved : 'dark';
+    if (saved === 'light' || saved === 'dark') return saved;
+    return window.matchMedia?.('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
   });
 
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem(STORAGE_KEY, theme);
-      if (theme === 'dark') {
-        document.documentElement.classList.add('dark');
-      } else {
-        document.documentElement.classList.remove('dark');
-      }
-    }
+  // useLayoutEffect so the class swap happens synchronously before paint —
+  // prevents a single dark-frame flash when switching to light.
+  useLayoutEffect(() => {
+    window.localStorage.setItem(STORAGE_KEY, theme);
+    applyThemeClass(theme);
   }, [theme]);
 
-  // Sync on mount (effect doesn't run during SSR/initial hydration)
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const saved = window.localStorage.getItem(STORAGE_KEY);
-      const initial = saved === 'light' || saved === 'dark' ? saved : 'dark';
-      if (initial === 'dark') {
-        document.documentElement.classList.add('dark');
-      } else {
-        document.documentElement.classList.remove('dark');
-      }
-    }
-  }, []);
+  const setTheme = useCallback((next: PortalTheme) => setThemeState(next), []);
+  const toggleTheme = useCallback(() => setThemeState((prev) => (prev === 'dark' ? 'light' : 'dark')), []);
 
   const value = useMemo<ThemeContextValue>(() => ({
     theme,
-    setTheme: (next) => setThemeState(next),
-    toggleTheme: () => setThemeState((prev) => (prev === 'dark' ? 'light' : 'dark')),
+    setTheme,
+    toggleTheme,
     themeClass: theme === 'dark' ? 'portal-dark' : 'portal-light',
-  }), [theme]);
+  }), [theme, setTheme, toggleTheme]);
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }

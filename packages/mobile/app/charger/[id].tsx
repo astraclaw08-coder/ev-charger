@@ -116,6 +116,7 @@ export default function ChargerDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const queryClient = useQueryClient();
+  const scrollRef = useRef<ScrollView | null>(null);
   const [startingConnector, setStartingConnector] = useState<number | null>(null);
   const [activationMessage, setActivationMessage] = useState<string | null>(null);
   const [showActivationModal, setShowActivationModal] = useState(false);
@@ -131,11 +132,13 @@ export default function ChargerDetailScreen() {
   const { data: charger, isLoading, refetch } = useQuery({
     queryKey: ['charger', id],
     queryFn: () => api.chargers.get(id),
+    placeholderData: (prev: any) => prev,   // keep stale data visible during refetch
   });
 
   const { data: allChargers = [], refetch: refetchAllChargers } = useQuery({
     queryKey: ['chargers'],
     queryFn: () => api.chargers.list(),
+    placeholderData: (prev: any) => prev,
   });
 
   const siteChargers = useMemo(() => {
@@ -171,10 +174,13 @@ export default function ChargerDetailScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      queryClient.invalidateQueries({ queryKey: ['charger', id] });
-      queryClient.invalidateQueries({ queryKey: ['chargers'] });
-      return undefined;
-    }, [id, queryClient]),
+      scrollRef.current?.scrollTo({ y: 0, animated: false });
+      // Refetch (not invalidate) so stale data stays visible while fresh data loads.
+      // invalidateQueries nukes the cache → isLoading flips true → loading spinner
+      // renders for one frame → content pops back in = the "jerk".
+      refetch();
+      refetchAllChargers();
+    }, [id, refetch, refetchAllChargers]),
   );
 
   const onPullRefresh = useCallback(async () => {
@@ -334,7 +340,60 @@ export default function ChargerDetailScreen() {
     startMutation.mutate({ chargerId, connectorId });
   }
 
-  if (isLoading) {
+  // Only show loading spinner on truly cold first load (no cached data at all).
+  // On re-open of the same charger, cached data renders instantly via placeholderData
+  // while refetch happens silently in background — no spinner, no jerk.
+  const showLoadingSpinner = isLoading && !charger;
+
+  // ── Hooks must be above all early returns (Rules of Hooks) ──────────
+  const headerLeft = useCallback(
+    () => (
+      <TouchableOpacity onPress={() => router.back()} style={{ paddingHorizontal: 4, paddingVertical: 4 }}>
+        <Ionicons name="chevron-back" size={30} color={isDark ? '#f9fafb' : '#111827'} />
+      </TouchableOpacity>
+    ),
+    [isDark, router],
+  );
+
+  const favTargetId = selectedCharger?.id ?? charger?.id ?? id;
+  const headerRight = useCallback(
+    () => (
+      <HeartButton
+        isFavorited={isFav(favTargetId)}
+        onToggle={async () => {
+          try {
+            await toggle(favTargetId);
+          } catch (e) {
+            Alert.alert('Favorites update failed', e instanceof Error ? e.message : 'Please sign in again and retry.');
+          }
+        }}
+      />
+    ),
+    [favTargetId, isFav, toggle],
+  );
+
+  const headerOptions = useMemo(
+    () => ({
+      title: 'Lumeo',
+      headerShown: true,
+      headerStyle: { backgroundColor: isDark ? '#0b1220' : '#ffffff' } as const,
+      headerTintColor: isDark ? '#f9fafb' : '#111827',
+      headerShadowVisible: false,
+      headerTitleStyle: {
+        color: isDark ? '#ffffff' : '#000000',
+        fontWeight: '300' as const,
+        letterSpacing: 1.5,
+        fontSize: 22,
+      },
+      headerBackButtonDisplayMode: 'minimal' as const,
+      headerLeft,
+      headerRight,
+    }),
+    [isDark, headerLeft, headerRight],
+  );
+
+  // ── Early returns (after all hooks) ────────────────────────────────
+  if (showLoadingSpinner) {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#10b981" />
@@ -350,6 +409,7 @@ export default function ChargerDetailScreen() {
     );
   }
 
+  // ── Derived display values ─────────────────────────────────────────
   const siteAvailableChargers = siteChargers.filter((c) =>
     c.connectors.some((connector) => connector.status === 'AVAILABLE'),
   ).length;
@@ -374,7 +434,6 @@ export default function ChargerDetailScreen() {
   const displayedIdleRate = pricingMode === 'tou' && nowTou ? nowTou.idleFeePerMinUsd : idleFeePerMinUsd;
   const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-  // Collapse saved windows into one representative day-bar + applicable days list
   const dayRows = Array.from({ length: 7 }, (_, day) => ({
     day,
     rows: touWindows.filter((w) => w.day === day).sort((a, b) => toMinutes(a.start) - toMinutes(b.start)),
@@ -392,43 +451,13 @@ export default function ChargerDetailScreen() {
     return Array.from(bySig.values()).sort((a, b) => b.days.length - a.days.length)[0] ?? null;
   })();
 
-
   return (
     <>
-      <Stack.Screen
-        options={{
-          title: 'Lumeo',
-          headerShown: true,
-          headerStyle: { backgroundColor: isDark ? '#0b1220' : '#ffffff' },
-          headerTintColor: isDark ? '#f9fafb' : '#111827',
-          headerShadowVisible: false,
-          headerTitleStyle: {
-            color: isDark ? '#ffffff' : '#000000',
-            fontWeight: '300',
-            letterSpacing: 1.5,
-            fontSize: 22,
-          } as any,
-          headerBackButtonDisplayMode: 'minimal',
-          headerLeft: () => (
-            <TouchableOpacity onPress={() => router.back()} style={{ paddingHorizontal: 4, paddingVertical: 4 }}>
-              <Ionicons name="chevron-back" size={30} color={isDark ? '#f9fafb' : '#111827'} />
-            </TouchableOpacity>
-          ),
-          headerRight: () => (
-            <HeartButton
-              isFavorited={isFav(selectedCharger?.id ?? charger.id)}
-              onToggle={async () => {
-                try {
-                  await toggle(selectedCharger?.id ?? charger.id);
-                } catch (e) {
-                  Alert.alert('Favorites update failed', e instanceof Error ? e.message : 'Please sign in again and retry.');
-                }
-              }}
-            />
-          ),
-        }}
-      />
+      <Stack.Screen options={headerOptions} />
       <ScrollView
+        key={String(id)}
+        ref={scrollRef}
+        contentOffset={{ x: 0, y: 0 }}
         style={[styles.container, { backgroundColor: isDark ? '#030712' : '#f9fafb' }]}
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={manualRefreshing} onRefresh={onPullRefresh} />}

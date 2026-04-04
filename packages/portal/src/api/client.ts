@@ -406,6 +406,80 @@ export interface AdminInAppNotificationCampaign {
   deliveryCount: number;
 }
 
+// ── Support Driver Types ────────────────────────────────────────────────
+export interface SupportDriverSummary {
+  id: string;
+  email: string;
+  phone: string | null;
+  name: string | null;
+  idTag: string;
+  createdAt: string;
+  sessionCount: number;
+}
+
+export interface SupportDriverDetail {
+  id: string;
+  clerkId: string;
+  email: string;
+  phone: string | null;
+  name: string | null;
+  homeAddress: string | null;
+  homeSiteAddress: string | null;
+  homeCity: string | null;
+  homeState: string | null;
+  homeZipCode: string | null;
+  paymentProfile: string | null;
+  idTag: string;
+  createdAt: string;
+  sessionCount: number;
+  paymentCount: number;
+}
+
+export interface SupportDriverProfileUpdate {
+  name: string;
+  phone: string;
+  homeAddress: string;
+  homeSiteAddress: string;
+  homeCity: string;
+  homeState: string;
+  homeZipCode: string;
+  idTag: string;
+}
+
+export interface SupportDriverSession {
+  id: string;
+  status: string;
+  startedAt: string;
+  stoppedAt: string | null;
+  energyKwh: number | null;
+  costUsd: number | null;
+  ratePerKwh: number | null;
+  chargerOcppId: string | null;
+  siteName: string | null;
+  connectorId: number | null;
+}
+
+export interface SupportDriverSessionsResponse {
+  sessions: SupportDriverSession[];
+  total: number;
+  page: number;
+  limit: number;
+  pages: number;
+}
+
+export interface SupportDriverPaymentCard {
+  id: string;
+  brand: string;
+  last4: string;
+  expMonth: number;
+  expYear: number;
+  isDefault: boolean;
+}
+
+export interface SupportDriverPaymentMethodsResponse {
+  cards: SupportDriverPaymentCard[];
+}
+
 export interface SmartChargingGroup {
   id: string;
   name: string;
@@ -949,5 +1023,31 @@ export function createApiClient(token: string | null | undefined) {
 
     listInAppNotificationAudit: (limit = 40) =>
       request<AdminInAppNotificationCampaign[]>(`/admin/notifications/audit?limit=${limit}`, token),
+
+    // ── Support Driver Management ──────────────────────────────────────
+    supportDriverLookup: (q: string) =>
+      request<SupportDriverSummary[]>(`/admin/support/driver-lookup?q=${encodeURIComponent(q)}`, token),
+
+    supportDriverDetail: (id: string) =>
+      request<SupportDriverDetail>(`/admin/support/drivers/${id}`, token),
+
+    supportDriverUpdate: (id: string, body: Partial<SupportDriverProfileUpdate>) =>
+      request<SupportDriverDetail>(`/admin/support/drivers/${id}`, token, {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      }),
+
+    supportDriverSessions: (id: string, params?: { page?: number; limit?: number; status?: string; from?: string; to?: string }) => {
+      const qs = new URLSearchParams();
+      if (params?.page) qs.set('page', String(params.page));
+      if (params?.limit) qs.set('limit', String(params.limit));
+      if (params?.status) qs.set('status', params.status);
+      if (params?.from) qs.set('from', params.from);
+      if (params?.to) qs.set('to', params.to);
+      return request<SupportDriverSessionsResponse>(`/admin/support/drivers/${id}/sessions${qs.toString() ? `?${qs}` : ''}`, token);
+    },
+
+    supportDriverPaymentMethods: (id: string) =>
+      request<SupportDriverPaymentMethodsResponse>(`/admin/support/drivers/${id}/payment-methods`, token),
   };
 }

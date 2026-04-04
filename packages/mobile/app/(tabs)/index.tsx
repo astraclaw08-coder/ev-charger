@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -82,7 +83,7 @@ export default function MapScreen() {
   const searchInputRef = useRef<TextInput | null>(null);
   const regionRef = useRef<Region | null>(null);
   const { isDark } = useAppTheme();
-  const tabBarHeight = useBottomTabBarHeight();
+  const tabBarHeight = useBottomTabBarHeight(); // kept for potential other uses
   const insets = useSafeAreaInsets();
   const { activeSession } = useChargingNotifications();
 
@@ -223,8 +224,42 @@ export default function MapScreen() {
 
   async function recenterToUser() {
     try {
-      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      const target = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
+      let granted = hasLocation;
+      if (!granted) {
+        const permission = await Location.requestForegroundPermissionsAsync();
+        granted = permission.status === 'granted';
+        setHasLocation(granted);
+      }
+
+      if (!granted) {
+        Alert.alert('Location access needed', 'Enable location access to center the map on your current position.');
+        return;
+      }
+
+      const lastKnown = await Location.getLastKnownPositionAsync().catch(() => null);
+
+      let current: Location.LocationObject | null = null;
+      try {
+        current = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      } catch {
+        current = null;
+      }
+
+      const coords = current?.coords ?? lastKnown?.coords ?? (userLocation
+        ? { latitude: userLocation.latitude, longitude: userLocation.longitude }
+        : null);
+
+      if (!coords) {
+        Alert.alert(
+          'Location unavailable',
+          Platform.OS === 'ios'
+            ? 'We could not determine your current location. If you are on Simulator, set a simulated location in Features → Location and try again.'
+            : 'We could not determine your current location right now. Please try again in a moment.',
+        );
+        return;
+      }
+
+      const target = { latitude: coords.latitude, longitude: coords.longitude };
       setUserLocation(target);
       const targetRegion = {
         ...target,
@@ -234,7 +269,7 @@ export default function MapScreen() {
       regionRef.current = targetRegion;
       mapRef.current?.animateToRegion(targetRegion, 400);
     } catch {
-      // no-op
+      Alert.alert('Location unavailable', 'We could not center the map on your location. Please try again.');
     }
   }
 
@@ -442,6 +477,9 @@ export default function MapScreen() {
 
         <View pointerEvents="box-none" style={[styles.mapControls, { bottom: locateButtonBottom }]}> 
           <TouchableOpacity
+            testID="map-find-me-button"
+            accessibilityRole="button"
+            accessibilityLabel="Find my location"
             style={[
               styles.locateBtn,
               {
@@ -636,7 +674,7 @@ export default function MapScreen() {
             style={[mapStyles.sheet, {
               backgroundColor: isDark ? '#111827' : '#ffffff',
               borderColor: isDark ? '#374151' : '#e5e7eb',
-              paddingBottom: Math.max(tabBarHeight + 8, 28),
+              paddingBottom: tabBarBottom + TAB_CONTENT_OFFSET + 12,
             }]}
             onPress={() => {
               setSelectedSite(null);

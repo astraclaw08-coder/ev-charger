@@ -13,6 +13,17 @@ interface Props {
 const mapContainerStyle = { width: '100%', height: '100%' };
 const libraries: ('places')[] = ['places'];
 
+// Shared: hide POIs and transit, keep parks simplified
+const CLEAN_MAP_STYLES: google.maps.MapTypeStyle[] = [
+  { featureType: 'poi', stylers: [{ visibility: 'off' }] },
+  { featureType: 'poi.park', stylers: [{ visibility: 'simplified' }] },
+  { featureType: 'transit', stylers: [{ visibility: 'off' }] },
+];
+
+const LIGHT_MAP_STYLES: google.maps.MapTypeStyle[] = [
+  ...CLEAN_MAP_STYLES,
+];
+
 const DARK_MAP_STYLES: google.maps.MapTypeStyle[] = [
   { elementType: 'geometry', stylers: [{ color: '#1f2937' }] },
   { elementType: 'labels.text.fill', stylers: [{ color: '#9ca3af' }] },
@@ -23,8 +34,7 @@ const DARK_MAP_STYLES: google.maps.MapTypeStyle[] = [
   { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#4b5563' }] },
   { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0f172a' }] },
   { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#6b7280' }] },
-  { featureType: 'poi', elementType: 'labels', stylers: [{ visibility: 'off' }] },
-  { featureType: 'transit', stylers: [{ visibility: 'off' }] },
+  ...CLEAN_MAP_STYLES,
 ];
 
 export default function ChargerMap({ lat, lng, siteName, chargers }: Props) {
@@ -69,7 +79,7 @@ export default function ChargerMap({ lat, lng, siteName, chargers }: Props) {
           streetViewControl: false,
           fullscreenControl: false,
           clickableIcons: false,
-          styles: isDark ? DARK_MAP_STYLES : [],
+          styles: isDark ? DARK_MAP_STYLES : LIGHT_MAP_STYLES,
         }}
       >
         <OverlayViewF

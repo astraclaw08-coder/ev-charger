@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Modal } from '../components/Modal';
 import { useJsApiLoader } from '@react-google-maps/api';
 
 const GOOGLE_MAPS_LIBRARIES: ('places')[] = ['places'];
@@ -198,12 +199,8 @@ export default function Sites() {
         </div>
       )}
 
-      {showAddSiteModal && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 p-4" onClick={() => setShowAddSiteModal(false)}>
-          <div className="w-full max-w-lg rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-5" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">Add Site</h2>
-            <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">Owner/Operator action — create a new charging site.</p>
-            <form className="mt-4 space-y-3" onSubmit={handleCreateSite}>
+      <Modal open={showAddSiteModal} onClose={() => setShowAddSiteModal(false)} title="Add Site" subtitle="Owner/Operator action — create a new charging site.">
+            <form className="space-y-3" onSubmit={handleCreateSite}>
               <input
                 className="w-full rounded-md border border-gray-300 dark:border-slate-600 px-3 py-2 text-sm"
                 placeholder="Site name"
@@ -263,9 +260,7 @@ export default function Sites() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
+      </Modal>
     </div>
   );
 }
@@ -275,11 +270,14 @@ function SiteListRow({ site }: { site: SiteListItem }) {
   const online = site.statusSummary.online;
   const offline = site.statusSummary.offline + site.statusSummary.faulted;
   return (
-    <div className="grid gap-3 px-4 py-3 md:grid-cols-[1.8fr_1fr_1fr_1fr] md:items-center">
+    <Link
+      to={`/sites/${shortId(site.id)}`}
+      className="grid gap-3 px-4 py-3 md:grid-cols-[1.8fr_1fr_1fr_1fr] md:items-center cursor-pointer transition-colors hover:bg-gray-50 dark:hover:bg-slate-800/60"
+    >
       <div>
-        <Link to={`/sites/${shortId(site.id)}`} className="font-semibold text-gray-900 dark:text-slate-100 hover:text-brand-700 hover:underline">
+        <span className="font-semibold text-gray-900 dark:text-slate-100">
           {site.name}
-        </Link>
+        </span>
         <p className="text-xs text-gray-500 dark:text-slate-400">{site.address}</p>
       </div>
       <div className="text-sm text-gray-700 dark:text-slate-300">{total}</div>
@@ -288,11 +286,11 @@ function SiteListRow({ site }: { site: SiteListItem }) {
         {offline > 0 && <span className="rounded-full border border-gray-300 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/60 px-2 py-0.5 text-gray-600 dark:text-slate-400">Offline {offline}</span>}
       </div>
       <div className="md:text-right">
-        <Link to={`/sites/${shortId(site.id)}`} className="inline-block rounded-md border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-700">
+        <span className="inline-block rounded-md border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-slate-200">
           View Site →
-        </Link>
+        </span>
       </div>
-    </div>
+    </Link>
   );
 }
 
@@ -302,12 +300,15 @@ function SiteCard({ site }: { site: SiteListItem }) {
   const offline = site.statusSummary.offline + site.statusSummary.faulted;
 
   return (
-    <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-5 shadow-sm transition hover:shadow-md">
+    <Link
+      to={`/sites/${shortId(site.id)}`}
+      className="block rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-5 shadow-sm transition hover:shadow-md hover:border-brand-300 dark:hover:border-brand-600/50 cursor-pointer"
+    >
       <div className="flex items-start justify-between">
         <div className="min-w-0">
-          <Link to={`/sites/${shortId(site.id)}`} className="block truncate font-semibold text-gray-900 dark:text-slate-100 hover:text-brand-700 hover:underline">
+          <span className="block truncate font-semibold text-gray-900 dark:text-slate-100">
             {site.name}
-          </Link>
+          </span>
           <p className="mt-0.5 truncate text-xs text-gray-500 dark:text-slate-400">{site.address}</p>
         </div>
         <span className="ml-2 shrink-0 text-2xl">🔌</span>
@@ -320,20 +321,18 @@ function SiteCard({ site }: { site: SiteListItem }) {
       </div>
 
       <div className="mt-4 flex gap-2">
-        <Link
-          to={`/sites/${shortId(site.id)}`}
-          className="flex-1 rounded-md bg-brand-600 px-3 py-1.5 text-center text-xs font-medium text-white hover:bg-brand-700"
-        >
+        <span className="flex-1 rounded-md bg-brand-600 px-3 py-1.5 text-center text-xs font-medium text-white">
           View Site
-        </Link>
-        <Link
-          to={`/sites/${shortId(site.id)}/analytics`}
+        </span>
+        <span
+          role="button"
+          onClick={(e) => { e.preventDefault(); window.location.href = `/sites/${shortId(site.id)}/analytics`; }}
           className="flex-1 rounded-md border border-gray-300 dark:border-slate-700 px-3 py-1.5 text-center text-xs font-medium text-gray-600 dark:text-slate-400 bg-white dark:bg-slate-800/60 hover:bg-gray-50 dark:hover:bg-slate-700"
         >
           Analytics
-        </Link>
+        </span>
       </div>
-    </div>
+    </Link>
   );
 }
 

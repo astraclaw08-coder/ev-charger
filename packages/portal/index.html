@@ -11,9 +11,25 @@
     <link rel="preconnect" href="https://maps.googleapis.com" crossorigin />
     <link rel="preconnect" href="https://maps.gstatic.com" crossorigin />
 
-    <title>EV Charger — Operator Portal</title>
+    <!-- Brand fonts: DM Sans (UI) + JetBrains Mono (data) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300..800;1,9..40,300..800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+    <title>Lumeo — Operator Portal</title>
   </head>
   <body>
+    <script>
+      // Apply theme class before React renders to prevent flash
+      (function(){
+        var t = localStorage.getItem('portal.theme');
+        if (t === 'light') {
+          document.documentElement.classList.remove('dark');
+        } else {
+          document.documentElement.classList.add('dark');
+        }
+      })();
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

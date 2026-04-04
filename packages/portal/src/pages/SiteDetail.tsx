@@ -10,6 +10,9 @@ import AddChargerDialog from '../components/AddChargerDialog';
 import AddressAutocomplete from '../components/AddressAutocomplete';
 import { formatDate } from '../lib/utils';
 import { usePortalTheme } from '../theme/ThemeContext';
+import { PageHeader, TabBar, useChartTheme } from '../components/ui';
+import { PageSkeleton } from '../components/ui/LoadingState';
+import { ErrorState } from '../components/ui';
 
 type RangePreset = '7d' | '30d' | '60d';
 
@@ -376,6 +379,8 @@ export default function SiteDetail() {
   const [savedSafetyLimits, setSavedSafetyLimits] = useState<typeof safetyLimits | null>(null);
   const [safetyMsg, setSafetyMsg] = useState('');
 
+  const [activeTab, setActiveTab] = useState('chargers');
+
   const hasTariffEdits = !savedTariff || tariffFingerprint(tariff) !== tariffFingerprint(savedTariff);
 
   const load = useCallback(async () => {
@@ -527,12 +532,8 @@ export default function SiteDetail() {
 
   useEffect(() => { load(); }, [load]);
 
-  if (loading) {
-    return <div className="flex h-64 items-center justify-center text-gray-400 dark:text-slate-500">Loading…</div>;
-  }
-  if (error || !site) {
-    return <div className="rounded-lg bg-red-50 dark:bg-red-900/20 p-4 text-sm text-red-700 dark:text-red-400">{error || 'Site not found'}</div>;
-  }
+  if (loading) return <PageSkeleton />;
+  if (error || !site) return <ErrorState message={error || 'Site not found'} onRetry={() => { setLoading(true); load(); }} />;
 
   const pushAudit = (action: string, detail: string) => {
     const next: SiteAuditEvent[] = [{
@@ -568,35 +569,55 @@ export default function SiteDetail() {
     <div className="space-y-6">
 
       {/* ── Header ── */}
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-slate-400">
-            <Link to="/overview" className="hover:text-gray-700 dark:hover:text-slate-200 dark:text-slate-300">Overview</Link>
-            <span>/</span>
-            <Link to="/sites" className="hover:text-gray-700 dark:hover:text-slate-200 dark:text-slate-300">Sites</Link>
-            <span>/</span>
-            <span className="text-gray-900 dark:text-slate-100">{site.name}</span>
+      <PageHeader
+        title={site.name}
+        breadcrumbs={[
+          { label: 'Overview', href: '/overview' },
+          { label: 'Sites', href: '/sites' },
+          { label: site.name },
+        ]}
+        description={site.address}
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={rangePreset}
+              onChange={(e) => setRangePreset(e.target.value as RangePreset)}
+              className="rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-700 dark:text-slate-200 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none transition-colors"
+            >
+              <option value="7d">Last 7 days</option>
+              <option value="30d">Last 30 days</option>
+              <option value="60d">Last 60 days</option>
+            </select>
+            <button onClick={() => setShowEditSite((v) => !v)} className="rounded-lg border border-gray-300 dark:border-slate-600 px-3 py-2 text-sm font-medium text-gray-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors">Edit Site</button>
+            <Link to={`/sites/${site.id}/analytics`} className="rounded-lg border border-gray-300 dark:border-slate-600 px-3 py-2 text-sm font-medium text-gray-600 dark:text-slate-300 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors">Analytics</Link>
+            <button onClick={() => setShowAddCharger(true)} className="rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-500 shadow-sm transition-colors">+ Add Charger</button>
           </div>
-          <h1 className="mt-1 text-2xl font-bold text-gray-900 dark:text-slate-100">{site.name}</h1>
-          <p className="text-sm text-gray-500 dark:text-slate-400">{site.address}</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <select
-            value={rangePreset}
-            onChange={(e) => setRangePreset(e.target.value as RangePreset)}
-            className="rounded-md border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800/60 px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700"
-          >
-            <option value="7d">Last 7 days</option>
-            <option value="30d">Last 30 days</option>
-            <option value="60d">Last 60 days</option>
-          </select>
-          <button onClick={() => setShowEditSite((v) => !v)} className="rounded-md border border-gray-300 dark:border-slate-700 px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-300 bg-white dark:bg-slate-800/60 hover:bg-gray-50 dark:hover:bg-slate-700">Edit Site</button>
-          <Link to={`/sites/${site.id}/analytics`} className="rounded-md border border-gray-300 dark:border-slate-700 px-4 py-2 text-sm font-medium text-gray-600 dark:text-slate-400 bg-white dark:bg-slate-800/60 hover:bg-gray-50 dark:hover:bg-slate-700">Analytics</Link>
-          <button onClick={() => setShowAddCharger(true)} className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">+ Add Charger</button>
-        </div>
+        }
+      />
+
+      {/* ── Site KPI tiles (always visible) ── */}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+        <SiteKpiTile label={`Total kWh (${rangePreset})`} value={`${totalKwh.toFixed(2)} kWh`} />
+        <SiteKpiTile label={`Total Revenue (${rangePreset})`} value={`$${totalRevenue.toFixed(2)}`} />
+        <SiteKpiTile label="Total Chargers" value={`${totalChargers}`} live />
+        <SiteKpiTile label="Active Sessions" value={`${activeSessions}`} live />
+        <SiteKpiTile label="Total Connectors" value={`${totalConnectors}`} live />
+        <SiteKpiTile label={`Utilization (${rangePreset})`} value={utilizationPct != null ? `${utilizationPct.toFixed(2)}%` : '—'} />
       </div>
 
-      {/* ── Edit site form ── */}
+      {/* ── Tab Navigation ── */}
+      <TabBar
+        tabs={[
+          { id: 'chargers', label: `Chargers (${site.chargers.length})` },
+          { id: 'pricing', label: 'Pricing' },
+          { id: 'analytics', label: 'Analytics' },
+          { id: 'settings', label: 'Settings' },
+        ]}
+        activeTab={activeTab}
+        onChange={setActiveTab}
+      />
+
+      {/* ── Edit site form (always visible when toggled) ── */}
       {showEditSite && (
         <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
           <h2 className="mb-3 text-sm font-semibold text-gray-700 dark:text-slate-300">Edit site details</h2>
@@ -659,17 +680,9 @@ export default function SiteDetail() {
         </div>
       )}
 
-      {/* ── KPI tiles (dashboard style) ── */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
-        <SiteKpiTile label={`Total kWh (${rangePreset})`} value={`${totalKwh.toFixed(2)} kWh`} />
-        <SiteKpiTile label={`Total Revenue (${rangePreset})`} value={`$${totalRevenue.toFixed(2)}`} />
-        <SiteKpiTile label="Total Chargers" value={`${totalChargers}`} live />
-        <SiteKpiTile label="Active Sessions" value={`${activeSessions}`} live />
-        <SiteKpiTile label="Total Connectors" value={`${totalConnectors}`} live />
-        <SiteKpiTile label={`Utilization (${rangePreset})`} value={utilizationPct != null ? `${utilizationPct.toFixed(2)}%` : '—'} />
-      </div>
 
-      {/* ── Vendor Fee Modal (superadmin only) ── */}
+
+      {/* ── Vendor Fee Modal (superadmin only — always rendered) ── */}
       {showFeeModal && isSuperAdmin && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setShowFeeModal(false)}>
           <div className="w-full max-w-md rounded-2xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
@@ -736,6 +749,8 @@ export default function SiteDetail() {
         </div>
       )}
 
+      {/* ── Pricing Tab ── */}
+      {activeTab === 'pricing' && <>
       {/* ── Tariff (full width, below tiles) ── */}
       <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
         <div className="mb-3 flex items-center justify-between">
@@ -1110,6 +1125,10 @@ export default function SiteDetail() {
         </div>
       </div>
 
+      </>}
+
+      {/* ── Analytics Tab ── */}
+      {activeTab === 'analytics' && <>
       {/* ── Trend chart (dashboard style) ── */}
       <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
         <p className="text-sm font-semibold">
@@ -1150,6 +1169,10 @@ export default function SiteDetail() {
         </div>
       )}
 
+      </>}
+
+      {/* ── Settings Tab ── */}
+      {activeTab === 'settings' && <>
       {/* ── Session Safety Limits ── */}
       <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-5">
         <h2 className="text-sm font-semibold text-gray-700 dark:text-slate-300">Session Safety Limits</h2>
@@ -1249,6 +1272,10 @@ export default function SiteDetail() {
         )}
       </div>
 
+      </>}
+
+      {/* ── Chargers Tab ── */}
+      {activeTab === 'chargers' && <>
       {/* ── Map ── */}
       <ChargerMap lat={site.lat} lng={site.lng} siteName={site.name} chargers={site.chargers} />
 
@@ -1293,6 +1320,10 @@ export default function SiteDetail() {
         )}
       </div>
 
+      </>}
+
+      {/* ── Audit trail (Settings tab) ── */}
+      {activeTab === 'settings' && <>
       {/* ── Audit trail ── */}
       <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
         <h2 className="mb-3 text-sm font-semibold text-gray-700 dark:text-slate-300">Audit trail</h2>
@@ -1308,7 +1339,9 @@ export default function SiteDetail() {
         </div>
       </div>
 
-      {/* ── Unassign charger confirmation dialog ── */}
+      </>}
+
+      {/* ── Unassign charger confirmation dialog (always rendered) ── */}
       {unassignTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-6 shadow-xl">

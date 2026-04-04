@@ -1,0 +1,34 @@
+appId: dev.evcharger.app
+---
+# Navigate to charger detail via deep link, then back and forward to test jerk
+
+# First load
+- openLink: "dev.evcharger.app://charger/detail/3656c8bd-cea5-4676-8c77-c21888876d4f"
+- waitForAnimationToEnd
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "Total kWh"
+    timeout: 10000
+- takeScreenshot: dl-jank-01-first-load
+
+# Navigate back 
+- tapOn:
+    point: "8%,12%"
+- waitForAnimationToEnd
+- waitForAnimationToEnd
+- takeScreenshot: dl-jank-02-after-back
+
+# Second load via deep link (same charger)
+- openLink: "dev.evcharger.app://charger/detail/3656c8bd-cea5-4676-8c77-c21888876d4f"
+
+# Rapid screenshots during transition
+- takeScreenshot: dl-jank-03-second-immediate
+- takeScreenshot: dl-jank-04-second-frame2
+- takeScreenshot: dl-jank-05-second-frame3
+
+- waitForAnimationToEnd
+- takeScreenshot: dl-jank-06-second-settled
+
+- waitForAnimationToEnd
+- waitForAnimationToEnd
+- takeScreenshot: dl-jank-07-final
