@@ -19,7 +19,7 @@ type AppAuthContextValue = {
   continueAsGuest?: () => void;
   signIn?: () => void;
   loginWithPassword?: (username: string, password: string) => Promise<boolean>;
-  loginWithOtp?: (accessToken: string, expiresIn: number) => Promise<boolean>;
+  loginWithOtp?: (accessToken: string, expiresIn: number, phone?: string) => Promise<boolean>;
   // Biometric
   biometricAvailable: boolean;
   biometricEnabled: boolean;
@@ -33,6 +33,8 @@ type PasswordSession = {
   expiresAtMs: number;
   refreshExpiresAtMs?: number;
   provider: 'keycloak-password';
+  /** Phone number used for OTP sign-in — stored for silent re-auth */
+  otpPhone?: string;
 };
 
 const PASSWORD_SESSION_KEY = 'mobile.keycloak.session.v1';
@@ -149,8 +151,21 @@ function KeycloakAuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (parsed.expiresAtMs <= Date.now() + 30_000) {
+        // Token expired or expiring soon — try refresh
         const refreshed = await refreshSession(parsed);
-        if (!refreshed) return;
+        if (!refreshed) {
+          // No refresh token available (OTP sessions don't have one)
+          // Keep session stored so index.tsx still routes to tabs,
+          // but the 401-retry handler will trigger silent re-auth
+          if (parsed.otpPhone) {
+            // Attempt silent OTP re-auth
+            const reauthed = await silentOtpReauth(parsed.otpPhone);
+            if (reauthed) return;
+          }
+          // Couldn't re-auth — clear and redirect to sign-in
+          await clearSession();
+          return;
+        }
       } else {
         setSession(parsed);
         setBearerToken(parsed.accessToken);
@@ -160,6 +175,26 @@ function KeycloakAuthProvider({ children }: { children: React.ReactNode }) {
       await clearSession();
     } finally {
       setLoading(false);
+    }
+  };
+
+  /** Attempt silent OTP re-auth: sends OTP, but requires user to enter code */
+  const silentOtpReauth = async (phone: string): Promise<boolean> => {
+    try {
+      const result = await api.auth.otpSend(phone);
+      // We can't auto-verify without the code — redirect to sign-in with context
+      // Store the pending challenge so sign-in can pick it up
+      await SecureStore.setItemAsync(
+        'mobile.pending-otp-reauth.v1',
+        JSON.stringify({
+          phone,
+          challengeId: result.challengeId,
+          resendCooldown: result.resendAvailableInSeconds,
+        }),
+      );
+      return false; // Still needs user code entry
+    } catch {
+      return false;
     }
   };
 
@@ -212,8 +247,15 @@ function KeycloakAuthProvider({ children }: { children: React.ReactNode }) {
     setAuthRefreshHandler(async () => {
       const active = sessionRef.current;
       if (!active) return false;
+      // Try standard token refresh first (password sessions with refresh tokens)
       const next = await refreshSession(active);
-      return Boolean(next?.accessToken);
+      if (next?.accessToken) return true;
+      // No refresh token — for OTP sessions, redirect to sign-in with pending re-auth
+      if (active.otpPhone) {
+        await silentOtpReauth(active.otpPhone);
+        // Can't complete silently — caller should redirect to sign-in
+      }
+      return false;
     });
 
     return () => setAuthRefreshHandler(null);
@@ -243,14 +285,15 @@ function KeycloakAuthProvider({ children }: { children: React.ReactNode }) {
     biometricEnabled,
     biometricLabel,
     toggleBiometric,
-    loginWithOtp: async (accessToken: string, expiresIn: number) => {
+    loginWithOtp: async (accessToken: string, expiresIn: number, phone?: string) => {
       setLoading(true);
       setError(null);
       try {
         const next: PasswordSession = {
           accessToken,
           expiresAtMs: Date.now() + Math.max(60, expiresIn) * 1000,
-          provider: 'keycloak-password' as const, // reuse session type — bearer token works the same
+          provider: 'keycloak-password' as const,
+          otpPhone: phone || undefined,
         };
         await persistSession(next);
         setBearerToken(next.accessToken);

@@ -123,9 +123,35 @@ function KeycloakSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onCo
   const [resendCooldown, setResendCooldown] = useState(0);
   const [verifying, setVerifying] = useState(false);
   const resendTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pendingReauthChecked = useRef(false);
 
   const [consentChecked, setConsentChecked] = useState(false);
   const loading = authLoading || otpLoading || verifying;
+
+  // Check for pending OTP re-auth (session expired, code already sent)
+  useEffect(() => {
+    if (pendingReauthChecked.current) return;
+    pendingReauthChecked.current = true;
+    (async () => {
+      try {
+        const SecureStore = require('expo-secure-store');
+        const raw = await SecureStore.getItemAsync('mobile.pending-otp-reauth.v1');
+        if (!raw) return;
+        await SecureStore.deleteItemAsync('mobile.pending-otp-reauth.v1').catch(() => {});
+        const pending = JSON.parse(raw);
+        if (pending?.phone && pending?.challengeId) {
+          setChallengeId(pending.challengeId);
+          setOtpTarget(pending.phone);
+          setResendCooldown(pending.resendCooldown ?? 0);
+          setConsentChecked(true);
+          setAwaitingCode(true);
+          setTimeout(() => codeInputRef.current?.focus(), 200);
+        }
+      } catch {
+        // ignore
+      }
+    })();
+  }, []);
 
   // Resend cooldown timer
   useEffect(() => {
@@ -198,7 +224,7 @@ function KeycloakSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onCo
     setOtpError('');
     try {
       const result = await api.auth.otpVerify(challengeId, otpCode);
-      const ok = await loginWithOtp?.(result.accessToken, result.expiresIn);
+      const ok = await loginWithOtp?.(result.accessToken, result.expiresIn, otpTarget);
       if (ok) {
         // Record consent acceptance
         try {
