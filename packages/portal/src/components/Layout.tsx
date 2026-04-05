@@ -136,7 +136,7 @@ function SidebarContent({ location, theme, toggleTheme, onNavClick, notification
 }) {
   return (
     <>
-      <div className={cn('flex h-14 items-center shrink-0', collapsed ? 'justify-center px-2' : 'px-4')}>
+      <div className={cn('flex h-14 items-center shrink-0', collapsed ? 'justify-center px-2' : 'justify-between px-4')}>
         {collapsed ? (
           <BrandMark className="w-[28px]" iconOnly />
         ) : (
@@ -336,15 +336,17 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         )}>
           <SidebarContent location={location} theme={theme} toggleTheme={toggleTheme} notificationCount={notificationCount} collapsed={collapsed} />
         </aside>
-        {/* Hover-reveal collapse/expand handle on the right edge */}
         <button
           type="button"
           onClick={toggleCollapse}
-          className="group absolute top-1/2 -right-3 z-50 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full border border-gray-200 bg-white shadow-sm opacity-0 hover:opacity-100 focus:opacity-100 transition-opacity duration-150 dark:border-slate-700 dark:bg-slate-900 hover:bg-gray-50 dark:hover:bg-slate-800 hover:shadow-md sidebar-collapse-handle"
+          className={cn(
+            'absolute top-4 z-50 flex h-7 w-7 items-center justify-center rounded-full border border-gray-200 bg-white shadow-sm transition-all duration-150 dark:border-slate-700 dark:bg-slate-900 hover:bg-gray-50 dark:hover:bg-slate-800 hover:shadow-md',
+            collapsed ? 'left-1/2 -translate-x-1/2' : 'right-3'
+          )}
           title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="h-3 w-3 text-gray-400 dark:text-slate-500 group-hover:text-gray-600 dark:group-hover:text-slate-300 transition-colors" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="h-3.5 w-3.5 text-gray-500 dark:text-slate-300 transition-colors" aria-hidden="true">
             {collapsed ? (
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
             ) : (

@@ -1,5 +1,6 @@
 import lightThemeLogo from '../assets/lumeo-logo-user-transparent.png';
 import darkThemeLogo from '../assets/lumeo_logo_darktheme.png';
+import swirlLogo from '../assets/lumeo-logo-swirl-only.png';
 import { usePortalTheme } from '../theme/ThemeContext';
 
 type BrandMarkProps = {
@@ -14,15 +15,12 @@ export default function BrandMark({ className = '', iconOnly }: BrandMarkProps) 
   const shadow = isDark ? 'drop-shadow-[0_0_18px_rgba(255,255,255,0.45)]' : 'drop-shadow-[0_2px_8px_rgba(13,104,190,0.12)]';
 
   if (iconOnly) {
-    // The swirl icon occupies ~32% of the logo width. Render the full logo
-    // at its natural width inside a clipped container that only shows the icon.
     return (
-      <div className={`overflow-hidden flex items-center justify-center ${className}`.trim()} style={{ maxWidth: 36, maxHeight: 36 }}>
+      <div className={`flex items-center justify-center ${className}`.trim()}>
         <img
-          src={src}
+          src={swirlLogo}
           alt="Lumeo"
-          className={`h-auto max-w-none object-contain object-left ${shadow}`}
-          style={{ width: 112 }}
+          className={`h-auto max-w-full object-contain ${shadow}`}
         />
       </div>
     );

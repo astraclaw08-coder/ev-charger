@@ -79,7 +79,7 @@ export default function Chargers() {
   if (loading) {
     return (
       <div className="space-y-4">
-        <PageHeader title="Chargers" breadcrumbs={[{ label: 'Overview', href: '/overview' }, { label: 'Chargers' }]} />
+        <PageHeader title="Chargers" />
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <StatCardSkeleton /><StatCardSkeleton /><StatCardSkeleton /><StatCardSkeleton />
         </div>
@@ -94,7 +94,6 @@ export default function Chargers() {
     <div className="space-y-5">
       <PageHeader
         title="Chargers"
-        breadcrumbs={[{ label: 'Overview', href: '/overview' }, { label: 'Chargers' }]}
         description="Fleet-wide charger inventory, status, and direct drill-down."
         actions={
           <button

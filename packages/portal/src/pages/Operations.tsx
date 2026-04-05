@@ -17,7 +17,6 @@ export default function Operations() {
     <div className="space-y-4">
       <PageHeader
         title="Operations"
-        breadcrumbs={[{ label: 'Overview', href: '/overview' }, { label: 'Operations' }]}
         description="Incident response, support workflows, and proactive notification operations."
       />
 

@@ -161,7 +161,7 @@ export default function Sessions() {
   if (loading) {
     return (
       <div className="space-y-4">
-        <PageHeader title="Sessions" breadcrumbs={[{ label: 'Overview', href: '/overview' }, { label: 'Sessions' }]} />
+        <PageHeader title="Sessions" />
         <div className="grid gap-3 sm:grid-cols-3"><StatCardSkeleton /><StatCardSkeleton /><StatCardSkeleton /></div>
         <TableSkeleton rows={6} columns={8} />
       </div>
@@ -174,7 +174,6 @@ export default function Sessions() {
     <div className="space-y-5">
       <PageHeader
         title="Sessions"
-        breadcrumbs={[{ label: 'Overview', href: '/overview' }, { label: 'Sessions' }]}
         description="Commercial and reliability view of charging session outcomes."
         actions={
           <button

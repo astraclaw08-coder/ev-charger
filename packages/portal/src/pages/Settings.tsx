@@ -739,7 +739,7 @@ function ChargerModelsTab({ models, newModel, setNewModel, modelValid, onAdd, on
 // ─── Main Settings Page ───────────────────────────────────────────────────────
 export default function Settings() {
   const getToken = useToken();
-  const { theme, toggleTheme } = usePortalTheme();
+  const { theme } = usePortalTheme();
   const { logoutPassword } = usePasswordAuth();
   const [activeTab, setActiveTab] = useState<TabId>('users');
   const [org, setOrg] = useState<OrgDraft>(EMPTY_ORG);
@@ -821,32 +821,11 @@ export default function Settings() {
       {/* Header with theme toggle + logout */}
       <div className="flex items-start justify-between">
         <div>
-          <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-slate-400">
-            <a href="/overview" className="hover:text-gray-700 dark:hover:text-slate-200 dark:text-slate-300">Overview</a>
-            <span>/</span>
-            <span className="text-gray-900 dark:text-slate-100">Admin</span>
-          </div>
-          <h1 className="mt-1 text-2xl font-bold text-gray-900 dark:text-slate-100">Admin</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-slate-100">Admin</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">Manage users, organizations, security, billing, and system configuration.</p>
           {error && <p className="mt-2 text-sm text-red-600 dark:text-red-400">{error}</p>}
         </div>
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={toggleTheme}
-            className={cn(
-              'inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium transition',
-              theme === 'dark'
-                ? 'border-gray-600 bg-gray-800 text-gray-100 hover:bg-gray-700'
-                : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-100',
-            )}
-            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-            aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-            data-theme-toggle="settings-header"
-          >
-            {theme === 'dark' ? <SunIcon /> : <MoonIcon />}
-            <span>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>
-          </button>
           <button
             type="button"
             onClick={handleLogout}

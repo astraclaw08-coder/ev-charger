@@ -572,7 +572,6 @@ export default function SiteDetail() {
       <PageHeader
         title={site.name}
         breadcrumbs={[
-          { label: 'Overview', href: '/overview' },
           { label: 'Sites', href: '/sites' },
           { label: site.name },
         ]}

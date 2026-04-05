@@ -251,7 +251,6 @@ export default function ChargerDetail() {
       <PageHeader
         title={status.ocppId}
         breadcrumbs={[
-          { label: 'Overview', href: '/overview' },
           { label: 'Sites', href: '/sites' },
           ...(chargerSite ? [{ label: chargerSite.name, href: `/sites/${shortId(chargerSite.id)}` }] : []),
           { label: status.ocppId },

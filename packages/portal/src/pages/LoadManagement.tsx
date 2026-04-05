@@ -726,15 +726,9 @@ export default function LoadManagement() {
   return (
     <>
     <div className="space-y-6">
-      {/* Breadcrumb + header */}
       <div>
-        <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-slate-400">
-          <Link to="/overview" className="hover:text-gray-700 dark:hover:text-slate-200 dark:text-slate-300">Overview</Link>
-          <span>/</span>
-          <span className="text-gray-900 dark:text-slate-100">Load Management</span>
-        </div>
-        <h1 className="mt-1 text-2xl font-bold text-gray-900 dark:text-slate-100">Load Management</h1>
-        <p className="text-sm text-gray-500 dark:text-slate-400">Control power limits per charger, group, or site using OCPP smart charging profiles.</p>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-slate-100">Load Management</h1>
+        <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">Control power limits per charger, group, or site using OCPP smart charging profiles.</p>
       </div>
 
       <RecommendedFlow />
