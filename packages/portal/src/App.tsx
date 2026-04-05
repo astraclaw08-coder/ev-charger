@@ -21,6 +21,9 @@ import Notifications from './pages/Notifications';
 import Operations from './pages/Operations';
 import Chargers from './pages/Chargers';
 import Sessions from './pages/Sessions';
+import PrivacyPolicy from './pages/PrivacyPolicy';
+import TermsOfService from './pages/TermsOfService';
+import ReConsentBanner from './components/ReConsentBanner';
 import CommandPalette from './components/CommandPalette';
 import { ThemeProvider } from './theme/ThemeContext';
 import { PortalScopeProvider } from './context/PortalScopeContext';
@@ -40,6 +43,7 @@ function PortalRoutes() {
     <BrowserRouter>
       <PortalScopeProvider>
         <CommandPalette />
+        <ReConsentBanner />
         <Layout>
           <Routes>
           <Route path="/" element={<Navigate to={homePath} replace />} />
@@ -58,6 +62,8 @@ function PortalRoutes() {
           <Route path="/users" element={<UserManagement />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/notifications" element={<Notifications />} />
+          <Route path="/privacy" element={<PrivacyPolicy />} />
+          <Route path="/terms" element={<TermsOfService />} />
           <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Layout>
@@ -70,6 +76,8 @@ function SignedOutRoutes() {
   return (
     <BrowserRouter>
       <Routes>
+        <Route path="/privacy" element={<PrivacyPolicy />} />
+        <Route path="/terms" element={<TermsOfService />} />
         <Route path="/login" element={<Login />} />
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/sso-callback" element={<Login error="Completing sign-in..." />} />

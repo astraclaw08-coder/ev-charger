@@ -10,6 +10,7 @@ import {
   Modal,
   Pressable,
   Platform,
+  Linking,
 } from 'react-native';
 import { GooglePlacesAutocomplete, type GooglePlacesAutocompleteRef } from 'react-native-google-places-autocomplete';
 import { useRouter } from 'expo-router';
@@ -434,6 +435,50 @@ export default function ProfileScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      {/* Legal & Account */}
+      <View style={[styles.card, { backgroundColor: isDark ? '#111827' : '#fff', borderColor: isDark ? '#1e293b' : '#e5e7eb' }]}>
+        <Text style={[styles.sectionTitle, { color: isDark ? '#e2e8f0' : '#111827' }]}>Legal</Text>
+        <TouchableOpacity
+          style={{ paddingVertical: 10 }}
+          onPress={() => Linking.openURL('https://portal.lumeopower.com/privacy')}
+        >
+          <Text style={{ fontSize: 15, color: '#3b82f6', fontWeight: '500' }}>Privacy Policy</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={{ paddingVertical: 10 }}
+          onPress={() => Linking.openURL('https://portal.lumeopower.com/terms')}
+        >
+          <Text style={{ fontSize: 15, color: '#3b82f6', fontWeight: '500' }}>Terms of Service</Text>
+        </TouchableOpacity>
+      </View>
+
+      <TouchableOpacity
+        style={[styles.logoutBtn, { backgroundColor: '#7f1d1d', marginTop: 8 }]}
+        onPress={() => {
+          Alert.alert(
+            'Delete Account',
+            'Are you sure? Your personal data will be permanently removed after a 30-day grace period. This cannot be undone.',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Delete My Account',
+                style: 'destructive',
+                onPress: async () => {
+                  try {
+                    const result = await api.account.deleteAccount();
+                    Alert.alert('Account Deletion Requested', result.message);
+                  } catch {
+                    Alert.alert('Error', 'Failed to request account deletion. Please try again or contact privacy@lumeopower.com.');
+                  }
+                },
+              },
+            ],
+          );
+        }}
+      >
+        <Text style={styles.logoutText}>Delete My Account</Text>
+      </TouchableOpacity>
 
       <Text style={[styles.versionText, { color: isDark ? '#6b7280' : '#9ca3af' }]}>Version {mobileVersion}</Text>
       <Text style={[styles.versionText, { color: isDark ? '#6b7280' : '#9ca3af' }]}>Environment {envLabel}</Text>

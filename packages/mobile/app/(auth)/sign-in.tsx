@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   Pressable,
   Image,
+  Linking,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { AntDesign, Ionicons } from '@expo/vector-icons';
@@ -123,6 +124,7 @@ function KeycloakSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onCo
   const [verifying, setVerifying] = useState(false);
   const resendTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const [consentChecked, setConsentChecked] = useState(false);
   const loading = authLoading || otpLoading || verifying;
 
   // Resend cooldown timer
@@ -144,8 +146,19 @@ function KeycloakSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onCo
   }, [resendCooldown > 0]);
 
   async function handleSignIn() {
+    if (!consentChecked) {
+      Alert.alert('Consent Required', 'Please agree to the Terms of Service and Privacy Policy to continue.');
+      return;
+    }
     const ok = await loginWithPassword?.(username, password);
-    if (ok) router.replace('/(tabs)' as any);
+    if (ok) {
+      try {
+        await api.consent.accept('1.0', '1.0');
+      } catch {
+        // Non-blocking
+      }
+      router.replace('/(tabs)' as any);
+    }
   }
 
   function openEmailLogin() {
@@ -187,6 +200,12 @@ function KeycloakSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onCo
       const result = await api.auth.otpVerify(challengeId, otpCode);
       const ok = await loginWithOtp?.(result.accessToken, result.expiresIn);
       if (ok) {
+        // Record consent acceptance
+        try {
+          await api.consent.accept('1.0', '1.0');
+        } catch {
+          // Non-blocking — consent will be re-prompted if needed
+        }
         router.replace('/(tabs)' as any);
       } else {
         setOtpError('Sign-in failed. Please try again.');
@@ -317,7 +336,23 @@ function KeycloakSignInForm({ isDark, onContinueGuest }: { isDark: boolean; onCo
       </View>
       <Text style={[styles.helperText, styles.centerText]}>A code will be sent to your phone for verification</Text>
 
-      <TouchableOpacity style={[styles.button, loading && styles.buttonDisabled]} onPress={handleNextOtp} disabled={loading}>
+      <TouchableOpacity
+        style={styles.consentRow}
+        onPress={() => setConsentChecked(!consentChecked)}
+        activeOpacity={0.7}
+      >
+        <View style={[styles.checkbox, consentChecked && styles.checkboxChecked]}>
+          {consentChecked && <Ionicons name="checkmark" size={14} color="#fff" />}
+        </View>
+        <Text style={styles.consentText}>
+          I agree to the{' '}
+          <Text style={styles.consentLink} onPress={() => Linking.openURL('https://portal.lumeopower.com/terms')}>Terms of Service</Text>
+          {' '}and{' '}
+          <Text style={styles.consentLink} onPress={() => Linking.openURL('https://portal.lumeopower.com/privacy')}>Privacy Policy</Text>
+        </Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity style={[styles.button, (loading || !consentChecked) && styles.buttonDisabled]} onPress={handleNextOtp} disabled={loading || !consentChecked}>
         {otpLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Next</Text>}
       </TouchableOpacity>
 
@@ -529,4 +564,36 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
   },
   guestBtnText: { color: '#111827', fontWeight: '600', fontSize: 15 },
+  consentRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    marginBottom: 14,
+    paddingHorizontal: 2,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: '#cbd5e1',
+    backgroundColor: '#f8fafc',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 1,
+  },
+  checkboxChecked: {
+    backgroundColor: '#10b981',
+    borderColor: '#10b981',
+  },
+  consentText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#64748b',
+    lineHeight: 19,
+  },
+  consentLink: {
+    color: '#3b82f6',
+    textDecorationLine: 'underline' as const,
+  },
 });

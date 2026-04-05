@@ -4,6 +4,7 @@ import { TouchableOpacity, Text, View } from 'react-native';
 import { BottomTabBar, type BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '@/theme';
+import ReConsentModal from '@/components/ReConsentModal';
 import { useAppAuth } from '@/providers/AuthProvider';
 import { useChargingNotifications } from '@/providers/ChargingNotificationsProvider';
 import type { Session } from '@/lib/api';

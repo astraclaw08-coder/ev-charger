@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { prisma } from '@ev-charger/shared';
 import { requireAuth } from '../plugins/auth';
+import { sendDeletionConfirmationEmail } from '../lib/email';
 
 function trimOrNull(value: unknown, max: number): string | null {
   if (typeof value !== 'string') return null;
@@ -146,6 +147,72 @@ export async function profileRoutes(app: FastifyInstance) {
       homeState: updated.homeState,
       homeZipCode: updated.homeZipCode,
       paymentProfile: updated.paymentProfile,
+    };
+  });
+
+  // Record consent acceptance (ToS + Privacy Policy)
+  app.post<{
+    Body: {
+      tosVersion: string;
+      privacyVersion: string;
+    };
+  }>('/me/consent', { preHandler: requireAuth }, async (req, reply) => {
+    const user = req.currentUser!;
+    const { tosVersion, privacyVersion } = req.body ?? {};
+
+    if (!tosVersion || !privacyVersion) {
+      return reply.status(400).send({ error: 'tosVersion and privacyVersion are required' });
+    }
+
+    const now = new Date();
+    const updated = await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        tosAcceptedAt: now,
+        tosVersion: String(tosVersion).slice(0, 20),
+        privacyAcceptedAt: now,
+        privacyVersion: String(privacyVersion).slice(0, 20),
+      },
+    });
+
+    return {
+      tosAcceptedAt: updated.tosAcceptedAt,
+      tosVersion: updated.tosVersion,
+      privacyAcceptedAt: updated.privacyAcceptedAt,
+      privacyVersion: updated.privacyVersion,
+    };
+  });
+
+  // Get consent status
+  app.get('/me/consent', { preHandler: requireAuth }, async (req) => {
+    const user = req.currentUser!;
+    const fresh = await prisma.user.findUnique({ where: { id: user.id } });
+    return {
+      tosAcceptedAt: fresh!.tosAcceptedAt,
+      tosVersion: fresh!.tosVersion,
+      privacyAcceptedAt: fresh!.privacyAcceptedAt,
+      privacyVersion: fresh!.privacyVersion,
+    };
+  });
+
+  // Request account deletion (soft delete — sets deletionRequestedAt)
+  app.delete('/me', { preHandler: requireAuth }, async (req) => {
+    const user = req.currentUser!;
+    const now = new Date();
+
+    const fresh = await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        deletionRequestedAt: now,
+      },
+    });
+
+    // Send confirmation email (non-blocking)
+    sendDeletionConfirmationEmail(fresh.email, now).catch(() => {});
+
+    return {
+      message: 'Account deletion requested. Your data will be permanently removed after 30 days. Contact privacy@lumeopower.com to cancel.',
+      deletionRequestedAt: now,
     };
   });
 }

@@ -14,6 +14,7 @@ export default function Login({ error, devMode = false, devOperatorId = 'operato
   const { loginWithPassword, loading: passwordLoading, error: passwordError } = usePasswordAuth();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [consentChecked, setConsentChecked] = useState(false);
 
   const passwordEnabled = !devMode;
   const resolvedError = error ?? passwordError;
@@ -81,9 +82,28 @@ export default function Login({ error, devMode = false, devOperatorId = 'operato
               />
             </div>
 
+            <label className="flex items-start gap-2.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={consentChecked}
+                onChange={(e) => setConsentChecked(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-gray-300 dark:border-slate-600 text-brand-600 focus:ring-brand-500 accent-brand-600"
+              />
+              <span className="text-xs text-gray-500 dark:text-slate-400 leading-relaxed">
+                I agree to the{' '}
+                <a href="/terms" target="_blank" rel="noopener noreferrer" className="font-medium text-brand-600 dark:text-brand-400 hover:underline">
+                  Terms of Service
+                </a>{' '}
+                and{' '}
+                <a href="/privacy" target="_blank" rel="noopener noreferrer" className="font-medium text-brand-600 dark:text-brand-400 hover:underline">
+                  Privacy Policy
+                </a>
+              </span>
+            </label>
+
             <button
               type="submit"
-              disabled={!passwordEnabled || passwordLoading || !username.trim() || !password}
+              disabled={!passwordEnabled || passwordLoading || !username.trim() || !password || !consentChecked}
               className="w-full rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-brand-500 hover:shadow-md disabled:opacity-60 disabled:cursor-not-allowed active:scale-[0.98]"
             >
               {!passwordEnabled ? 'Username/password disabled in dev mode' : passwordLoading ? 'Signing in…' : 'Sign in'}
