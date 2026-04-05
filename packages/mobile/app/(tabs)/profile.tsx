@@ -463,18 +463,15 @@ export default function ProfileScreen() {
         <Text style={styles.logoutText}>Delete My Account</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity
-        style={{ paddingVertical: 10, marginTop: 8 }}
-        onPress={() => Linking.openURL('https://portal.lumeopower.com/privacy')}
-      >
-        <Text style={{ fontSize: 15, color: '#3b82f6', fontWeight: '500' }}>Privacy Policy</Text>
-      </TouchableOpacity>
-      <TouchableOpacity
-        style={{ paddingVertical: 10 }}
-        onPress={() => Linking.openURL('https://portal.lumeopower.com/terms')}
-      >
-        <Text style={{ fontSize: 15, color: '#3b82f6', fontWeight: '500' }}>Terms of Service</Text>
-      </TouchableOpacity>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 10, gap: 10 }}>
+        <TouchableOpacity onPress={() => Linking.openURL('https://portal.lumeopower.com/privacy')}>
+          <Text style={{ fontSize: 15, color: '#3b82f6', fontWeight: '500' }}>Privacy Policy</Text>
+        </TouchableOpacity>
+        <Text style={{ fontSize: 15, color: isDark ? '#6b7280' : '#9ca3af' }}>|</Text>
+        <TouchableOpacity onPress={() => Linking.openURL('https://portal.lumeopower.com/terms')}>
+          <Text style={{ fontSize: 15, color: '#3b82f6', fontWeight: '500' }}>Terms of Service</Text>
+        </TouchableOpacity>
+      </View>
 
       <Text style={[styles.versionText, { color: isDark ? '#6b7280' : '#9ca3af' }]}>Version {mobileVersion}</Text>
       <Text style={[styles.versionText, { color: isDark ? '#6b7280' : '#9ca3af' }]}>Environment {envLabel}</Text>
