@@ -16,11 +16,11 @@ export default function BrandMark({ className = '', iconOnly }: BrandMarkProps) 
 
   if (iconOnly) {
     return (
-      <div className={`flex items-center justify-center ${className}`.trim()}>
+      <div className={`flex items-center justify-center ${className}`.trim()} style={{ maxWidth: 36, maxHeight: 36 }}>
         <img
           src={swirlLogo}
           alt="Lumeo"
-          className={`h-auto max-w-full object-contain ${shadow}`}
+          className={`h-8 w-8 object-contain ${shadow}`}
         />
       </div>
     );
@@ -30,7 +30,7 @@ export default function BrandMark({ className = '', iconOnly }: BrandMarkProps) 
     <img
       src={src}
       alt="Lumeo"
-      className={`h-auto max-w-full object-contain object-left ${shadow} ${className}`.trim()}
+      className={`max-h-8 w-auto object-contain object-left ${shadow} ${className}`.trim()}
     />
   );
 }

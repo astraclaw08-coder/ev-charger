@@ -22,24 +22,33 @@ export type DashboardSiteMapItem = {
 const libraries: ('places')[] = ['places'];
 const mapContainerStyle = { width: '100%', height: '100%' };
 
-// Minimal map styles: keep street / city / state labels, hide nearly everything else.
-const CLEAN_MAP_STYLES: google.maps.MapTypeStyle[] = [
-  { featureType: 'administrative.neighborhood', stylers: [{ visibility: 'off' }] },
-  { featureType: 'administrative.land_parcel', stylers: [{ visibility: 'off' }] },
+// Minimal map: only roads, water, admin boundaries + labels.
+// Hide all POIs, transit, businesses, parks/forests, landscape detail, highways labels clutter.
+const CLEAN_BASE_STYLES: google.maps.MapTypeStyle[] = [
   { featureType: 'poi', stylers: [{ visibility: 'off' }] },
-  { featureType: 'poi.park', stylers: [{ visibility: 'off' }] },
   { featureType: 'transit', stylers: [{ visibility: 'off' }] },
+  { featureType: 'landscape.natural', stylers: [{ visibility: 'simplified' }] },
+  { featureType: 'landscape.natural', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+  { featureType: 'landscape.man_made', stylers: [{ visibility: 'simplified' }] },
+  { featureType: 'landscape.man_made', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+  { featureType: 'road.highway', elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
+  { featureType: 'road.local', elementType: 'labels', stylers: [{ visibility: 'on' }] },
+  { featureType: 'road.arterial', elementType: 'labels', stylers: [{ visibility: 'on' }] },
+  { featureType: 'administrative', elementType: 'labels', stylers: [{ visibility: 'on' }] },
   { featureType: 'water', elementType: 'labels', stylers: [{ visibility: 'off' }] },
-  { featureType: 'road', elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
-  { featureType: 'road.local', elementType: 'labels.text', stylers: [{ visibility: 'off' }] },
 ];
 
-// Google Maps styling arrays for light/dark
 const LIGHT_MAP_STYLES: google.maps.MapTypeStyle[] = [
-  ...CLEAN_MAP_STYLES,
+  ...CLEAN_BASE_STYLES,
+  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#e2e8f0' }] },
+  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#cbd5e1' }] },
+  { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#f1f5f9' }] },
+  { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#f8fafc' }] },
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#dbeafe' }] },
 ];
 
 const DARK_MAP_STYLES: google.maps.MapTypeStyle[] = [
+  ...CLEAN_BASE_STYLES,
   { elementType: 'geometry', stylers: [{ color: '#1f2937' }] },
   { elementType: 'labels.text.fill', stylers: [{ color: '#9ca3af' }] },
   { elementType: 'labels.text.stroke', stylers: [{ color: '#1f2937' }] },
@@ -48,8 +57,7 @@ const DARK_MAP_STYLES: google.maps.MapTypeStyle[] = [
   { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#d1d5db' }] },
   { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#4b5563' }] },
   { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0f172a' }] },
-  { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#6b7280' }] },
-  ...CLEAN_MAP_STYLES,
+  { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#1f2937' }] },
 ];
 
 function availabilityColor(available: number, total: number): string {

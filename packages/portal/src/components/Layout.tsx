@@ -126,21 +126,43 @@ const NAV = [
 
 const portalVersion = import.meta.env.VITE_APP_VERSION ?? 'dev-local';
 
-function SidebarContent({ location, theme, toggleTheme, onNavClick, notificationCount, collapsed }: {
+function SidebarContent({ location, theme, toggleTheme, onNavClick, notificationCount, collapsed, onToggleCollapse }: {
   location: ReturnType<typeof useLocation>;
   theme: string;
   toggleTheme: () => void;
   onNavClick?: () => void;
   notificationCount?: number;
   collapsed?: boolean;
+  onToggleCollapse?: () => void;
 }) {
   return (
     <>
       <div className={cn('flex h-14 items-center shrink-0', collapsed ? 'justify-center px-2' : 'justify-between px-4')}>
         {collapsed ? (
-          <BrandMark className="w-[28px]" iconOnly />
+          <button
+            type="button"
+            onClick={onToggleCollapse}
+            className="flex items-center justify-center rounded-md hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors p-1"
+            title="Expand sidebar"
+            aria-label="Expand sidebar"
+          >
+            <BrandMark className="w-[28px]" iconOnly />
+          </button>
         ) : (
           <BrandMark className="w-[140px]" />
+        )}
+        {onToggleCollapse && !collapsed && (
+          <button
+            type="button"
+            onClick={onToggleCollapse}
+            className="flex h-7 w-7 items-center justify-center rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:text-slate-500 dark:hover:text-slate-300 dark:hover:bg-slate-800 transition-colors"
+            title="Collapse sidebar"
+            aria-label="Collapse sidebar"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
         )}
       </div>
 
@@ -189,7 +211,16 @@ function SidebarContent({ location, theme, toggleTheme, onNavClick, notification
       </nav>
 
       <div className={cn('border-t border-gray-200 dark:border-slate-800 shrink-0', collapsed ? 'p-2' : 'p-3')}>
-        {!collapsed && (
+        {collapsed ? (
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }))}
+            className="mb-2 flex w-full items-center justify-center rounded-md px-2 py-1.5 text-gray-400 dark:text-slate-500 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-slate-800 dark:hover:text-slate-300 transition-colors"
+            title="Search (⌘K)"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.2-5.2M10 17a7 7 0 1 1 0-14 7 7 0 0 1 0 14Z" /></svg>
+          </button>
+        ) : (
           <button
             type="button"
             onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }))}
@@ -334,31 +365,20 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           'flex h-full flex-col border-r border-gray-200 bg-white dark:border-slate-800 dark:bg-slate-950/95 transition-[width] duration-200 ease-out',
           collapsed ? 'w-[60px]' : 'w-56',
         )}>
-          <SidebarContent location={location} theme={theme} toggleTheme={toggleTheme} notificationCount={notificationCount} collapsed={collapsed} />
+          <SidebarContent location={location} theme={theme} toggleTheme={toggleTheme} notificationCount={notificationCount} collapsed={collapsed} onToggleCollapse={toggleCollapse} />
         </aside>
-        <button
-          type="button"
-          onClick={toggleCollapse}
-          className={cn(
-            'absolute top-4 z-50 flex h-7 w-7 items-center justify-center rounded-full border border-gray-200 bg-white shadow-sm transition-all duration-150 dark:border-slate-700 dark:bg-slate-900 hover:bg-gray-50 dark:hover:bg-slate-800 hover:shadow-md',
-            collapsed ? 'left-1/2 -translate-x-1/2' : 'right-3'
-          )}
-          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="h-3.5 w-3.5 text-gray-500 dark:text-slate-300 transition-colors" aria-hidden="true">
-            {collapsed ? (
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-            ) : (
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-            )}
-          </svg>
-        </button>
       </div>
 
       {/* Main content */}
       <main className="flex-1 overflow-auto bg-gray-50 dark:bg-slate-950 pt-14 lg:pt-0">
         <div className="mx-auto max-w-6xl p-4 sm:p-6 page-enter">{children}</div>
+        <footer className="mx-auto max-w-6xl px-4 sm:px-6 pb-6 pt-2 flex items-center justify-center gap-4 text-xs text-gray-400 dark:text-slate-600">
+          <span>© {new Date().getFullYear()} Lumeo Power</span>
+          <span>·</span>
+          <a href="/privacy" className="hover:text-gray-600 dark:hover:text-slate-400 transition-colors">Privacy Policy</a>
+          <span>·</span>
+          <a href="/terms" className="hover:text-gray-600 dark:hover:text-slate-400 transition-colors">Terms of Service</a>
+        </footer>
       </main>
     </div>
   );
