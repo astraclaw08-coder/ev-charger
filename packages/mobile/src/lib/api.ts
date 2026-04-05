@@ -279,6 +279,18 @@ export interface FavoriteListResponse {
   chargerIds: string[];
 }
 
+export interface ConsentStatus {
+  tosAcceptedAt: string | null;
+  tosVersion: string | null;
+  privacyAcceptedAt: string | null;
+  privacyVersion: string | null;
+}
+
+export interface AccountDeletionResponse {
+  ok: boolean;
+  deletionRequestedAt?: string;
+  message: string;
+}
 
 export interface ChargerUptime {
   chargerId: string;
@@ -524,6 +536,26 @@ export const api = {
       return request<UserProfile>('/me/profile', {
         method: 'PUT',
         body: JSON.stringify(input),
+      });
+    },
+  },
+
+  consent: {
+    status() {
+      return request<ConsentStatus>('/me/consent');
+    },
+    accept(tosVersion: string, privacyVersion: string) {
+      return request<ConsentStatus>('/me/consent', {
+        method: 'POST',
+        body: JSON.stringify({ tosVersion, privacyVersion }),
+      });
+    },
+  },
+
+  account: {
+    deleteAccount() {
+      return request<AccountDeletionResponse>('/me', {
+        method: 'DELETE',
       });
     },
   },
