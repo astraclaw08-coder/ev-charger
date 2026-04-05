@@ -393,7 +393,7 @@ export default function Dashboard() {
                   <rect x="8.25" y="13" width="2.75" height="7" rx="0.8" fill="currentColor" opacity="0.95" />
                   <rect x="12.5" y="10" width="2.75" height="10" rx="0.8" fill="currentColor" opacity="0.95" />
                   <rect x="16.75" y="7" width="2.75" height="13" rx="0.8" fill="currentColor" opacity="0.95" />
-                  <path d="M4 20L20 4" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" />
+                  <path d="M4 4L20 20" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" />
                 </svg>
               }
             />
