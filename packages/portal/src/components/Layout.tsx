@@ -178,7 +178,7 @@ function SidebarContent({ location, theme, toggleTheme, onNavClick, notification
               onClick={onNavClick}
               title={collapsed ? item.label : undefined}
               className={cn(
-                'group flex items-center rounded-md text-sm font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/70 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-slate-950',
+                'group relative flex items-center rounded-md text-sm font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/70 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-slate-950',
                 collapsed ? 'justify-center px-2 py-2' : 'gap-2 px-3 py-2',
                 active
                   ? 'bg-gray-100 text-gray-900 shadow-sm dark:bg-slate-700 dark:text-white'
@@ -195,6 +195,11 @@ function SidebarContent({ location, theme, toggleTheme, onNavClick, notification
                 )}
               />
               {!collapsed && <span className="flex-1">{item.label}</span>}
+              {collapsed && (
+                <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-3 -translate-y-1/2 whitespace-nowrap rounded-md border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-700 opacity-0 shadow-sm transition-all duration-150 group-hover:opacity-100 group-focus-visible:opacity-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+                  {item.label}
+                </span>
+              )}
               {!collapsed && item.label === 'Operations' && !!notificationCount && notificationCount > 0 && (
                 <span className="ml-auto flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white tabular-nums">
                   {notificationCount > 99 ? '99+' : notificationCount}
