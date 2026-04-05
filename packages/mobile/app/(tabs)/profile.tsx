@@ -245,7 +245,7 @@ export default function ProfileScreen() {
         {GOOGLE_PLACES_KEY ? (
           <GooglePlacesAutocomplete
             ref={placesRef}
-            placeholder="Start typing an address…"
+            placeholder="Start typing an address..."
             textInputProps={{
               value: profile.homeSiteAddress,
               onChangeText: (v: string) => set('homeSiteAddress', v),
@@ -436,23 +436,6 @@ export default function ProfileScreen() {
         </Pressable>
       </Modal>
 
-      {/* Legal & Account */}
-      <View style={[styles.card, { backgroundColor: isDark ? '#111827' : '#fff', borderColor: isDark ? '#1e293b' : '#e5e7eb' }]}>
-        <Text style={[styles.sectionTitle, { color: isDark ? '#e2e8f0' : '#111827' }]}>Legal</Text>
-        <TouchableOpacity
-          style={{ paddingVertical: 10 }}
-          onPress={() => Linking.openURL('https://portal.lumeopower.com/privacy')}
-        >
-          <Text style={{ fontSize: 15, color: '#3b82f6', fontWeight: '500' }}>Privacy Policy</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={{ paddingVertical: 10 }}
-          onPress={() => Linking.openURL('https://portal.lumeopower.com/terms')}
-        >
-          <Text style={{ fontSize: 15, color: '#3b82f6', fontWeight: '500' }}>Terms of Service</Text>
-        </TouchableOpacity>
-      </View>
-
       <TouchableOpacity
         style={[styles.logoutBtn, { backgroundColor: '#7f1d1d', marginTop: 8 }]}
         onPress={() => {
@@ -478,6 +461,19 @@ export default function ProfileScreen() {
         }}
       >
         <Text style={styles.logoutText}>Delete My Account</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={{ paddingVertical: 10, marginTop: 8 }}
+        onPress={() => Linking.openURL('https://portal.lumeopower.com/privacy')}
+      >
+        <Text style={{ fontSize: 15, color: '#3b82f6', fontWeight: '500' }}>Privacy Policy</Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={{ paddingVertical: 10 }}
+        onPress={() => Linking.openURL('https://portal.lumeopower.com/terms')}
+      >
+        <Text style={{ fontSize: 15, color: '#3b82f6', fontWeight: '500' }}>Terms of Service</Text>
       </TouchableOpacity>
 
       <Text style={[styles.versionText, { color: isDark ? '#6b7280' : '#9ca3af' }]}>Version {mobileVersion}</Text>
