@@ -534,7 +534,7 @@ function FleetHealthTile({ label, count, total, color, icon }: { label: string; 
     <div className={cn('rounded-xl p-4 ring-1', c.ring, c.bg)}>
       <div className="flex items-center gap-2 mb-2">
         <span className={c.text}>{icon}</span>
-        <span className="text-xs font-medium text-gray-600 dark:text-slate-300">{label}</span>
+        <span className={cn('text-xs font-medium', c.text)}>{label}</span>
       </div>
       <div className="flex items-baseline gap-1.5">
         <span className={cn('text-2xl font-bold font-mono tabular-nums', c.text)}>{count}</span>
