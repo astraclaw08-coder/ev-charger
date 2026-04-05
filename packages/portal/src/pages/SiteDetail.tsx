@@ -1389,12 +1389,14 @@ export default function SiteDetail() {
 
 function SiteKpiTile({ label, value, live }: { label: string; value: string; live?: boolean }) {
   return (
-    <div className="rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
-      <div className="flex items-center gap-1.5">
+    <div className="rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 min-w-0">
+      <div className="flex items-center gap-1.5 min-w-0">
         <p className="truncate text-[11px] font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">{label}</p>
         {live && <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-500" title="Live" />}
       </div>
-      <p className="mt-1 truncate text-[clamp(1.05rem,1.8vw,1.6rem)] font-semibold leading-tight text-gray-900 dark:text-slate-100">{value}</p>
+      <p className="mt-1 min-w-0 whitespace-nowrap text-[clamp(1rem,1.6vw,1.5rem)] font-semibold leading-tight tracking-tight text-gray-900 dark:text-slate-100">
+        {value}
+      </p>
     </div>
   );
 }
