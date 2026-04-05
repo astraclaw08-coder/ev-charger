@@ -165,7 +165,8 @@ export default function MapScreen() {
 
   const controlsBottom = tabBarBottom + TAB_CONTENT_OFFSET;
   const locateButtonBottom = controlsBottom + SEARCH_TO_LOCATE;
-  const mapAttributionBottom = controlsBottom + 72;
+  const mapBottomInset = controlsBottom + 72;
+  const mapAttributionBottom = mapBottomInset;
 
   useEffect(() => {
     (async () => {
@@ -332,7 +333,7 @@ export default function MapScreen() {
     }
 
     mapRef.current.fitToCoordinates(unique, {
-      edgePadding: { top: 70, right: 70, bottom: 120, left: 70 },
+      edgePadding: { top: 70, right: 70, bottom: Math.max(mapBottomInset + 36, 120), left: 70 },
       animated: true,
     });
   }, [committedSearch, filteredSites]);
@@ -494,6 +495,7 @@ export default function MapScreen() {
           pitchEnabled={false}
           customMapStyle={isDark ? DARK_MAP_STYLES : LIGHT_MAP_STYLES}
           userInterfaceStyle={isDark ? 'dark' : 'light'}
+          mapPadding={{ top: 0, right: 0, bottom: mapBottomInset, left: 0 }}
           legalLabelInsets={{ bottom: mapAttributionBottom, left: 16, right: 16, top: 0 }}
           onRegionChangeComplete={(r) => {
             regionRef.current = r;
