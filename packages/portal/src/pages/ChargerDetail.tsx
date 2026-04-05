@@ -20,9 +20,11 @@ function rangeDays(preset: RangePreset) {
 
 function ChargerKpiTile({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 shadow-sm">
+    <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 shadow-sm min-w-0">
       <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">{label}</p>
-      <p className="mt-1 text-2xl font-semibold text-gray-900 dark:text-slate-100">{value}</p>
+      <p className="mt-1 min-w-0 whitespace-nowrap text-[clamp(1.125rem,2.1vw,1.5rem)] font-semibold leading-tight tracking-tight text-gray-900 dark:text-slate-100">
+        {value}
+      </p>
     </div>
   );
 }
