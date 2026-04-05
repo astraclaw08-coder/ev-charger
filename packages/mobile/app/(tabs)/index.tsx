@@ -165,7 +165,8 @@ export default function MapScreen() {
 
   const controlsBottom = tabBarBottom + TAB_CONTENT_OFFSET;
   const locateButtonBottom = controlsBottom + SEARCH_TO_LOCATE;
-  const mapBottomInset = controlsBottom + 72;
+  const mapAttributionGap = TAB_CONTENT_OFFSET;
+  const mapBottomInset = controlsBottom + mapAttributionGap;
   const mapAttributionBottom = mapBottomInset;
 
   useEffect(() => {
