@@ -389,7 +389,8 @@ export default function Dashboard() {
               color="gray"
               icon={
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 5.636a9 9 0 010 12.728M5.636 18.364L18.364 5.636" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 18h1.5m3-3H10m3-3h1.5m3-3H20" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 21L21 3" />
                 </svg>
               }
             />
@@ -419,7 +420,7 @@ export default function Dashboard() {
             <a href="/sites" className="text-xs font-medium text-brand-600 dark:text-brand-400 hover:underline">View all →</a>
           </div>
           <div className="space-y-2">
-            {topUtilizedSites.map((site, idx) => (
+            {topUtilizedSites.slice(0, 3).map((site, idx) => (
               <a
                 key={site.id}
                 href={`/sites/${site.id}`}
@@ -427,9 +428,13 @@ export default function Dashboard() {
               >
                 <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gray-200 dark:bg-slate-700 text-xs font-bold font-mono text-gray-600 dark:text-slate-300">{idx + 1}</span>
                 <div className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-medium text-gray-900 dark:text-slate-100">{site.name}</span>
+                  <span className="block truncate text-sm font-medium text-gray-900 dark:text-slate-100">
+                    {site.name}
+                    <span className="ml-2 text-xs font-normal text-gray-500 dark:text-slate-400">
+                      · {site.chargerCount} charger{site.chargerCount !== 1 ? 's' : ''}
+                    </span>
+                  </span>
                   <span className="block truncate text-xs text-gray-500 dark:text-slate-400">{site.address}</span>
-                  <span className="text-xs text-gray-400 dark:text-slate-500">{site.chargerCount} charger{site.chargerCount !== 1 ? 's' : ''}</span>
                 </div>
                 <span className="shrink-0 text-sm font-bold font-mono tabular-nums text-gray-900 dark:text-slate-100">{site.utilizationPct.toFixed(1)}%</span>
                 <div className="hidden w-28 sm:block">

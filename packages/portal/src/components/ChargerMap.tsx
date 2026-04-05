@@ -13,11 +13,16 @@ interface Props {
 const mapContainerStyle = { width: '100%', height: '100%' };
 const libraries: ('places')[] = ['places'];
 
-// Shared: hide POIs and transit, keep parks simplified
+// Minimal map styles: keep street / city / state labels, hide nearly everything else.
 const CLEAN_MAP_STYLES: google.maps.MapTypeStyle[] = [
+  { featureType: 'administrative.neighborhood', stylers: [{ visibility: 'off' }] },
+  { featureType: 'administrative.land_parcel', stylers: [{ visibility: 'off' }] },
   { featureType: 'poi', stylers: [{ visibility: 'off' }] },
-  { featureType: 'poi.park', stylers: [{ visibility: 'simplified' }] },
+  { featureType: 'poi.park', stylers: [{ visibility: 'off' }] },
   { featureType: 'transit', stylers: [{ visibility: 'off' }] },
+  { featureType: 'water', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+  { featureType: 'road', elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
+  { featureType: 'road.local', elementType: 'labels.text', stylers: [{ visibility: 'off' }] },
 ];
 
 const LIGHT_MAP_STYLES: google.maps.MapTypeStyle[] = [

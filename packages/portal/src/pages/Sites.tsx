@@ -114,12 +114,7 @@ export default function Sites() {
     <div>
       <div className="flex items-center justify-between gap-3">
         <div>
-          <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-slate-400">
-            <Link to="/overview" className="hover:text-gray-700 dark:hover:text-slate-200 dark:text-slate-300">Overview</Link>
-            <span>/</span>
-            <span className="text-gray-900 dark:text-slate-100">Sites</span>
-          </div>
-          <h1 className="mt-1 text-2xl font-bold text-gray-900 dark:text-slate-100">Sites</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-slate-100">Sites</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">All charging sites and their fleet status</p>
         </div>
         <button

@@ -162,15 +162,8 @@ export default function Analytics() {
   return (
     <div className="space-y-6">
       <div>
-        <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-slate-400">
-          <Link to="/overview" className="hover:text-gray-700 dark:hover:text-slate-200 dark:text-slate-300">Overview</Link>
-          <span>/</span>
-          <Link to={`/sites/${resolvedSiteId ?? id}`} className="hover:text-gray-700 dark:hover:text-slate-200 dark:text-slate-300">{data.siteName}</Link>
-          <span>/</span>
-          <span className="text-gray-900 dark:text-slate-100">Analytics</span>
-        </div>
-        <h1 className="mt-1 text-2xl font-bold text-gray-900 dark:text-slate-100">Analytics — {data.siteName}</h1>
-        <p className="text-sm text-gray-500 dark:text-slate-400">Trend filters + saved views + export queue controls</p>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-slate-100">Analytics — {data.siteName}</h1>
+        <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">Trend filters + saved views + export queue controls</p>
       </div>
 
       <div className="flex flex-wrap items-center gap-2 rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
