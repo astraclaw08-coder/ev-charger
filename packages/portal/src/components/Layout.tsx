@@ -321,7 +321,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   }, [getToken]);
 
   return (
-    <div className="flex min-h-screen bg-gray-50 dark:bg-slate-950">
+    <div className="flex min-h-screen flex-col lg:flex-row bg-gray-50 dark:bg-slate-950">
       {/* Mobile hamburger header */}
       <div className="fixed top-0 left-0 right-0 z-40 flex h-14 items-center justify-between border-b border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-4 lg:hidden">
         <BrandMark className="w-[120px]" />
@@ -370,9 +370,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       </div>
 
       {/* Main content */}
-      <main className="flex-1 overflow-auto bg-gray-50 dark:bg-slate-950 pt-14 lg:pt-0">
-        <div className="mx-auto max-w-6xl p-4 sm:p-6 page-enter">{children}</div>
-        <footer className="mx-auto max-w-6xl px-4 sm:px-6 pb-6 pt-2 flex items-center justify-center gap-4 text-xs text-gray-400 dark:text-slate-600">
+      <main className="flex flex-1 flex-col overflow-auto bg-gray-50 dark:bg-slate-950 pt-14 lg:pt-0">
+        <div className="mx-auto w-full max-w-6xl flex-1 p-4 sm:p-6 page-enter">{children}</div>
+        <footer className="mx-auto mt-auto w-full max-w-6xl px-4 sm:px-6 pb-6 pt-2 flex items-center justify-center gap-4 text-xs text-gray-400 dark:text-slate-600">
           <span>© {new Date().getFullYear()} Lumeo Power</span>
           <span>·</span>
           <a href="/privacy" className="hover:text-gray-600 dark:hover:text-slate-400 transition-colors">Privacy Policy</a>

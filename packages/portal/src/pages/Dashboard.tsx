@@ -389,7 +389,7 @@ export default function Dashboard() {
               color="gray"
               icon={
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 18h1.5m3-3H10m3-3h1.5m3-3H20" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 18h2M9 14h2M13 10h2M17 6h2" />
                   <path strokeLinecap="round" strokeLinejoin="round" d="M3 21L21 3" />
                 </svg>
               }
