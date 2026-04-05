@@ -374,22 +374,10 @@ export default function ChargerDetailScreen() {
 
   const headerOptions = useMemo(
     () => ({
-      title: 'Lumeo',
-      headerShown: true,
-      headerStyle: { backgroundColor: isDark ? '#0b1220' : '#ffffff' } as const,
-      headerTintColor: isDark ? '#f9fafb' : '#111827',
-      headerShadowVisible: false,
-      headerTitleStyle: {
-        color: isDark ? '#ffffff' : '#000000',
-        fontWeight: '300' as const,
-        letterSpacing: 1.5,
-        fontSize: 22,
-      },
-      headerBackButtonDisplayMode: 'minimal' as const,
       headerLeft,
       headerRight,
     }),
-    [isDark, headerLeft, headerRight],
+    [headerLeft, headerRight],
   );
 
   // ── Early returns (after all hooks) ────────────────────────────────
