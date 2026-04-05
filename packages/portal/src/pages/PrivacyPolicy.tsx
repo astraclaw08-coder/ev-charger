@@ -1,5 +1,3 @@
-import { Link } from 'react-router-dom';
-import BrandMark from '../components/BrandMark';
 
 const sections = [
   {
@@ -32,23 +30,12 @@ export default function PrivacyPolicy() {
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900 dark:bg-slate-950 dark:text-slate-100">
       <div className="mx-auto max-w-4xl px-6 py-10 sm:px-8 lg:px-10">
-        <div className="mb-10 flex items-center justify-between gap-4">
-          <div>
-            <div className="w-[180px]">
-              <BrandMark />
-            </div>
-            <p className="mt-3 text-sm uppercase tracking-[0.24em] text-gray-500 dark:text-slate-400">Legal</p>
-            <h1 className="mt-2 text-3xl font-extrabold tracking-tight sm:text-4xl">Privacy Policy</h1>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-600 dark:text-slate-300">
-              This policy explains how Lumeo handles personal information used to operate EV charging services across the portal and mobile experience.
-            </p>
-          </div>
-          <Link
-            to="/login"
-            className="rounded-full border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:border-brand-400 hover:text-brand-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-brand-500 dark:hover:text-brand-300"
-          >
-            Back to sign in
-          </Link>
+        <div className="mb-10">
+          <p className="text-sm uppercase tracking-[0.24em] text-gray-500 dark:text-slate-400">Legal</p>
+          <h1 className="mt-2 text-3xl font-extrabold tracking-tight sm:text-4xl">Privacy Policy</h1>
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-600 dark:text-slate-300">
+            This policy explains how Lumeo handles personal information used to operate EV charging services across the portal and mobile experience.
+          </p>
         </div>
 
         <div className="rounded-3xl border border-gray-200 bg-white/90 p-6 shadow-sm shadow-gray-200/60 dark:border-slate-800 dark:bg-slate-900/80 dark:shadow-black/20 sm:p-8">

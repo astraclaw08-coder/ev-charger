@@ -245,13 +245,8 @@ export default function FleetAnalytics() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-slate-400">
-            <Link to="/overview" className="hover:text-gray-700 dark:hover:text-slate-200 dark:text-slate-300">Overview</Link>
-            <span>/</span>
-            <span className="text-gray-900 dark:text-slate-100">Analytics</span>
-          </div>
-          <h1 className="mt-1 text-2xl font-bold text-gray-900 dark:text-slate-100">Analytics</h1>
-          <p className="text-sm text-gray-500 dark:text-slate-400">Monitor charging performance, revenue, and utilization across your network.</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-slate-100">Analytics</h1>
+          <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">Monitor charging performance, revenue, and utilization across your network.</p>
         </div>
 
         <div className="flex flex-wrap items-end gap-2">

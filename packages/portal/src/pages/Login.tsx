@@ -44,7 +44,7 @@ export default function Login({ error, devMode = false, devOperatorId = 'operato
           {/* Brand */}
           <div className="mb-8 text-center">
             <div className="flex justify-center">
-              <BrandMark className="w-[240px]" />
+              <BrandMark className="w-auto max-w-[240px]" />
             </div>
             <p className="mt-3 text-sm text-gray-500 dark:text-slate-400 tracking-wide">Charger Management Platform</p>
           </div>
@@ -140,10 +140,6 @@ export default function Login({ error, devMode = false, devOperatorId = 'operato
           )}
         </div>
 
-        {/* Footer */}
-        <p className="mt-6 text-center text-xs text-gray-400 dark:text-slate-600">
-          OCPP 1.6J · Lumeo Power
-        </p>
       </div>
     </div>
   );
