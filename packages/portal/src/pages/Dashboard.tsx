@@ -388,9 +388,12 @@ export default function Dashboard() {
               total={fleetStatus.totalConnectors}
               color="gray"
               icon={
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 18h2M9 14h2M13 10h2M17 6h2" />
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 21L21 3" />
+                <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
+                  <rect x="4" y="16" width="2.75" height="4" rx="0.8" fill="currentColor" opacity="0.95" />
+                  <rect x="8.25" y="13" width="2.75" height="7" rx="0.8" fill="currentColor" opacity="0.95" />
+                  <rect x="12.5" y="10" width="2.75" height="10" rx="0.8" fill="currentColor" opacity="0.95" />
+                  <rect x="16.75" y="7" width="2.75" height="13" rx="0.8" fill="currentColor" opacity="0.95" />
+                  <path d="M4 20L20 4" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" />
                 </svg>
               }
             />
