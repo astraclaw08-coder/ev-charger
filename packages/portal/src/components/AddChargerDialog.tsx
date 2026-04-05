@@ -51,20 +51,20 @@ export default function AddChargerDialog({ siteId, onAdd, onClose }: Props) {
 
   return (
     /* Backdrop */
-    <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/40" onClick={onClose}>
+    <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
       <div
-        className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl"
+        className="w-full max-w-md rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-6 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         {step === 'form' ? (
           <>
-            <h2 className="text-lg font-semibold text-gray-900">Register New Charger</h2>
-            <p className="mt-1 text-sm text-gray-500">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">Register New Charger</h2>
+            <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
               Enter the charger details. A password will be generated for OCPP authentication.
             </p>
 
             {error && (
-              <div className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
+              <div className="mt-3 rounded-md bg-red-50 dark:bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:text-red-400">{error}</div>
             )}
 
             <form onSubmit={handleSubmit} className="mt-4 space-y-3">
@@ -77,13 +77,13 @@ export default function AddChargerDialog({ siteId, onAdd, onClose }: Props) {
                 ] as const
               ).map(({ label, field, placeholder }) => (
                 <div key={field}>
-                  <label className="block text-sm font-medium text-gray-700">{label}</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-slate-300">{label}</label>
                   <input
                     required
                     value={form[field]}
                     onChange={set(field)}
                     placeholder={placeholder}
-                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                    className="mt-1 block w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100 placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
                   />
                 </div>
               ))}
@@ -92,7 +92,7 @@ export default function AddChargerDialog({ siteId, onAdd, onClose }: Props) {
                 <button
                   type="button"
                   onClick={onClose}
-                  className="rounded-md border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                  className="rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800/60 px-4 py-2 text-sm text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700"
                 >
                   Cancel
                 </button>
@@ -115,25 +115,25 @@ export default function AddChargerDialog({ siteId, onAdd, onClose }: Props) {
           <>
             <div className="flex items-center gap-2">
               <span className="text-2xl">✅</span>
-              <h2 className="text-lg font-semibold text-gray-900">Charger Registered</h2>
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">Charger Registered</h2>
             </div>
-            <p className="mt-2 text-sm text-gray-500">
+            <p className="mt-2 text-sm text-gray-500 dark:text-slate-400">
               Configure your charger with the connection details below. The password is shown{' '}
               <strong>once</strong> — save it now.
             </p>
 
-            <div className="mt-4 space-y-3 rounded-lg bg-gray-50 p-4 font-mono text-sm">
+            <div className="mt-4 space-y-3 rounded-lg bg-gray-50 dark:bg-slate-800/60 p-4 font-mono text-sm">
               <div>
-                <p className="text-xs font-sans font-medium text-gray-500 uppercase">OCPP Endpoint</p>
-                <p className="mt-0.5 break-all text-gray-900">{created?.ocppEndpoint}</p>
+                <p className="text-xs font-sans font-medium text-gray-500 dark:text-slate-400 uppercase">OCPP Endpoint</p>
+                <p className="mt-0.5 break-all text-gray-900 dark:text-slate-100">{created?.ocppEndpoint}</p>
               </div>
               <div>
-                <p className="text-xs font-sans font-medium text-gray-500 uppercase">Identity</p>
-                <p className="mt-0.5 text-gray-900">{created?.ocppId}</p>
+                <p className="text-xs font-sans font-medium text-gray-500 dark:text-slate-400 uppercase">Identity</p>
+                <p className="mt-0.5 text-gray-900 dark:text-slate-100">{created?.ocppId}</p>
               </div>
               <div>
-                <p className="text-xs font-sans font-medium text-gray-500 uppercase">Password</p>
-                <p className="mt-0.5 font-bold text-red-700">{created?.password}</p>
+                <p className="text-xs font-sans font-medium text-gray-500 dark:text-slate-400 uppercase">Password</p>
+                <p className="mt-0.5 font-bold text-red-700 dark:text-red-400">{created?.password}</p>
               </div>
             </div>
 
