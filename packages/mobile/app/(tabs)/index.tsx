@@ -76,6 +76,43 @@ function statusLabelFromStatuses(statuses: string[], chargerStatuses: string[]):
   return 'Unknown';
 }
 
+
+const CLEAN_BASE_STYLES = [
+  { featureType: 'poi', stylers: [{ visibility: 'off' }] },
+  { featureType: 'transit', stylers: [{ visibility: 'off' }] },
+  { featureType: 'landscape.natural', stylers: [{ visibility: 'simplified' }] },
+  { featureType: 'landscape.natural', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+  { featureType: 'landscape.man_made', stylers: [{ visibility: 'simplified' }] },
+  { featureType: 'landscape.man_made', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+  { featureType: 'road.highway', elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
+  { featureType: 'road.local', elementType: 'labels', stylers: [{ visibility: 'on' }] },
+  { featureType: 'road.arterial', elementType: 'labels', stylers: [{ visibility: 'on' }] },
+  { featureType: 'administrative', elementType: 'labels', stylers: [{ visibility: 'on' }] },
+  { featureType: 'water', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+];
+
+const LIGHT_MAP_STYLES = [
+  ...CLEAN_BASE_STYLES,
+  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#e2e8f0' }] },
+  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#cbd5e1' }] },
+  { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#f1f5f9' }] },
+  { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#f8fafc' }] },
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#dbeafe' }] },
+];
+
+const DARK_MAP_STYLES = [
+  ...CLEAN_BASE_STYLES,
+  { elementType: 'geometry', stylers: [{ color: '#1f2937' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#9ca3af' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#1f2937' }] },
+  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#374151' }] },
+  { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#111827' }] },
+  { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#d1d5db' }] },
+  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#4b5563' }] },
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0f172a' }] },
+  { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#1f2937' }] },
+];
+
 export default function MapScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ openScanner?: string; scanNonce?: string }>();
@@ -445,10 +482,16 @@ export default function MapScreen() {
           }}
           showsUserLocation={hasLocation}
           showsMyLocationButton={false}
+          showsCompass={false}
+          showsBuildings={false}
+          showsTraffic={false}
+          showsIndoors={false}
+          toolbarEnabled={false}
           zoomEnabled
           scrollEnabled
           rotateEnabled
-          pitchEnabled
+          pitchEnabled={false}
+          customMapStyle={isDark ? DARK_MAP_STYLES : LIGHT_MAP_STYLES}
           userInterfaceStyle={isDark ? 'dark' : 'light'}
           legalLabelInsets={{ bottom: controlsBottom + 56, left: 8, right: 0, top: 0 }}
           onRegionChangeComplete={(r) => {
