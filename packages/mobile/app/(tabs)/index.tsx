@@ -165,6 +165,7 @@ export default function MapScreen() {
 
   const controlsBottom = tabBarBottom + TAB_CONTENT_OFFSET;
   const locateButtonBottom = controlsBottom + SEARCH_TO_LOCATE;
+  const mapAttributionBottom = controlsBottom + 72;
 
   useEffect(() => {
     (async () => {
@@ -493,7 +494,7 @@ export default function MapScreen() {
           pitchEnabled={false}
           customMapStyle={isDark ? DARK_MAP_STYLES : LIGHT_MAP_STYLES}
           userInterfaceStyle={isDark ? 'dark' : 'light'}
-          legalLabelInsets={{ bottom: controlsBottom + 56, left: 12, right: 12, top: 0 }}
+          legalLabelInsets={{ bottom: mapAttributionBottom, left: 16, right: 16, top: 0 }}
           onRegionChangeComplete={(r) => {
             regionRef.current = r;
           }}
@@ -517,6 +518,8 @@ export default function MapScreen() {
             );
           })}
         </MapView>
+
+        <View pointerEvents="none" style={[styles.mapAttributionSafeZone, { bottom: tabBarBottom }]} />
 
         <View pointerEvents="box-none" style={[styles.mapControls, { bottom: locateButtonBottom }]}> 
           <TouchableOpacity
@@ -778,6 +781,15 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   mapSection: { flex: 1, position: 'relative' },
   map: { flex: 1 },
+  mapAttributionSafeZone: {
+    position: 'absolute',
+    left: 0,
+    bottom: 0,
+    width: 170,
+    height: 64,
+    borderTopRightRadius: 18,
+    backgroundColor: 'transparent',
+  },
   mapControls: { position: 'absolute', right: 12, gap: 8 },
   locateBtn: { width: 42, height: 42, borderRadius: 21, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   zoomBtn: { width: 42, height: 42, backgroundColor: '#111827cc', borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
