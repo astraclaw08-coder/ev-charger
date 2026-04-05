@@ -26,11 +26,15 @@ export default function BrandMark({ className = '', iconOnly }: BrandMarkProps) 
     );
   }
 
+  const fullLogoClasses = className.includes('max-h-none')
+    ? `h-auto max-w-full object-contain object-left ${shadow} ${className.replace('max-h-none', '').trim()}`.trim()
+    : `max-h-8 w-auto object-contain object-left ${shadow} ${className}`.trim();
+
   return (
     <img
       src={src}
       alt="Lumeo"
-      className={`max-h-8 w-auto object-contain object-left ${shadow} ${className}`.trim()}
+      className={fullLogoClasses}
     />
   );
 }

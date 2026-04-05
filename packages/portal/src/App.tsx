@@ -42,31 +42,40 @@ function PortalRoutes() {
   return (
     <BrowserRouter>
       <PortalScopeProvider>
-        <CommandPalette />
-        <ReConsentBanner />
-        <Layout>
-          <Routes>
-          <Route path="/" element={<Navigate to={homePath} replace />} />
-          <Route path="/overview" element={<Dashboard />} />
-          <Route path="/sites" element={<Sites />} />
-          <Route path="/sites/:id" element={<SiteDetail />} />
-          <Route path="/analytics" element={<FleetAnalytics />} />
-          <Route path="/sites/:id/analytics" element={<Analytics />} />
-          <Route path="/chargers" element={<Chargers />} />
-          <Route path="/chargers/:id" element={<ChargerDetail />} />
-          <Route path="/sessions" element={<Sessions />} />
-          <Route path="/operations" element={<Operations />} />
-          <Route path="/support" element={<CustomerSupport />} />
-          <Route path="/network" element={<NetworkOps />} />
-          <Route path="/load-management" element={<LoadManagement />} />
-          <Route path="/users" element={<UserManagement />} />
-          <Route path="/settings" element={<Settings />} />
-          <Route path="/notifications" element={<Notifications />} />
+        <Routes>
           <Route path="/privacy" element={<PrivacyPolicy />} />
           <Route path="/terms" element={<TermsOfService />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </Layout>
+          <Route
+            path="*"
+            element={(
+              <>
+                <CommandPalette />
+                <ReConsentBanner />
+                <Layout>
+                  <Routes>
+                    <Route path="/" element={<Navigate to={homePath} replace />} />
+                    <Route path="/overview" element={<Dashboard />} />
+                    <Route path="/sites" element={<Sites />} />
+                    <Route path="/sites/:id" element={<SiteDetail />} />
+                    <Route path="/analytics" element={<FleetAnalytics />} />
+                    <Route path="/sites/:id/analytics" element={<Analytics />} />
+                    <Route path="/chargers" element={<Chargers />} />
+                    <Route path="/chargers/:id" element={<ChargerDetail />} />
+                    <Route path="/sessions" element={<Sessions />} />
+                    <Route path="/operations" element={<Operations />} />
+                    <Route path="/support" element={<CustomerSupport />} />
+                    <Route path="/network" element={<NetworkOps />} />
+                    <Route path="/load-management" element={<LoadManagement />} />
+                    <Route path="/users" element={<UserManagement />} />
+                    <Route path="/settings" element={<Settings />} />
+                    <Route path="/notifications" element={<Notifications />} />
+                    <Route path="*" element={<Navigate to="/" replace />} />
+                  </Routes>
+                </Layout>
+              </>
+            )}
+          />
+        </Routes>
       </PortalScopeProvider>
     </BrowserRouter>
   );
@@ -106,18 +115,16 @@ function KeycloakOnlyApp() {
   );
 }
 
-function DevSignedOutRoutes({ onSignIn }: { onSignIn: () => void }) {
+function DevSignedOutContent({ onSignIn }: { onSignIn: () => void }) {
   const devOperatorId = import.meta.env.VITE_DEV_OPERATOR_ID ?? 'operator-001';
 
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/login" element={<Login devMode devOperatorId={devOperatorId} onDevSignIn={onSignIn} />} />
-        <Route path="/reset-password" element={<ResetPassword />} />
-        <Route path="/sso-callback" element={<Navigate to="/login" replace />} />
-        <Route path="*" element={<Navigate to="/login" replace />} />
-      </Routes>
-    </BrowserRouter>
+    <Routes>
+      <Route path="/login" element={<Login devMode devOperatorId={devOperatorId} onDevSignIn={onSignIn} />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
+      <Route path="/sso-callback" element={<Navigate to="/login" replace />} />
+      <Route path="*" element={<Navigate to="/login" replace />} />
+    </Routes>
   );
 }
 
@@ -137,10 +144,22 @@ function DevApp() {
   return (
     <DevTokenProvider>
       <DevAuthUxProvider>
-        <div className="sticky top-0 z-50 bg-yellow-400 px-4 py-1 text-center text-xs font-medium text-yellow-900">
-          Dev mode — auth shell enabled · operator-id: {import.meta.env.VITE_DEV_OPERATOR_ID ?? 'operator-001'}
-        </div>
-        {devSignedIn ? <PortalRoutes /> : <DevSignedOutRoutes onSignIn={handleDevSignIn} />}
+        {devSignedIn ? (
+          <>
+            <div className="sticky top-0 z-50 bg-yellow-400 px-4 py-1 text-center text-xs font-medium text-yellow-900">
+              Dev mode — auth shell enabled · operator-id: {import.meta.env.VITE_DEV_OPERATOR_ID ?? 'operator-001'}
+            </div>
+            <PortalRoutes />
+          </>
+        ) : (
+          <BrowserRouter>
+            <Routes>
+              <Route path="/privacy" element={<PrivacyPolicy />} />
+              <Route path="/terms" element={<TermsOfService />} />
+              <Route path="*" element={<DevSignedOutContent onSignIn={handleDevSignIn} />} />
+            </Routes>
+          </BrowserRouter>
+        )}
       </DevAuthUxProvider>
     </DevTokenProvider>
   );

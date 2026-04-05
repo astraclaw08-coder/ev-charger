@@ -44,7 +44,7 @@ export default function Login({ error, devMode = false, devOperatorId = 'operato
           {/* Brand */}
           <div className="mb-8 text-center">
             <div className="flex justify-center">
-              <BrandMark className="w-auto max-w-[240px]" />
+              <BrandMark className="w-[240px] max-h-none" />
             </div>
             <p className="mt-3 text-sm text-gray-500 dark:text-slate-400 tracking-wide">Charger Management Platform</p>
           </div>
