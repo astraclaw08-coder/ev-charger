@@ -493,7 +493,7 @@ export default function MapScreen() {
           pitchEnabled={false}
           customMapStyle={isDark ? DARK_MAP_STYLES : LIGHT_MAP_STYLES}
           userInterfaceStyle={isDark ? 'dark' : 'light'}
-          legalLabelInsets={{ bottom: tabBarBottom + 10, left: 0, right: 0, top: 0 }}
+          legalLabelInsets={{ bottom: controlsBottom + 56, left: 12, right: 12, top: 0 }}
           onRegionChangeComplete={(r) => {
             regionRef.current = r;
           }}
