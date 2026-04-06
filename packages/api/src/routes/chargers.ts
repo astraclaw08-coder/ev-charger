@@ -512,11 +512,11 @@ export async function chargerRoutes(app: FastifyInstance) {
       });
     }
 
-    const status = await triggerHeartbeat(charger.ocppId);
-    if (status !== 'Accepted') {
-      return reply.status(503).send({ error: 'Charger rejected heartbeat trigger', status });
+    const result = await triggerHeartbeat(charger.ocppId);
+    if (result.status !== 'Accepted') {
+      return reply.status(503).send({ error: 'Charger rejected heartbeat trigger', ...result });
     }
-    return { status };
+    return result;
   });
 
   // POST /chargers/:id/get-configuration — operator requests current config keys

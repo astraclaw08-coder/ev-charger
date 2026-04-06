@@ -98,8 +98,8 @@ export function attachInternalRoutes(httpServer: http.Server): void {
           if (!ocppId || !requestedMessage) {
             return sendJson(res, 400, { error: 'ocppId and requestedMessage required' });
           }
-          const status = await remoteTriggerMessage(ocppId, requestedMessage, connectorId);
-          return sendJson(res, 200, { status });
+          const result = await remoteTriggerMessage(ocppId, requestedMessage, connectorId);
+          return sendJson(res, result.status === 'Accepted' ? 200 : 503, result);
         }
 
         // POST /get-configuration — pull OCPP configuration keys from a connected charger

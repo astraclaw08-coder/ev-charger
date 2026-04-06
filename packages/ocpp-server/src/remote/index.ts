@@ -1,4 +1,5 @@
 import { clientRegistry } from '../clientRegistry';
+import { logOcppMessage } from '../ocppLogger';
 
 /**
  * Send RemoteStartTransaction to a connected charger.
@@ -80,22 +81,31 @@ export async function remoteTriggerMessage(
   ocppId: string,
   requestedMessage: 'Heartbeat' | 'MeterValues' | 'StatusNotification' | 'BootNotification',
   connectorId?: number,
-): Promise<'Accepted' | 'Rejected'> {
+): Promise<{ status: 'Accepted' | 'Rejected'; error?: string; detail?: string; registry?: Record<string, unknown> | null }> {
   const client = clientRegistry.get(ocppId);
+  const registry = clientRegistry.debug(ocppId);
   if (!client) {
-    console.warn(`[RemoteTriggerMessage] Charger ${ocppId} is not connected`);
-    return 'Rejected';
+    const detail = 'Charger is not connected to the live OCPP registry';
+    console.warn(`[RemoteTriggerMessage] Charger ${ocppId} is not connected registry=${JSON.stringify(registry)}`);
+    return { status: 'Rejected', error: 'not_connected', detail, registry };
   }
 
   try {
     const payload: any = { requestedMessage };
     if (typeof connectorId === 'number') payload.connectorId = connectorId;
+    console.log(`[RemoteTriggerMessage] -> ${ocppId} payload=${JSON.stringify(payload)} registry=${JSON.stringify(registry)}`);
     const result = await client.call('TriggerMessage', payload);
-    console.log(`[RemoteTriggerMessage] Charger ${ocppId} requestedMessage=${requestedMessage} responded: ${result.status}`);
-    return result.status as 'Accepted' | 'Rejected';
+    const chargerId = client?.session?.chargerId ?? '';
+    if (chargerId) {
+      await logOcppMessage(chargerId, 'OUTBOUND', 'TriggerMessage', payload);
+      await logOcppMessage(chargerId, 'INBOUND', 'TriggerMessageResponse', result ?? {});
+    }
+    console.log(`[RemoteTriggerMessage] <- ${ocppId} requestedMessage=${requestedMessage} responded: ${result.status}`);
+    return { status: (result.status as 'Accepted' | 'Rejected') ?? 'Rejected', registry };
   } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
     console.error(`[RemoteTriggerMessage] Error calling charger ${ocppId}:`, err);
-    return 'Rejected';
+    return { status: 'Rejected', error: 'call_failed', detail, registry };
   }
 }
 

@@ -57,16 +57,16 @@ export async function remoteReset(
 
 export async function triggerHeartbeat(
   ocppId: string,
-): Promise<'Accepted' | 'Rejected'> {
+): Promise<{ status: 'Accepted' | 'Rejected'; error?: string; detail?: string; registry?: unknown }> {
   try {
-    const data = await post<{ status: string }>('/trigger-message', {
+    return await post<{ status: 'Accepted' | 'Rejected'; error?: string; detail?: string; registry?: unknown }>('/trigger-message', {
       ocppId,
       requestedMessage: 'Heartbeat',
     });
-    return data.status as 'Accepted' | 'Rejected';
   } catch (err) {
     console.error('[OcppClient] triggerHeartbeat failed:', err);
-    return 'Rejected';
+    const detail = err instanceof Error ? err.message : String(err);
+    return { status: 'Rejected', error: 'internal_http_failed', detail };
   }
 }
 
