@@ -1,5 +1,6 @@
 export const RBAC_ROLES = [
   'super_admin',
+  'admin',
   'owner',
   'operator',
   'customer_service',
@@ -35,8 +36,12 @@ export type RolePolicyMap = Record<RbacRole, readonly RbacPermission[]>;
  *                Manages all operators, sites, users across the entire platform.
  *                Intended for platform owners only (e.g. Son / sdang3209).
  *
- * owner        — Full access within their assigned sites/org scope.
- *                Can manage operators, configure sites, access billing + RBAC.
+ * admin        — Full operational/admin access across all sites.
+ *                Can manage users, sites, billing, notifications, and settings,
+ *                but cannot grant or revoke admin/super_admin roles.
+ *
+ * owner        — Legacy full-access role within assigned org scope.
+ *                Retained for compatibility; admin supersedes it for new usage.
  *
  * operator     — Day-to-day ops: read/write sites and chargers, view sessions.
  *                No RBAC management or billing export.
@@ -52,6 +57,7 @@ export type RolePolicyMap = Record<RbacRole, readonly RbacPermission[]>;
  */
 export const ROLE_POLICIES: RolePolicyMap = {
   super_admin: RBAC_PERMISSIONS,
+  admin: RBAC_PERMISSIONS,
   owner: RBAC_PERMISSIONS,
   operator: [
     'site:read',
@@ -92,6 +98,7 @@ export const ROLE_POLICIES: RolePolicyMap = {
  *  an actor can only assign roles below their own level. */
 export const ROLE_HIERARCHY: readonly RbacRole[] = [
   'super_admin',
+  'admin',
   'owner',
   'operator',
   'customer_service',
@@ -101,6 +108,7 @@ export const ROLE_HIERARCHY: readonly RbacRole[] = [
 
 export const RBAC_ROLE_LABELS: Record<RbacRole, string> = {
   super_admin: 'Super Admin',
+  admin: 'Admin',
   owner: 'Owner',
   operator: 'Operator',
   customer_service: 'Customer Service',
@@ -110,6 +118,7 @@ export const RBAC_ROLE_LABELS: Record<RbacRole, string> = {
 
 export const RBAC_ROLE_DESCRIPTIONS: Record<RbacRole, string> = {
   super_admin: 'Full platform access. All permissions, all orgs/sites.',
+  admin: 'Platform admin access across all sites. Can manage operations and users, but not grant/revoke admin-class roles.',
   owner: 'Organization admin. Full access within org scope.',
   operator: 'Day-to-day operations. Sites, chargers, sessions.',
   customer_service: 'Read access + session refunds. No write operations.',
@@ -123,8 +132,8 @@ export function roleRank(role: string): number {
   return idx >= 0 ? idx : -1;
 }
 
-/** Assignable roles — everything except super_admin. */
-export const ASSIGNABLE_ROLES: readonly RbacRole[] = ROLE_HIERARCHY.filter((r) => r !== 'super_admin');
+/** Assignable roles — everything except super_admin and admin-class roles. */
+export const ASSIGNABLE_ROLES: readonly RbacRole[] = ROLE_HIERARCHY.filter((r) => r !== 'super_admin' && r !== 'admin');
 
 export type PermissionGuardContract = {
   anyOf?: RbacPermission[];

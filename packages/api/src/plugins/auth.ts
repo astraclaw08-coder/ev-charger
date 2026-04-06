@@ -194,11 +194,11 @@ export const requireOperator: preHandlerHookHandler = async (req, reply) => {
     recordAuthSuccess({ ip: req.ip, routeScope: 'operator' });
     req.currentOperator = {
       id: devOperatorId,
-      roles: ['owner'],
+      roles: ['super_admin'],
       claims: {
         version: 1,
         orgId: null,
-        roles: ['owner'],
+        roles: ['super_admin'],
         siteIds: ['*'],
         dataScopes: ['full'],
         source: 'legacy',
@@ -219,7 +219,7 @@ export const requireOperator: preHandlerHookHandler = async (req, reply) => {
     });
     const effectiveRoles = claims.roles;
 
-    if (!payload?.sub || (!effectiveRoles.includes('operator') && !effectiveRoles.includes('owner'))) {
+    if (!payload?.sub || (!effectiveRoles.includes('operator') && !effectiveRoles.includes('owner') && !effectiveRoles.includes('admin') && !effectiveRoles.includes('super_admin'))) {
       // Expired token → don't record as suspicious failure
       const isExpired = !payload?.sub;
       if (!isExpired) {
@@ -229,7 +229,7 @@ export const requireOperator: preHandlerHookHandler = async (req, reply) => {
         error: 'Operator access required',
         denyReason: {
           code: 'INSUFFICIENT_OPERATOR_ROLE',
-          reason: 'Token does not include operator or owner role',
+          reason: 'Token does not include operator, owner, admin, or super_admin role',
         },
       });
     }

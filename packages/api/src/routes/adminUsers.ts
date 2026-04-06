@@ -131,11 +131,20 @@ export async function adminUserRoutes(app: FastifyInstance) {
     const reason = requireReason(req.body.reason);
     const assignableRoles = getAssignableRoles();
 
-    if (!role || !assignableRoles.includes(role)) {
-      return reply.status(400).send({ error: `Role is required and must be one of: ${assignableRoles.join(', ')}` });
+    const privilegedRoleSet = new Set(['super_admin', 'admin']);
+    if (!role || (!assignableRoles.includes(role) && !privilegedRoleSet.has(role))) {
+      return reply.status(400).send({ error: `Role is required and must be one of: ${[...assignableRoles, ...privilegedRoleSet].join(', ')}` });
     }
     if (!reason) {
       return reply.status(400).send({ error: 'Non-empty reason is required for role changes' });
+    }
+
+    const actorRoles = req.currentOperator!.claims!.roles;
+    const isActorSuperAdmin = actorRoles.includes('super_admin');
+    if (privilegedRoleSet.has(role) && !isActorSuperAdmin) {
+      return reply.status(403).send({
+        error: `Only super_admin can assign role '${role}'`,
+      });
     }
 
     // ── Hierarchy enforcement ──────────────────────────────────────────────
@@ -202,9 +211,16 @@ export async function adminUserRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: 'Non-empty reason is required for role changes' });
     }
 
-    const isPrivilegedRole = role === 'owner';
+    const privilegedRoleSet = new Set(['owner', 'admin', 'super_admin']);
+    const actorRoles = req.currentOperator!.claims!.roles;
+    const isActorSuperAdmin = actorRoles.includes('super_admin');
+    if ((role === 'admin' || role === 'super_admin') && !isActorSuperAdmin) {
+      return reply.status(403).send({ error: `Only super_admin can remove role '${role}'` });
+    }
+
+    const isPrivilegedRole = privilegedRoleSet.has(role);
     if (isPrivilegedRole && !req.body.confirmPrivilegedRoleRemoval) {
-      return reply.status(400).send({ error: 'confirmPrivilegedRoleRemoval=true required when removing owner role' });
+      return reply.status(400).send({ error: 'confirmPrivilegedRoleRemoval=true required when removing owner/admin/super_admin role' });
     }
 
     const kc = getKeycloakAdminClient();

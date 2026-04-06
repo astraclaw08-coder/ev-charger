@@ -3,8 +3,9 @@ import { createApiClient, type AdminUser } from '../api/client';
 import { useToken } from '../auth/TokenContext';
 import { cn } from '../lib/utils';
 
-// Must match shared RBAC_ROLES (excluding super_admin for portal assignment)
+// Must match shared RBAC_ROLES. Only super_admin should assign admin-class roles.
 const ASSIGNABLE_ROLES = [
+  'admin',
   'owner',
   'operator',
   'customer_service',
@@ -22,6 +23,8 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 const ROLE_DESCRIPTIONS: Record<string, string> = {
+  super_admin: 'Highest privilege. Full platform access and only role allowed to grant/revoke admin-class roles.',
+  admin: 'Full admin access across all sites. Can manage operations and users, but cannot grant/revoke admin-class roles.',
   owner: 'Full access within org. Users, sites, billing, RBAC.',
   operator: 'Day-to-day ops. Sites, chargers, sessions.',
   customer_service: 'Read access + session refunds.',
