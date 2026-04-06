@@ -81,7 +81,10 @@ export async function startServer(port: number): Promise<OcppServerHandle> {
     const connectedAt = new Date();
     const req = client?._ws?._socket?.parser?.incoming ?? client?._socket?.parser?.incoming ?? null;
     const sessionId = `${ocppId}:${connectedAt.getTime()}`;
-    client.session = { ...(client.session ?? {}), sessionId, connectedAt: connectedAt.toISOString() };
+    if (client.session && typeof client.session === 'object') {
+      client.session.sessionId = sessionId;
+      client.session.connectedAt = connectedAt.toISOString();
+    }
 
     console.log(`[Server] Connected: ${ocppId} (db=${chargerId})`);
     clientRegistry.register(ocppId, client);
