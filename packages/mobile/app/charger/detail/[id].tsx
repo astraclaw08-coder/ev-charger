@@ -8,12 +8,12 @@ import {
   ActivityIndicator,
   Alert,
   Animated,
-  PanResponder,
   RefreshControl,
   Image,
   Easing,
   Modal,
 } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useNavigation, usePreventRemove } from '@react-navigation/native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -119,6 +119,26 @@ function SlideToStart({
   const maxX = Math.max(trackWidth - knobSize, 0);
   const x = useRef(new Animated.Value(0)).current;
   const valueRef = useRef(0);
+  const interactingRef = useRef(false);
+  const completeThreshold = maxX * 0.85;
+
+  const resetKnob = useCallback(() => {
+    Animated.spring(x, { toValue: 0, useNativeDriver: true }).start();
+  }, [x]);
+
+  const finishInteraction = useCallback(() => {
+    if (interactingRef.current) {
+      interactingRef.current = false;
+      onInteractionChange?.(false);
+    }
+  }, [onInteractionChange]);
+
+  const beginInteraction = useCallback(() => {
+    if (disabled || interactingRef.current) return;
+    interactingRef.current = true;
+    onInteractionChange?.(true);
+  }, [disabled, onInteractionChange]);
+
   useEffect(() => {
     const sub = x.addListener(({ value }) => {
       valueRef.current = value;
@@ -132,34 +152,35 @@ function SlideToStart({
     }
   }, [maxX, x]);
 
-  const pan = useMemo(
+  useEffect(() => () => finishInteraction(), [finishInteraction]);
+
+  const sliderGesture = useMemo(
     () =>
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => !disabled,
-        onStartShouldSetPanResponderCapture: () => !disabled,
-        onMoveShouldSetPanResponder: (_, g) => !disabled && g.dx > 6 && Math.abs(g.dx) > Math.abs(g.dy),
-        onMoveShouldSetPanResponderCapture: (_, g) => !disabled && g.dx > 2 && Math.abs(g.dx) > Math.abs(g.dy),
-        onPanResponderTerminationRequest: () => false,
-        onShouldBlockNativeResponder: () => true,
-        onPanResponderGrant: () => onInteractionChange?.(true),
-        onPanResponderMove: (_, g) => x.setValue(Math.max(0, Math.min(maxX, g.dx))),
-        onPanResponderRelease: () => {
-          onInteractionChange?.(false);
-          if (valueRef.current >= maxX * 0.85) {
+      Gesture.Pan()
+        .enabled(!disabled)
+        .activeOffsetX(8)
+        .failOffsetY([-12, 12])
+        .shouldCancelWhenOutside(false)
+        .onBegin(() => {
+          beginInteraction();
+        })
+        .onUpdate((event) => {
+          if (disabled) return;
+          const next = Math.max(0, Math.min(maxX, event.translationX));
+          x.setValue(next);
+        })
+        .onFinalize(() => {
+          finishInteraction();
+          if (valueRef.current >= completeThreshold) {
             Animated.timing(x, { toValue: maxX, duration: 110, useNativeDriver: true }).start(() => {
               onComplete();
-              Animated.spring(x, { toValue: 0, useNativeDriver: true }).start();
+              resetKnob();
             });
-          } else {
-            Animated.spring(x, { toValue: 0, useNativeDriver: true }).start();
+            return;
           }
-        },
-        onPanResponderTerminate: () => {
-          onInteractionChange?.(false);
-          Animated.spring(x, { toValue: 0, useNativeDriver: true }).start();
-        },
-      }),
-    [disabled, maxX, onComplete, x],
+          resetKnob();
+        }),
+    [beginInteraction, completeThreshold, disabled, finishInteraction, maxX, onComplete, resetKnob, x],
   );
 
   return (
@@ -179,13 +200,15 @@ function SlideToStart({
       ]}
     >
       <Text style={[styles.slideLabel, { color: isDark ? '#d1d5db' : '#374151' }]}>{label}</Text>
-      <Animated.View {...pan.panHandlers} style={[styles.slideKnob, { transform: [{ translateX: x }] }]}>
-        <Image
-          source={require('../../../assets/branding/lumeo_logo_swirl_only.png')}
-          style={styles.slideKnobLogo}
-          resizeMode="contain"
-        />
-      </Animated.View>
+      <GestureDetector gesture={sliderGesture}>
+        <Animated.View style={[styles.slideKnob, { transform: [{ translateX: x }] }]}>
+          <Image
+            source={require('../../../assets/branding/lumeo_logo_swirl_only.png')}
+            style={styles.slideKnobLogo}
+            resizeMode="contain"
+          />
+        </Animated.View>
+      </GestureDetector>
     </View>
   );
 }
