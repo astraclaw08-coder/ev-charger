@@ -400,6 +400,54 @@ export async function chargerRoutes(app: FastifyInstance) {
     return uptime;
   });
 
+  // GET /chargers/:id/connection-events — recent transport lifecycle events (operator only)
+  app.get<{ Params: { id: string }; Querystring: { limit?: string } }>('/chargers/:id/connection-events', {
+    preHandler: [requireOperator, requirePolicy('charger.uptime.read')],
+  }, async (req, reply) => {
+    const resolvedId = await resolveChargerId(req.params.id);
+    if (!resolvedId) return reply.status(404).send({ error: 'Charger not found' });
+
+    const charger = await prisma.charger.findUnique({
+      where: { id: resolvedId },
+      select: { id: true, ocppId: true, siteId: true },
+    });
+    if (!charger) return reply.status(404).send({ error: 'Charger not found' });
+    if (!hasSiteAccess(charger.siteId, req.currentOperator?.claims?.siteIds)) {
+      return reply.status(403).send({
+        error: 'Forbidden',
+        denyReason: { code: 'SITE_OUT_OF_SCOPE', reason: `Site ${charger.siteId} is not in granted siteIds`, policy: 'charger.uptime.read' },
+      });
+    }
+
+    const limit = Math.min(parseInt(req.query.limit ?? '50', 10) || 50, 200);
+    const events = await prisma.chargerConnectionEvent.findMany({
+      where: { chargerId: charger.id },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+    });
+
+    return {
+      chargerId: charger.id,
+      ocppId: charger.ocppId,
+      events: events.map((e: any) => ({
+        id: e.id,
+        event: e.event,
+        sessionId: e.sessionId,
+        connectedAt: e.connectedAt?.toISOString() ?? null,
+        disconnectedAt: e.disconnectedAt?.toISOString() ?? null,
+        durationMs: e.durationMs,
+        closeCode: e.closeCode,
+        closeReason: e.closeReason,
+        remoteAddress: e.remoteAddress,
+        host: e.host,
+        path: e.path,
+        userAgent: e.userAgent,
+        transportMeta: e.transportMeta,
+        createdAt: e.createdAt.toISOString(),
+      })),
+    };
+  });
+
   // GET /chargers/:id/health-assessment — AI-powered charger health diagnostic (operator only)
   app.get<{
     Params: { id: string };
