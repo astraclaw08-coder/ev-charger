@@ -1,0 +1,5 @@
+[phases.setup]
+nixPkgs = ["nodejs_18", "npm-10_x"]
+
+[variables]
+NPM_CONFIG_LEGACY_PEER_DEPS = "true"
