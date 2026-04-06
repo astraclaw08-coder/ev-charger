@@ -166,7 +166,7 @@ function SidebarContent({ location, theme, toggleTheme, onNavClick, notification
         )}
       </div>
 
-      <nav className={cn('flex-1 overflow-y-auto', collapsed ? 'p-2' : 'p-3')}>
+      <nav className={cn('flex-1 overflow-y-auto overflow-x-hidden', collapsed ? 'p-2' : 'p-3')}>
         {NAV.map((item) => {
           const active = item.href === '/overview'
             ? location.pathname === '/overview' || location.pathname === '/'
