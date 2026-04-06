@@ -461,7 +461,7 @@ export default function Dashboard() {
       <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-5">
         <div className="flex items-center gap-4 mb-4">
           <h2 className="text-sm font-semibold text-gray-900 dark:text-slate-100">Fleet Trend</h2>
-          <div className="flex items-center gap-3 text-xs">
+          <div className="flex items-center gap-3 text-xs text-gray-600 dark:text-slate-300">
             <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-blue-500" /> Energy (kWh)</span>
             <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500" /> Revenue ($)</span>
             <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-amber-500" /> Transactions</span>
