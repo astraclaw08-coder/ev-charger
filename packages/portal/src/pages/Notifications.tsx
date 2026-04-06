@@ -81,12 +81,7 @@ export default function Notifications() {
   return (
     <div className="space-y-6">
       <div>
-        <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-slate-400">
-          <a href="/overview" className="hover:text-gray-700 dark:hover:text-slate-200 dark:text-slate-300">Overview</a>
-          <span>/</span>
-          <span className="text-gray-900 dark:text-slate-100">Notifications</span>
-        </div>
-        <h1 className="mt-1 text-xl font-semibold text-gray-900 dark:text-slate-100">Notifications</h1>
+        <h1 className="text-xl font-semibold text-gray-900 dark:text-slate-100">Notifications</h1>
       </div>
 
       <section className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-5">

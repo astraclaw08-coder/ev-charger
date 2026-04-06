@@ -103,12 +103,7 @@ export default function NetworkOps() {
   return (
     <div className="space-y-6">
       <div>
-        <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-slate-400">
-          <Link to="/overview" className="hover:text-gray-700 dark:hover:text-slate-200 dark:text-slate-300">Overview</Link>
-          <span>/</span>
-          <span className="text-gray-900 dark:text-slate-100">Network Ops</span>
-        </div>
-        <h1 className="mt-1 text-2xl font-bold text-gray-900 dark:text-slate-100">Network Reliability Console</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-slate-100">Network Reliability Console</h1>
         <p className="text-sm text-gray-500 dark:text-slate-400">Charger health monitoring, offline triage, remote commands, and incident timeline.</p>
       </div>
 
