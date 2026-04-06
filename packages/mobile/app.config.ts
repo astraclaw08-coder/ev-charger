@@ -21,11 +21,8 @@ const androidPackage = isProd ? 'app.evcharger.app' : isRC ? 'rc.evcharger.app' 
 const defaultApiUrl = isProd || isRC
   ? 'https://api-production-26cf.up.railway.app'
   : 'http://127.0.0.1:3001';
-// For RC/prod, always use the prod API URL — don't let .env override it
-const apiUrl = isProd || isRC
-  ? (process.env.EXPO_PUBLIC_API_URL || defaultApiUrl)
-  : (process.env.EXPO_PUBLIC_API_URL || defaultApiUrl);
-// Guard: if EXPO_PUBLIC_API_URL points to localhost but we're in RC/prod, ignore it
+const apiUrl = process.env.EXPO_PUBLIC_API_URL || defaultApiUrl;
+// RC/prod should never accidentally point at localhost.
 const resolvedApiUrl = (isProd || isRC) && apiUrl.includes('127.0.0.1')
   ? 'https://api-production-26cf.up.railway.app'
   : apiUrl;

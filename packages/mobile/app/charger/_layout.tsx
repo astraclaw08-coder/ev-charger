@@ -21,7 +21,10 @@ export default function ChargerLayout() {
         headerTitle: 'Lumeo',
         headerBackButtonDisplayMode: 'minimal',
         gestureEnabled: false,
+        fullScreenGestureEnabled: false,
       }}
-    />
+    >
+      <Stack.Screen name="detail/[id]" options={{ gestureEnabled: false, fullScreenGestureEnabled: false }} />
+    </Stack>
   );
 }
