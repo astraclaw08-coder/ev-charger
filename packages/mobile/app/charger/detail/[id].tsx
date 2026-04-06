@@ -15,6 +15,7 @@ import {
   Modal,
 } from 'react-native';
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useNavigation, usePreventRemove } from '@react-navigation/native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, type Connector, type Session } from '@/lib/api';
 import { useAppTheme } from '@/theme';
@@ -104,11 +105,13 @@ function SlideToStart({
   disabled,
   isDark,
   onComplete,
+  onInteractionChange,
   label = 'Slide to charge',
 }: {
   disabled?: boolean;
   isDark: boolean;
   onComplete: () => void;
+  onInteractionChange?: (active: boolean) => void;
   label?: string;
 }) {
   const knobSize = 56;
@@ -133,9 +136,15 @@ function SlideToStart({
     () =>
       PanResponder.create({
         onStartShouldSetPanResponder: () => !disabled,
-        onMoveShouldSetPanResponder: () => !disabled,
+        onStartShouldSetPanResponderCapture: () => !disabled,
+        onMoveShouldSetPanResponder: (_, g) => !disabled && g.dx > 6 && Math.abs(g.dx) > Math.abs(g.dy),
+        onMoveShouldSetPanResponderCapture: (_, g) => !disabled && g.dx > 2 && Math.abs(g.dx) > Math.abs(g.dy),
+        onPanResponderTerminationRequest: () => false,
+        onShouldBlockNativeResponder: () => true,
+        onPanResponderGrant: () => onInteractionChange?.(true),
         onPanResponderMove: (_, g) => x.setValue(Math.max(0, Math.min(maxX, g.dx))),
         onPanResponderRelease: () => {
+          onInteractionChange?.(false);
           if (valueRef.current >= maxX * 0.85) {
             Animated.timing(x, { toValue: maxX, duration: 110, useNativeDriver: true }).start(() => {
               onComplete();
@@ -144,6 +153,10 @@ function SlideToStart({
           } else {
             Animated.spring(x, { toValue: 0, useNativeDriver: true }).start();
           }
+        },
+        onPanResponderTerminate: () => {
+          onInteractionChange?.(false);
+          Animated.spring(x, { toValue: 0, useNativeDriver: true }).start();
         },
       }),
     [disabled, maxX, onComplete, x],
@@ -321,6 +334,7 @@ function TopMetricsHero({
 export default function ChargerStartScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const navigation = useNavigation();
   const queryClient = useQueryClient();
   const scrollRef = useRef<ScrollView | null>(null);
   const { isDark } = useAppTheme();
@@ -329,6 +343,7 @@ export default function ChargerStartScreen() {
 
   const [siteExpanded, setSiteExpanded] = useState(false);
   const [manualRefreshing, setManualRefreshing] = useState(false);
+  const [sliderInteracting, setSliderInteracting] = useState(false);
 
   const { data: charger, isLoading, refetch } = useQuery({
     queryKey: ['charger', id],
@@ -380,6 +395,16 @@ export default function ChargerStartScreen() {
   const [awaitingPlugIn, setAwaitingPlugIn] = useState(false);
   const activationPollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activationModalDismissedRef = useRef(false);
+  const flowLocked = sliderInteracting || starting != null || showActivationModal || awaitingPlugIn;
+
+  usePreventRemove(flowLocked, () => {});
+
+  useEffect(() => {
+    navigation.setOptions({
+      gestureEnabled: false,
+      fullScreenGestureEnabled: false,
+    } as any);
+  }, [navigation]);
 
   useEffect(() => {
     if (!isFlowing) return;
@@ -669,6 +694,7 @@ export default function ChargerStartScreen() {
               fontSize: 22,
             } as any,
             gestureEnabled: false,
+            fullScreenGestureEnabled: false,
             headerBackButtonDisplayMode: 'minimal',
             headerLeft: () => (
               <TouchableOpacity onPress={() => router.back()} style={{ paddingHorizontal: 4, paddingVertical: 4 }}>
@@ -741,9 +767,13 @@ export default function ChargerStartScreen() {
             fontSize: 22,
           } as any,
           gestureEnabled: false,
+          fullScreenGestureEnabled: false,
           headerBackButtonDisplayMode: 'minimal',
           headerLeft: () => (
-            <TouchableOpacity onPress={() => router.back()} style={{ paddingHorizontal: 4, paddingVertical: 4 }}>
+            <TouchableOpacity
+              disabled={flowLocked}
+              onPress={() => router.back()}
+              style={{ paddingHorizontal: 4, paddingVertical: 4, opacity: flowLocked ? 0.45 : 1 }}>
               <Ionicons name="chevron-back" size={30} color={isDark ? '#ffffff' : '#111827'} />
             </TouchableOpacity>
           ),
@@ -768,9 +798,10 @@ export default function ChargerStartScreen() {
         key={String(id)}
         ref={scrollRef}
         contentOffset={{ x: 0, y: 0 }}
+        scrollEnabled={!flowLocked}
         style={[styles.container, { backgroundColor: isDark ? '#030712' : '#f8fafc' }]}
         contentContainerStyle={styles.content}
-        refreshControl={<RefreshControl refreshing={manualRefreshing} onRefresh={onPullRefresh} />}
+        refreshControl={<RefreshControl refreshing={manualRefreshing} onRefresh={onPullRefresh} enabled={!flowLocked} />}
       >
         <TopMetricsHero
           isDark={isDark}
@@ -858,6 +889,7 @@ export default function ChargerStartScreen() {
             <SlideToStart
               isDark={isDark}
               disabled={activeSession ? stopMutation.isPending : (starting != null || !selectedConnector)}
+              onInteractionChange={setSliderInteracting}
               label={sliderLabel}
               onComplete={() => {
                 if (activeSession) {
