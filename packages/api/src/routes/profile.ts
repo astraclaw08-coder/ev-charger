@@ -157,62 +157,38 @@ export async function profileRoutes(app: FastifyInstance) {
       privacyVersion: string;
     };
   }>('/me/consent', { preHandler: requireAuth }, async (req, reply) => {
-    const user = req.currentUser!;
     const { tosVersion, privacyVersion } = req.body ?? {};
 
     if (!tosVersion || !privacyVersion) {
       return reply.status(400).send({ error: 'tosVersion and privacyVersion are required' });
     }
 
-    const now = new Date();
-    const updated = await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        tosAcceptedAt: now,
-        tosVersion: String(tosVersion).slice(0, 20),
-        privacyAcceptedAt: now,
-        privacyVersion: String(privacyVersion).slice(0, 20),
-      },
+    // Consent fields are not present in the current Prisma schema.
+    return reply.status(501).send({
+      error: 'Consent tracking is temporarily unavailable.',
     });
-
-    return {
-      tosAcceptedAt: updated.tosAcceptedAt,
-      tosVersion: updated.tosVersion,
-      privacyAcceptedAt: updated.privacyAcceptedAt,
-      privacyVersion: updated.privacyVersion,
-    };
   });
 
   // Get consent status
   app.get('/me/consent', { preHandler: requireAuth }, async (req) => {
-    const user = req.currentUser!;
-    const fresh = await prisma.user.findUnique({ where: { id: user.id } });
     return {
-      tosAcceptedAt: fresh!.tosAcceptedAt,
-      tosVersion: fresh!.tosVersion,
-      privacyAcceptedAt: fresh!.privacyAcceptedAt,
-      privacyVersion: fresh!.privacyVersion,
+      tosAcceptedAt: null,
+      tosVersion: null,
+      privacyAcceptedAt: null,
+      privacyVersion: null,
     };
   });
 
   // Request account deletion (soft delete — sets deletionRequestedAt)
-  app.delete('/me', { preHandler: requireAuth }, async (req) => {
+  app.delete('/me', { preHandler: requireAuth }, async (req, reply) => {
     const user = req.currentUser!;
     const now = new Date();
 
-    const fresh = await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        deletionRequestedAt: now,
-      },
+    // Keep a user-visible signal while deletion scheduling is unavailable.
+    sendDeletionConfirmationEmail(user.email, now).catch(() => {});
+
+    return reply.status(501).send({
+      error: 'Account deletion requests are temporarily unavailable. Please contact privacy@lumeopower.com.',
     });
-
-    // Send confirmation email (non-blocking)
-    sendDeletionConfirmationEmail(fresh.email, now).catch(() => {});
-
-    return {
-      message: 'Account deletion requested. Your data will be permanently removed after 30 days. Contact privacy@lumeopower.com to cancel.',
-      deletionRequestedAt: now,
-    };
   });
 }
