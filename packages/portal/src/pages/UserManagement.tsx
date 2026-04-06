@@ -5,6 +5,7 @@ import { cn } from '../lib/utils';
 
 // Must match shared RBAC_ROLES. Only super_admin should assign admin-class roles.
 const ASSIGNABLE_ROLES = [
+  'super_admin',
   'admin',
   'owner',
   'operator',
@@ -15,6 +16,7 @@ const ASSIGNABLE_ROLES = [
 
 const ROLE_LABELS: Record<string, string> = {
   super_admin: 'Super Admin',
+  admin: 'Admin',
   owner: 'Owner',
   operator: 'Operator',
   customer_service: 'Customer Service',
