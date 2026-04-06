@@ -125,6 +125,7 @@ model Charger {
   stateTransitions ConnectorStateTransition[]
   ocppLogs        OcppLog[]
   uptimeEvents    UptimeEvent[]
+  connectionEvents ChargerConnectionEvent[]
   uptimeDaily     UptimeDaily[]
   outboxEvents    OcppEventOutbox[]
   chargingProfiles SmartChargingProfile[]
@@ -501,6 +502,31 @@ model UptimeEvent {
   @@index([chargerId, createdAt])
   @@index([createdAt])
   @@index([event])
+}
+
+model ChargerConnectionEvent {
+  id              String   @id @default(uuid())
+  chargerId        String
+  charger          Charger  @relation(fields: [chargerId], references: [id], onDelete: Cascade)
+  ocppId           String
+  event            String   // CONNECTED | DISCONNECTED
+  sessionId        String?
+  connectedAt      DateTime?
+  disconnectedAt   DateTime?
+  durationMs       Int?
+  closeCode        Int?
+  closeReason      String?
+  remoteAddress    String?
+  host             String?
+  path             String?
+  userAgent        String?
+  transportMeta    Json?
+  createdAt        DateTime @default(now())
+
+  @@index([chargerId, createdAt])
+  @@index([ocppId, createdAt])
+  @@index([event, createdAt])
+  @@index([sessionId])
 }
 
 model UptimeDaily {

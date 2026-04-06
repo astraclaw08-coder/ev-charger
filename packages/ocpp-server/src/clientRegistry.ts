@@ -11,6 +11,14 @@ interface ClientEntry {
 
 const clients = new Map<string, ClientEntry>();
 
+function describeClient(client: any): string {
+  const identity = client?.identity ?? 'n/a';
+  const sessionChargerId = client?.session?.chargerId ?? 'n/a';
+  const wsReadyState = client?._ws?.readyState;
+  const hasCall = typeof client?.call === 'function';
+  return `identity=${identity} db=${sessionChargerId} wsReady=${wsReadyState ?? 'n/a'} hasCall=${hasCall}`;
+}
+
 export const clientRegistry = {
   /**
    * Register a new client. If an existing session exists for the same identity,
@@ -23,10 +31,8 @@ export const clientRegistry = {
       console.warn(
         `[Registry] Superseding existing session for ${ocppId} ` +
         `(was connected ${durationSec}s, boot=${existing.bootReceived}, hb=${existing.heartbeatCount}). ` +
-        `Closing old socket in 5s.`,
+        `old={${describeClient(existing.client)}} new={${describeClient(client)}} Closing old socket in 5s.`,
       );
-      // Close the stale socket after a short grace period to avoid racing
-      // with any in-flight messages on the old connection.
       const staleClient = existing.client;
       setTimeout(() => {
         try {
@@ -44,58 +50,88 @@ export const clientRegistry = {
       bootReceived: false,
       heartbeatCount: 0,
     });
-    console.log(`[Registry] + ${ocppId} connected. Total online: ${clients.size}`);
+    console.log(`[Registry] + ${ocppId} connected. ${describeClient(client)} Total online: ${clients.size}`);
   },
 
   /**
    * Unregister and log connection lifetime stats for diagnostics.
    */
-  unregister(ocppId: string): void {
+  unregister(ocppId: string, client?: any): void {
     const entry = clients.get(ocppId);
-    if (entry) {
-      const durationSec = ((Date.now() - entry.connectedAt) / 1000).toFixed(1);
-      console.log(
-        `[Registry] - ${ocppId} disconnected after ${durationSec}s ` +
-        `(boot=${entry.bootReceived}, hb=${entry.heartbeatCount}). ` +
-        `Total online: ${clients.size - 1}`,
-      );
-    } else {
+    if (!entry) {
       console.log(`[Registry] - ${ocppId} disconnected (was not in registry). Total online: ${clients.size}`);
+      return;
     }
+
+    if (client && entry.client && entry.client !== client) {
+      console.warn(
+        `[Registry] ignore stale disconnect for ${ocppId}. ` +
+        `incoming={${describeClient(client)}} current={${describeClient(entry.client)}}`,
+      );
+      return;
+    }
+
+    const durationSec = ((Date.now() - entry.connectedAt) / 1000).toFixed(1);
+    console.log(
+      `[Registry] - ${ocppId} disconnected after ${durationSec}s ` +
+      `(boot=${entry.bootReceived}, hb=${entry.heartbeatCount}) ` +
+      `${describeClient(entry.client)} Total online: ${clients.size - 1}`,
+    );
     clients.delete(ocppId);
   },
 
   get(ocppId: string): any | undefined {
-    return clients.get(ocppId)?.client;
+    const entry = clients.get(ocppId);
+    const client = entry?.client;
+    if (!client) return undefined;
+
+    const wsReadyState = client?._ws?.readyState;
+    if (typeof wsReadyState === 'number' && wsReadyState !== 1) {
+      console.warn(`[Registry] get(${ocppId}) found non-open client; evicting stale entry. ${describeClient(client)}`);
+      clients.delete(ocppId);
+      return undefined;
+    }
+    return client;
   },
 
   has(ocppId: string): boolean {
-    return clients.has(ocppId);
+    return !!this.get(ocppId);
   },
 
-  /** Mark that a BootNotification was received for this session. */
   markBoot(ocppId: string): void {
     const entry = clients.get(ocppId);
     if (entry) entry.bootReceived = true;
   },
 
-  /** Increment heartbeat counter for this session. */
   markHeartbeat(ocppId: string): void {
     const entry = clients.get(ocppId);
     if (entry) entry.heartbeatCount++;
   },
 
-  /** Get connection stats for a specific charger. */
   getStats(ocppId: string): { connectedAt: number; bootReceived: boolean; heartbeatCount: number } | null {
     const entry = clients.get(ocppId);
     if (!entry) return null;
     return { connectedAt: entry.connectedAt, bootReceived: entry.bootReceived, heartbeatCount: entry.heartbeatCount };
   },
 
+  debug(ocppId: string): Record<string, unknown> | null {
+    const entry = clients.get(ocppId);
+    if (!entry) return null;
+    return {
+      ocppId,
+      connectedAt: entry.connectedAt,
+      bootReceived: entry.bootReceived,
+      heartbeatCount: entry.heartbeatCount,
+      description: describeClient(entry.client),
+    };
+  },
+
   all(): Map<string, any> {
-    // Return client objects only for backward compat
     const result = new Map<string, any>();
-    for (const [k, v] of clients) result.set(k, v.client);
+    for (const [k, v] of clients) {
+      const client = this.get(k);
+      if (client) result.set(k, client);
+    }
     return result;
   },
 };

@@ -78,9 +78,33 @@ export async function startServer(port: number): Promise<OcppServerHandle> {
   server.on('client', async (client: any) => {
     const ocppId: string    = client.identity;
     const chargerId: string = client.session?.chargerId ?? '';
+    const connectedAt = new Date();
+    const req = client?._ws?._socket?.parser?.incoming ?? client?._socket?.parser?.incoming ?? null;
+    const sessionId = `${ocppId}:${connectedAt.getTime()}`;
+    client.session = { ...(client.session ?? {}), sessionId, connectedAt: connectedAt.toISOString() };
 
     console.log(`[Server] Connected: ${ocppId} (db=${chargerId})`);
     clientRegistry.register(ocppId, client);
+
+    prisma.chargerConnectionEvent.create({
+      data: {
+        chargerId,
+        ocppId,
+        event: 'CONNECTED',
+        sessionId,
+        connectedAt,
+        remoteAddress: req?.headers?.['cf-connecting-ip'] || req?.headers?.['x-forwarded-for'] || req?.socket?.remoteAddress || null,
+        host: req?.headers?.host || null,
+        path: req?.url || null,
+        userAgent: req?.headers?.['user-agent'] || null,
+        transportMeta: {
+          protocol: req?.headers?.['sec-websocket-protocol'] ?? null,
+          forwardedFor: req?.headers?.['x-forwarded-for'] ?? null,
+        },
+      },
+    }).catch((err: unknown) => {
+      console.warn('[ConnectionEvent] failed to persist CONNECTED event', { chargerId, ocppId, err });
+    });
 
     // Trigger smart charging apply 10s after connect to handle reconnections
     // that skip BootNotification (e.g. after server redeploy). The delay
@@ -228,7 +252,11 @@ export async function startServer(port: number): Promise<OcppServerHandle> {
       })();
 
       console.warn(`[Server] Disconnected: ${ocppId} code=${codeText} reason=${reasonText || 'n/a'} raw=${safeRaw}`);
-      clientRegistry.unregister(ocppId);
+      clientRegistry.unregister(ocppId, client);
+
+      const disconnectedAt = new Date();
+      const connectedAtMs = client?.session?.connectedAt ? Date.parse(client.session.connectedAt) : NaN;
+      const durationMs = Number.isFinite(connectedAtMs) ? Math.max(0, disconnectedAt.getTime() - connectedAtMs) : null;
 
       prisma.charger.update({
         where: { id: chargerId },
@@ -242,6 +270,23 @@ export async function startServer(port: number): Promise<OcppServerHandle> {
           reason: 'WebSocket disconnected',
         },
       }).catch(console.error);
+
+      prisma.chargerConnectionEvent.create({
+        data: {
+          chargerId,
+          ocppId,
+          event: 'DISCONNECTED',
+          sessionId: client?.session?.sessionId ?? null,
+          connectedAt: Number.isFinite(connectedAtMs) ? new Date(connectedAtMs) : null,
+          disconnectedAt,
+          durationMs,
+          closeCode: parsedCode ?? null,
+          closeReason: reasonText || null,
+          transportMeta: { raw: safeRaw },
+        },
+      }).catch((err: unknown) => {
+        console.warn('[ConnectionEvent] failed to persist DISCONNECTED event', { chargerId, ocppId, err });
+      });
     });
   });
 
