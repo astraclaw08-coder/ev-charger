@@ -1147,8 +1147,11 @@ export default function SiteDetail() {
         const periodSessions = allSessions.filter((s) => new Date(s.startedAt).getTime() >= periodCutoff);
         const completedSessions = periodSessions.filter((s) => s.status === 'COMPLETED');
         const failedSessions = periodSessions.filter((s) => s.status === 'FAILED');
+        const activeSess = periodSessions.filter((s) => s.status === 'ACTIVE');
         const totalSessions = periodSessions.length;
-        const successRate = totalSessions > 0 ? (completedSessions.length / totalSessions) * 100 : 0;
+        // Success rate: only count finished sessions (exclude in-progress ACTIVE)
+        const finishedSessions = completedSessions.length + failedSessions.length;
+        const successRate = finishedSessions > 0 ? (completedSessions.length / finishedSessions) * 100 : (totalSessions > 0 ? 0 : 100);
 
         // Avg session duration (completed only)
         const durations = completedSessions
@@ -1174,7 +1177,8 @@ export default function SiteDetail() {
           const revenue = completed.filter((s) => s.effectiveAmountCents != null).reduce((sum, s) => sum + s.effectiveAmountCents! / 100, 0);
           const durs = completed.filter((s) => s.stoppedAt).map((s) => (new Date(s.stoppedAt!).getTime() - new Date(s.startedAt).getTime()) / 60000);
           const avgDur = durs.length > 0 ? durs.reduce((a, b) => a + b, 0) / durs.length : 0;
-          const rate = sessions.length > 0 ? (completed.length / sessions.length) * 100 : 0;
+          const finished = completed.length + failed.length;
+          const rate = finished > 0 ? (completed.length / finished) * 100 : (sessions.length > 0 ? 0 : 100);
           const uptime = chargerUptime[c.id];
           return { charger: c, sessions: sessions.length, completed: completed.length, failed: failed.length, kwh, revenue, avgDur, rate, uptime };
         });
@@ -1185,7 +1189,7 @@ export default function SiteDetail() {
         <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
           <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Total Sessions</p>
           <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-slate-100">{totalSessions}</p>
-          <p className="text-xs text-gray-400 dark:text-slate-500">{completedSessions.length} completed · {failedSessions.length} failed</p>
+          <p className="text-xs text-gray-400 dark:text-slate-500">{completedSessions.length} completed · {failedSessions.length} failed{activeSess.length > 0 ? ` · ${activeSess.length} active` : ''}</p>
         </div>
         <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
           <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Success Rate</p>
