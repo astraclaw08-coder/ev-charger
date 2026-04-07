@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { shortId } from '../lib/shortId';
 import { Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { createApiClient, type SiteDetail as SiteDetailType, type ChargerUptime, type SiteUptime, type Analytics as SiteAnalytics, type DailyEntry } from '../api/client';
@@ -13,6 +13,7 @@ import { usePortalTheme } from '../theme/ThemeContext';
 import { PageHeader, TabBar, useChartTheme } from '../components/ui';
 import { PageSkeleton } from '../components/ui/LoadingState';
 import { ErrorState } from '../components/ui';
+import SiteLoadManagement from '../components/loadManagement/SiteLoadManagement';
 
 type RangePreset = '7d' | '30d' | '60d';
 
@@ -379,7 +380,8 @@ export default function SiteDetail() {
   const [savedSafetyLimits, setSavedSafetyLimits] = useState<typeof safetyLimits | null>(null);
   const [safetyMsg, setSafetyMsg] = useState('');
 
-  const [activeTab, setActiveTab] = useState('chargers');
+  const [searchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'chargers');
 
   const hasTariffEdits = !savedTariff || tariffFingerprint(tariff) !== tariffFingerprint(savedTariff);
 
@@ -609,6 +611,7 @@ export default function SiteDetail() {
         tabs={[
           { id: 'chargers', label: `Chargers (${site.chargers.length})` },
           { id: 'pricing', label: 'Pricing' },
+          { id: 'load-management', label: 'Load Management' },
           { id: 'analytics', label: 'Analytics' },
           { id: 'settings', label: 'Settings' },
         ]}
@@ -1125,6 +1128,9 @@ export default function SiteDetail() {
       </div>
 
       </>}
+
+      {/* ── Load Management Tab ── */}
+      {activeTab === 'load-management' && <SiteLoadManagement siteId={site.id} />}
 
       {/* ── Analytics Tab ── */}
       {activeTab === 'analytics' && <>
