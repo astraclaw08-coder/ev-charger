@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { shortId } from '../lib/shortId';
 import { Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { createApiClient, type SiteDetail as SiteDetailType, type ChargerUptime, type SiteUptime, type Analytics as SiteAnalytics, type DailyEntry } from '../api/client';
+import { createApiClient, type SiteDetail as SiteDetailType, type ChargerUptime, type SiteUptime, type Analytics as SiteAnalytics, type DailyEntry, type SessionRecord } from '../api/client';
 import { useToken } from '../auth/TokenContext';
 import ChargerMap from '../components/ChargerMap';
 import StatusBadge from '../components/StatusBadge';
@@ -355,6 +355,7 @@ export default function SiteDetail() {
   const [trend, setTrend] = useState<Array<{ date: string; label: string; sessions: number; kwhDelivered: number; revenueUsd: number }>>([]);
   const [activeSessions, setActiveSessions] = useState(0);
   const [siteUtilizationPct, setSiteUtilizationPct] = useState<number | null>(null);
+  const [perChargerSessions, setPerChargerSessions] = useState<Record<string, SessionRecord[]>>({});
 
   const [tariff, setTariff] = useState<TariffConfig>({ pricePerKwhUsd: 0.35, idleFeePerMinUsd: 0.08, activationFeeUsd: 0, gracePeriodMin: 10, softwareVendorFeeMode: 'none', softwareVendorFeeValue: 0, softwareFeeIncludesActivation: true, mode: 'flat', buckets: DEFAULT_BUCKETS, profiles: [], windows: [] });
   const [savedTariff, setSavedTariff] = useState<TariffConfig | null>(null);
@@ -479,6 +480,11 @@ export default function SiteDetail() {
         chargerStatuses.filter(Boolean).reduce((sum, ch) => sum + (ch?.connectors.filter((c) => c.activeSession).length ?? 0), 0),
       );
 
+      // Store per-charger sessions for analytics breakdown
+      const sessMap: Record<string, SessionRecord[]> = {};
+      data.chargers.forEach((c, i) => { sessMap[c.id] = chargerSessions[i] ?? []; });
+      setPerChargerSessions(sessMap);
+
       const periodEndMs = Date.now();
       const periodStartMs = periodEndMs - (periodDays * 24 * 60 * 60 * 1000);
       const actualChargingSeconds = chargerSessions
@@ -590,7 +596,6 @@ export default function SiteDetail() {
               <option value="60d">Last 60 days</option>
             </select>
             <button onClick={() => setShowEditSite((v) => !v)} className="rounded-lg border border-gray-300 dark:border-slate-600 px-3 py-2 text-sm font-medium text-gray-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors">Edit Site</button>
-            <Link to={`/sites/${site.id}/analytics`} className="rounded-lg border border-gray-300 dark:border-slate-600 px-3 py-2 text-sm font-medium text-gray-600 dark:text-slate-300 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors">Analytics</Link>
             <button onClick={() => setShowAddCharger(true)} className="rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-500 shadow-sm transition-colors">+ Add Charger</button>
           </div>
         }
@@ -1133,8 +1138,78 @@ export default function SiteDetail() {
       {activeTab === 'load-management' && <SiteLoadManagement siteId={site.id} />}
 
       {/* ── Analytics Tab ── */}
-      {activeTab === 'analytics' && <>
-      {/* ── Trend chart (dashboard style) ── */}
+      {activeTab === 'analytics' && (() => {
+        // Aggregate per-charger stats from session data
+        const periodDays = rangePreset === '7d' ? 7 : rangePreset === '30d' ? 30 : 60;
+        const periodCutoff = Date.now() - periodDays * 24 * 60 * 60 * 1000;
+
+        const allSessions = Object.values(perChargerSessions).flat();
+        const periodSessions = allSessions.filter((s) => new Date(s.startedAt).getTime() >= periodCutoff);
+        const completedSessions = periodSessions.filter((s) => s.status === 'COMPLETED');
+        const failedSessions = periodSessions.filter((s) => s.status === 'FAILED');
+        const totalSessions = periodSessions.length;
+        const successRate = totalSessions > 0 ? (completedSessions.length / totalSessions) * 100 : 0;
+
+        // Avg session duration (completed only)
+        const durations = completedSessions
+          .filter((s) => s.stoppedAt)
+          .map((s) => (new Date(s.stoppedAt!).getTime() - new Date(s.startedAt).getTime()) / 60000);
+        const avgDurationMin = durations.length > 0 ? durations.reduce((a, b) => a + b, 0) / durations.length : 0;
+
+        // Avg kWh per session
+        const kwhValues = completedSessions.filter((s) => s.kwhDelivered != null).map((s) => s.kwhDelivered!);
+        const avgKwh = kwhValues.length > 0 ? kwhValues.reduce((a, b) => a + b, 0) / kwhValues.length : 0;
+        const totalKwhAll = kwhValues.reduce((a, b) => a + b, 0);
+
+        // Avg revenue per session
+        const revenueValues = completedSessions.filter((s) => s.effectiveAmountCents != null).map((s) => s.effectiveAmountCents! / 100);
+        const avgRevenue = revenueValues.length > 0 ? revenueValues.reduce((a, b) => a + b, 0) / revenueValues.length : 0;
+
+        // Per-charger breakdown
+        const chargerBreakdown = site.chargers.map((c) => {
+          const sessions = (perChargerSessions[c.id] ?? []).filter((s) => new Date(s.startedAt).getTime() >= periodCutoff);
+          const completed = sessions.filter((s) => s.status === 'COMPLETED');
+          const failed = sessions.filter((s) => s.status === 'FAILED');
+          const kwh = completed.filter((s) => s.kwhDelivered != null).reduce((sum, s) => sum + s.kwhDelivered!, 0);
+          const revenue = completed.filter((s) => s.effectiveAmountCents != null).reduce((sum, s) => sum + s.effectiveAmountCents! / 100, 0);
+          const durs = completed.filter((s) => s.stoppedAt).map((s) => (new Date(s.stoppedAt!).getTime() - new Date(s.startedAt).getTime()) / 60000);
+          const avgDur = durs.length > 0 ? durs.reduce((a, b) => a + b, 0) / durs.length : 0;
+          const rate = sessions.length > 0 ? (completed.length / sessions.length) * 100 : 0;
+          const uptime = chargerUptime[c.id];
+          return { charger: c, sessions: sessions.length, completed: completed.length, failed: failed.length, kwh, revenue, avgDur, rate, uptime };
+        });
+
+        return <>
+      {/* ── Site KPI Summary ── */}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Total Sessions</p>
+          <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-slate-100">{totalSessions}</p>
+          <p className="text-xs text-gray-400 dark:text-slate-500">{completedSessions.length} completed · {failedSessions.length} failed</p>
+        </div>
+        <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Success Rate</p>
+          <p className={`mt-1 text-2xl font-bold ${successRate >= 90 ? 'text-green-600 dark:text-green-400' : successRate >= 70 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'}`}>{successRate.toFixed(1)}%</p>
+          <p className="text-xs text-gray-400 dark:text-slate-500">({rangePreset})</p>
+        </div>
+        <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Avg Session</p>
+          <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-slate-100">{avgDurationMin < 60 ? `${avgDurationMin.toFixed(0)} min` : `${(avgDurationMin / 60).toFixed(1)} hr`}</p>
+          <p className="text-xs text-gray-400 dark:text-slate-500">{avgKwh.toFixed(1)} kWh avg · ${avgRevenue.toFixed(2)} avg</p>
+        </div>
+        <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Energy Delivered</p>
+          <p className="mt-1 text-2xl font-bold text-blue-600 dark:text-blue-400">{totalKwhAll.toFixed(1)} kWh</p>
+          <p className="text-xs text-gray-400 dark:text-slate-500">{(totalKwhAll / Math.max(periodDays, 1)).toFixed(1)} kWh/day avg</p>
+        </div>
+        <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Utilization</p>
+          <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-slate-100">{siteUtilizationPct != null ? `${siteUtilizationPct.toFixed(1)}%` : '—'}</p>
+          <p className="text-xs text-gray-400 dark:text-slate-500">{site.chargers.length} charger(s) · {rangePreset}</p>
+        </div>
+      </div>
+
+      {/* ── Trend chart ── */}
       <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
         <p className="text-sm font-semibold">
           <span className="text-blue-600">Energy (kWh)</span>
@@ -1164,17 +1239,135 @@ export default function SiteDetail() {
         </div>
       </div>
 
-      {/* ── Uptime summary ── */}
+      {/* ── Site Uptime ── */}
       {siteUptime && (
         <div className="grid gap-3 sm:grid-cols-4">
-          <div className="rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 text-center"><p className="text-xs text-gray-500 dark:text-slate-400">Uptime 24h</p><p className="mt-1 text-lg font-semibold text-gray-900 dark:text-slate-100">{siteUptime.uptimePercent24h.toFixed(1)}%</p></div>
-          <div className="rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 text-center"><p className="text-xs text-gray-500 dark:text-slate-400">Uptime 7d</p><p className="mt-1 text-lg font-semibold text-gray-900 dark:text-slate-100">{siteUptime.uptimePercent7d.toFixed(1)}%</p></div>
-          <div className="rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 text-center"><p className="text-xs text-gray-500 dark:text-slate-400">Uptime 30d</p><p className="mt-1 text-lg font-semibold text-gray-900 dark:text-slate-100">{siteUptime.uptimePercent30d.toFixed(1)}%</p></div>
-          <div className="rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 text-center"><p className="text-xs text-gray-500 dark:text-slate-400">Total chargers</p><p className="mt-1 text-lg font-semibold text-gray-900 dark:text-slate-100">{site.chargers.length}</p></div>
+          <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 text-center"><p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Uptime 24h</p><p className="mt-1 text-2xl font-bold text-gray-900 dark:text-slate-100">{siteUptime.uptimePercent24h.toFixed(1)}%</p></div>
+          <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 text-center"><p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Uptime 7d</p><p className="mt-1 text-2xl font-bold text-gray-900 dark:text-slate-100">{siteUptime.uptimePercent7d.toFixed(1)}%</p></div>
+          <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 text-center"><p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Uptime 30d</p><p className="mt-1 text-2xl font-bold text-gray-900 dark:text-slate-100">{siteUptime.uptimePercent30d.toFixed(1)}%</p></div>
+          <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 text-center"><p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Total Chargers</p><p className="mt-1 text-2xl font-bold text-gray-900 dark:text-slate-100">{site.chargers.length}</p></div>
         </div>
       )}
 
-      </>}
+      {/* ── Charger Performance Breakdown ── */}
+      <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm">
+        <div className="border-b border-gray-200 dark:border-slate-700 px-5 py-4">
+          <h2 className="text-sm font-semibold text-gray-900 dark:text-slate-100">Charger Performance Breakdown</h2>
+          <p className="mt-0.5 text-xs text-gray-500 dark:text-slate-400">Per-charger metrics for the selected period ({rangePreset}).</p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-100 dark:border-slate-800 bg-gray-50 dark:bg-slate-800/40 text-left text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">
+                <th className="px-5 py-3">Charger</th>
+                <th className="px-5 py-3">Status</th>
+                <th className="px-5 py-3 text-right">Sessions</th>
+                <th className="px-5 py-3 text-right">Success Rate</th>
+                <th className="px-5 py-3 text-right">Energy (kWh)</th>
+                <th className="px-5 py-3 text-right">Revenue</th>
+                <th className="px-5 py-3 text-right">Avg Duration</th>
+                <th className="px-5 py-3 text-right">Uptime 30d</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50 dark:divide-slate-800">
+              {chargerBreakdown.map((row) => (
+                <tr key={row.charger.id} className="hover:bg-gray-50 dark:hover:bg-slate-800/60">
+                  <td className="px-5 py-3">
+                    <Link to={`/chargers/${row.charger.id}`} className="font-mono text-xs font-semibold text-brand-700 dark:text-brand-300 hover:underline">{row.charger.ocppId}</Link>
+                  </td>
+                  <td className="px-5 py-3">
+                    <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${row.charger.status === 'ONLINE' ? 'text-green-600 dark:text-green-400' : row.charger.status === 'FAULTED' ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-slate-400'}`}>
+                      <span className={`h-2 w-2 rounded-full ${row.charger.status === 'ONLINE' ? 'bg-green-500' : row.charger.status === 'FAULTED' ? 'bg-red-500' : 'bg-gray-300 dark:bg-slate-600'}`} />
+                      {row.charger.status}
+                    </span>
+                  </td>
+                  <td className="px-5 py-3 text-right">
+                    <span className="font-medium text-gray-900 dark:text-slate-100">{row.sessions}</span>
+                    {row.failed > 0 && <span className="ml-1 text-[11px] text-red-500">({row.failed} failed)</span>}
+                  </td>
+                  <td className="px-5 py-3 text-right">
+                    <span className={`font-medium ${row.rate >= 90 ? 'text-green-600 dark:text-green-400' : row.rate >= 70 ? 'text-amber-600 dark:text-amber-400' : row.sessions === 0 ? 'text-gray-400 dark:text-slate-500' : 'text-red-600 dark:text-red-400'}`}>
+                      {row.sessions > 0 ? `${row.rate.toFixed(0)}%` : '—'}
+                    </span>
+                  </td>
+                  <td className="px-5 py-3 text-right font-medium text-gray-900 dark:text-slate-100">{row.kwh > 0 ? row.kwh.toFixed(1) : '—'}</td>
+                  <td className="px-5 py-3 text-right font-medium text-gray-900 dark:text-slate-100">{row.revenue > 0 ? `$${row.revenue.toFixed(2)}` : '—'}</td>
+                  <td className="px-5 py-3 text-right text-gray-700 dark:text-slate-300">
+                    {row.avgDur > 0 ? (row.avgDur < 60 ? `${row.avgDur.toFixed(0)} min` : `${(row.avgDur / 60).toFixed(1)} hr`) : '—'}
+                  </td>
+                  <td className="px-5 py-3 text-right">
+                    {row.uptime ? (
+                      <span className={`font-medium ${row.uptime.uptimePercent30d >= 95 ? 'text-green-600 dark:text-green-400' : row.uptime.uptimePercent30d >= 80 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'}`}>
+                        {row.uptime.uptimePercent30d.toFixed(1)}%
+                      </span>
+                    ) : <span className="text-gray-400 dark:text-slate-500">—</span>}
+                  </td>
+                </tr>
+              ))}
+              {chargerBreakdown.length === 0 && (
+                <tr><td colSpan={8} className="px-5 py-8 text-center text-sm text-gray-400 dark:text-slate-500">No chargers at this site.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* ── Charger Uptime Comparison ── */}
+      {Object.keys(chargerUptime).length > 0 && (
+        <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm">
+          <div className="border-b border-gray-200 dark:border-slate-700 px-5 py-4">
+            <h2 className="text-sm font-semibold text-gray-900 dark:text-slate-100">Charger Uptime Comparison</h2>
+            <p className="mt-0.5 text-xs text-gray-500 dark:text-slate-400">Side-by-side uptime across 24h, 7d, and 30d windows.</p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-100 dark:border-slate-800 bg-gray-50 dark:bg-slate-800/40 text-left text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">
+                  <th className="px-5 py-3">Charger</th>
+                  <th className="px-5 py-3">Current Status</th>
+                  <th className="px-5 py-3 text-right">24h</th>
+                  <th className="px-5 py-3 text-right">7d</th>
+                  <th className="px-5 py-3 text-right">30d</th>
+                  <th className="px-5 py-3">Last Online</th>
+                  <th className="px-5 py-3 text-right">Recent Incidents</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50 dark:divide-slate-800">
+                {site.chargers.map((c) => {
+                  const up = chargerUptime[c.id];
+                  if (!up) return null;
+                  const uptimeColor = (pct: number) => pct >= 95 ? 'text-green-600 dark:text-green-400' : pct >= 80 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400';
+                  const recentIncidents = up.incidents?.filter((inc) => inc.event === 'OFFLINE' || inc.event === 'FAULTED').length ?? 0;
+                  return (
+                    <tr key={c.id} className="hover:bg-gray-50 dark:hover:bg-slate-800/60">
+                      <td className="px-5 py-3 font-mono text-xs font-semibold text-gray-800 dark:text-slate-200">{c.ocppId}</td>
+                      <td className="px-5 py-3">
+                        <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${up.currentStatus === 'ONLINE' ? 'text-green-600 dark:text-green-400' : up.currentStatus === 'FAULTED' ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-slate-400'}`}>
+                          <span className={`h-2 w-2 rounded-full ${up.currentStatus === 'ONLINE' ? 'bg-green-500' : up.currentStatus === 'FAULTED' ? 'bg-red-500' : 'bg-gray-300 dark:bg-slate-600'}`} />
+                          {up.currentStatus}
+                        </span>
+                      </td>
+                      <td className={`px-5 py-3 text-right font-medium ${uptimeColor(up.uptimePercent24h)}`}>{up.uptimePercent24h.toFixed(1)}%</td>
+                      <td className={`px-5 py-3 text-right font-medium ${uptimeColor(up.uptimePercent7d)}`}>{up.uptimePercent7d.toFixed(1)}%</td>
+                      <td className={`px-5 py-3 text-right font-medium ${uptimeColor(up.uptimePercent30d)}`}>{up.uptimePercent30d.toFixed(1)}%</td>
+                      <td className="px-5 py-3 text-xs text-gray-500 dark:text-slate-400">{up.lastOnlineAt ? new Date(up.lastOnlineAt).toLocaleString() : '—'}</td>
+                      <td className="px-5 py-3 text-right">
+                        {recentIncidents > 0 ? (
+                          <span className="rounded-full bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 px-2 py-0.5 text-[11px] font-medium text-red-600 dark:text-red-400">{recentIncidents}</span>
+                        ) : (
+                          <span className="text-xs text-gray-400 dark:text-slate-500">0</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      </>; })()}
 
       {/* ── Settings Tab ── */}
       {activeTab === 'settings' && <>
