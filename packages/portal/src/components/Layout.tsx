@@ -375,7 +375,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       </div>
 
       {/* Main content */}
-      <main className="flex flex-1 flex-col overflow-auto bg-gray-50 dark:bg-slate-950 pt-14 lg:pt-0">
+      <main className="flex flex-1 min-w-0 flex-col overflow-x-hidden overflow-y-auto bg-gray-50 dark:bg-slate-950 pt-14 lg:pt-0">
         <div className="mx-auto w-full max-w-6xl flex-1 p-4 sm:p-6 page-enter">{children}</div>
         <footer className="mx-auto mt-auto w-full max-w-6xl px-4 sm:px-6 pb-6 pt-2 flex items-center justify-center gap-4 text-xs text-gray-400 dark:text-slate-600">
           <span>© {new Date().getFullYear()} Lumeo Power</span>
