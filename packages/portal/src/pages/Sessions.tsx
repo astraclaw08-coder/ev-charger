@@ -308,9 +308,7 @@ function ReceiptModal({ row, onClose }: { row: EnrichedTransaction | null; onClo
   const gracePeriodMin = breakdown?.gracePeriodMin ?? 0;
   const idleStartLabel = rawIdleSegments.length > 0 ? toTime(rawIdleSegments[0].startedAt) : null;
   const idleEndLabel = rawIdleSegments.length > 0 ? toTime(rawIdleSegments[rawIdleSegments.length - 1].endedAt) : null;
-  const idleSubtotalLabel = idleStartLabel && idleEndLabel
-    ? `${idleStartLabel} to ${idleEndLabel} Subtotal`
-    : 'Idle Subtotal';
+  const idleSubtotalLabel = 'Idle Subtotal';
 
   return (
     <Modal open={!!row} onClose={onClose} title="Session Receipt" maxWidth="max-w-2xl">
