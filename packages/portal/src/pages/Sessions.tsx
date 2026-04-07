@@ -305,6 +305,7 @@ function ReceiptModal({ row, onClose }: { row: EnrichedTransaction | null; onClo
   const activationFee = totals?.activationUsd ?? breakdown?.activation.totalUsd ?? 0;
   const displayTotal = Number(energySubtotal.toFixed(2)) + Number(idleSubtotal.toFixed(2)) + Number(activationFee.toFixed(2));
   const total = breakdown ? displayTotal : (totals?.grossUsd ?? breakdown?.grossTotalUsd ?? row.revenueUsd ?? totals?.netUsd ?? 0);
+  const gracePeriodMin = breakdown?.gracePeriodMin ?? 0;
   const idleStartLabel = rawIdleSegments.length > 0 ? toTime(rawIdleSegments[0].startedAt) : null;
   const idleEndLabel = rawIdleSegments.length > 0 ? toTime(rawIdleSegments[rawIdleSegments.length - 1].endedAt) : null;
   const idleSubtotalLabel = idleStartLabel && idleEndLabel
@@ -335,13 +336,16 @@ function ReceiptModal({ row, onClose }: { row: EnrichedTransaction | null; onClo
 
           <ReceiptLine label="Energy Subtotal" value={`$${energySubtotal.toFixed(2)}`} emphasizeValue />
 
-          {idleSegments.map((seg, idx) => (
-            <ReceiptLine
-              key={`${seg.startedAt}-${seg.endedAt}-${idx}`}
-              label={`${toTime(seg.startedAt)} to ${toTime(seg.endedAt)} × $${seg.idleFeePerMinUsd.toFixed(2)}/min (10 min grace)`}
-              value={`$${seg.amountUsd.toFixed(2)}`}
-            />
-          ))}
+          {idleSegments.map((seg, idx) => {
+            const graceNote = idx === 0 && gracePeriodMin > 0 ? ` (${gracePeriodMin} min grace)` : '';
+            return (
+              <ReceiptLine
+                key={`${seg.startedAt}-${seg.endedAt}-${idx}`}
+                label={`${toTime(seg.startedAt)} to ${toTime(seg.endedAt)} × $${seg.idleFeePerMinUsd.toFixed(2)}/min${graceNote}`}
+                value={`$${seg.amountUsd.toFixed(2)}`}
+              />
+            );
+          })}
 
           <ReceiptLine label={idleSubtotalLabel} value={`$${idleSubtotal.toFixed(2)}`} emphasizeValue />
           <ReceiptLine label="Activation fee" value={`$${activationFee.toFixed(2)}`} emphasizeValue />
