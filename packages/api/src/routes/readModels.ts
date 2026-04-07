@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
-import { prisma } from '@ev-charger/shared';
+import { prisma, resolveSessionStatusTimings as resolveTimingsShared } from '@ev-charger/shared';
+import type { SessionTimings, StatusLogLike } from '@ev-charger/shared';
 import { requireOperator } from '../plugins/auth';
 import { requirePolicy } from '../plugins/authorization';
 import { computeSessionAmounts } from '../lib/sessionBilling';
@@ -38,139 +39,18 @@ function hasSiteAccess(siteId: string, siteIds: string[] | undefined) {
   return siteIds.includes(siteId);
 }
 
-type StatusLogLike = {
-  chargerId: string;
-  createdAt: Date;
-  payload: unknown;
-};
-
-function parseConnectorStatus(value: unknown): string | null {
-  if (typeof value !== 'string') return null;
-  const normalized = value.trim().replace(/[-\s]/g, '_').toUpperCase();
-  const map: Record<string, string> = {
-    AVAILABLE: 'AVAILABLE',
-    PREPARING: 'PREPARING',
-    CHARGING: 'CHARGING',
-    FINISHING: 'FINISHING',
-    SUSPENDEDEV: 'SUSPENDED_EV',
-    SUSPENDED_EV: 'SUSPENDED_EV',
-    SUSPENDEDEVSE: 'SUSPENDED_EVSE',
-    SUSPENDED_EVSE: 'SUSPENDED_EVSE',
-    RESERVED: 'RESERVED',
-    UNAVAILABLE: 'UNAVAILABLE',
-    FAULTED: 'FAULTED',
-  };
-  return map[normalized] ?? null;
-}
-
-function extractStatusEvent(log: StatusLogLike): { connectorId: number; status: string; at: Date } | null {
-  if (!log.payload || typeof log.payload !== 'object') return null;
-  const payload = log.payload as { connectorId?: number | string; status?: string; timestamp?: string };
-  const connectorId = Number(payload.connectorId);
-  const status = parseConnectorStatus(payload.status);
-  if (!Number.isInteger(connectorId) || connectorId <= 0 || !status) return null;
-  const timestamp = payload.timestamp ? new Date(payload.timestamp) : null;
-  const at = timestamp && Number.isFinite(timestamp.getTime()) ? timestamp : log.createdAt;
-  return { connectorId, status, at };
-}
-
+/** Adapter: readModels passes flat fields, shared function expects session shape */
 function resolveSessionStatusTimings(input: {
   startedAt?: Date | string | null;
   stoppedAt?: Date | string | null;
   connectorId?: number | null;
-  statusLogs: StatusLogLike[];
-}): { idleStartedAt?: string; idleStoppedAt?: string; plugInAt?: string; plugOutAt?: string } {
-  if (!input.startedAt || !input.connectorId) return {};
-  const sessionStart = new Date(input.startedAt);
-  if (!Number.isFinite(sessionStart.getTime())) return {};
-
-  const sessionStop = input.stoppedAt ? new Date(input.stoppedAt) : null;
-  const lookbackMs = 24 * 60 * 60 * 1000;
-  const hardStartMs = sessionStart.getTime() - lookbackMs;
-  const hardEndMs = sessionStop && Number.isFinite(sessionStop.getTime())
-    ? sessionStop.getTime() + (2 * 60 * 60 * 1000)
-    : Date.now() + (2 * 60 * 60 * 1000);
-
-  const baseEvents = input.statusLogs
-    .map(extractStatusEvent)
-    .filter((e): e is { connectorId: number; status: string; at: Date } => Boolean(e))
-    .filter((e) => e.connectorId === input.connectorId)
-    .filter((e) => {
-      const atMs = e.at.getTime();
-      return atMs >= hardStartMs && atMs <= hardEndMs;
-    })
-    .sort((a, b) => a.at.getTime() - b.at.getTime());
-
-  if (baseEvents.length === 0) {
-    return { plugInAt: sessionStart.toISOString() };
-  }
-
-  const events = baseEvents.map((e, idx) => ({
-    ...e,
-    prevStatus: idx > 0 ? baseEvents[idx - 1].status : null as string | null,
-  }));
-
-  const plugInCandidates = events.filter((e) =>
-    e.prevStatus === 'AVAILABLE'
-    && e.status === 'PREPARING'
-    && e.at.getTime() <= sessionStart.getTime(),
+  chargerId?: string | null;
+  statusLogs: Array<{ chargerId: string; createdAt: Date; payload: unknown }>;
+}): SessionTimings {
+  return resolveTimingsShared(
+    { startedAt: input.startedAt, stoppedAt: input.stoppedAt, connector: { connectorId: input.connectorId, charger: { id: input.chargerId } } },
+    input.statusLogs,
   );
-  const preparingCandidates = events.filter((e) =>
-    e.status === 'PREPARING'
-    && e.at.getTime() <= sessionStart.getTime(),
-  );
-  const plugIn = plugInCandidates.length > 0
-    ? plugInCandidates[plugInCandidates.length - 1]
-    : (preparingCandidates.length > 0 ? preparingCandidates[preparingCandidates.length - 1] : null);
-
-  const plugOutCandidates = events.filter((e) =>
-    e.status === 'AVAILABLE'
-    && !!e.prevStatus
-    && new Set(['FINISHING', 'SUSPENDED_EV', 'SUSPENDED_EVSE']).has(e.prevStatus)
-    && (!sessionStop || e.at.getTime() >= sessionStop.getTime()),
-  );
-  const plugOut = plugOutCandidates.length > 0
-    ? plugOutCandidates[0]
-    : events.find((e) =>
-      e.status === 'AVAILABLE'
-      && !!e.prevStatus
-      && new Set(['FINISHING', 'SUSPENDED_EV', 'SUSPENDED_EVSE']).has(e.prevStatus),
-    );
-
-  const idleStart = events.find((e) =>
-    e.at.getTime() >= sessionStart.getTime()
-    && e.prevStatus === 'CHARGING'
-    && (e.status === 'SUSPENDED_EV' || e.status === 'SUSPENDED_EVSE'),
-  ) ?? events.find((e) =>
-    e.at.getTime() >= sessionStart.getTime()
-    && e.prevStatus === 'CHARGING'
-    && e.status === 'FINISHING',
-  );
-
-  const idleEnd = idleStart
-    ? events.find((e) =>
-      e.at.getTime() >= idleStart.at.getTime()
-      && e.status === 'AVAILABLE'
-      && (
-        e.prevStatus === 'FINISHING'
-        || e.prevStatus === 'SUSPENDED_EV'
-        || e.prevStatus === 'SUSPENDED_EVSE'
-      ),
-    )
-    : null;
-
-  const resolvedIdleEnd = idleEnd?.at ?? plugOut?.at ?? sessionStop ?? null;
-
-  return {
-    idleStartedAt: idleStart?.at && resolvedIdleEnd && resolvedIdleEnd.getTime() > idleStart.at.getTime()
-      ? idleStart.at.toISOString()
-      : undefined,
-    idleStoppedAt: idleStart?.at && resolvedIdleEnd && resolvedIdleEnd.getTime() > idleStart.at.getTime()
-      ? resolvedIdleEnd.toISOString()
-      : undefined,
-    plugInAt: plugIn?.at?.toISOString() ?? sessionStart.toISOString(),
-    plugOutAt: plugOut?.at?.toISOString(),
-  };
 }
 
 export async function readModelRoutes(app: FastifyInstance) {
@@ -444,6 +324,7 @@ export async function readModelRoutes(app: FastifyInstance) {
           startedAt: row.startedAt,
           stoppedAt: row.stoppedAt,
           connectorId: row.session?.connector?.connectorId,
+          chargerId: row.charger?.id,
           statusLogs: statusLogsByCharger.get(row.charger?.id) ?? [],
         });
         const amounts = computeSessionAmounts({
@@ -467,6 +348,7 @@ export async function readModelRoutes(app: FastifyInstance) {
           softwareFeeIncludesActivation: row.site.softwareFeeIncludesActivation,
           idleStartedAt: sessionTimings.idleStartedAt,
           idleStoppedAt: sessionTimings.idleStoppedAt,
+          idleWindows: sessionTimings.idleWindows,
         });
 
         const snapshot = row.session?.billingSnapshot;
