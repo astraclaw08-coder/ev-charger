@@ -10,7 +10,7 @@
  */
 import { prisma } from '../db';
 import { splitTouDuration } from '../touPricing';
-import { computeSessionAmounts, computeDeliveredKwh } from './sessionBilling';
+import { computeSessionAmounts, computeDeliveredKwh, deriveChargingWindows } from './sessionBilling';
 import { extractMeterReadings, interpolateMeterAtBoundaries, computeSegmentKwh } from './meterInterpolation';
 import { resolveSessionStatusTimings } from './sessionTimings';
 
@@ -100,6 +100,7 @@ export async function captureSessionBillingSnapshot(sessionId: string): Promise<
   // Query MeterValues logs to interpolate the energy register at TOU window
   // boundaries, producing per-segment kWh that reflects actual power draw
   // rather than time-proportional allocation.
+  // Charging windows exclude idle gaps so boundaries match actual charge periods.
   let segmentKwhOverrides: number[] | null = null;
   try {
     const meterLogs = await prisma.ocppLog.findMany({
@@ -118,15 +119,26 @@ export async function captureSessionBillingSnapshot(sessionId: string): Promise<
     const meterReadings = extractMeterReadings(meterLogs);
 
     if (meterReadings.length >= 2 && energyStop) {
-      const chargingSegments = splitTouDuration({
-        startedAt: session.startedAt,
-        stoppedAt: energyStop,
-        pricingMode: site.pricingMode,
-        defaultPricePerKwhUsd: site.pricePerKwhUsd,
-        defaultIdleFeePerMinUsd: site.idleFeePerMinUsd,
-        touWindows: site.touWindows,
-        timeZone: siteTimeZone,
-      });
+      // Derive charging windows (session span minus idle) then TOU-split each
+      const chargingWindows = deriveChargingWindows(
+        session.startedAt,
+        energyStop,
+        timings.idleWindows,
+      );
+
+      const chargingSegments: Array<{ startedAt: string; endedAt: string }> = [];
+      for (const cw of chargingWindows) {
+        const windowSegs = splitTouDuration({
+          startedAt: cw.startedAt,
+          stoppedAt: cw.stoppedAt,
+          pricingMode: site.pricingMode,
+          defaultPricePerKwhUsd: site.pricePerKwhUsd,
+          defaultIdleFeePerMinUsd: site.idleFeePerMinUsd,
+          touWindows: site.touWindows,
+          timeZone: siteTimeZone,
+        });
+        chargingSegments.push(...windowSegs);
+      }
 
       if (chargingSegments.length > 1) {
         const boundaries = [

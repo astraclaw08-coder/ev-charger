@@ -120,6 +120,51 @@ export function computeDeliveredKwh(session: {
   return Math.max(session.kwhDelivered ?? 0, meterDerivedKwh);
 }
 
+/**
+ * Derive charging windows by subtracting idle windows from the session timespan.
+ * Returns the time periods the charger was actively delivering power.
+ */
+export function deriveChargingWindows(
+  sessionStart: Date | null,
+  sessionStop: Date | null,
+  idleWindows: Array<{ startedAt: Date | string; stoppedAt: Date | string }>,
+): Array<{ startedAt: Date; stoppedAt: Date }> {
+  if (!sessionStart || !sessionStop) return [];
+  const startMs = sessionStart.getTime();
+  const stopMs = sessionStop.getTime();
+  if (stopMs <= startMs) return [];
+  if (idleWindows.length === 0) return [{ startedAt: sessionStart, stoppedAt: sessionStop }];
+
+  // Sort idle windows chronologically
+  const sorted = [...idleWindows]
+    .map((w) => ({
+      startMs: new Date(w.startedAt).getTime(),
+      stopMs: new Date(w.stoppedAt).getTime(),
+    }))
+    .filter((w) => w.stopMs > w.startMs)
+    .sort((a, b) => a.startMs - b.startMs);
+
+  const windows: Array<{ startedAt: Date; stoppedAt: Date }> = [];
+  let cursor = startMs;
+
+  for (const idle of sorted) {
+    const idleStart = Math.max(idle.startMs, startMs);
+    const idleStop = Math.min(idle.stopMs, stopMs);
+    if (idleStart >= idleStop) continue; // idle window outside session
+    if (cursor < idleStart) {
+      windows.push({ startedAt: new Date(cursor), stoppedAt: new Date(idleStart) });
+    }
+    cursor = Math.max(cursor, idleStop);
+  }
+
+  // Remaining charging after last idle window
+  if (cursor < stopMs) {
+    windows.push({ startedAt: new Date(cursor), stoppedAt: new Date(stopMs) });
+  }
+
+  return windows;
+}
+
 export function computeSessionAmounts(session: {
   meterStart?: number | null;
   meterStop?: number | null;
@@ -156,17 +201,51 @@ export function computeSessionAmounts(session: {
 
   const billingTimeZone = session.siteTimeZone ?? process.env.EV_TOU_TIMEZONE ?? 'America/Los_Angeles';
 
-  const rawSegments = durationMinutes != null && session.startedAt && session.stoppedAt
-    ? splitTouDuration({
-        startedAt: session.startedAt,
-        stoppedAt: session.stoppedAt,
+  // ── Derive charging windows (session span minus idle windows) ───────────
+  // This ensures energy segments only cover periods the charger was actually
+  // delivering power, not idle gaps where the EV wasn't drawing current.
+  const resolvedIdleWindowsForCharging = (session.idleWindows && session.idleWindows.length > 0)
+    ? session.idleWindows
+    : (session.idleStartedAt && session.idleStoppedAt
+        ? [{ startedAt: session.idleStartedAt, stoppedAt: session.idleStoppedAt }]
+        : []);
+
+  const chargingWindows = deriveChargingWindows(
+    session.startedAt ? new Date(session.startedAt) : null,
+    session.stoppedAt ? new Date(session.stoppedAt) : null,
+    resolvedIdleWindowsForCharging,
+  );
+
+  const rawSegments: Array<{
+    startedAt: string; endedAt: string; minutes: number;
+    pricePerKwhUsd: number; idleFeePerMinUsd: number; source: 'flat' | 'tou';
+  }> = [];
+
+  if (chargingWindows.length > 0) {
+    for (const cw of chargingWindows) {
+      const windowSegs = splitTouDuration({
+        startedAt: cw.startedAt,
+        stoppedAt: cw.stoppedAt,
         pricingMode,
         defaultPricePerKwhUsd: pricePerKwhUsd,
         defaultIdleFeePerMinUsd: idleFeePerMinUsd,
         touWindows: session.touWindows,
         timeZone: billingTimeZone,
-      })
-    : [];
+      });
+      rawSegments.push(...windowSegs);
+    }
+  } else if (durationMinutes != null && session.startedAt && session.stoppedAt) {
+    // No idle windows — full session is charging
+    rawSegments.push(...splitTouDuration({
+      startedAt: session.startedAt,
+      stoppedAt: session.stoppedAt,
+      pricingMode,
+      defaultPricePerKwhUsd: pricePerKwhUsd,
+      defaultIdleFeePerMinUsd: idleFeePerMinUsd,
+      touWindows: session.touWindows,
+      timeZone: billingTimeZone,
+    }));
+  }
 
   const fallbackSegment = rawSegments.length > 0
     ? rawSegments
