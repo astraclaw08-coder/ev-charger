@@ -4,6 +4,7 @@ import { TouchableOpacity, Text, View } from 'react-native';
 import { BottomTabBar, type BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '@/theme';
+import { Fonts } from '@/fonts';
 import ReConsentModal from '@/components/ReConsentModal';
 import { useAppAuth } from '@/providers/AuthProvider';
 import { useChargingNotifications } from '@/providers/ChargingNotificationsProvider';
@@ -187,7 +188,7 @@ export default function TabsLayout() {
             marginBottom: 0,
             paddingTop: 0,
             lineHeight: 12,
-            fontWeight: '700',
+            fontFamily: Fonts.bold,
             fontSize: 11,
             letterSpacing: 0.2,
             textAlign: 'center',
@@ -197,7 +198,7 @@ export default function TabsLayout() {
           headerTitle: 'Lumeo',
           headerTitleStyle: {
             color: isDark ? '#ffffff' : '#000000',
-            fontWeight: '300',
+            fontFamily: Fonts.light,
             letterSpacing: 1.5,
             fontSize: 22,
           },

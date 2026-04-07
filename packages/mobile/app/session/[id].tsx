@@ -21,6 +21,7 @@ import { useLocalSearchParams, Stack } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, isDevMode, type Session } from '@/lib/api';
 import { useAppTheme } from '@/theme';
+import { Fonts } from '@/fonts';
 
 const RATE_PER_KWH = 0.35;
 
@@ -717,7 +718,7 @@ export default function SessionScreen() {
           headerBackButtonDisplayMode: 'minimal',
           headerTitleStyle: {
             color: isDark ? '#ffffff' : '#000000',
-            fontWeight: '300',
+            fontFamily: Fonts.light,
             letterSpacing: 1.5,
             fontSize: 22,
           } as any,
