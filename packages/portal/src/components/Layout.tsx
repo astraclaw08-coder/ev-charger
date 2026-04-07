@@ -326,7 +326,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   }, [getToken]);
 
   return (
-    <div className="flex min-h-screen flex-col lg:flex-row bg-gray-50 dark:bg-slate-950">
+    <div className="flex min-h-screen flex-col lg:flex-row bg-gray-50 dark:bg-slate-950 overflow-x-hidden">
       {/* Mobile hamburger header */}
       <div className="fixed top-0 left-0 right-0 z-40 flex h-14 items-center justify-between border-b border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-4 lg:hidden">
         <BrandMark className="w-[120px]" />
@@ -367,7 +367,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       {/* Desktop sidebar */}
       <div className="hidden lg:block relative shrink-0">
         <aside className={cn(
-          'flex h-full flex-col border-r border-gray-200 bg-white dark:border-slate-800 dark:bg-slate-950/95 transition-[width] duration-200 ease-out',
+          'flex h-full flex-col border-r border-gray-200 bg-white dark:border-slate-800 dark:bg-slate-950/95 transition-[width] duration-200 ease-out overflow-x-hidden',
           collapsed ? 'w-[60px]' : 'w-56',
         )}>
           <SidebarContent location={location} theme={theme} toggleTheme={toggleTheme} notificationCount={notificationCount} collapsed={collapsed} onToggleCollapse={toggleCollapse} />
