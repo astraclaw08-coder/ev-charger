@@ -83,7 +83,7 @@ const config: ExpoConfig = {
   },
   plugins: [
     'expo-router',
-    ['expo-build-properties', { ios: {} }],
+    ['expo-build-properties', { newArchEnabled: false, ios: {} }],
     ['expo-location', { locationWhenInUsePermission: 'We use your location to show nearby chargers.' }],
     ['expo-camera', { cameraPermission: 'We use the camera to scan charger QR codes and open the right charger.' }],
   ],

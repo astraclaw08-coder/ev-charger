@@ -1,6 +1,7 @@
 import React from 'react';
 import { Stack } from 'expo-router';
 import { useAppTheme } from '@/theme';
+import { Fonts } from '@/fonts';
 
 export default function ChargerLayout() {
   const { isDark } = useAppTheme();
@@ -14,7 +15,7 @@ export default function ChargerLayout() {
         headerShadowVisible: false,
         headerTitleStyle: {
           color: isDark ? '#ffffff' : '#000000',
-          fontWeight: '300',
+          fontFamily: Fonts.light,
           letterSpacing: 1.5,
           fontSize: 22,
         } as any,

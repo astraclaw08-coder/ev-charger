@@ -22,6 +22,7 @@ import { useAppAuth } from '@/providers/AuthProvider';
 import { useFavorites } from '@/hooks/useFavorites';
 import { HeartButton } from '@/components/HeartButton';
 import { Ionicons } from '@expo/vector-icons';
+import { Fonts } from '@/fonts';
 
 function formatKwh(value: number): string {
   return value.toFixed(4).replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1');
@@ -133,7 +134,8 @@ function SlideToStart({
     () =>
       PanResponder.create({
         onStartShouldSetPanResponder: () => !disabled,
-        onMoveShouldSetPanResponder: () => !disabled,
+        onMoveShouldSetPanResponder: (_, g) => !disabled && Math.abs(g.dx) > Math.abs(g.dy),
+        onPanResponderTerminationRequest: () => false,
         onPanResponderMove: (_, g) => x.setValue(Math.max(0, Math.min(maxX, g.dx))),
         onPanResponderRelease: () => {
           if (valueRef.current >= maxX * 0.85) {
@@ -277,19 +279,19 @@ function TopMetricsHero({
       <View style={styles.metricsGrid}>
         <View style={[styles.metricTile, { backgroundColor: isDark ? '#111827' : '#ffffff' }]}>
           <Text style={[styles.metricLabel, { color: labelColor }]}>Total kWh</Text>
-          <Text style={[styles.metricValue, { color: valueColor }]}>{formatKwh(totalKwh)}</Text>
+          <Text style={[styles.metricValue, { color: valueColor }]} numberOfLines={1} adjustsFontSizeToFit>{formatKwh(totalKwh)}</Text>
         </View>
         <View style={[styles.metricTile, { backgroundColor: isDark ? '#111827' : '#ffffff' }]}>
           <Text style={[styles.metricLabel, { color: labelColor }]}>Time elapsed</Text>
-          <Text style={[styles.metricValue, { color: valueColor }]}>{elapsed}</Text>
+          <Text style={[styles.metricValue, { color: valueColor }]} numberOfLines={1} adjustsFontSizeToFit>{elapsed}</Text>
         </View>
         <View style={[styles.metricTile, { backgroundColor: isDark ? '#111827' : '#ffffff' }]}>
           <Text style={[styles.metricLabel, { color: labelColor }]}>Cost</Text>
-          <Text style={[styles.metricValue, { color: valueColor }]}>${costUsd.toFixed(2)}</Text>
+          <Text style={[styles.metricValue, { color: valueColor }]} numberOfLines={1} adjustsFontSizeToFit>${costUsd.toFixed(2)}</Text>
         </View>
         <View style={[styles.metricTile, { backgroundColor: isDark ? '#111827' : '#ffffff' }]}>
           <Text style={[styles.metricLabel, { color: labelColor }]}>Power</Text>
-          <Text style={[styles.metricValue, { color: valueColor }]}>{powerKw.toFixed(1)} kW</Text>
+          <Text style={[styles.metricValue, { color: valueColor }]} numberOfLines={1} adjustsFontSizeToFit>{powerKw.toFixed(1)} kW</Text>
         </View>
       </View>
 
@@ -350,10 +352,25 @@ export default function ChargerStartScreen() {
     enabled: !isGuest,
   });
 
-  const activeSession = useMemo(
+  const rawActiveSession = useMemo(
     () => sessionsData?.sessions.find((s) => s.status === 'ACTIVE' && s.connector.charger.id === id) ?? null,
     [sessionsData, id],
   );
+
+  // Use the PLUG_OUT event timestamp to detect session-end before the session
+  // API catches up.  If the connector recorded a plug-out that occurred after
+  // the session started, the physical cable is disconnected and we should
+  // clear the active-session UI immediately.
+  const pluggedOut = useMemo(() => {
+    if (!rawActiveSession || !charger) return false;
+    const conn = charger.connectors.find(
+      (c) => c.connectorId === rawActiveSession.connector.connectorId,
+    );
+    if (!conn?.lastPlugOutAt) return false;
+    return new Date(conn.lastPlugOutAt) >= new Date(rawActiveSession.startedAt);
+  }, [rawActiveSession, charger]);
+
+  const activeSession = pluggedOut ? null : rawActiveSession;
 
   const [elapsedNowMs, setElapsedNowMs] = useState(() => Date.now());
   useEffect(() => {
@@ -664,7 +681,7 @@ export default function ChargerStartScreen() {
             headerShadowVisible: false,
             headerTitleStyle: {
               color: isDark ? '#ffffff' : '#000000',
-              fontWeight: '300',
+              fontFamily: Fonts.light,
               letterSpacing: 1.5,
               fontSize: 22,
             } as any,
@@ -736,7 +753,7 @@ export default function ChargerStartScreen() {
           headerShadowVisible: false,
           headerTitleStyle: {
             color: isDark ? '#ffffff' : '#000000',
-            fontWeight: '300',
+            fontFamily: Fonts.light,
             letterSpacing: 1.5,
             fontSize: 22,
           } as any,
@@ -782,7 +799,7 @@ export default function ChargerStartScreen() {
           chargerName={charger.ocppId}
           chargerStatus={topChargerStatus}
           haloMode={haloMode}
-          forceWhiteText={haloMode === 'awaitingPlug'}
+          forceWhiteText={false}
         />
 
         <View style={styles.bottomDock}>

@@ -9,7 +9,9 @@
  * - API routes serve from snapshot when present, fall back to compute-on-read for active sessions
  */
 import { prisma } from '../db';
-import { computeSessionAmounts } from './sessionBilling';
+import { splitTouDuration } from '../touPricing';
+import { computeSessionAmounts, computeDeliveredKwh } from './sessionBilling';
+import { extractMeterReadings, interpolateMeterAtBoundaries, computeSegmentKwh } from './meterInterpolation';
 import { resolveSessionStatusTimings } from './sessionTimings';
 
 const FINAL_STATUSES = new Set(['CAPTURED', 'REFUNDED']);
@@ -41,6 +43,7 @@ export async function captureSessionBillingSnapshot(sessionId: string): Promise<
                   softwareVendorFeeMode: true,
                   softwareVendorFeeValue: true,
                   softwareFeeIncludesActivation: true,
+                  timeZone: true,
                 },
               },
             },
@@ -93,6 +96,54 @@ export async function captureSessionBillingSnapshot(sessionId: string): Promise<
       ? new Date(timings.plugOutAt)
       : session.stoppedAt;
 
+  const siteTimeZone = site.timeZone ?? 'America/Los_Angeles';
+
+  // ── Meter-based energy split across TOU segments ──────────────────────
+  // Query MeterValues logs to interpolate the energy register at TOU window
+  // boundaries, producing per-segment kWh that reflects actual power draw
+  // rather than time-proportional allocation.
+  let segmentKwhOverrides: number[] | null = null;
+  try {
+    const meterLogs = await prisma.ocppLog.findMany({
+      where: {
+        chargerId,
+        action: 'MeterValues',
+        createdAt: {
+          gte: session.startedAt,
+          lte: billingStop ?? session.stoppedAt ?? new Date(),
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+      select: { payload: true, createdAt: true },
+    });
+
+    const meterReadings = extractMeterReadings(meterLogs);
+
+    if (meterReadings.length >= 2 && billingStop) {
+      const chargingSegments = splitTouDuration({
+        startedAt: session.startedAt,
+        stoppedAt: billingStop,
+        pricingMode: site.pricingMode,
+        defaultPricePerKwhUsd: site.pricePerKwhUsd,
+        defaultIdleFeePerMinUsd: site.idleFeePerMinUsd,
+        touWindows: site.touWindows,
+        timeZone: siteTimeZone,
+      });
+
+      if (chargingSegments.length > 1) {
+        const boundaries = [
+          new Date(chargingSegments[0].startedAt),
+          ...chargingSegments.map((s) => new Date(s.endedAt)),
+        ];
+        const boundaryWh = interpolateMeterAtBoundaries(meterReadings, boundaries);
+        const totalKwh = computeDeliveredKwh(session) ?? 0;
+        segmentKwhOverrides = computeSegmentKwh(boundaryWh, totalKwh);
+      }
+    }
+  } catch (err) {
+    console.warn(`[BillingSnapshot] Meter interpolation failed for session ${sessionId}, falling back to time-proportional:`, err);
+  }
+
   const amounts = computeSessionAmounts({
     ...session,
     startedAt: session.startedAt,
@@ -103,11 +154,13 @@ export async function captureSessionBillingSnapshot(sessionId: string): Promise<
     activationFeeUsd: site.activationFeeUsd,
     gracePeriodMin: site.gracePeriodMin,
     touWindows: site.touWindows,
+    siteTimeZone,
     softwareVendorFeeMode: site.softwareVendorFeeMode,
     softwareVendorFeeValue: site.softwareVendorFeeValue,
     softwareFeeIncludesActivation: site.softwareFeeIncludesActivation,
     idleStartedAt: timings.idleStartedAt,
     idleStoppedAt: timings.idleStoppedAt,
+    segmentKwhOverrides,
   });
 
   const b = amounts.billingBreakdown;
@@ -120,6 +173,7 @@ export async function captureSessionBillingSnapshot(sessionId: string): Promise<
     activationFeeUsd: site.activationFeeUsd,
     gracePeriodMin: site.gracePeriodMin,
     touWindowsJson: site.touWindows ?? undefined,
+    siteTimeZone,
     // Computed outputs
     kwhDelivered: amounts.kwhDelivered ?? undefined,
     durationMinutes: amounts.durationMinutes ?? undefined,
