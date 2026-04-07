@@ -142,6 +142,7 @@ export function computeSessionAmounts(session: {
   softwareFeeIncludesActivation?: boolean;
   idleStartedAt?: Date | string | null;
   idleStoppedAt?: Date | string | null;
+  segmentKwhOverrides?: number[] | null;
 }) {
   const computedKwh = computeDeliveredKwh(session);
   const durationMinutes = resolveDurationMinutes(session);
@@ -207,54 +208,63 @@ export function computeSessionAmounts(session: {
 
   const idleSegmentMinutesTotal = idleSegmentsBase.reduce((sum, seg) => sum + seg.minutes, 0);
 
-  const detailedSegments: BillingSegment[] = fallbackSegment.map((seg) => {
-    const ratio = segmentMinutesTotal > 0 ? seg.minutes / segmentMinutesTotal : (fallbackSegment.length > 0 ? 1 / fallbackSegment.length : 0);
-    const kwh = deliveredKwh * ratio;
+  const detailedSegments: BillingSegment[] = fallbackSegment.map((seg, idx) => {
+    const kwh = session.segmentKwhOverrides?.[idx] != null
+      ? session.segmentKwhOverrides[idx]
+      : deliveredKwh * (segmentMinutesTotal > 0 ? seg.minutes / segmentMinutesTotal : (fallbackSegment.length > 0 ? 1 / fallbackSegment.length : 0));
     const energyAmountUsd = kwh * seg.pricePerKwhUsd;
     return {
       ...seg,
-      kwh: Number(kwh.toFixed(6)),
-      energyAmountUsd: Number(energyAmountUsd.toFixed(6)),
+      kwh: Number(kwh.toFixed(4)),
+      energyAmountUsd: Math.round(energyAmountUsd * 100) / 100,
       idleMinutes: 0,
       idleAmountUsd: 0,
     };
   });
 
-  const idleBreakdownSegments = idleSegmentsBase.map((seg) => {
-    const ratio = idleSegmentMinutesTotal > 0 ? seg.minutes / idleSegmentMinutesTotal : (idleSegmentsBase.length > 0 ? 1 / idleSegmentsBase.length : 0);
-    const minutes = billableIdleMinutes * ratio;
-    const amountUsd = minutes * seg.idleFeePerMinUsd;
+  // Apply grace period chronologically: subtract from the first idle segment,
+  // spilling remainder to subsequent segments if the first is shorter than grace.
+  const sortedIdleSegments = [...idleSegmentsBase].sort(
+    (a, b) => new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime(),
+  );
+  let remainingGrace = gracePeriodMin;
+  const idleBreakdownSegments = sortedIdleSegments.map((seg) => {
+    const segMinutesAfterGrace = Math.max(0, seg.minutes - remainingGrace);
+    remainingGrace = Math.max(0, remainingGrace - seg.minutes);
+    const amountUsd = segMinutesAfterGrace * seg.idleFeePerMinUsd;
     return {
       startedAt: seg.startedAt,
       endedAt: seg.endedAt,
-      minutes: Number(minutes.toFixed(6)),
+      minutes: Math.round(segMinutesAfterGrace * 100) / 100,
       idleFeePerMinUsd: seg.idleFeePerMinUsd,
-      amountUsd: Number(amountUsd.toFixed(6)),
+      amountUsd: Math.round(amountUsd * 100) / 100,
       source: seg.source,
     };
   });
 
-  const energyTotalUsd = detailedSegments.reduce((sum, seg) => sum + seg.energyAmountUsd, 0);
-  const idleTotalUsd = idleBreakdownSegments.reduce((sum, seg) => sum + seg.amountUsd, 0);
-  const activationTotalUsd = Math.max(0, toFiniteNumber(session.activationFeeUsd) ?? 0);
-  const breakdownGrossUsd = energyTotalUsd + idleTotalUsd + activationTotalUsd;
+  // Sum already-rounded segment values so line items always add up to subtotals.
+  const energyTotalUsd = Math.round(detailedSegments.reduce((sum, seg) => sum + seg.energyAmountUsd, 0) * 100) / 100;
+  const idleTotalUsd = Math.round(idleBreakdownSegments.reduce((sum, seg) => sum + seg.amountUsd, 0) * 100) / 100;
+  const totalBillableIdleMinutes = Math.round(idleBreakdownSegments.reduce((sum, seg) => sum + seg.minutes, 0) * 100) / 100;
+  const activationTotalUsd = Math.round(Math.max(0, toFiniteNumber(session.activationFeeUsd) ?? 0) * 100) / 100;
+  const breakdownGrossUsd = Math.round((energyTotalUsd + idleTotalUsd + activationTotalUsd) * 100) / 100;
 
   const breakdown: BillingBreakdown = {
     pricingMode,
-    durationMinutes: Number(durationForBreakdown.toFixed(6)),
-    gracePeriodMin: Number(gracePeriodMin.toFixed(6)),
+    durationMinutes: Math.round(durationForBreakdown * 100) / 100,
+    gracePeriodMin,
     energy: {
-      kwhDelivered: Number(deliveredKwh.toFixed(6)),
-      totalUsd: Number(energyTotalUsd.toFixed(6)),
+      kwhDelivered: Number(deliveredKwh.toFixed(4)),
+      totalUsd: energyTotalUsd,
       segments: detailedSegments,
     },
     idle: {
-      minutes: Number(billableIdleMinutes.toFixed(6)),
-      totalUsd: Number(idleTotalUsd.toFixed(6)),
+      minutes: totalBillableIdleMinutes,
+      totalUsd: idleTotalUsd,
       segments: idleBreakdownSegments,
     },
-    activation: { totalUsd: Number(activationTotalUsd.toFixed(6)) },
-    grossTotalUsd: Number(breakdownGrossUsd.toFixed(6)),
+    activation: { totalUsd: activationTotalUsd },
+    grossTotalUsd: breakdownGrossUsd,
   };
 
   const hasBillableSignal = session.revenueUsd != null || computedKwh != null || durationMinutes != null || (toFiniteNumber(session.activationFeeUsd) ?? 0) > 0;

@@ -120,16 +120,18 @@ export function resolveSessionStatusTimings(
       && new Set(['FINISHING', 'SUSPENDED_EV', 'SUSPENDED_EVSE']).has(e.prevStatus),
     );
 
-  // idleStart: CHARGING → SUSPENDED_EV/EVSE (primary) or CHARGING → FINISHING (fallback)
-  const idleStart = events.find((e) =>
+  // idleStart: LAST CHARGING → SUSPENDED_EV/EVSE (primary) or CHARGING → FINISHING (fallback)
+  // Uses the last transition (not first) so brief charging resumptions after
+  // an initial suspend are included in the charging window, not the idle window.
+  const idleStart = events.filter((e) =>
     e.at.getTime() >= sessionStart.getTime()
     && e.prevStatus === 'CHARGING'
     && (e.status === 'SUSPENDED_EV' || e.status === 'SUSPENDED_EVSE'),
-  ) ?? events.find((e) =>
+  ).pop() ?? events.filter((e) =>
     e.at.getTime() >= sessionStart.getTime()
     && e.prevStatus === 'CHARGING'
     && e.status === 'FINISHING',
-  );
+  ).pop() ?? null;
 
   const idleEnd = idleStart
     ? events.find((e) =>

@@ -131,8 +131,27 @@ export async function chargerRoutes(app: FastifyInstance) {
 
     if (!charger) return reply.status(404).send({ error: 'Charger not found' });
 
+    // Fetch latest PLUG_OUT transition per connector so mobile can detect
+    // session-end even before the session API catches up.
+    const plugOutTransitions = await prisma.connectorStateTransition.findMany({
+      where: {
+        chargerId: resolvedId,
+        transitionType: 'PLUG_OUT',
+      },
+      orderBy: { occurredAt: 'desc' },
+      distinct: ['connectorId'],
+      select: { connectorId: true, occurredAt: true },
+    });
+    const plugOutMap = new Map(plugOutTransitions.map((t) => [t.connectorId, t.occurredAt]));
+
     const { password: _pw, ...safeCharger } = charger;
-    return safeCharger;
+    return {
+      ...safeCharger,
+      connectors: safeCharger.connectors.map((c: any) => ({
+        ...c,
+        lastPlugOutAt: plugOutMap.get(c.connectorId)?.toISOString() ?? null,
+      })),
+    };
   });
 
   // GET /chargers/:id/status — real-time state (operator only)
