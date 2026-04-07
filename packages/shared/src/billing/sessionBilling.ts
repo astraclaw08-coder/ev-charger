@@ -142,6 +142,7 @@ export function computeSessionAmounts(session: {
   softwareFeeIncludesActivation?: boolean;
   idleStartedAt?: Date | string | null;
   idleStoppedAt?: Date | string | null;
+  idleWindows?: Array<{ startedAt: Date | string; stoppedAt: Date | string }> | null;
   segmentKwhOverrides?: number[] | null;
 }) {
   const computedKwh = computeDeliveredKwh(session);
@@ -180,33 +181,44 @@ export function computeSessionAmounts(session: {
 
   const segmentMinutesTotal = fallbackSegment.reduce((sum, seg) => sum + seg.minutes, 0);
 
-  const idleWindowMinutes = resolveDurationMinutes({ startedAt: session.idleStartedAt, stoppedAt: session.idleStoppedAt }) ?? 0;
-  const billableIdleMinutes = Math.max(0, idleWindowMinutes - gracePeriodMin);
+  // ── Multi-window idle billing ───────────────────────────────────────────
+  // Resolve idle windows: prefer array, fall back to single idleStartedAt/StoppedAt pair.
+  const resolvedIdleWindows = (session.idleWindows && session.idleWindows.length > 0)
+    ? session.idleWindows
+    : (session.idleStartedAt && session.idleStoppedAt
+        ? [{ startedAt: session.idleStartedAt, stoppedAt: session.idleStoppedAt }]
+        : []);
 
-  const idleRawSegments = idleWindowMinutes > 0 && session.idleStartedAt && session.idleStoppedAt
-    ? splitTouDuration({
-        startedAt: session.idleStartedAt,
-        stoppedAt: session.idleStoppedAt,
-        pricingMode,
-        defaultPricePerKwhUsd: pricePerKwhUsd,
-        defaultIdleFeePerMinUsd: idleFeePerMinUsd,
-        touWindows: session.touWindows,
-        timeZone: billingTimeZone,
-      })
-    : [];
-
-  const idleSegmentsBase = idleRawSegments.length > 0
-    ? idleRawSegments
-    : [{
-        startedAt: session.idleStartedAt ? new Date(session.idleStartedAt).toISOString() : (session.startedAt ? new Date(session.startedAt).toISOString() : new Date(0).toISOString()),
-        endedAt: session.idleStoppedAt ? new Date(session.idleStoppedAt).toISOString() : (session.startedAt ? new Date(session.startedAt).toISOString() : new Date(0).toISOString()),
-        minutes: idleWindowMinutes,
+  // Collect TOU-split idle segments from all windows
+  const idleSegmentsBase: Array<{
+    startedAt: string; endedAt: string; minutes: number;
+    pricePerKwhUsd: number; idleFeePerMinUsd: number; source: 'flat' | 'tou';
+  }> = [];
+  for (const window of resolvedIdleWindows) {
+    const windowMinutes = resolveDurationMinutes({ startedAt: window.startedAt, stoppedAt: window.stoppedAt }) ?? 0;
+    if (windowMinutes <= 0) continue;
+    const windowSegments = splitTouDuration({
+      startedAt: window.startedAt,
+      stoppedAt: window.stoppedAt,
+      pricingMode,
+      defaultPricePerKwhUsd: pricePerKwhUsd,
+      defaultIdleFeePerMinUsd: idleFeePerMinUsd,
+      touWindows: session.touWindows,
+      timeZone: billingTimeZone,
+    });
+    if (windowSegments.length > 0) {
+      idleSegmentsBase.push(...windowSegments);
+    } else {
+      idleSegmentsBase.push({
+        startedAt: new Date(window.startedAt).toISOString(),
+        endedAt: new Date(window.stoppedAt).toISOString(),
+        minutes: windowMinutes,
         pricePerKwhUsd,
         idleFeePerMinUsd,
         source: 'flat' as const,
-      }];
-
-  const idleSegmentMinutesTotal = idleSegmentsBase.reduce((sum, seg) => sum + seg.minutes, 0);
+      });
+    }
+  }
 
   const detailedSegments: BillingSegment[] = fallbackSegment.map((seg, idx) => {
     const kwh = session.segmentKwhOverrides?.[idx] != null

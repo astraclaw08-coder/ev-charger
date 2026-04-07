@@ -90,11 +90,9 @@ export async function captureSessionBillingSnapshot(sessionId: string): Promise<
     statusLogs.map((l: { chargerId: string; createdAt: Date; payload: unknown }) => ({ chargerId: l.chargerId, createdAt: l.createdAt, payload: l.payload })),
   );
 
-  const billingStop = timings.idleStartedAt
-    ? new Date(timings.idleStartedAt)
-    : timings.plugOutAt
-      ? new Date(timings.plugOutAt)
-      : session.stoppedAt;
+  // Energy billing uses session.stoppedAt — meter interpolation distributes
+  // kWh accurately regardless of idle gaps. Idle is billed separately per window.
+  const energyStop = session.stoppedAt;
 
   const siteTimeZone = site.timeZone ?? 'America/Los_Angeles';
 
@@ -110,7 +108,7 @@ export async function captureSessionBillingSnapshot(sessionId: string): Promise<
         action: 'MeterValues',
         createdAt: {
           gte: session.startedAt,
-          lte: billingStop ?? session.stoppedAt ?? new Date(),
+          lte: energyStop ?? new Date(),
         },
       },
       orderBy: { createdAt: 'asc' },
@@ -119,10 +117,10 @@ export async function captureSessionBillingSnapshot(sessionId: string): Promise<
 
     const meterReadings = extractMeterReadings(meterLogs);
 
-    if (meterReadings.length >= 2 && billingStop) {
+    if (meterReadings.length >= 2 && energyStop) {
       const chargingSegments = splitTouDuration({
         startedAt: session.startedAt,
-        stoppedAt: billingStop,
+        stoppedAt: energyStop,
         pricingMode: site.pricingMode,
         defaultPricePerKwhUsd: site.pricePerKwhUsd,
         defaultIdleFeePerMinUsd: site.idleFeePerMinUsd,
@@ -147,7 +145,7 @@ export async function captureSessionBillingSnapshot(sessionId: string): Promise<
   const amounts = computeSessionAmounts({
     ...session,
     startedAt: session.startedAt,
-    stoppedAt: billingStop,
+    stoppedAt: energyStop,
     pricingMode: site.pricingMode,
     pricePerKwhUsd: site.pricePerKwhUsd,
     idleFeePerMinUsd: site.idleFeePerMinUsd,
@@ -160,6 +158,7 @@ export async function captureSessionBillingSnapshot(sessionId: string): Promise<
     softwareFeeIncludesActivation: site.softwareFeeIncludesActivation,
     idleStartedAt: timings.idleStartedAt,
     idleStoppedAt: timings.idleStoppedAt,
+    idleWindows: timings.idleWindows,
     segmentKwhOverrides,
   });
 
@@ -183,10 +182,10 @@ export async function captureSessionBillingSnapshot(sessionId: string): Promise<
     grossAmountUsd: b.grossTotalUsd,
     vendorFeeUsd: amounts.vendorFeeUsd,
     netAmountUsd: (amounts.effectiveAmountCents ?? 0) / 100,
-    billingBreakdownJson: amounts.billingBreakdown as object,
+    billingBreakdownJson: { ...amounts.billingBreakdown, idleWindows: timings.idleWindows } as object,
     // Locked timings
     chargingStartedAt: session.startedAt,
-    chargingStoppedAt: billingStop ?? undefined,
+    chargingStoppedAt: energyStop ?? undefined,
     idleStartedAt: timings.idleStartedAt ? new Date(timings.idleStartedAt) : undefined,
     idleStoppedAt: timings.idleStoppedAt ? new Date(timings.idleStoppedAt) : undefined,
     plugOutAt: timings.plugOutAt ? new Date(timings.plugOutAt) : undefined,
