@@ -1181,7 +1181,7 @@ export default function SiteDetail() {
 
         return <>
       {/* ── Site KPI Summary ── */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-3 sm:grid-cols-3">
         <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
           <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Total Sessions</p>
           <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-slate-100">{totalSessions}</p>
@@ -1196,16 +1196,6 @@ export default function SiteDetail() {
           <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Avg Session</p>
           <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-slate-100">{avgDurationMin < 60 ? `${avgDurationMin.toFixed(0)} min` : `${(avgDurationMin / 60).toFixed(1)} hr`}</p>
           <p className="text-xs text-gray-400 dark:text-slate-500">{avgKwh.toFixed(1)} kWh avg · ${avgRevenue.toFixed(2)} avg</p>
-        </div>
-        <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
-          <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Energy Delivered</p>
-          <p className="mt-1 text-2xl font-bold text-blue-600 dark:text-blue-400">{totalKwhAll.toFixed(1)} kWh</p>
-          <p className="text-xs text-gray-400 dark:text-slate-500">{(totalKwhAll / Math.max(periodDays, 1)).toFixed(1)} kWh/day avg</p>
-        </div>
-        <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
-          <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Utilization</p>
-          <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-slate-100">{siteUtilizationPct != null ? `${siteUtilizationPct.toFixed(1)}%` : '—'}</p>
-          <p className="text-xs text-gray-400 dark:text-slate-500">{site.chargers.length} charger(s) · {rangePreset}</p>
         </div>
       </div>
 
