@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { shortId } from '../lib/shortId';
-import { Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { createApiClient, type SiteDetail as SiteDetailType, type ChargerUptime, type SiteUptime, type Analytics as SiteAnalytics, type DailyEntry, type SessionRecord } from '../api/client';
 import { useToken } from '../auth/TokenContext';
 import ChargerMap from '../components/ChargerMap';
@@ -1199,35 +1199,99 @@ export default function SiteDetail() {
         </div>
       </div>
 
-      {/* ── Trend chart ── */}
-      <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
-        <p className="text-sm font-semibold">
-          <span className="text-blue-600">Energy (kWh)</span>
-          <span className="text-gray-400 dark:text-slate-500"> | </span>
-          <span className="text-emerald-600">Revenue ($)</span>
-          <span className="text-gray-400 dark:text-slate-500"> | </span>
-          <span className="text-amber-500">Transactions</span>
-          <span className="ml-1 text-xs font-normal text-gray-400 dark:text-slate-500">({rangePreset})</span>
-        </p>
-        <div className="mt-3 h-64">
-          {trend.length === 0 ? (
-            <div className="flex h-full items-center justify-center text-sm text-gray-400 dark:text-slate-500">No trend data for selected period.</div>
-          ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={trend} margin={{ top: 4, right: 16, bottom: 0, left: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} />
-                <XAxis dataKey="label" tick={{ fontSize: 10, fill: chartColors.tick }} />
-                <YAxis yAxisId="kwh" tick={{ fontSize: 10, fill: chartColors.tick }} />
-                <YAxis yAxisId="rev" orientation="right" tick={{ fontSize: 10, fill: chartColors.tick }} tickFormatter={(v: number) => `$${v}`} />
-                <Tooltip contentStyle={chartColors.tooltip} formatter={(v: number, name: string) => name === 'revenueUsd' ? [`$${v.toFixed(2)}`, 'Revenue ($)'] : name === 'kwhDelivered' ? [`${v} kWh`, 'Energy (kWh)'] : [v, 'Transactions']} />
-                <Bar yAxisId="kwh" dataKey="kwhDelivered" fill="#3b82f6" opacity={0.7} name="Energy (kWh)" />
-                <Line yAxisId="rev" type="monotone" dataKey="revenueUsd" stroke="#10b981" dot={false} strokeWidth={2} name="Revenue ($)" />
-                <Line yAxisId="kwh" type="monotone" dataKey="sessions" stroke="#f59e0b" dot={false} strokeWidth={1.5} name="Transactions" />
-              </ComposedChart>
-            </ResponsiveContainer>
-          )}
+      {/* ── Trend Charts ── */}
+      {trend.length === 0 ? (
+        <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-8 text-center text-sm text-gray-400 dark:text-slate-500">No trend data for selected period.</div>
+      ) : (
+        <div className="grid gap-4 lg:grid-cols-3">
+          {/* Energy */}
+          <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+            <div className="flex items-baseline justify-between mb-3">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Energy</p>
+                <p className="mt-0.5 text-xl font-bold text-blue-600 dark:text-blue-400">{trend.reduce((s, d) => s + d.kwhDelivered, 0).toFixed(1)} kWh</p>
+              </div>
+              <span className="text-[11px] text-gray-400 dark:text-slate-500">{rangePreset}</span>
+            </div>
+            <div className="h-28">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={trend} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
+                  <defs>
+                    <linearGradient id="kwhGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.3} />
+                      <stop offset="100%" stopColor="#3b82f6" stopOpacity={0.02} />
+                    </linearGradient>
+                  </defs>
+                  <XAxis dataKey="label" hide />
+                  <YAxis hide />
+                  <Tooltip contentStyle={{ ...chartColors.tooltip, fontSize: 12, borderRadius: 8, padding: '6px 10px' }} formatter={(v: number) => [`${v.toFixed(1)} kWh`, 'Energy']} labelFormatter={(l) => l} />
+                  <Area type="monotone" dataKey="kwhDelivered" stroke="#3b82f6" strokeWidth={2} fill="url(#kwhGrad)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="flex justify-between text-[10px] text-gray-400 dark:text-slate-500 mt-1 px-0.5">
+              <span>{trend[0]?.label}</span>
+              <span>{trend[trend.length - 1]?.label}</span>
+            </div>
+          </div>
+
+          {/* Revenue */}
+          <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+            <div className="flex items-baseline justify-between mb-3">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Revenue</p>
+                <p className="mt-0.5 text-xl font-bold text-emerald-600 dark:text-emerald-400">${trend.reduce((s, d) => s + d.revenueUsd, 0).toFixed(2)}</p>
+              </div>
+              <span className="text-[11px] text-gray-400 dark:text-slate-500">{rangePreset}</span>
+            </div>
+            <div className="h-28">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={trend} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
+                  <defs>
+                    <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#10b981" stopOpacity={0.3} />
+                      <stop offset="100%" stopColor="#10b981" stopOpacity={0.02} />
+                    </linearGradient>
+                  </defs>
+                  <XAxis dataKey="label" hide />
+                  <YAxis hide />
+                  <Tooltip contentStyle={{ ...chartColors.tooltip, fontSize: 12, borderRadius: 8, padding: '6px 10px' }} formatter={(v: number) => [`$${v.toFixed(2)}`, 'Revenue']} labelFormatter={(l) => l} />
+                  <Area type="monotone" dataKey="revenueUsd" stroke="#10b981" strokeWidth={2} fill="url(#revGrad)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="flex justify-between text-[10px] text-gray-400 dark:text-slate-500 mt-1 px-0.5">
+              <span>{trend[0]?.label}</span>
+              <span>{trend[trend.length - 1]?.label}</span>
+            </div>
+          </div>
+
+          {/* Sessions */}
+          <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+            <div className="flex items-baseline justify-between mb-3">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Sessions</p>
+                <p className="mt-0.5 text-xl font-bold text-amber-600 dark:text-amber-400">{trend.reduce((s, d) => s + d.sessions, 0)}</p>
+              </div>
+              <span className="text-[11px] text-gray-400 dark:text-slate-500">{rangePreset}</span>
+            </div>
+            <div className="h-28">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={trend} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
+                  <XAxis dataKey="label" hide />
+                  <YAxis hide />
+                  <Tooltip contentStyle={{ ...chartColors.tooltip, fontSize: 12, borderRadius: 8, padding: '6px 10px' }} formatter={(v: number) => [v, 'Sessions']} labelFormatter={(l) => l} cursor={{ fill: 'transparent' }} />
+                  <Bar dataKey="sessions" fill="#f59e0b" opacity={0.8} radius={[3, 3, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="flex justify-between text-[10px] text-gray-400 dark:text-slate-500 mt-1 px-0.5">
+              <span>{trend[0]?.label}</span>
+              <span>{trend[trend.length - 1]?.label}</span>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* ── Site Uptime ── */}
       {siteUptime && (
