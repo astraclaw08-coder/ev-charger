@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { requireOperator } from '../plugins/auth';
 import OpenAI from 'openai';
-import { getLLMApiKey } from '../lib/llmProvider';
+import { getLLMConfig } from '../lib/llmProvider';
 import { buildAgentSystemPrompt } from '../lib/agentSystemPrompt';
 import { AGENT_TOOLS, executeAgentTool } from '../lib/agentTools';
 import { prisma } from '@ev-charger/shared';
@@ -9,7 +9,6 @@ import crypto from 'crypto';
 
 const MAX_TOOL_ITERATIONS = 6;
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
-const DEFAULT_MODEL = 'anthropic/claude-sonnet-4';
 
 export async function agentChatRoutes(app: FastifyInstance) {
   app.post('/agent/chat', {
@@ -27,18 +26,18 @@ export async function agentChatRoutes(app: FastifyInstance) {
     // Limit context
     const trimmedMessages = messages.slice(-40); // last 20 pairs
 
-    // Get LLM API key (OpenRouter)
+    // Get LLM config (OpenRouter key + model)
     const scopeKey = claims.orgId ?? 'default';
-    let apiKey: string;
+    let llmConfig: { apiKey: string; model: string };
     try {
-      apiKey = await getLLMApiKey(prisma, scopeKey);
+      llmConfig = await getLLMConfig(prisma, scopeKey);
     } catch (err: any) {
       return reply.status(503).send({ error: err.message });
     }
 
     const openai = new OpenAI({
       baseURL: OPENROUTER_BASE_URL,
-      apiKey,
+      apiKey: llmConfig.apiKey,
       defaultHeaders: {
         'HTTP-Referer': 'https://portal.lumeopower.com',
         'X-OpenRouter-Title': 'Lumeo AI',
@@ -80,7 +79,7 @@ export async function agentChatRoutes(app: FastifyInstance) {
         iterations++;
 
         const stream = await openai.chat.completions.create({
-          model: DEFAULT_MODEL,
+          model: llmConfig.model,
           messages: currentMessages,
           tools: AGENT_TOOLS as any,
           stream: true,
