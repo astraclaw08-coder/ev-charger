@@ -44,17 +44,25 @@ export async function agentChatRoutes(app: FastifyInstance) {
       },
     });
 
-    // Set up SSE
+    // Set up SSE — must include CORS headers since reply.raw bypasses @fastify/cors
+    const origin = req.headers.origin || '*';
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
+      'Cache-Control': 'no-cache, no-transform',
       'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
       'X-Request-Id': requestId,
+      'Access-Control-Allow-Origin': origin,
+      'Access-Control-Allow-Credentials': 'true',
     });
+    reply.raw.flushHeaders();
 
     function sendSSE(event: Record<string, unknown>) {
       reply.raw.write(`data: ${JSON.stringify(event)}\n\n`);
     }
+
+    // Send initial keepalive so the client knows the stream is open
+    sendSSE({ type: 'stream_started', requestId });
 
     // Cancellation handling
     let aborted = false;
@@ -78,13 +86,21 @@ export async function agentChatRoutes(app: FastifyInstance) {
       while (iterations < MAX_TOOL_ITERATIONS && !aborted) {
         iterations++;
 
-        const stream = await openai.chat.completions.create({
-          model: llmConfig.model,
-          messages: currentMessages,
-          tools: AGENT_TOOLS as any,
-          stream: true,
-          max_tokens: 4096,
-        });
+        app.log.info({ requestId, iteration: iterations, model: llmConfig.model }, 'Agent: starting LLM call');
+
+        let stream;
+        try {
+          stream = await openai.chat.completions.create({
+            model: llmConfig.model,
+            messages: currentMessages,
+            tools: AGENT_TOOLS as any,
+            stream: true,
+            max_tokens: 4096,
+          });
+        } catch (llmErr: any) {
+          app.log.error({ err: llmErr, requestId, model: llmConfig.model }, 'Agent: LLM call failed');
+          throw llmErr;
+        }
 
         let assistantContent = '';
         const toolCalls: Array<{ id: string; function: { name: string; arguments: string } }> = [];
