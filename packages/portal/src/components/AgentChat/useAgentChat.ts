@@ -26,6 +26,7 @@ function uid(): string {
 export function useAgentChat() {
   const [messages, setMessages] = useState<ChatMessage[]>(loadMessages);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
   const getToken = useToken();
 
@@ -180,6 +181,7 @@ export function useAgentChat() {
 
               case 'message_done':
                 setIsStreaming(false);
+                setUnreadCount((c) => c + 1);
                 break;
 
               case 'error':
@@ -230,8 +232,13 @@ export function useAgentChat() {
   const clearConversation = useCallback(() => {
     updateMessages(() => []);
     setIsStreaming(false);
+    setUnreadCount(0);
     abortRef.current?.abort();
   }, [updateMessages]);
 
-  return { messages, isStreaming, sendMessage, abort, clearConversation };
+  const markRead = useCallback(() => {
+    setUnreadCount(0);
+  }, []);
+
+  return { messages, isStreaming, unreadCount, sendMessage, abort, clearConversation, markRead };
 }

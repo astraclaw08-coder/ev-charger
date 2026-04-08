@@ -348,6 +348,8 @@ export default function SiteDetail() {
   const [showEditSite, setShowEditSite] = useState(false);
   const [editSiteForm, setEditSiteForm] = useState({ name: '', address: '', lat: '', lng: '', organizationName: '', portfolioName: '' });
   const [editCoordsAutoFilled, setEditCoordsAutoFilled] = useState(false);
+  const [orgOptions, setOrgOptions] = useState<string[]>([]);
+  const [portfolioOptions, setPortfolioOptions] = useState<Record<string, string[]>>({});
   const [chargerUptime, setChargerUptime] = useState<Record<string, ChargerUptime>>({});
   const [siteUptime, setSiteUptime] = useState<SiteUptime | null>(null);
   const [siteAnalytics, setSiteAnalytics] = useState<SiteAnalytics | null>(null);
@@ -626,65 +628,33 @@ export default function SiteDetail() {
 
       {/* ── Edit site form (always visible when toggled) ── */}
       {showEditSite && (
-        <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
-          <h2 className="mb-3 text-sm font-semibold text-gray-700 dark:text-slate-300">Edit site details</h2>
-          <div className="grid gap-3 md:grid-cols-2">
-            <label className="text-sm text-gray-700 dark:text-slate-300">Site name
-              <input className="mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5" value={editSiteForm.name} onChange={(e) => setEditSiteForm((f) => ({ ...f, name: e.target.value }))} />
-            </label>
-            <label className="text-sm text-gray-700 dark:text-slate-300">Address
-              <div className="mt-1">
-                <AddressAutocomplete
-                  value={editSiteForm.address}
-                  className="w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5"
-                  placeholder="Start typing an address…"
-                  onRawChange={(v) => {
-                    setEditSiteForm((f) => ({ ...f, address: v }));
-                    if (editCoordsAutoFilled) {
-                      setEditCoordsAutoFilled(false);
-                      setEditSiteForm((f) => ({ ...f, lat: '', lng: '' }));
-                    }
-                  }}
-                  onChange={(address, lat, lng) => {
-                    setEditSiteForm((f) => ({ ...f, address, lat: String(lat), lng: String(lng) }));
-                    setEditCoordsAutoFilled(true);
-                  }}
-                />
-              </div>
-            </label>
-            <label className="text-sm text-gray-700 dark:text-slate-300">Latitude
-              <input type="number" step="0.000001" className="mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5" value={editSiteForm.lat} readOnly={editCoordsAutoFilled} onChange={(e) => setEditSiteForm((f) => ({ ...f, lat: e.target.value }))} />
-            </label>
-            <label className="text-sm text-gray-700 dark:text-slate-300">Longitude
-              <input type="number" step="0.000001" className="mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5" value={editSiteForm.lng} readOnly={editCoordsAutoFilled} onChange={(e) => setEditSiteForm((f) => ({ ...f, lng: e.target.value }))} />
-            </label>
-            <label className="text-sm text-gray-700 dark:text-slate-300">Organization
-              <input className="mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5" value={editSiteForm.organizationName} onChange={(e) => setEditSiteForm((f) => ({ ...f, organizationName: e.target.value }))} />
-            </label>
-            <label className="text-sm text-gray-700 dark:text-slate-300">Portfolio
-              <input className="mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5" value={editSiteForm.portfolioName} onChange={(e) => setEditSiteForm((f) => ({ ...f, portfolioName: e.target.value }))} />
-            </label>
-          </div>
-          <div className="mt-3 flex gap-2">
-            <button className="rounded-md bg-brand-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-700"
-              onClick={async () => {
-                const token = await getToken();
-                const payload = {
-                  name: editSiteForm.name.trim(),
-                  address: editSiteForm.address.trim(),
-                  lat: Number(editSiteForm.lat),
-                  lng: Number(editSiteForm.lng),
-                  organizationName: editSiteForm.organizationName.trim(),
-                  portfolioName: editSiteForm.portfolioName.trim(),
-                };
-                await createApiClient(token).updateSite(site.id, payload);
-                pushAudit('site.updated', `${payload.name} @ ${payload.address} | org=${payload.organizationName || '-'} portfolio=${payload.portfolioName || '-'}`);
-                setShowEditSite(false);
-                await load();
-              }}>Save site</button>
-            <button className="rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800/60 px-3 py-1.5 text-xs text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700" onClick={() => setShowEditSite(false)}>Cancel</button>
-          </div>
-        </div>
+        <EditSiteForm
+          form={editSiteForm}
+          setForm={setEditSiteForm}
+          coordsAutoFilled={editCoordsAutoFilled}
+          setCoordsAutoFilled={setEditCoordsAutoFilled}
+          orgOptions={orgOptions}
+          portfolioOptions={portfolioOptions}
+          onSave={async () => {
+            const token = await getToken();
+            const payload = {
+              name: editSiteForm.name.trim(),
+              address: editSiteForm.address.trim(),
+              lat: Number(editSiteForm.lat),
+              lng: Number(editSiteForm.lng),
+              organizationName: editSiteForm.organizationName.trim(),
+              portfolioName: editSiteForm.portfolioName.trim(),
+            };
+            await createApiClient(token).updateSite(site.id, payload);
+            pushAudit('site.updated', `${payload.name} @ ${payload.address} | org=${payload.organizationName || '-'} portfolio=${payload.portfolioName || '-'}`);
+            setShowEditSite(false);
+            await load();
+          }}
+          onCancel={() => setShowEditSite(false)}
+          getToken={getToken}
+          setOrgOptions={setOrgOptions}
+          setPortfolioOptions={setPortfolioOptions}
+        />
       )}
 
 
@@ -1753,6 +1723,198 @@ function ChargerCard({ charger, uptime, onUnassign }: { charger: SiteDetailType[
           </button>
         )}
         <Link to={`/chargers/${shortId(charger.id)}`} className="flex-1 rounded-md border border-gray-300 dark:border-slate-700 px-3 py-1.5 text-center text-xs font-medium text-gray-600 dark:text-slate-400 bg-white dark:bg-slate-800/60 hover:bg-gray-50 dark:hover:bg-slate-700">View Detail →</Link>
+      </div>
+    </div>
+  );
+}
+
+// ── Edit Site Form with Organization/Portfolio Dropdowns ──
+
+function EditSiteForm({
+  form,
+  setForm,
+  coordsAutoFilled,
+  setCoordsAutoFilled,
+  orgOptions,
+  portfolioOptions,
+  onSave,
+  onCancel,
+  getToken,
+  setOrgOptions,
+  setPortfolioOptions,
+}: {
+  form: { name: string; address: string; lat: string; lng: string; organizationName: string; portfolioName: string };
+  setForm: React.Dispatch<React.SetStateAction<typeof form>>;
+  coordsAutoFilled: boolean;
+  setCoordsAutoFilled: React.Dispatch<React.SetStateAction<boolean>>;
+  orgOptions: string[];
+  portfolioOptions: Record<string, string[]>;
+  onSave: () => Promise<void>;
+  onCancel: () => void;
+  getToken: () => Promise<string | null>;
+  setOrgOptions: React.Dispatch<React.SetStateAction<string[]>>;
+  setPortfolioOptions: React.Dispatch<React.SetStateAction<Record<string, string[]>>>;
+}) {
+  const [customOrg, setCustomOrg] = useState(false);
+  const [customPortfolio, setCustomPortfolio] = useState(false);
+
+  // Fetch org/portfolio options on mount
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await getToken();
+        const data = await createApiClient(token).getOrgPortfolioOptions();
+        if (cancelled) return;
+        setOrgOptions(data.organizations);
+        setPortfolioOptions(data.portfolios);
+        // If current value isn't in the list, show custom input
+        if (form.organizationName && !data.organizations.includes(form.organizationName)) {
+          setCustomOrg(true);
+        }
+        const availPortfolios = data.portfolios[form.organizationName] ?? data.portfolios[''] ?? [];
+        if (form.portfolioName && !availPortfolios.includes(form.portfolioName)) {
+          setCustomPortfolio(true);
+        }
+      } catch { /* silent — dropdowns will just be empty */ }
+    })();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Portfolio options depend on selected organization
+  const currentPortfolioList = portfolioOptions[form.organizationName] ?? portfolioOptions[''] ?? [];
+
+  const inputCls = 'mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5 text-sm bg-white dark:bg-slate-800';
+
+  return (
+    <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+      <h2 className="mb-3 text-sm font-semibold text-gray-700 dark:text-slate-300">Edit site details</h2>
+      <div className="grid gap-3 md:grid-cols-2">
+        <label className="text-sm text-gray-700 dark:text-slate-300">Site name
+          <input className={inputCls} value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
+        </label>
+        <label className="text-sm text-gray-700 dark:text-slate-300">Address
+          <div className="mt-1">
+            <AddressAutocomplete
+              value={form.address}
+              className="w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5"
+              placeholder="Start typing an address…"
+              onRawChange={(v) => {
+                setForm((f) => ({ ...f, address: v }));
+                if (coordsAutoFilled) {
+                  setCoordsAutoFilled(false);
+                  setForm((f) => ({ ...f, lat: '', lng: '' }));
+                }
+              }}
+              onChange={(address, lat, lng) => {
+                setForm((f) => ({ ...f, address, lat: String(lat), lng: String(lng) }));
+                setCoordsAutoFilled(true);
+              }}
+            />
+          </div>
+        </label>
+        <label className="text-sm text-gray-700 dark:text-slate-300">Latitude
+          <input type="number" step="0.000001" className={inputCls} value={form.lat} readOnly={coordsAutoFilled} onChange={(e) => setForm((f) => ({ ...f, lat: e.target.value }))} />
+        </label>
+        <label className="text-sm text-gray-700 dark:text-slate-300">Longitude
+          <input type="number" step="0.000001" className={inputCls} value={form.lng} readOnly={coordsAutoFilled} onChange={(e) => setForm((f) => ({ ...f, lng: e.target.value }))} />
+        </label>
+
+        {/* Organization — dropdown with custom option */}
+        <div className="text-sm text-gray-700 dark:text-slate-300">
+          <span>Organization</span>
+          {!customOrg && orgOptions.length > 0 ? (
+            <select
+              className={inputCls}
+              value={form.organizationName}
+              onChange={(e) => {
+                if (e.target.value === '__custom__') {
+                  setCustomOrg(true);
+                  setForm((f) => ({ ...f, organizationName: '' }));
+                } else {
+                  setForm((f) => ({ ...f, organizationName: e.target.value, portfolioName: '' }));
+                  setCustomPortfolio(false);
+                }
+              }}
+            >
+              <option value="">— None —</option>
+              {orgOptions.map((org) => (
+                <option key={org} value={org}>{org}</option>
+              ))}
+              <option value="__custom__">+ Add new organization…</option>
+            </select>
+          ) : (
+            <div className="flex gap-1 mt-1">
+              <input
+                className="flex-1 rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5 text-sm bg-white dark:bg-slate-800"
+                placeholder="Enter organization name"
+                value={form.organizationName}
+                onChange={(e) => setForm((f) => ({ ...f, organizationName: e.target.value }))}
+                autoFocus={customOrg}
+              />
+              {orgOptions.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => { setCustomOrg(false); setForm((f) => ({ ...f, organizationName: '' })); }}
+                  className="shrink-0 rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1 text-xs text-gray-500 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-700"
+                  title="Switch back to dropdown"
+                >
+                  ↩
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Portfolio — dropdown with custom option */}
+        <div className="text-sm text-gray-700 dark:text-slate-300">
+          <span>Portfolio</span>
+          {!customPortfolio && currentPortfolioList.length > 0 ? (
+            <select
+              className={inputCls}
+              value={form.portfolioName}
+              onChange={(e) => {
+                if (e.target.value === '__custom__') {
+                  setCustomPortfolio(true);
+                  setForm((f) => ({ ...f, portfolioName: '' }));
+                } else {
+                  setForm((f) => ({ ...f, portfolioName: e.target.value }));
+                }
+              }}
+            >
+              <option value="">— None —</option>
+              {currentPortfolioList.map((p) => (
+                <option key={p} value={p}>{p}</option>
+              ))}
+              <option value="__custom__">+ Add new portfolio…</option>
+            </select>
+          ) : (
+            <div className="flex gap-1 mt-1">
+              <input
+                className="flex-1 rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5 text-sm bg-white dark:bg-slate-800"
+                placeholder="Enter portfolio name"
+                value={form.portfolioName}
+                onChange={(e) => setForm((f) => ({ ...f, portfolioName: e.target.value }))}
+                autoFocus={customPortfolio}
+              />
+              {currentPortfolioList.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => { setCustomPortfolio(false); setForm((f) => ({ ...f, portfolioName: '' })); }}
+                  className="shrink-0 rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1 text-xs text-gray-500 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-700"
+                  title="Switch back to dropdown"
+                >
+                  ↩
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+      <div className="mt-3 flex gap-2">
+        <button className="rounded-md bg-brand-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-700" onClick={onSave}>Save site</button>
+        <button className="rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800/60 px-3 py-1.5 text-xs text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700" onClick={onCancel}>Cancel</button>
       </div>
     </div>
   );

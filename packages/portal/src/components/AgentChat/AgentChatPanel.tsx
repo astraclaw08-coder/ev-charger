@@ -9,7 +9,7 @@ import AgentChatMessage from './AgentChatMessage';
 export default function AgentChatPanel() {
   const [isOpen, setIsOpen] = useState(false);
   const [aiConfigured, setAiConfigured] = useState<boolean | null>(null);
-  const { messages, isStreaming, sendMessage, abort, clearConversation } = useAgentChat();
+  const { messages, isStreaming, unreadCount, sendMessage, abort, clearConversation, markRead } = useAgentChat();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const getToken = useToken();
 
@@ -47,6 +47,11 @@ export default function AgentChatPanel() {
     return () => document.removeEventListener('keydown', handleKey);
   }, []);
 
+  // Mark messages read when panel opens
+  useEffect(() => {
+    if (isOpen) markRead();
+  }, [isOpen, markRead]);
+
   const toggle = useCallback(() => setIsOpen((v) => !v), []);
   const close = useCallback(() => setIsOpen(false), []);
 
@@ -65,9 +70,9 @@ export default function AgentChatPanel() {
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5" aria-hidden="true">
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2m0 14v2m9-9h-2M5 12H3m15.364-6.364-1.414 1.414M7.05 16.95l-1.414 1.414m12.728 0-1.414-1.414M7.05 7.05 5.636 5.636M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z" />
           </svg>
-          {messages.length > 0 && (
+          {unreadCount > 0 && (
             <span className="absolute -top-1 -right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white tabular-nums">
-              {messages.filter((m) => m.role === 'assistant').length}
+              {unreadCount}
             </span>
           )}
         </button>
