@@ -70,8 +70,10 @@ export async function siteRoutes(app: FastifyInstance) {
     }));
   });
 
-  // GET /sites/org-portfolio-options — list distinct organization and portfolio names
-  app.get('/sites/org-portfolio-options', {
+  // GET /site-options/org-portfolio — list distinct organization and portfolio names
+  // NOTE: Registered at /site-options/* instead of /sites/* to avoid Fastify
+  // parametric route collision with /sites/:id
+  app.get('/site-options/org-portfolio', {
     preHandler: [requireOperator, requirePolicy('site.list')],
   }, async (req) => {
     const operator = req.currentOperator!;

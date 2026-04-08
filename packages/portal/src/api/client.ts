@@ -676,7 +676,7 @@ export function createApiClient(token: string | null | undefined) {
   return {
     getSites: () => request<SiteListItem[]>('/sites', token),
     getSite: (id: string) => request<SiteDetail>(`/sites/${id}`, token),
-    getOrgPortfolioOptions: () => request<{ organizations: string[]; portfolios: Record<string, string[]> }>('/sites/org-portfolio-options', token),
+    getOrgPortfolioOptions: () => request<{ organizations: string[]; portfolios: Record<string, string[]> }>('/site-options/org-portfolio', token),
     getChargers: () => request<ChargerListItem[]>('/chargers', token),
     getAnalytics: (siteId: string, params?: { periodDays?: number; startDate?: string; endDate?: string }) => {
       const query = new URLSearchParams();
