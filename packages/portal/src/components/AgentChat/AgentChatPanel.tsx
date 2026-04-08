@@ -13,14 +13,14 @@ export default function AgentChatPanel() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const getToken = useToken();
 
-  // Check OpenAI connection status on mount
+  // Check AI connection status on mount
   useEffect(() => {
     let cancelled = false;
     async function check() {
       try {
         const token = await getToken();
         const api = createApiClient(token);
-        const res = await api.getOpenAIStatus();
+        const res = await api.getAIStatus();
         if (!cancelled) setAiConfigured(res.connected);
       } catch {
         if (!cancelled) setAiConfigured(null);
