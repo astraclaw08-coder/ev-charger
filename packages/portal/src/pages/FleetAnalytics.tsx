@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   AreaChart,
   Area,
@@ -25,6 +25,8 @@ import {
 import { exportToCsv, type CsvColumn } from '../lib/csvExport';
 import { useToken } from '../auth/TokenContext';
 import { usePortalTheme } from '../theme/ThemeContext';
+import TabBar from '../components/ui/TabBar';
+import IntervalUsageExport from './IntervalUsageExport';
 
 type TimeFilter = '7d' | '30d' | '60d' | 'custom';
 
@@ -32,7 +34,18 @@ type DailyMerged = { date: string; sessions: number; kwhDelivered: number; reven
 
 const ENABLE_EVC_PLATFORM_BUSINESS_VIEWS = import.meta.env.VITE_EVC_PLATFORM_BUSINESS_VIEWS === '1';
 
+const ANALYTICS_TABS = [
+  { id: 'overview', label: 'Fleet Overview' },
+  { id: 'reports', label: 'Reports' },
+];
+
 export default function FleetAnalytics() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = searchParams.get('tab') || 'overview';
+  const setActiveTab = (tab: string) => {
+    setSearchParams(tab === 'overview' ? {} : { tab }, { replace: true });
+  };
+
   const getToken = useToken();
   const { theme } = usePortalTheme();
   const isDark = theme === 'dark';
@@ -238,9 +251,6 @@ export default function FleetAnalytics() {
   const orgOptions = useMemo(() => Array.from(new Set(sites.map((s) => s.organizationName ?? '').filter(Boolean))).sort(), [sites]);
   const portfolioOptions = useMemo(() => Array.from(new Set(sites.map((s) => s.portfolioName ?? '').filter(Boolean))).sort(), [sites]);
 
-  if (loading) return <div className="flex h-64 items-center justify-center text-gray-400 dark:text-slate-500">Loading analytics…</div>;
-  if (error) return <div className="rounded-lg bg-red-50 dark:bg-red-900/20 p-4 text-sm text-red-700 dark:text-red-400">{error}</div>;
-
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -249,7 +259,7 @@ export default function FleetAnalytics() {
           <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">Monitor charging performance, revenue, and utilization across your network.</p>
         </div>
 
-        <div className="flex flex-wrap items-end gap-2">
+        {activeTab === 'overview' && !loading && !error && <div className="flex flex-wrap items-end gap-2">
           <div>
             <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">DATE RANGE</label>
             <select value={timeFilter} onChange={(e) => setTimeFilter(e.target.value as TimeFilter)} className="rounded-md border border-gray-300 dark:border-slate-600 px-2 py-2 text-sm">
@@ -271,8 +281,22 @@ export default function FleetAnalytics() {
               </div>
             </>
           )}
-        </div>
+        </div>}
       </div>
+
+      <TabBar tabs={ANALYTICS_TABS} activeTab={activeTab} onChange={setActiveTab} variant="underline" />
+
+      {activeTab === 'reports' && <IntervalUsageExport />}
+
+      {activeTab === 'overview' && loading && (
+        <div className="flex h-64 items-center justify-center text-gray-400 dark:text-slate-500">Loading analytics...</div>
+      )}
+
+      {activeTab === 'overview' && error && (
+        <div className="rounded-lg bg-red-50 dark:bg-red-900/20 p-4 text-sm text-red-700 dark:text-red-400">{error}</div>
+      )}
+
+      {activeTab === 'overview' && !loading && !error && <>
 
       {ENABLE_EVC_PLATFORM_BUSINESS_VIEWS && (
         <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
@@ -462,6 +486,8 @@ export default function FleetAnalytics() {
           </BarChart>
         </ResponsiveContainer>
       </ChartCard>
+
+      </>}
     </div>
   );
 }

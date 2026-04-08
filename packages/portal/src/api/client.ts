@@ -27,6 +27,47 @@ export interface PortfolioEntity {
   createdAt: string;
 }
 
+export interface SavedReport {
+  id: string;
+  operatorId: string;
+  name: string;
+  reportType: string;
+  config: IntervalUsageReportConfig;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface IntervalUsageReportConfig {
+  siteId?: string;
+  chargerIds?: string[];
+  dateRangeType: 'relative' | 'fixed';
+  relativeDays?: number;
+  startDate?: string;
+  endDate?: string;
+  intervalMinutes: number;
+}
+
+export interface IntervalUsagePreviewRow {
+  intervalStart: string;
+  intervalEnd: string;
+  siteName: string;
+  chargerOcppId: string;
+  connectorId: number;
+  energyKwh: number;
+  avgPowerKw: number;
+  maxPowerKw: number | null;
+  portStatus: string;
+  vehicleConnected: string;
+  dataQualityFlag: string;
+}
+
+export interface IntervalUsagePreviewResponse {
+  total: number;
+  limit: number;
+  offset: number;
+  rows: IntervalUsagePreviewRow[];
+}
+
 export interface SiteListItem {
   id: string;
   name: string;
@@ -1126,5 +1167,58 @@ export function createApiClient(token: string | null | undefined) {
         method: 'POST',
         body: JSON.stringify({}),
       }),
+
+    // ── Reports ──────────────────────────────────────────────────────────────
+
+    getIntervalUsagePreview: (params: { siteId?: string; chargerIds?: string[]; startDate: string; endDate: string; limit?: number; offset?: number }) => {
+      const query = new URLSearchParams();
+      if (params.siteId) query.set('siteId', params.siteId);
+      if (params.chargerIds?.length) query.set('chargerIds', params.chargerIds.join(','));
+      query.set('startDate', params.startDate);
+      query.set('endDate', params.endDate);
+      if (params.limit != null) query.set('limit', String(params.limit));
+      if (params.offset != null) query.set('offset', String(params.offset));
+      return request<IntervalUsagePreviewResponse>(`/reports/interval-usage/preview?${query}`, token);
+    },
+
+    exportIntervalUsageCsv: async (params: { siteId?: string; chargerIds?: string[]; startDate: string; endDate: string; intervalMinutes?: number }) => {
+      const query = new URLSearchParams();
+      if (params.siteId) query.set('siteId', params.siteId);
+      if (params.chargerIds?.length) query.set('chargerIds', params.chargerIds.join(','));
+      query.set('startDate', params.startDate);
+      query.set('endDate', params.endDate);
+      if (params.intervalMinutes) query.set('intervalMinutes', String(params.intervalMinutes));
+      const url = `${API_URL}/reports/interval-usage/csv?${query}`;
+      const headers: Record<string, string> = {};
+      if (IS_DEV_MODE) {
+        headers['x-dev-operator-id'] = DEV_OPERATOR_ID;
+      } else if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      const res = await fetch(url, { headers });
+      if (!res.ok) throw new Error(`CSV export failed: ${res.status}`);
+      const blob = await res.blob();
+      const downloadUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = `interval-usage_${params.startDate}_${params.endDate}.csv`;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(downloadUrl);
+    },
+
+    getSavedReports: () =>
+      request<{ reports: SavedReport[] }>('/reports/saved', token).then((r) => r.reports),
+
+    createSavedReport: (data: { name: string; config: IntervalUsageReportConfig }) =>
+      request<SavedReport>('/reports/saved', token, { method: 'POST', body: JSON.stringify(data) }),
+
+    updateSavedReport: (id: string, data: { name?: string; config?: IntervalUsageReportConfig }) =>
+      request<SavedReport>(`/reports/saved/${id}`, token, { method: 'PUT', body: JSON.stringify(data) }),
+
+    deleteSavedReport: (id: string) =>
+      request<void>(`/reports/saved/${id}`, token, { method: 'DELETE' }),
   };
 }
