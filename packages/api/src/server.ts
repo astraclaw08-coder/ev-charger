@@ -16,6 +16,8 @@ import { qrRedirectRoutes } from './routes/qrRedirect';
 import { supportDriverRoutes } from './routes/supportDrivers';
 import { agentChatRoutes } from './routes/agentChat';
 import { openaiOAuthRoutes } from './routes/openaiOAuth';
+import { organizationRoutes } from './routes/organizations';
+import { portfolioRoutes } from './routes/portfolios';
 // Temporarily disabled until notification Prisma models/types are aligned.
 // import { notificationRoutes } from './routes/notifications';
 import { prisma } from '@ev-charger/shared';
@@ -67,6 +69,8 @@ export async function buildServer() {
   await app.register(chargerRoutes);
   await app.register(sessionRoutes);
   await app.register(siteRoutes);
+  await app.register(organizationRoutes);
+  await app.register(portfolioRoutes);
   await app.register(paymentRoutes);
   await app.register(profileRoutes);
   await app.register(favoriteRoutes);

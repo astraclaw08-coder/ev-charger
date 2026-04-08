@@ -71,8 +71,8 @@ export default function Sites() {
     return sites.filter((site) =>
       site.name.toLowerCase().includes(q)
       || site.address.toLowerCase().includes(q)
-      || (site.organizationName ?? '').toLowerCase().includes(q)
-      || (site.portfolioName ?? '').toLowerCase().includes(q),
+      || (site.organization?.name ?? site.organizationName ?? '').toLowerCase().includes(q)
+      || (site.portfolio?.name ?? site.portfolioName ?? '').toLowerCase().includes(q),
     );
   }, [sites, query]);
 
@@ -161,8 +161,9 @@ export default function Sites() {
         </div>
       ) : filteredSites.length > 4 ? (
         <div className="mt-6 overflow-hidden rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900">
-          <div className="hidden grid-cols-[1.8fr_1fr_1fr_1fr] gap-3 border-b border-gray-300 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/60 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400 md:grid">
+          <div className="hidden grid-cols-[1.6fr_1fr_0.8fr_1fr_0.7fr] gap-3 border-b border-gray-300 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/60 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400 md:grid">
             <span>Site</span>
+            <span>Organization</span>
             <span>Chargers</span>
             <span className="inline-flex items-center gap-1">
               Status
@@ -267,13 +268,25 @@ function SiteListRow({ site }: { site: SiteListItem }) {
   return (
     <Link
       to={`/sites/${shortId(site.id)}`}
-      className="grid gap-3 px-4 py-3 md:grid-cols-[1.8fr_1fr_1fr_1fr] md:items-center cursor-pointer transition-colors hover:bg-gray-50 dark:hover:bg-slate-800/60"
+      className="grid gap-3 px-4 py-3 md:grid-cols-[1.6fr_1fr_0.8fr_1fr_0.7fr] md:items-center cursor-pointer transition-colors hover:bg-gray-50 dark:hover:bg-slate-800/60"
     >
       <div>
         <span className="font-semibold text-gray-900 dark:text-slate-100">
           {site.name}
         </span>
         <p className="text-xs text-gray-500 dark:text-slate-400">{site.address}</p>
+      </div>
+      <div className="min-w-0">
+        {(site.organization?.name || site.organizationName) ? (
+          <div>
+            <span className="text-sm text-gray-700 dark:text-slate-300 truncate block">{site.organization?.name ?? site.organizationName}</span>
+            {(site.portfolio?.name || site.portfolioName) && (
+              <span className="text-xs text-gray-400 dark:text-slate-500 truncate block">{site.portfolio?.name ?? site.portfolioName}</span>
+            )}
+          </div>
+        ) : (
+          <span className="text-xs text-gray-400 dark:text-slate-500">—</span>
+        )}
       </div>
       <div className="text-sm text-gray-700 dark:text-slate-300">{total}</div>
       <div className="flex flex-wrap gap-2 text-xs">
@@ -305,6 +318,11 @@ function SiteCard({ site }: { site: SiteListItem }) {
             {site.name}
           </span>
           <p className="mt-0.5 truncate text-xs text-gray-500 dark:text-slate-400">{site.address}</p>
+          {(site.organization?.name || site.organizationName) && (
+            <p className="mt-1 truncate text-xs text-gray-400 dark:text-slate-500">
+              {site.organization?.name ?? site.organizationName}{(site.portfolio?.name || site.portfolioName) ? ` · ${(site.portfolio?.name ?? site.portfolioName)}` : ''}
+            </p>
+          )}
         </div>
         <span className="ml-2 shrink-0 text-2xl">🔌</span>
       </div>

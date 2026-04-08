@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { createApiClient, type AdminAuditEvent, type ChargerModelCatalogItem, type OperatorNotificationPreference, type PortalSettings } from '../api/client';
+import { createApiClient, type AdminAuditEvent, type ChargerModelCatalogItem, type OperatorNotificationPreference, type PortalSettings, type OrganizationEntity, type PortfolioEntity } from '../api/client';
 import { useToken } from '../auth/TokenContext';
 import UserManagement from './UserManagement';
 import { cn } from '../lib/utils';
@@ -244,32 +244,195 @@ function UserCreateInline({ onSubmit, onCancel }: { onSubmit: (data: { email: st
 }
 
 // ─── Tab: Organizations ───────────────────────────────────────────────────────
-function OrganizationsTab({ org, setOrg, onSave, valid }: {
-  org: OrgDraft; setOrg: React.Dispatch<React.SetStateAction<OrgDraft>>; onSave: () => void; valid: boolean;
-}) {
+function OrganizationsTab() {
+  const getToken = useToken();
+  const [orgs, setOrgs] = useState<OrganizationEntity[]>([]);
+  const [portfolios, setPortfolios] = useState<PortfolioEntity[]>([]);
+  const [loading, setLoading] = useState(true);
   const [orgSearch, setOrgSearch] = useState('');
+  const [expandedOrgId, setExpandedOrgId] = useState<string | null>(null);
+
+  // Create org form
   const [showCreate, setShowCreate] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [createDraft, setCreateDraft] = useState({ name: '', billingAddress: '', contactEmail: '', contactPhone: '' });
+  const [createBusy, setCreateBusy] = useState(false);
 
-  // Mock org list — in production this comes from API
-  const orgList = [
-    { id: '1', name: org.organizationName || 'Default Organization', sites: 2, chargers: 4, contactEmail: org.supportContactEmail, status: 'Active' as const },
-  ].filter((o) => o.name);
+  // Edit org form
+  const [editingOrgId, setEditingOrgId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState({ name: '', billingAddress: '', contactEmail: '', contactPhone: '' });
+  const [editBusy, setEditBusy] = useState(false);
 
-  const filteredOrgs = orgList.filter((o) =>
+  // Create portfolio form
+  const [addPortfolioOrgId, setAddPortfolioOrgId] = useState<string | null>(null);
+  const [portfolioDraft, setPortfolioDraft] = useState({ name: '', description: '' });
+  const [portfolioBusy, setPortfolioBusy] = useState(false);
+
+  // Edit portfolio form
+  const [editingPortfolioId, setEditingPortfolioId] = useState<string | null>(null);
+  const [editPortfolioDraft, setEditPortfolioDraft] = useState({ name: '', description: '' });
+  const [editPortfolioBusy, setEditPortfolioBusy] = useState(false);
+
+  async function fetchData() {
+    try {
+      setLoading(true);
+      const token = await getToken();
+      const api = createApiClient(token);
+      const [orgsRes, portRes] = await Promise.all([api.getOrganizations(), api.getPortfolios()]);
+      setOrgs(orgsRes);
+      setPortfolios(portRes);
+    } catch (err) {
+      console.error('Failed to load organizations', err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { fetchData(); }, []);
+
+  const filteredOrgs = orgs.filter((o) =>
     !orgSearch || o.name.toLowerCase().includes(orgSearch.toLowerCase()),
   );
 
-  const orgFields: Array<{ key: keyof OrgDraft; label: string; placeholder: string }> = [
-    { key: 'organizationName', label: 'Organization Name', placeholder: 'Acme Charging Inc.' },
-    { key: 'organizationBillingAddress', label: 'Billing Address', placeholder: '123 Main St, City, ST 00000' },
-    { key: 'organizationPortfolio', label: 'Portfolio / Site Assignment', placeholder: 'Portfolio name or site IDs' },
-    { key: 'organizationDefaultSite', label: 'Default Site', placeholder: 'Primary site ID' },
-    { key: 'supportContactEmail', label: 'Support Contact Email', placeholder: 'support@company.com' },
-    { key: 'supportContactPhone', label: 'Support Contact Phone', placeholder: '+1 (555) 000-0000' },
-    { key: 'profileDisplayName', label: 'Admin Display Name', placeholder: 'Admin user display name' },
-    { key: 'profileTimezone', label: 'Timezone', placeholder: 'America/Los_Angeles' },
-  ];
+  function portfoliosForOrg(orgId: string) {
+    return portfolios.filter((p) => p.organizationId === orgId);
+  }
+
+  // ── Create Org ──
+  async function handleCreateOrg() {
+    if (!createDraft.name.trim()) return;
+    setCreateBusy(true);
+    try {
+      const token = await getToken();
+      const api = createApiClient(token);
+      await api.createOrganization({
+        name: createDraft.name.trim(),
+        billingAddress: createDraft.billingAddress.trim() || undefined,
+        contactEmail: createDraft.contactEmail.trim() || undefined,
+        contactPhone: createDraft.contactPhone.trim() || undefined,
+      });
+      setCreateDraft({ name: '', billingAddress: '', contactEmail: '', contactPhone: '' });
+      setShowCreate(false);
+      await fetchData();
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Failed to create organization');
+    } finally {
+      setCreateBusy(false);
+    }
+  }
+
+  // ── Edit Org ──
+  function startEditOrg(o: OrganizationEntity) {
+    setEditingOrgId(o.id);
+    setEditDraft({ name: o.name, billingAddress: o.billingAddress ?? '', contactEmail: o.contactEmail ?? '', contactPhone: o.contactPhone ?? '' });
+  }
+
+  async function handleUpdateOrg() {
+    if (!editingOrgId || !editDraft.name.trim()) return;
+    setEditBusy(true);
+    try {
+      const token = await getToken();
+      const api = createApiClient(token);
+      await api.updateOrganization(editingOrgId, {
+        name: editDraft.name.trim(),
+        billingAddress: editDraft.billingAddress.trim(),
+        contactEmail: editDraft.contactEmail.trim(),
+        contactPhone: editDraft.contactPhone.trim(),
+      });
+      setEditingOrgId(null);
+      await fetchData();
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Failed to update organization');
+    } finally {
+      setEditBusy(false);
+    }
+  }
+
+  // ── Delete Org ──
+  async function handleDeleteOrg(o: OrganizationEntity) {
+    if (!window.confirm(`Delete organization "${o.name}"? This cannot be undone.`)) return;
+    try {
+      const token = await getToken();
+      const api = createApiClient(token);
+      await api.deleteOrganization(o.id);
+      if (expandedOrgId === o.id) setExpandedOrgId(null);
+      if (editingOrgId === o.id) setEditingOrgId(null);
+      await fetchData();
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Failed to delete organization');
+    }
+  }
+
+  // ── Create Portfolio ──
+  async function handleCreatePortfolio() {
+    if (!addPortfolioOrgId || !portfolioDraft.name.trim()) return;
+    setPortfolioBusy(true);
+    try {
+      const token = await getToken();
+      const api = createApiClient(token);
+      await api.createPortfolio({
+        name: portfolioDraft.name.trim(),
+        organizationId: addPortfolioOrgId,
+        description: portfolioDraft.description.trim() || undefined,
+      });
+      setPortfolioDraft({ name: '', description: '' });
+      setAddPortfolioOrgId(null);
+      await fetchData();
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Failed to create portfolio');
+    } finally {
+      setPortfolioBusy(false);
+    }
+  }
+
+  // ── Edit Portfolio ──
+  function startEditPortfolio(p: PortfolioEntity) {
+    setEditingPortfolioId(p.id);
+    setEditPortfolioDraft({ name: p.name, description: p.description ?? '' });
+  }
+
+  async function handleUpdatePortfolio() {
+    if (!editingPortfolioId || !editPortfolioDraft.name.trim()) return;
+    setEditPortfolioBusy(true);
+    try {
+      const token = await getToken();
+      const api = createApiClient(token);
+      await api.updatePortfolio(editingPortfolioId, {
+        name: editPortfolioDraft.name.trim(),
+        description: editPortfolioDraft.description.trim(),
+      });
+      setEditingPortfolioId(null);
+      await fetchData();
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Failed to update portfolio');
+    } finally {
+      setEditPortfolioBusy(false);
+    }
+  }
+
+  // ── Delete Portfolio ──
+  async function handleDeletePortfolio(p: PortfolioEntity) {
+    if (!window.confirm(`Delete portfolio "${p.name}"? This cannot be undone.`)) return;
+    try {
+      const token = await getToken();
+      const api = createApiClient(token);
+      await api.deletePortfolio(p.id);
+      if (editingPortfolioId === p.id) setEditingPortfolioId(null);
+      await fetchData();
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Failed to delete portfolio');
+    }
+  }
+
+  function statusBadge(status: string) {
+    const isActive = status.toLowerCase() === 'active';
+    return (
+      <span className={cn('rounded-full px-2 py-0.5 text-xs font-medium', isActive ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-gray-100 dark:bg-slate-800 text-gray-500 dark:text-slate-400')}>
+        {status}
+      </span>
+    );
+  }
+
+  if (loading) return <p className="text-sm text-gray-500 dark:text-slate-400">Loading organizations...</p>;
 
   return (
     <SectionCard
@@ -277,6 +440,7 @@ function OrganizationsTab({ org, setOrg, onSave, valid }: {
       description="Manage registered organizations, portfolios, and site assignments."
       actions={<PrimaryButton onClick={() => setShowCreate((v) => !v)}>+ Organization</PrimaryButton>}
     >
+      {/* ── Create Organization Form ── */}
       {showCreate && (
         <div className="mb-6 rounded-lg border border-brand-200 dark:border-brand-700 bg-brand-50/30 dark:bg-brand-900/10 p-4">
           <div className="flex items-center justify-between mb-3">
@@ -284,79 +448,175 @@ function OrganizationsTab({ org, setOrg, onSave, valid }: {
             <button onClick={() => setShowCreate(false)} className="text-xs text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200">Cancel</button>
           </div>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            {orgFields.slice(0, 4).map(({ key, label, placeholder }) => (
-              <FieldRow key={key} label={label}><Input placeholder={placeholder} value={org[key]} onChange={(e) => setOrg((p) => ({ ...p, [key]: e.target.value }))} /></FieldRow>
-            ))}
-          </div>
-          <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-            {orgFields.slice(4).map(({ key, label, placeholder }) => (
-              <FieldRow key={key} label={label}><Input placeholder={placeholder} value={org[key]} onChange={(e) => setOrg((p) => ({ ...p, [key]: e.target.value }))} /></FieldRow>
-            ))}
+            <FieldRow label="Organization Name *"><Input placeholder="Acme Charging Inc." value={createDraft.name} onChange={(e) => setCreateDraft((p) => ({ ...p, name: e.target.value }))} /></FieldRow>
+            <FieldRow label="Billing Address"><Input placeholder="123 Main St, City, ST 00000" value={createDraft.billingAddress} onChange={(e) => setCreateDraft((p) => ({ ...p, billingAddress: e.target.value }))} /></FieldRow>
+            <FieldRow label="Contact Email"><Input type="email" placeholder="admin@company.com" value={createDraft.contactEmail} onChange={(e) => setCreateDraft((p) => ({ ...p, contactEmail: e.target.value }))} /></FieldRow>
+            <FieldRow label="Contact Phone"><Input placeholder="+1 (555) 000-0000" value={createDraft.contactPhone} onChange={(e) => setCreateDraft((p) => ({ ...p, contactPhone: e.target.value }))} /></FieldRow>
           </div>
           <div className="mt-3">
-            <FieldRow label="Change Reason (required)"><Input placeholder="Reason" value={org.reason} onChange={(e) => setOrg((p) => ({ ...p, reason: e.target.value }))} /></FieldRow>
+            <PrimaryButton disabled={!createDraft.name.trim() || createBusy} onClick={handleCreateOrg}>
+              {createBusy ? 'Creating...' : 'Create Organization'}
+            </PrimaryButton>
           </div>
-          <div className="mt-3"><PrimaryButton disabled={!valid} onClick={() => { onSave(); setShowCreate(false); }}>Create Organization</PrimaryButton></div>
         </div>
       )}
 
+      {/* ── Search ── */}
       <div className="mb-4">
-        <Input placeholder="Search organizations…" value={orgSearch} onChange={(e) => setOrgSearch(e.target.value)} />
+        <Input placeholder="Search organizations..." value={orgSearch} onChange={(e) => setOrgSearch(e.target.value)} />
       </div>
 
+      {/* ── Organizations Table ── */}
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-100 dark:border-slate-800 text-left text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">
               <th className="px-4 py-3">Organization</th>
               <th className="px-4 py-3">Sites</th>
-              <th className="px-4 py-3">Chargers</th>
+              <th className="px-4 py-3">Portfolios</th>
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50 dark:divide-slate-800">
-            {filteredOrgs.map((o) => (
-              <tr key={o.id} className="hover:bg-gray-50 dark:hover:bg-slate-800/40">
-                <td className="px-4 py-3">
-                  <p className="font-medium text-gray-900 dark:text-slate-100">{o.name}</p>
-                  <p className="text-xs text-gray-500 dark:text-slate-400">{o.contactEmail || '—'}</p>
-                </td>
-                <td className="px-4 py-3 text-gray-700 dark:text-slate-300">{o.sites}</td>
-                <td className="px-4 py-3 text-gray-700 dark:text-slate-300">{o.chargers}</td>
-                <td className="px-4 py-3">
-                  <span className="rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-2 py-0.5 text-xs font-medium">{o.status}</span>
-                </td>
-                <td className="px-4 py-3">
-                  <SecondaryButton onClick={() => setEditingId(editingId === o.id ? null : o.id)}>Edit</SecondaryButton>
-                </td>
-              </tr>
-            ))}
+            {filteredOrgs.map((o) => {
+              const isExpanded = expandedOrgId === o.id;
+              const orgPortfolios = portfoliosForOrg(o.id);
+              return (
+                <tr key={o.id} className="group">
+                  <td colSpan={5} className="p-0">
+                    {/* Main org row */}
+                    <div
+                      className="flex items-center cursor-pointer hover:bg-gray-50 dark:hover:bg-slate-800/40"
+                      onClick={() => setExpandedOrgId(isExpanded ? null : o.id)}
+                    >
+                      <div className="px-4 py-3 flex-1">
+                        <div className="flex items-center gap-2">
+                          <svg viewBox="0 0 20 20" fill="currentColor" className={cn('h-3.5 w-3.5 text-gray-400 dark:text-slate-500 transition-transform', isExpanded && 'rotate-90')}>
+                            <path fillRule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clipRule="evenodd" />
+                          </svg>
+                          <div>
+                            <p className="font-medium text-gray-900 dark:text-slate-100">{o.name}</p>
+                            <p className="text-xs text-gray-500 dark:text-slate-400">{o.contactEmail || '---'}</p>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="px-4 py-3 w-20 text-gray-700 dark:text-slate-300">{o.siteCount}</div>
+                      <div className="px-4 py-3 w-24 text-gray-700 dark:text-slate-300">{o.portfolioCount}</div>
+                      <div className="px-4 py-3 w-24">{statusBadge(o.status)}</div>
+                      <div className="px-4 py-3 w-32 flex gap-1" onClick={(e) => e.stopPropagation()}>
+                        <SecondaryButton onClick={() => startEditOrg(o)} className="px-2 py-1 text-xs">Edit</SecondaryButton>
+                        <button
+                          onClick={() => handleDeleteOrg(o)}
+                          className="rounded-md border border-red-300 dark:border-red-700 bg-white dark:bg-slate-800 px-2 py-1 text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Expanded: portfolios */}
+                    {isExpanded && (
+                      <div className="border-t border-gray-100 dark:border-slate-800 bg-gray-50/50 dark:bg-slate-800/20 px-6 py-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <h5 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">Portfolios ({orgPortfolios.length})</h5>
+                          <button
+                            onClick={() => { setAddPortfolioOrgId(addPortfolioOrgId === o.id ? null : o.id); setPortfolioDraft({ name: '', description: '' }); }}
+                            className="text-xs font-medium text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300"
+                          >
+                            + Add Portfolio
+                          </button>
+                        </div>
+
+                        {/* Add portfolio inline form */}
+                        {addPortfolioOrgId === o.id && (
+                          <div className="mb-3 rounded-lg border border-brand-200 dark:border-brand-700 bg-white dark:bg-slate-900 p-3">
+                            <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                              <FieldRow label="Portfolio Name *"><Input placeholder="West Coast Sites" value={portfolioDraft.name} onChange={(e) => setPortfolioDraft((p) => ({ ...p, name: e.target.value }))} /></FieldRow>
+                              <FieldRow label="Description"><Input placeholder="Optional description" value={portfolioDraft.description} onChange={(e) => setPortfolioDraft((p) => ({ ...p, description: e.target.value }))} /></FieldRow>
+                            </div>
+                            <div className="mt-2 flex gap-2">
+                              <PrimaryButton disabled={!portfolioDraft.name.trim() || portfolioBusy} onClick={handleCreatePortfolio}>
+                                {portfolioBusy ? 'Creating...' : 'Create'}
+                              </PrimaryButton>
+                              <SecondaryButton onClick={() => setAddPortfolioOrgId(null)}>Cancel</SecondaryButton>
+                            </div>
+                          </div>
+                        )}
+
+                        {orgPortfolios.length === 0 && !addPortfolioOrgId && (
+                          <p className="text-xs text-gray-500 dark:text-slate-400 py-2">No portfolios yet.</p>
+                        )}
+
+                        {orgPortfolios.map((p) => (
+                          <div key={p.id} className="flex items-center justify-between rounded-md border border-gray-100 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 py-2.5 mb-1.5">
+                            {editingPortfolioId === p.id ? (
+                              <div className="flex-1 mr-3">
+                                <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                                  <Input placeholder="Portfolio name" value={editPortfolioDraft.name} onChange={(e) => setEditPortfolioDraft((prev) => ({ ...prev, name: e.target.value }))} />
+                                  <Input placeholder="Description" value={editPortfolioDraft.description} onChange={(e) => setEditPortfolioDraft((prev) => ({ ...prev, description: e.target.value }))} />
+                                </div>
+                                <div className="mt-2 flex gap-1">
+                                  <PrimaryButton disabled={!editPortfolioDraft.name.trim() || editPortfolioBusy} onClick={handleUpdatePortfolio} className="px-2 py-1 text-xs">
+                                    {editPortfolioBusy ? 'Saving...' : 'Save'}
+                                  </PrimaryButton>
+                                  <SecondaryButton onClick={() => setEditingPortfolioId(null)} className="px-2 py-1 text-xs">Cancel</SecondaryButton>
+                                </div>
+                              </div>
+                            ) : (
+                              <>
+                                <div className="min-w-0">
+                                  <p className="text-sm font-medium text-gray-900 dark:text-slate-100">{p.name}{p.isGlobal && <span className="ml-1.5 text-xs text-gray-400 dark:text-slate-500">(global)</span>}</p>
+                                  {p.description && <p className="text-xs text-gray-500 dark:text-slate-400 truncate">{p.description}</p>}
+                                  <p className="text-xs text-gray-400 dark:text-slate-500">{p.siteCount} site{p.siteCount !== 1 ? 's' : ''}</p>
+                                </div>
+                                <div className="flex gap-1 shrink-0">
+                                  <SecondaryButton onClick={() => startEditPortfolio(p)} className="px-2 py-1 text-xs">Edit</SecondaryButton>
+                                  <button
+                                    onClick={() => handleDeletePortfolio(p)}
+                                    className="rounded-md border border-red-300 dark:border-red-700 bg-white dark:bg-slate-800 px-2 py-1 text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                  >
+                                    Delete
+                                  </button>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Edit org inline form */}
+                    {editingOrgId === o.id && (
+                      <div className="border-t border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/40 px-6 py-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className="text-sm font-semibold text-gray-900 dark:text-slate-100">Edit Organization</h4>
+                          <button onClick={() => setEditingOrgId(null)} className="text-xs text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200">Close</button>
+                        </div>
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                          <FieldRow label="Organization Name *"><Input placeholder="Acme Charging Inc." value={editDraft.name} onChange={(e) => setEditDraft((p) => ({ ...p, name: e.target.value }))} /></FieldRow>
+                          <FieldRow label="Billing Address"><Input placeholder="123 Main St, City, ST 00000" value={editDraft.billingAddress} onChange={(e) => setEditDraft((p) => ({ ...p, billingAddress: e.target.value }))} /></FieldRow>
+                          <FieldRow label="Contact Email"><Input type="email" placeholder="admin@company.com" value={editDraft.contactEmail} onChange={(e) => setEditDraft((p) => ({ ...p, contactEmail: e.target.value }))} /></FieldRow>
+                          <FieldRow label="Contact Phone"><Input placeholder="+1 (555) 000-0000" value={editDraft.contactPhone} onChange={(e) => setEditDraft((p) => ({ ...p, contactPhone: e.target.value }))} /></FieldRow>
+                        </div>
+                        <div className="mt-3 flex gap-2">
+                          <PrimaryButton disabled={!editDraft.name.trim() || editBusy} onClick={handleUpdateOrg}>
+                            {editBusy ? 'Saving...' : 'Save'}
+                          </PrimaryButton>
+                          <SecondaryButton onClick={() => setEditingOrgId(null)}>Cancel</SecondaryButton>
+                        </div>
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
             {filteredOrgs.length === 0 && (
               <tr><td colSpan={5} className="px-4 py-8 text-center text-xs text-gray-500 dark:text-slate-400">No organizations found.</td></tr>
             )}
           </tbody>
         </table>
       </div>
-
-      {editingId && (
-        <div className="mt-4 rounded-lg border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/40 p-4">
-          <div className="flex items-center justify-between mb-3">
-            <h4 className="text-sm font-semibold text-gray-900 dark:text-slate-100">Edit Organization</h4>
-            <button onClick={() => setEditingId(null)} className="text-xs text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200">Close</button>
-          </div>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            {orgFields.map(({ key, label, placeholder }) => (
-              <FieldRow key={key} label={label}><Input placeholder={placeholder} value={org[key]} onChange={(e) => setOrg((p) => ({ ...p, [key]: e.target.value }))} /></FieldRow>
-            ))}
-          </div>
-          <div className="mt-3"><FieldRow label="Change Reason (required)"><Input placeholder="Reason" value={org.reason} onChange={(e) => setOrg((p) => ({ ...p, reason: e.target.value }))} /></FieldRow></div>
-          <div className="mt-3 flex gap-2">
-            <PrimaryButton disabled={!valid} onClick={onSave}>Save</PrimaryButton>
-            <SecondaryButton onClick={() => setEditingId(null)}>Cancel</SecondaryButton>
-          </div>
-        </div>
-      )}
     </SectionCard>
   );
 }
@@ -1043,7 +1303,7 @@ export default function Settings() {
 
       {/* Tab content */}
       {activeTab === 'users' && <UsersTab />}
-      {activeTab === 'organizations' && <OrganizationsTab org={org} setOrg={setOrg} onSave={saveOrg} valid={orgValid} />}
+      {activeTab === 'organizations' && <OrganizationsTab />}
       {activeTab === 'notifications' && <NotificationsTab notifications={notifications} setNotifications={setNotifications} reason={notifReason} setReason={setNotifReason} onSave={saveNotifications} valid={notifValid} />}
       {activeTab === 'audit' && <AuditTab audit={audit} />}
       {activeTab === 'api' && <ApiKeysTab />}

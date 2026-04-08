@@ -26,6 +26,7 @@ function uid(): string {
 export function useAgentChat() {
   const [messages, setMessages] = useState<ChatMessage[]>(loadMessages);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
   const getToken = useToken();
 
@@ -69,11 +70,13 @@ export function useAgentChat() {
     try {
       const token = await getToken();
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-
-      // Dev mode header
-      if (!token) {
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      } else if (API_URL.includes('localhost')) {
+        // Dev mode header — only for local development
         headers['x-dev-operator-id'] = 'operator-001';
+      } else {
+        throw new Error('Session expired. Please refresh the page and sign in again.');
       }
 
       const res = await fetch(`${API_URL}/agent/chat`, {
@@ -178,6 +181,7 @@ export function useAgentChat() {
 
               case 'message_done':
                 setIsStreaming(false);
+                setUnreadCount((c) => c + 1);
                 break;
 
               case 'error':
@@ -228,8 +232,13 @@ export function useAgentChat() {
   const clearConversation = useCallback(() => {
     updateMessages(() => []);
     setIsStreaming(false);
+    setUnreadCount(0);
     abortRef.current?.abort();
   }, [updateMessages]);
 
-  return { messages, isStreaming, sendMessage, abort, clearConversation };
+  const markRead = useCallback(() => {
+    setUnreadCount(0);
+  }, []);
+
+  return { messages, isStreaming, unreadCount, sendMessage, abort, clearConversation, markRead };
 }

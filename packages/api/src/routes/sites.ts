@@ -38,6 +38,8 @@ export async function siteRoutes(app: FastifyInstance) {
             _count: { select: { connectors: true } },
           },
         },
+        organization: { select: { id: true, name: true } },
+        portfolio: { select: { id: true, name: true } },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -59,6 +61,10 @@ export async function siteRoutes(app: FastifyInstance) {
       touWindows: site.touWindows,
       organizationName: site.organizationName,
       portfolioName: site.portfolioName,
+      organizationId: site.organizationId,
+      portfolioId: site.portfolioId,
+      organization: site.organization,
+      portfolio: site.portfolio,
       createdAt: site.createdAt,
       chargerCount: site.chargers.length,
       connectorCount: site.chargers.reduce((sum: number, c: { status: string; _count: { connectors: number } }) => sum + (c._count?.connectors ?? 0), 0),
@@ -68,6 +74,34 @@ export async function siteRoutes(app: FastifyInstance) {
         faulted: site.chargers.filter((c: { status: string }) => c.status === 'FAULTED').length,
       },
     }));
+  });
+
+  // GET /site-options/org-portfolio — list organizations and their portfolios as entities
+  // NOTE: Registered at /site-options/* instead of /sites/* to avoid Fastify
+  // parametric route collision with /sites/:id
+  app.get('/site-options/org-portfolio', {
+    preHandler: [requireOperator, requirePolicy('org.list')],
+  }, async (req) => {
+    const operator = req.currentOperator!;
+    const claimsOrgId = operator.claims?.orgId;
+
+    // If operator is scoped to a specific org, only return that org
+    const orgWhere = claimsOrgId ? { id: claimsOrgId } : {};
+
+    const orgs = await prisma.organization.findMany({
+      where: { ...orgWhere, status: 'active' },
+      include: {
+        portfolios: { orderBy: { name: 'asc' }, select: { id: true, name: true } },
+      },
+      orderBy: { name: 'asc' },
+    });
+
+    return {
+      organizations: orgs.map((o) => ({ id: o.id, name: o.name })),
+      portfolios: Object.fromEntries(
+        orgs.map((o) => [o.id, o.portfolios]),
+      ),
+    };
   });
 
   // GET /sites/:id — site detail with chargers (no passwords)
@@ -84,6 +118,8 @@ export async function siteRoutes(app: FastifyInstance) {
           orderBy: { createdAt: 'asc' },
           include: { connectors: true },
         },
+        organization: { select: { id: true, name: true } },
+        portfolio: { select: { id: true, name: true } },
       },
     });
 
@@ -106,6 +142,10 @@ export async function siteRoutes(app: FastifyInstance) {
       touWindows: site.touWindows,
       organizationName: site.organizationName,
       portfolioName: site.portfolioName,
+      organizationId: site.organizationId,
+      portfolioId: site.portfolioId,
+      organization: site.organization,
+      portfolio: site.portfolio,
       maxChargeDurationMin: site.maxChargeDurationMin,
       maxIdleDurationMin: site.maxIdleDurationMin,
       maxSessionCostUsd: site.maxSessionCostUsd,
@@ -132,6 +172,8 @@ export async function siteRoutes(app: FastifyInstance) {
       touWindows?: unknown;
       organizationName?: string;
       portfolioName?: string;
+      organizationId?: string;
+      portfolioId?: string;
     };
   }>('/sites', {
     preHandler: [requireOperator, requirePolicy('site.create')],
@@ -191,8 +233,10 @@ export async function siteRoutes(app: FastifyInstance) {
         ...(softwareVendorFeeValue != null ? { softwareVendorFeeValue } : {}),
         ...(softwareFeeIncludesActivation != null ? { softwareFeeIncludesActivation } : {}),
         ...(touValidation?.ok ? { touWindows: touValidation.windows } : {}),
-        organizationName,
-        portfolioName,
+        organizationName: organizationName ?? undefined,
+        portfolioName: portfolioName ?? undefined,
+        organizationId: (req.body as any).organizationId ?? undefined,
+        portfolioId: (req.body as any).portfolioId ?? undefined,
       },
     });
 
@@ -218,6 +262,8 @@ export async function siteRoutes(app: FastifyInstance) {
       touWindows?: unknown;
       organizationName?: string;
       portfolioName?: string;
+      organizationId?: string | null;
+      portfolioId?: string | null;
       maxChargeDurationMin?: number | null;
       maxIdleDurationMin?: number | null;
       maxSessionCostUsd?: number | null;
@@ -230,7 +276,7 @@ export async function siteRoutes(app: FastifyInstance) {
       return reply.status(404).send({ error: 'Site not found' });
     }
 
-    const { name, address, lat, lng, pricingMode, pricePerKwhUsd, idleFeePerMinUsd, activationFeeUsd, gracePeriodMin, softwareVendorFeeMode, softwareVendorFeeValue, softwareFeeIncludesActivation, touWindows, organizationName, portfolioName, maxChargeDurationMin, maxIdleDurationMin, maxSessionCostUsd } = req.body;
+    const { name, address, lat, lng, pricingMode, pricePerKwhUsd, idleFeePerMinUsd, activationFeeUsd, gracePeriodMin, softwareVendorFeeMode, softwareVendorFeeValue, softwareFeeIncludesActivation, touWindows, organizationName, portfolioName, organizationId, portfolioId, maxChargeDurationMin, maxIdleDurationMin, maxSessionCostUsd } = req.body;
 
     const touValidation = touWindows !== undefined ? validateTouWindows(touWindows) : null;
     if (touValidation && !touValidation.ok) {
@@ -287,6 +333,8 @@ export async function siteRoutes(app: FastifyInstance) {
         ...(touValidation?.ok ? { touWindows: touValidation.windows } : {}),
         ...(organizationName !== undefined ? { organizationName } : {}),
         ...(portfolioName !== undefined ? { portfolioName } : {}),
+        ...(organizationId !== undefined ? { organizationId } : {}),
+        ...(portfolioId !== undefined ? { portfolioId } : {}),
         ...(maxChargeDurationMin !== undefined ? { maxChargeDurationMin: maxChargeDurationMin } : {}),
         ...(maxIdleDurationMin !== undefined ? { maxIdleDurationMin: maxIdleDurationMin } : {}),
         ...(maxSessionCostUsd !== undefined ? { maxSessionCostUsd: maxSessionCostUsd } : {}),

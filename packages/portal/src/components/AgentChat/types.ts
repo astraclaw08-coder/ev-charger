@@ -1,4 +1,5 @@
 export type SSEEvent =
+  | { type: 'stream_started'; requestId: string }
   | { type: 'text_delta'; text: string }
   | { type: 'tool_started'; id: string; name: string; input: Record<string, unknown> }
   | { type: 'tool_result'; id: string; name: string; summary: string }

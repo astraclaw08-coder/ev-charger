@@ -346,8 +346,10 @@ export default function SiteDetail() {
   const [error, setError] = useState('');
   const [showAddCharger, setShowAddCharger] = useState(false);
   const [showEditSite, setShowEditSite] = useState(false);
-  const [editSiteForm, setEditSiteForm] = useState({ name: '', address: '', lat: '', lng: '', organizationName: '', portfolioName: '' });
+  const [editSiteForm, setEditSiteForm] = useState({ name: '', address: '', lat: '', lng: '', organizationId: '', portfolioId: '' });
   const [editCoordsAutoFilled, setEditCoordsAutoFilled] = useState(false);
+  const [orgOptions, setOrgOptions] = useState<{ id: string; name: string }[]>([]);
+  const [portfolioOptions, setPortfolioOptions] = useState<Record<string, { id: string; name: string }[]>>({});
   const [chargerUptime, setChargerUptime] = useState<Record<string, ChargerUptime>>({});
   const [siteUptime, setSiteUptime] = useState<SiteUptime | null>(null);
   const [siteAnalytics, setSiteAnalytics] = useState<SiteAnalytics | null>(null);
@@ -404,8 +406,8 @@ export default function SiteDetail() {
         address: data.address,
         lat: String(data.lat),
         lng: String(data.lng),
-        organizationName: data.organizationName ?? '',
-        portfolioName: data.portfolioName ?? '',
+        organizationId: data.organizationId ?? '',
+        portfolioId: data.portfolioId ?? '',
       });
       const loadedSafety = {
         maxChargeDurationMin: data.maxChargeDurationMin != null ? String(data.maxChargeDurationMin) : '',
@@ -626,65 +628,38 @@ export default function SiteDetail() {
 
       {/* ── Edit site form (always visible when toggled) ── */}
       {showEditSite && (
-        <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
-          <h2 className="mb-3 text-sm font-semibold text-gray-700 dark:text-slate-300">Edit site details</h2>
-          <div className="grid gap-3 md:grid-cols-2">
-            <label className="text-sm text-gray-700 dark:text-slate-300">Site name
-              <input className="mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5" value={editSiteForm.name} onChange={(e) => setEditSiteForm((f) => ({ ...f, name: e.target.value }))} />
-            </label>
-            <label className="text-sm text-gray-700 dark:text-slate-300">Address
-              <div className="mt-1">
-                <AddressAutocomplete
-                  value={editSiteForm.address}
-                  className="w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5"
-                  placeholder="Start typing an address…"
-                  onRawChange={(v) => {
-                    setEditSiteForm((f) => ({ ...f, address: v }));
-                    if (editCoordsAutoFilled) {
-                      setEditCoordsAutoFilled(false);
-                      setEditSiteForm((f) => ({ ...f, lat: '', lng: '' }));
-                    }
-                  }}
-                  onChange={(address, lat, lng) => {
-                    setEditSiteForm((f) => ({ ...f, address, lat: String(lat), lng: String(lng) }));
-                    setEditCoordsAutoFilled(true);
-                  }}
-                />
-              </div>
-            </label>
-            <label className="text-sm text-gray-700 dark:text-slate-300">Latitude
-              <input type="number" step="0.000001" className="mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5" value={editSiteForm.lat} readOnly={editCoordsAutoFilled} onChange={(e) => setEditSiteForm((f) => ({ ...f, lat: e.target.value }))} />
-            </label>
-            <label className="text-sm text-gray-700 dark:text-slate-300">Longitude
-              <input type="number" step="0.000001" className="mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5" value={editSiteForm.lng} readOnly={editCoordsAutoFilled} onChange={(e) => setEditSiteForm((f) => ({ ...f, lng: e.target.value }))} />
-            </label>
-            <label className="text-sm text-gray-700 dark:text-slate-300">Organization
-              <input className="mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5" value={editSiteForm.organizationName} onChange={(e) => setEditSiteForm((f) => ({ ...f, organizationName: e.target.value }))} />
-            </label>
-            <label className="text-sm text-gray-700 dark:text-slate-300">Portfolio
-              <input className="mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5" value={editSiteForm.portfolioName} onChange={(e) => setEditSiteForm((f) => ({ ...f, portfolioName: e.target.value }))} />
-            </label>
-          </div>
-          <div className="mt-3 flex gap-2">
-            <button className="rounded-md bg-brand-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-700"
-              onClick={async () => {
-                const token = await getToken();
-                const payload = {
-                  name: editSiteForm.name.trim(),
-                  address: editSiteForm.address.trim(),
-                  lat: Number(editSiteForm.lat),
-                  lng: Number(editSiteForm.lng),
-                  organizationName: editSiteForm.organizationName.trim(),
-                  portfolioName: editSiteForm.portfolioName.trim(),
-                };
-                await createApiClient(token).updateSite(site.id, payload);
-                pushAudit('site.updated', `${payload.name} @ ${payload.address} | org=${payload.organizationName || '-'} portfolio=${payload.portfolioName || '-'}`);
-                setShowEditSite(false);
-                await load();
-              }}>Save site</button>
-            <button className="rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800/60 px-3 py-1.5 text-xs text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700" onClick={() => setShowEditSite(false)}>Cancel</button>
-          </div>
-        </div>
+        <EditSiteForm
+          form={editSiteForm}
+          setForm={setEditSiteForm}
+          coordsAutoFilled={editCoordsAutoFilled}
+          setCoordsAutoFilled={setEditCoordsAutoFilled}
+          orgOptions={orgOptions}
+          portfolioOptions={portfolioOptions}
+          onSave={async () => {
+            const token = await getToken();
+            const payload: Record<string, unknown> = {
+              name: editSiteForm.name.trim(),
+              address: editSiteForm.address.trim(),
+              lat: Number(editSiteForm.lat),
+              lng: Number(editSiteForm.lng),
+              organizationId: editSiteForm.organizationId || null,
+              portfolioId: editSiteForm.portfolioId || null,
+            };
+            // Sync legacy string fields from selected entities
+            const selectedOrg = orgOptions.find((o) => o.id === editSiteForm.organizationId);
+            const selectedPort = portfolioOptions[editSiteForm.organizationId]?.find((p) => p.id === editSiteForm.portfolioId);
+            payload.organizationName = selectedOrg?.name ?? '';
+            payload.portfolioName = selectedPort?.name ?? '';
+            await createApiClient(token).updateSite(site.id, payload);
+            pushAudit('site.updated', `${payload.name} @ ${payload.address} | org=${selectedOrg?.name || '-'} portfolio=${selectedPort?.name || '-'}`);
+            setShowEditSite(false);
+            await load();
+          }}
+          onCancel={() => setShowEditSite(false)}
+          getToken={getToken}
+          setOrgOptions={setOrgOptions}
+          setPortfolioOptions={setPortfolioOptions}
+        />
       )}
 
 
@@ -1753,6 +1728,140 @@ function ChargerCard({ charger, uptime, onUnassign }: { charger: SiteDetailType[
           </button>
         )}
         <Link to={`/chargers/${shortId(charger.id)}`} className="flex-1 rounded-md border border-gray-300 dark:border-slate-700 px-3 py-1.5 text-center text-xs font-medium text-gray-600 dark:text-slate-400 bg-white dark:bg-slate-800/60 hover:bg-gray-50 dark:hover:bg-slate-700">View Detail →</Link>
+      </div>
+    </div>
+  );
+}
+
+// ── Edit Site Form with Organization/Portfolio Dropdowns (entity-backed) ──
+
+function EditSiteForm({
+  form,
+  setForm,
+  coordsAutoFilled,
+  setCoordsAutoFilled,
+  orgOptions,
+  portfolioOptions,
+  onSave,
+  onCancel,
+  getToken,
+  setOrgOptions,
+  setPortfolioOptions,
+}: {
+  form: { name: string; address: string; lat: string; lng: string; organizationId: string; portfolioId: string };
+  setForm: React.Dispatch<React.SetStateAction<typeof form>>;
+  coordsAutoFilled: boolean;
+  setCoordsAutoFilled: React.Dispatch<React.SetStateAction<boolean>>;
+  orgOptions: { id: string; name: string }[];
+  portfolioOptions: Record<string, { id: string; name: string }[]>;
+  onSave: () => Promise<void>;
+  onCancel: () => void;
+  getToken: () => Promise<string | null>;
+  setOrgOptions: React.Dispatch<React.SetStateAction<{ id: string; name: string }[]>>;
+  setPortfolioOptions: React.Dispatch<React.SetStateAction<Record<string, { id: string; name: string }[]>>>;
+}) {
+  // Fetch org/portfolio options on mount
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await getToken();
+        const data = await createApiClient(token).getOrgPortfolioOptions();
+        if (cancelled) return;
+        setOrgOptions(data.organizations);
+        setPortfolioOptions(data.portfolios);
+      } catch { /* silent — dropdowns will just be empty */ }
+    })();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Portfolio options depend on selected organization
+  const currentPortfolioList = portfolioOptions[form.organizationId] ?? [];
+
+  const inputCls = 'mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5 text-sm bg-white dark:bg-slate-800';
+
+  return (
+    <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+      <h2 className="mb-3 text-sm font-semibold text-gray-700 dark:text-slate-300">Edit site details</h2>
+      <div className="grid gap-3 md:grid-cols-2">
+        <label className="text-sm text-gray-700 dark:text-slate-300">Site name
+          <input className={inputCls} value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
+        </label>
+        <label className="text-sm text-gray-700 dark:text-slate-300">Address
+          <div className="mt-1">
+            <AddressAutocomplete
+              value={form.address}
+              className="w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5"
+              placeholder="Start typing an address…"
+              onRawChange={(v) => {
+                setForm((f) => ({ ...f, address: v }));
+                if (coordsAutoFilled) {
+                  setCoordsAutoFilled(false);
+                  setForm((f) => ({ ...f, lat: '', lng: '' }));
+                }
+              }}
+              onChange={(address, lat, lng) => {
+                setForm((f) => ({ ...f, address, lat: String(lat), lng: String(lng) }));
+                setCoordsAutoFilled(true);
+              }}
+            />
+          </div>
+        </label>
+        <label className="text-sm text-gray-700 dark:text-slate-300">Latitude
+          <input type="number" step="0.000001" className={inputCls} value={form.lat} readOnly={coordsAutoFilled} onChange={(e) => setForm((f) => ({ ...f, lat: e.target.value }))} />
+        </label>
+        <label className="text-sm text-gray-700 dark:text-slate-300">Longitude
+          <input type="number" step="0.000001" className={inputCls} value={form.lng} readOnly={coordsAutoFilled} onChange={(e) => setForm((f) => ({ ...f, lng: e.target.value }))} />
+        </label>
+
+        {/* Organization — dropdown from entity table */}
+        <div className="text-sm text-gray-700 dark:text-slate-300">
+          <span>Organization</span>
+          {orgOptions.length > 0 ? (
+            <select
+              className={inputCls}
+              value={form.organizationId}
+              onChange={(e) => {
+                setForm((f) => ({ ...f, organizationId: e.target.value, portfolioId: '' }));
+              }}
+            >
+              <option value="">— None —</option>
+              {orgOptions.map((org) => (
+                <option key={org.id} value={org.id}>{org.name}</option>
+              ))}
+            </select>
+          ) : (
+            <p className="mt-1 text-xs text-gray-400 dark:text-slate-500 italic">No organizations available. Create one in the Admin tab.</p>
+          )}
+        </div>
+
+        {/* Portfolio — dropdown scoped by selected organization */}
+        <div className="text-sm text-gray-700 dark:text-slate-300">
+          <span>Portfolio</span>
+          {form.organizationId && currentPortfolioList.length > 0 ? (
+            <select
+              className={inputCls}
+              value={form.portfolioId}
+              onChange={(e) => {
+                setForm((f) => ({ ...f, portfolioId: e.target.value }));
+              }}
+            >
+              <option value="">— None —</option>
+              {currentPortfolioList.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          ) : form.organizationId ? (
+            <p className="mt-1 text-xs text-gray-400 dark:text-slate-500 italic">No portfolios for this org. Create one in the Admin tab.</p>
+          ) : (
+            <p className="mt-1 text-xs text-gray-400 dark:text-slate-500 italic">Select an organization first.</p>
+          )}
+        </div>
+      </div>
+      <div className="mt-3 flex gap-2">
+        <button className="rounded-md bg-brand-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-700" onClick={onSave}>Save site</button>
+        <button className="rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800/60 px-3 py-1.5 text-xs text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700" onClick={onCancel}>Cancel</button>
       </div>
     </div>
   );
