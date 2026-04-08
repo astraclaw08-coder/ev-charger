@@ -1052,12 +1052,18 @@ export function createApiClient(token: string | null | undefined) {
 
     // ── AI Assistant (OpenRouter) ───────────────────────────────────────
     getAIStatus: () =>
-      request<{ connected: boolean; connectedAt?: string }>('/settings/ai/status', token),
+      request<{ connected: boolean; connectedAt?: string; model?: string }>('/settings/ai/status', token),
 
-    postAIConnect: (apiKey: string) =>
+    postAIConnect: (apiKey: string, model?: string) =>
       request<{ success: boolean }>('/settings/ai/connect', token, {
         method: 'POST',
-        body: JSON.stringify({ apiKey }),
+        body: JSON.stringify({ apiKey, model }),
+      }),
+
+    postAIModel: (model: string) =>
+      request<{ success: boolean }>('/settings/ai/model', token, {
+        method: 'POST',
+        body: JSON.stringify({ model }),
       }),
 
     postAIDisconnect: () =>

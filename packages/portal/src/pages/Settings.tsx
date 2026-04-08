@@ -468,13 +468,23 @@ function ApiKeysTab() {
 }
 
 // ─── Tab: AI Assistant ───────────────────────────────────────────────────────
+const AI_MODELS = [
+  { id: 'anthropic/claude-sonnet-4', label: 'Claude Sonnet 4', price: '$3 / $15 per M tokens' },
+  { id: 'anthropic/claude-haiku-3.5', label: 'Claude Haiku 3.5', price: '$0.80 / $4 per M tokens' },
+  { id: 'openai/gpt-4o', label: 'GPT-4o', price: '$2.50 / $10 per M tokens' },
+  { id: 'openai/gpt-4o-mini', label: 'GPT-4o Mini', price: '$0.15 / $0.60 per M tokens' },
+  { id: 'google/gemini-2.5-flash-preview', label: 'Gemini 2.5 Flash', price: '$0.15 / $0.60 per M tokens' },
+];
+
 function AiAssistantTab() {
   const getToken = useToken();
-  const [status, setStatus] = useState<{ connected: boolean; connectedAt?: string } | null>(null);
+  const [status, setStatus] = useState<{ connected: boolean; connectedAt?: string; model?: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const [apiKey, setApiKey] = useState('');
+  const [selectedModel, setSelectedModel] = useState(AI_MODELS[0].id);
+  const [savingModel, setSavingModel] = useState(false);
   const [error, setError] = useState('');
 
   const fetchStatus = async () => {
@@ -483,6 +493,7 @@ function AiAssistantTab() {
       const api = createApiClient(token);
       const res = await api.getAIStatus();
       setStatus(res);
+      if (res.model) setSelectedModel(res.model);
     } catch {
       setStatus(null);
     } finally {
@@ -499,13 +510,27 @@ function AiAssistantTab() {
     try {
       const token = await getToken();
       const api = createApiClient(token);
-      await api.postAIConnect(apiKey.trim());
+      await api.postAIConnect(apiKey.trim(), selectedModel);
       setApiKey('');
       await fetchStatus();
     } catch (err: any) {
       setError(err?.message ?? 'Failed to save API key');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleModelChange = async (model: string) => {
+    setSelectedModel(model);
+    if (!status?.connected) return; // Just update local state if not connected yet
+    setSavingModel(true);
+    try {
+      const token = await getToken();
+      const api = createApiClient(token);
+      await api.postAIModel(model);
+      setStatus((s) => s ? { ...s, model } : s);
+    } catch { /* ignore */ } finally {
+      setSavingModel(false);
     }
   };
 
@@ -521,6 +546,8 @@ function AiAssistantTab() {
       setDisconnecting(false);
     }
   };
+
+  const currentModelLabel = AI_MODELS.find((m) => m.id === (status?.model ?? selectedModel))?.label ?? status?.model ?? selectedModel;
 
   return (
     <div className="space-y-6">
@@ -557,9 +584,28 @@ function AiAssistantTab() {
                 {disconnecting ? 'Removing...' : 'Remove Key'}
               </button>
             </div>
+
+            {/* Model selector (when connected) */}
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-slate-300 mb-1.5">Model</label>
+              <div className="flex items-center gap-2">
+                <select
+                  value={selectedModel}
+                  onChange={(e) => handleModelChange(e.target.value)}
+                  disabled={savingModel}
+                  className="flex-1 rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100"
+                >
+                  {AI_MODELS.map((m) => (
+                    <option key={m.id} value={m.id}>{m.label} — {m.price}</option>
+                  ))}
+                </select>
+                {savingModel && <span className="text-xs text-gray-400">Saving...</span>}
+              </div>
+            </div>
+
             <div className="text-xs text-gray-500 dark:text-slate-400 space-y-1">
               <p>The AI assistant is available to all portal users via the chat button (bottom-right).</p>
-              <p>Usage is billed to your OpenRouter account. You can update the key by removing and re-adding it.</p>
+              <p>Usage is billed to your OpenRouter account. Model changes take effect on the next message.</p>
             </div>
           </div>
         ) : (
@@ -581,17 +627,31 @@ function AiAssistantTab() {
                   </p>
                 </div>
               </div>
-              <div className="flex gap-2">
-                <input
-                  type="password"
-                  value={apiKey}
-                  onChange={(e) => { setApiKey(e.target.value); setError(''); }}
-                  placeholder="sk-or-v1-..."
-                  className="flex-1 rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100 placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
-                />
-                <PrimaryButton onClick={handleSave} disabled={saving || !apiKey.trim()}>
-                  {saving ? 'Saving...' : 'Save'}
-                </PrimaryButton>
+              <div className="space-y-3">
+                <div className="flex gap-2">
+                  <input
+                    type="password"
+                    value={apiKey}
+                    onChange={(e) => { setApiKey(e.target.value); setError(''); }}
+                    placeholder="sk-or-v1-..."
+                    className="flex-1 rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100 placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                  />
+                  <PrimaryButton onClick={handleSave} disabled={saving || !apiKey.trim()}>
+                    {saving ? 'Saving...' : 'Save'}
+                  </PrimaryButton>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-slate-300 mb-1">Model</label>
+                  <select
+                    value={selectedModel}
+                    onChange={(e) => setSelectedModel(e.target.value)}
+                    className="w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100"
+                  >
+                    {AI_MODELS.map((m) => (
+                      <option key={m.id} value={m.id}>{m.label} — {m.price}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
               {error && <p className="mt-2 text-xs text-red-600 dark:text-red-400">{error}</p>}
             </div>
