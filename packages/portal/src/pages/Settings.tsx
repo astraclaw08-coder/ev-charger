@@ -470,10 +470,10 @@ function ApiKeysTab() {
 // ─── Tab: AI Assistant ───────────────────────────────────────────────────────
 const AI_MODELS = [
   { id: 'anthropic/claude-sonnet-4', label: 'Claude Sonnet 4', price: '$3 / $15 per M tokens' },
-  { id: 'anthropic/claude-haiku-3.5', label: 'Claude Haiku 3.5', price: '$0.80 / $4 per M tokens' },
+  { id: 'anthropic/claude-3.5-haiku', label: 'Claude 3.5 Haiku', price: '$0.80 / $4 per M tokens' },
   { id: 'openai/gpt-4o', label: 'GPT-4o', price: '$2.50 / $10 per M tokens' },
   { id: 'openai/gpt-4o-mini', label: 'GPT-4o Mini', price: '$0.15 / $0.60 per M tokens' },
-  { id: 'google/gemini-2.5-flash-preview', label: 'Gemini 2.5 Flash', price: '$0.15 / $0.60 per M tokens' },
+  { id: 'google/gemini-2.5-flash', label: 'Gemini 2.5 Flash', price: '$0.30 / $2.50 per M tokens' },
 ];
 
 function AiAssistantTab() {
