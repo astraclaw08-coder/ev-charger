@@ -70,6 +70,48 @@ export async function siteRoutes(app: FastifyInstance) {
     }));
   });
 
+  // GET /sites/org-portfolio-options — list distinct organization and portfolio names
+  app.get('/sites/org-portfolio-options', {
+    preHandler: [requireOperator, requirePolicy('site.list')],
+  }, async (req) => {
+    const operator = req.currentOperator!;
+    const scopedSiteIds = operator.claims?.siteIds ?? [];
+    const isOwner = (operator.roles ?? []).some(r => r === 'owner' || r === 'super_admin');
+
+    const where = scopedSiteIds.length > 0 && !scopedSiteIds.includes('*')
+      ? { id: { in: scopedSiteIds } }
+      : (isOwner ? {} : { operatorId: operator.id });
+
+    const sites = await prisma.site.findMany({
+      where,
+      select: { organizationName: true, portfolioName: true },
+    });
+
+    const orgs = new Set<string>();
+    const portfoliosByOrg: Record<string, Set<string>> = {};
+
+    for (const s of sites) {
+      if (s.organizationName) {
+        orgs.add(s.organizationName);
+        if (s.portfolioName) {
+          if (!portfoliosByOrg[s.organizationName]) portfoliosByOrg[s.organizationName] = new Set();
+          portfoliosByOrg[s.organizationName].add(s.portfolioName);
+        }
+      }
+      if (s.portfolioName && !s.organizationName) {
+        if (!portfoliosByOrg['']) portfoliosByOrg[''] = new Set();
+        portfoliosByOrg[''].add(s.portfolioName);
+      }
+    }
+
+    return {
+      organizations: [...orgs].sort(),
+      portfolios: Object.fromEntries(
+        Object.entries(portfoliosByOrg).map(([org, set]) => [org, [...set].sort()]),
+      ),
+    };
+  });
+
   // GET /sites/:id — site detail with chargers (no passwords)
   app.get<{ Params: { id: string } }>('/sites/:id', {
     preHandler: [requireOperator, requirePolicy('site.read', { getResourceSiteId: (req) => req.params.id })],
