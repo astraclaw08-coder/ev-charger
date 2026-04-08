@@ -5,6 +5,7 @@ import BrandMark from './BrandMark';
 import { usePortalTheme } from '../theme/ThemeContext';
 import { createApiClient } from '../api/client';
 import { useToken } from '../auth/TokenContext';
+import AgentChatPanel from './AgentChat/AgentChatPanel';
 
 type IconProps = { className?: string };
 
@@ -166,7 +167,7 @@ function SidebarContent({ location, theme, toggleTheme, onNavClick, notification
         )}
       </div>
 
-      <nav className={cn('flex-1 overflow-y-auto', collapsed ? 'p-2' : 'p-3')}>
+      <nav className={cn('flex-1 overflow-y-auto overflow-x-hidden', collapsed ? 'p-2' : 'p-3')}>
         {NAV.map((item) => {
           const active = item.href === '/overview'
             ? location.pathname === '/overview' || location.pathname === '/'
@@ -215,7 +216,7 @@ function SidebarContent({ location, theme, toggleTheme, onNavClick, notification
         })}
       </nav>
 
-      <div className={cn('border-t border-gray-200 dark:border-slate-800 shrink-0', collapsed ? 'p-2' : 'p-3')}>
+      <div className={cn('border-t border-gray-200 dark:border-slate-800 shrink-0 overflow-hidden', collapsed ? 'p-2' : 'p-3')}>
         {collapsed ? (
           <button
             type="button"
@@ -365,7 +366,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* Desktop sidebar */}
-      <div className="hidden lg:block relative shrink-0">
+      <div className="hidden lg:block relative shrink-0 overflow-hidden">
         <aside className={cn(
           'flex h-full flex-col border-r border-gray-200 bg-white dark:border-slate-800 dark:bg-slate-950/95 transition-[width] duration-200 ease-out overflow-x-hidden',
           collapsed ? 'w-[60px]' : 'w-56',
@@ -385,6 +386,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           <a href="/terms" className="hover:text-gray-600 dark:hover:text-slate-400 transition-colors">Terms of Service</a>
         </footer>
       </main>
+      <AgentChatPanel />
     </div>
   );
 }
