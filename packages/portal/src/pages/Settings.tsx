@@ -470,16 +470,18 @@ function ApiKeysTab() {
 // ─── Tab: AI Assistant ───────────────────────────────────────────────────────
 function AiAssistantTab() {
   const getToken = useToken();
-  const [status, setStatus] = useState<{ connected: boolean; email?: string; connectedAt?: string } | null>(null);
+  const [status, setStatus] = useState<{ connected: boolean; connectedAt?: string } | null>(null);
   const [loading, setLoading] = useState(true);
-  const [connecting, setConnecting] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [apiKey, setApiKey] = useState('');
+  const [error, setError] = useState('');
 
   const fetchStatus = async () => {
     try {
       const token = await getToken();
       const api = createApiClient(token);
-      const res = await api.getOpenAIStatus();
+      const res = await api.getAIStatus();
       setStatus(res);
     } catch {
       setStatus(null);
@@ -490,48 +492,30 @@ function AiAssistantTab() {
 
   useEffect(() => { fetchStatus(); }, []);
 
-  // Listen for postMessage from OAuth popup
-  useEffect(() => {
-    function handleMessage(e: MessageEvent) {
-      if (e.data?.type === 'openai-oauth-result') {
-        setConnecting(false);
-        if (e.data.success) {
-          fetchStatus();
-        }
-      }
-    }
-    window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
-  }, []);
-
-  const handleConnect = async () => {
-    setConnecting(true);
+  const handleSave = async () => {
+    if (!apiKey.trim()) { setError('API key is required'); return; }
+    setSaving(true);
+    setError('');
     try {
       const token = await getToken();
       const api = createApiClient(token);
-      const { url } = await api.getOpenAIAuthUrl();
-      // Open popup centered on screen
-      const w = 500, h = 700;
-      const left = window.screenX + (window.outerWidth - w) / 2;
-      const top = window.screenY + (window.outerHeight - h) / 2;
-      const popup = window.open(url, 'openai-oauth', `width=${w},height=${h},left=${left},top=${top},popup=1`);
-      // If popup was blocked, reset state
-      if (!popup) {
-        setConnecting(false);
-        alert('Popup blocked. Please allow popups for this site and try again.');
-      }
-    } catch {
-      setConnecting(false);
+      await api.postAIConnect(apiKey.trim());
+      setApiKey('');
+      await fetchStatus();
+    } catch (err: any) {
+      setError(err?.message ?? 'Failed to save API key');
+    } finally {
+      setSaving(false);
     }
   };
 
   const handleDisconnect = async () => {
-    if (!confirm('Disconnect OpenAI? The AI assistant will stop working for all portal users.')) return;
+    if (!confirm('Remove API key? The AI assistant will stop working for all portal users.')) return;
     setDisconnecting(true);
     try {
       const token = await getToken();
       const api = createApiClient(token);
-      await api.postOpenAIDisconnect();
+      await api.postAIDisconnect();
       setStatus({ connected: false });
     } catch { /* ignore */ } finally {
       setDisconnecting(false);
@@ -542,11 +526,11 @@ function AiAssistantTab() {
     <div className="space-y-6">
       <SectionCard
         title="Lumeo AI"
-        description="Connect your OpenAI account to enable the AI assistant for all portal users."
+        description="Add an OpenRouter API key to enable the AI assistant for all portal users."
       >
         {loading ? (
           <div className="px-4 py-6 text-center">
-            <p className="text-sm text-gray-500 dark:text-slate-400">Checking connection...</p>
+            <p className="text-sm text-gray-500 dark:text-slate-400">Checking configuration...</p>
           </div>
         ) : status?.connected ? (
           <div className="space-y-4">
@@ -557,11 +541,10 @@ function AiAssistantTab() {
                 </svg>
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-green-800 dark:text-green-300">OpenAI Connected</p>
-                {status.email && <p className="text-xs text-green-600 dark:text-green-400 truncate">{status.email}</p>}
+                <p className="text-sm font-medium text-green-800 dark:text-green-300">AI Assistant Active</p>
                 {status.connectedAt && (
                   <p className="text-xs text-green-600/70 dark:text-green-500/70">
-                    Connected {new Date(status.connectedAt).toLocaleDateString()}
+                    Configured {new Date(status.connectedAt).toLocaleDateString()}
                   </p>
                 )}
               </div>
@@ -571,32 +554,52 @@ function AiAssistantTab() {
                 disabled={disconnecting}
                 className="rounded-md border border-red-300 dark:border-red-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 transition-colors"
               >
-                {disconnecting ? 'Disconnecting...' : 'Disconnect'}
+                {disconnecting ? 'Removing...' : 'Remove Key'}
               </button>
             </div>
             <div className="text-xs text-gray-500 dark:text-slate-400 space-y-1">
               <p>The AI assistant is available to all portal users via the chat button (bottom-right).</p>
-              <p>It uses your connected OpenAI account for GPT-4o access.</p>
+              <p>Usage is billed to your OpenRouter account. You can update the key by removing and re-adding it.</p>
             </div>
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="rounded-lg border border-gray-100 dark:border-slate-800 bg-gray-50 dark:bg-slate-800/40 px-4 py-6 text-center">
-              <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-blue-50 dark:bg-blue-900/30">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="h-5 w-5 text-blue-500 dark:text-blue-400">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2m0 14v2m9-9h-2M5 12H3m15.364-6.364-1.414 1.414M7.05 16.95l-1.414 1.414m12.728 0-1.414-1.414M7.05 7.05 5.636 5.636M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z" />
-                </svg>
+            <div className="rounded-lg border border-gray-100 dark:border-slate-800 bg-gray-50 dark:bg-slate-800/40 px-4 py-5">
+              <div className="flex items-start gap-3 mb-4">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-50 dark:bg-blue-900/30">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="h-4.5 w-4.5 text-blue-500 dark:text-blue-400">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2m0 14v2m9-9h-2M5 12H3m15.364-6.364-1.414 1.414M7.05 16.95l-1.414 1.414m12.728 0-1.414-1.414M7.05 7.05 5.636 5.636M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-900 dark:text-slate-100">Connect OpenRouter</p>
+                  <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">
+                    Get your API key from{' '}
+                    <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline">
+                      openrouter.ai/keys
+                    </a>
+                  </p>
+                </div>
               </div>
-              <p className="text-sm text-gray-600 dark:text-slate-300 mb-1">Connect your OpenAI account to enable Lumeo AI</p>
-              <p className="text-xs text-gray-500 dark:text-slate-400 mb-4">Uses your ChatGPT subscription for GPT-4o access. No API key needed.</p>
-              <PrimaryButton onClick={handleConnect} disabled={connecting}>
-                {connecting ? 'Connecting...' : 'Connect OpenAI'}
-              </PrimaryButton>
+              <div className="flex gap-2">
+                <input
+                  type="password"
+                  value={apiKey}
+                  onChange={(e) => { setApiKey(e.target.value); setError(''); }}
+                  placeholder="sk-or-v1-..."
+                  className="flex-1 rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100 placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                />
+                <PrimaryButton onClick={handleSave} disabled={saving || !apiKey.trim()}>
+                  {saving ? 'Saving...' : 'Save'}
+                </PrimaryButton>
+              </div>
+              {error && <p className="mt-2 text-xs text-red-600 dark:text-red-400">{error}</p>}
             </div>
             <div className="text-xs text-gray-500 dark:text-slate-400 space-y-1">
-              <p>A popup window will open for you to sign in with your OpenAI account.</p>
-              <p>Once connected, all portal users can use the AI assistant to query sites, chargers, and analytics.</p>
+              <p>OpenRouter provides access to multiple AI models behind a single API key with built-in redundancy.</p>
+              <p>Once configured, all portal users can use the AI assistant to query sites, chargers, and analytics.</p>
               <p>The assistant respects each user's role and permissions — it cannot access data beyond what the user is allowed to see.</p>
+              <p>Your API key is encrypted at rest and never exposed to portal users.</p>
             </div>
           </div>
         )}
