@@ -69,11 +69,13 @@ export function useAgentChat() {
     try {
       const token = await getToken();
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-
-      // Dev mode header
-      if (!token) {
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      } else if (API_URL.includes('localhost')) {
+        // Dev mode header — only for local development
         headers['x-dev-operator-id'] = 'operator-001';
+      } else {
+        throw new Error('Session expired. Please refresh the page and sign in again.');
       }
 
       const res = await fetch(`${API_URL}/agent/chat`, {
