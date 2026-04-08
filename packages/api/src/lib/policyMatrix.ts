@@ -22,7 +22,18 @@ export type PolicyKey =
   | 'admin.notifications.write'
   | 'admin.security.posture.read'
   | 'admin.security.breakglass'
-  | 'admin.security.scim';
+  | 'admin.security.scim'
+  | 'org.list'
+  | 'org.read'
+  | 'org.create'
+  | 'org.update'
+  | 'org.delete'
+  | 'portfolio.list'
+  | 'portfolio.read'
+  | 'portfolio.create'
+  | 'portfolio.update'
+  | 'portfolio.delete'
+  | 'portfolio.assign_cross_org';
 
 export type PolicyContract = {
   description: string;
@@ -55,6 +66,18 @@ export const POLICY_MATRIX: Record<PolicyKey, PolicyContract> = {
   'admin.security.posture.read': { description: 'Read security posture', anyOf: ['rbac:manage'], minScope: 'limited', sensitive: true },
   'admin.security.breakglass': { description: 'Break-glass owner elevation', allOf: ['rbac:manage'], minScope: 'full', sensitive: true },
   'admin.security.scim': { description: 'SCIM provisioning hooks', anyOf: ['rbac:manage'], minScope: 'full', sensitive: true },
+  // ── Organization & Portfolio ──
+  'org.list': { description: 'List organizations', anyOf: ['site:read'], minScope: 'read-only', allowLegacyOperatorFallback: true },
+  'org.read': { description: 'Read organization details', anyOf: ['site:read'], minScope: 'read-only', allowLegacyOperatorFallback: true },
+  'org.create': { description: 'Create organization', anyOf: ['rbac:manage'], minScope: 'full', sensitive: true },
+  'org.update': { description: 'Update organization', anyOf: ['rbac:manage'], minScope: 'full', sensitive: true },
+  'org.delete': { description: 'Delete organization', anyOf: ['rbac:manage'], minScope: 'full', sensitive: true },
+  'portfolio.list': { description: 'List portfolios', anyOf: ['site:read'], minScope: 'read-only', allowLegacyOperatorFallback: true },
+  'portfolio.read': { description: 'Read portfolio details', anyOf: ['site:read'], minScope: 'read-only', allowLegacyOperatorFallback: true },
+  'portfolio.create': { description: 'Create portfolio', anyOf: ['site:write'], minScope: 'full', allowLegacyOperatorFallback: true, sensitive: true },
+  'portfolio.update': { description: 'Update portfolio', anyOf: ['site:write'], minScope: 'full', allowLegacyOperatorFallback: true, sensitive: true },
+  'portfolio.delete': { description: 'Delete portfolio', anyOf: ['site:write'], minScope: 'full', allowLegacyOperatorFallback: true, sensitive: true },
+  'portfolio.assign_cross_org': { description: 'Assign portfolio across orgs', anyOf: ['rbac:manage'], minScope: 'full', sensitive: true },
 };
 
 export type AuthorizationFailureCode =

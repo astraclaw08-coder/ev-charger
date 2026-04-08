@@ -71,8 +71,8 @@ export default function Sites() {
     return sites.filter((site) =>
       site.name.toLowerCase().includes(q)
       || site.address.toLowerCase().includes(q)
-      || (site.organizationName ?? '').toLowerCase().includes(q)
-      || (site.portfolioName ?? '').toLowerCase().includes(q),
+      || (site.organization?.name ?? site.organizationName ?? '').toLowerCase().includes(q)
+      || (site.portfolio?.name ?? site.portfolioName ?? '').toLowerCase().includes(q),
     );
   }, [sites, query]);
 
@@ -277,11 +277,11 @@ function SiteListRow({ site }: { site: SiteListItem }) {
         <p className="text-xs text-gray-500 dark:text-slate-400">{site.address}</p>
       </div>
       <div className="min-w-0">
-        {site.organizationName ? (
+        {(site.organization?.name || site.organizationName) ? (
           <div>
-            <span className="text-sm text-gray-700 dark:text-slate-300 truncate block">{site.organizationName}</span>
-            {site.portfolioName && (
-              <span className="text-xs text-gray-400 dark:text-slate-500 truncate block">{site.portfolioName}</span>
+            <span className="text-sm text-gray-700 dark:text-slate-300 truncate block">{site.organization?.name ?? site.organizationName}</span>
+            {(site.portfolio?.name || site.portfolioName) && (
+              <span className="text-xs text-gray-400 dark:text-slate-500 truncate block">{site.portfolio?.name ?? site.portfolioName}</span>
             )}
           </div>
         ) : (
@@ -318,9 +318,9 @@ function SiteCard({ site }: { site: SiteListItem }) {
             {site.name}
           </span>
           <p className="mt-0.5 truncate text-xs text-gray-500 dark:text-slate-400">{site.address}</p>
-          {site.organizationName && (
+          {(site.organization?.name || site.organizationName) && (
             <p className="mt-1 truncate text-xs text-gray-400 dark:text-slate-500">
-              {site.organizationName}{site.portfolioName ? ` · ${site.portfolioName}` : ''}
+              {site.organization?.name ?? site.organizationName}{(site.portfolio?.name || site.portfolioName) ? ` · ${(site.portfolio?.name ?? site.portfolioName)}` : ''}
             </p>
           )}
         </div>

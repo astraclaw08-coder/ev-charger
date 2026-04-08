@@ -90,8 +90,12 @@ model Site {
   softwareFeeIncludesActivation Boolean @default(false)
   touWindows       Json?
   timeZone         String              @default("America/Los_Angeles") // IANA timezone for TOU pricing + smart charging
-  organizationName String?
-  portfolioName    String?
+  organizationName String?             // @deprecated — use organizationId relation
+  portfolioName    String?             // @deprecated — use portfolioId relation
+  organizationId   String?
+  organization     Organization?       @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  portfolioId      String?
+  portfolio        Portfolio?          @relation(fields: [portfolioId], references: [id], onDelete: SetNull)
   // Session safety limits (null = no limit)
   maxChargeDurationMin  Int?    // Auto-stop active charging after N minutes
   maxIdleDurationMin    Int?    // Auto-stop/disconnect after N minutes idle post-charge
@@ -106,6 +110,8 @@ model Site {
   updatedAt        DateTime            @updatedAt
 
   @@index([operatorId])
+  @@index([organizationId])
+  @@index([portfolioId])
 }
 
 model Charger {
@@ -682,4 +688,36 @@ model AuthSession {
   user User @relation(fields: [userId], references: [id])
 
   @@index([userId])
+}
+
+// ── Organization & Portfolio entities ──
+
+model Organization {
+  id                  String      @id @default(uuid())
+  name                String      @unique
+  billingAddress      String?
+  contactEmail        String?
+  contactPhone        String?
+  status              String      @default("active") // active | inactive
+  createdByOperatorId String
+  sites               Site[]
+  portfolios          Portfolio[]
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+}
+
+model Portfolio {
+  id                  String       @id @default(uuid())
+  name                String
+  organizationId      String
+  organization        Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  description         String?
+  isGlobal            Boolean      @default(false) // true = admin-assigned cross-org
+  createdByOperatorId String
+  sites               Site[]
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  @@unique([name, organizationId])
+  @@index([organizationId])
 }

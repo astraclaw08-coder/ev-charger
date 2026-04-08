@@ -1,5 +1,32 @@
 // ─── Types ───────────────────────────────────────────────────────────────────
 
+export interface OrgRef { id: string; name: string }
+export interface PortfolioRef { id: string; name: string }
+
+export interface OrganizationEntity {
+  id: string;
+  name: string;
+  billingAddress?: string | null;
+  contactEmail?: string | null;
+  contactPhone?: string | null;
+  status: string;
+  siteCount: number;
+  portfolioCount: number;
+  portfolios?: PortfolioRef[];
+  createdAt: string;
+}
+
+export interface PortfolioEntity {
+  id: string;
+  name: string;
+  organizationId: string;
+  organizationName?: string;
+  description?: string | null;
+  isGlobal: boolean;
+  siteCount: number;
+  createdAt: string;
+}
+
 export interface SiteListItem {
   id: string;
   name: string;
@@ -17,6 +44,10 @@ export interface SiteListItem {
   touWindows?: unknown;
   organizationName?: string | null;
   portfolioName?: string | null;
+  organizationId?: string | null;
+  portfolioId?: string | null;
+  organization?: OrgRef | null;
+  portfolio?: PortfolioRef | null;
   createdAt: string;
   chargerCount: number;
   connectorCount?: number;
@@ -67,6 +98,10 @@ export interface SiteDetail {
   touWindows?: unknown;
   organizationName?: string | null;
   portfolioName?: string | null;
+  organizationId?: string | null;
+  portfolioId?: string | null;
+  organization?: OrgRef | null;
+  portfolio?: PortfolioRef | null;
   maxChargeDurationMin?: number | null;
   maxIdleDurationMin?: number | null;
   maxSessionCostUsd?: number | null;
@@ -676,7 +711,26 @@ export function createApiClient(token: string | null | undefined) {
   return {
     getSites: () => request<SiteListItem[]>('/sites', token),
     getSite: (id: string) => request<SiteDetail>(`/sites/${id}`, token),
-    getOrgPortfolioOptions: () => request<{ organizations: string[]; portfolios: Record<string, string[]> }>('/site-options/org-portfolio', token),
+    getOrgPortfolioOptions: () => request<{ organizations: OrgRef[]; portfolios: Record<string, PortfolioRef[]> }>('/site-options/org-portfolio', token),
+
+    // Organization CRUD
+    getOrganizations: () => request<OrganizationEntity[]>('/organizations', token),
+    getOrganization: (id: string) => request<OrganizationEntity>(`/organizations/${id}`, token),
+    createOrganization: (data: { name: string; billingAddress?: string; contactEmail?: string; contactPhone?: string }) =>
+      request<OrganizationEntity>('/organizations', token, { method: 'POST', body: JSON.stringify(data), headers: { 'Content-Type': 'application/json' } }),
+    updateOrganization: (id: string, data: Partial<{ name: string; billingAddress: string; contactEmail: string; contactPhone: string; status: string }>) =>
+      request<OrganizationEntity>(`/organizations/${id}`, token, { method: 'PUT', body: JSON.stringify(data), headers: { 'Content-Type': 'application/json' } }),
+    deleteOrganization: (id: string) =>
+      request<{ success: boolean }>(`/organizations/${id}`, token, { method: 'DELETE' }),
+
+    // Portfolio CRUD
+    getPortfolios: (orgId?: string) => request<PortfolioEntity[]>(`/portfolios${orgId ? `?orgId=${orgId}` : ''}`, token),
+    createPortfolio: (data: { name: string; organizationId: string; description?: string }) =>
+      request<PortfolioEntity>('/portfolios', token, { method: 'POST', body: JSON.stringify(data), headers: { 'Content-Type': 'application/json' } }),
+    updatePortfolio: (id: string, data: Partial<{ name: string; description: string }>) =>
+      request<PortfolioEntity>(`/portfolios/${id}`, token, { method: 'PUT', body: JSON.stringify(data), headers: { 'Content-Type': 'application/json' } }),
+    deletePortfolio: (id: string) =>
+      request<{ success: boolean }>(`/portfolios/${id}`, token, { method: 'DELETE' }),
     getChargers: () => request<ChargerListItem[]>('/chargers', token),
     getAnalytics: (siteId: string, params?: { periodDays?: number; startDate?: string; endDate?: string }) => {
       const query = new URLSearchParams();
