@@ -1,8 +1,7 @@
 import { prisma } from '@ev-charger/shared';
 
 async function main() {
-  // No-op until deletion tracking fields exist in the Prisma schema.
-  console.log('Anonymize deleted accounts skipped: deletion tracking is not available in current schema.');
+  console.warn('[anonymize-deleted-accounts] Skipped: current Prisma schema has no deletionRequestedAt field on User.');
 }
 
 main()

@@ -1049,5 +1049,19 @@ export function createApiClient(token: string | null | undefined) {
 
     supportDriverPaymentMethods: (id: string) =>
       request<SupportDriverPaymentMethodsResponse>(`/admin/support/drivers/${id}/payment-methods`, token),
+
+    // ── OpenAI OAuth (AI Agent) ───────────────────────────────────────
+    getOpenAIStatus: () =>
+      request<{ connected: boolean; email?: string; connectedAt?: string; tokenExpiresAt?: string }>('/settings/openai/status', token),
+
+    /** Get the OpenAI authorization URL to open in a popup. */
+    getOpenAIAuthUrl: () =>
+      request<{ url: string }>('/settings/openai/auth-url', token),
+
+    postOpenAIDisconnect: () =>
+      request<{ success: boolean }>('/settings/openai/disconnect', token, {
+        method: 'POST',
+        body: JSON.stringify({}),
+      }),
   };
 }

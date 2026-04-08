@@ -42,6 +42,7 @@
       [
         "expo-build-properties",
         {
+          "newArchEnabled": false,
           "ios": {}
         }
       ],

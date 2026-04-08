@@ -16,9 +16,15 @@ export type SessionLikeForIdle = {
   connector?: { connectorId?: number | null; charger?: { id?: string | null } } | null;
 };
 
+export type IdleWindow = {
+  startedAt: string;
+  stoppedAt: string;
+};
+
 export type SessionTimings = {
   idleStartedAt?: string;
   idleStoppedAt?: string;
+  idleWindows: IdleWindow[];
   plugInAt?: string;
   plugOutAt?: string;
 };
@@ -60,10 +66,10 @@ export function resolveSessionStatusTimings(
 ): SessionTimings {
   const chargerId = session.connector?.charger?.id;
   const connectorId = session.connector?.connectorId;
-  if (!chargerId || !connectorId || !session.startedAt) return {};
+  if (!chargerId || !connectorId || !session.startedAt) return { idleWindows: [] };
 
   const sessionStart = new Date(session.startedAt);
-  if (!Number.isFinite(sessionStart.getTime())) return {};
+  if (!Number.isFinite(sessionStart.getTime())) return { idleWindows: [] };
 
   const sessionStop = session.stoppedAt ? new Date(session.stoppedAt) : null;
   const lookbackMs = 24 * 60 * 60 * 1000;
@@ -83,7 +89,7 @@ export function resolveSessionStatusTimings(
     .sort((a, b) => a.at.getTime() - b.at.getTime());
 
   if (baseEvents.length === 0) {
-    return { plugInAt: sessionStart.toISOString() };
+    return { idleWindows: [], plugInAt: sessionStart.toISOString() };
   }
 
   const events = baseEvents.map((e, idx) => ({
@@ -120,38 +126,60 @@ export function resolveSessionStatusTimings(
       && new Set(['FINISHING', 'SUSPENDED_EV', 'SUSPENDED_EVSE']).has(e.prevStatus),
     );
 
-  // idleStart: CHARGING → SUSPENDED_EV/EVSE (primary) or CHARGING → FINISHING (fallback)
-  const idleStart = events.find((e) =>
-    e.at.getTime() >= sessionStart.getTime()
-    && e.prevStatus === 'CHARGING'
-    && (e.status === 'SUSPENDED_EV' || e.status === 'SUSPENDED_EVSE'),
-  ) ?? events.find((e) =>
-    e.at.getTime() >= sessionStart.getTime()
-    && e.prevStatus === 'CHARGING'
-    && e.status === 'FINISHING',
-  );
+  // ── Multi-window idle detection ──────────────────────────────────────────
+  // Collect all idle windows: a window starts at CHARGING → SUSPENDED/FINISHING
+  // and ends at the next genuine CHARGING (≥60s) or AVAILABLE/session end.
+  // Brief charging bursts (<60s between SUSPENDED states) are absorbed as noise.
+  const MIN_CHARGE_MS = 60_000;
 
-  const idleEnd = idleStart
-    ? events.find((e) =>
-      e.at.getTime() > idleStart.at.getTime()
-      && e.status === 'AVAILABLE'
-      && (
-        e.prevStatus === 'FINISHING'
-        || e.prevStatus === 'SUSPENDED_EV'
-        || e.prevStatus === 'SUSPENDED_EVSE'
-      ),
-    )
-    : null;
+  const rawIdleWindows: Array<{ startAt: Date; endAt: Date }> = [];
+  for (let i = 0; i < events.length; i++) {
+    const e = events[i];
+    if (e.at.getTime() < sessionStart.getTime()) continue;
+    if (e.prevStatus !== 'CHARGING') continue;
+    if (e.status !== 'SUSPENDED_EV' && e.status !== 'SUSPENDED_EVSE' && e.status !== 'FINISHING') continue;
 
-  const resolvedIdleEnd = idleEnd?.at ?? plugOut?.at ?? sessionStop ?? null;
+    const startAt = e.at;
+    let endAt: Date | null = null;
+
+    for (let j = i + 1; j < events.length; j++) {
+      if (events[j].status === 'CHARGING') {
+        endAt = events[j].at;
+        break;
+      }
+      if (events[j].status === 'AVAILABLE'
+        && !!events[j].prevStatus
+        && new Set(['FINISHING', 'SUSPENDED_EV', 'SUSPENDED_EVSE']).has(events[j].prevStatus!)) {
+        endAt = events[j].at;
+        break;
+      }
+    }
+    if (!endAt) endAt = plugOut?.at ?? sessionStop ?? null;
+    if (endAt && endAt.getTime() > startAt.getTime()) {
+      rawIdleWindows.push({ startAt, endAt });
+    }
+  }
+
+  // Merge windows separated by charging bursts shorter than MIN_CHARGE_MS (noise)
+  const mergedWindows: Array<{ startAt: Date; endAt: Date }> = [];
+  for (const w of rawIdleWindows) {
+    const prev = mergedWindows[mergedWindows.length - 1];
+    if (prev && (w.startAt.getTime() - prev.endAt.getTime()) < MIN_CHARGE_MS) {
+      prev.endAt = w.endAt; // absorb noise burst
+    } else {
+      mergedWindows.push({ startAt: new Date(w.startAt), endAt: new Date(w.endAt) });
+    }
+  }
+
+  const idleWindows: IdleWindow[] = mergedWindows.map((w) => ({
+    startedAt: w.startAt.toISOString(),
+    stoppedAt: w.endAt.toISOString(),
+  }));
 
   return {
-    idleStartedAt: idleStart?.at && resolvedIdleEnd && resolvedIdleEnd.getTime() > idleStart.at.getTime()
-      ? idleStart.at.toISOString()
-      : undefined,
-    idleStoppedAt: idleStart?.at && resolvedIdleEnd && resolvedIdleEnd.getTime() > idleStart.at.getTime()
-      ? resolvedIdleEnd.toISOString()
-      : undefined,
+    idleStartedAt: idleWindows.length > 0 ? idleWindows[0].startedAt : undefined,
+    idleStoppedAt: idleWindows.length > 0 ? idleWindows[idleWindows.length - 1].stoppedAt : undefined,
+    idleWindows,
     plugInAt: plugIn?.at?.toISOString() ?? sessionStart.toISOString(),
     plugOutAt: plugOut?.at?.toISOString(),
   };

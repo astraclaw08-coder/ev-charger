@@ -21,6 +21,7 @@ import { useLocalSearchParams, Stack } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, isDevMode, type Session } from '@/lib/api';
 import { useAppTheme } from '@/theme';
+import { Fonts } from '@/fonts';
 
 const RATE_PER_KWH = 0.35;
 
@@ -165,9 +166,10 @@ function SessionSummary({
   const idleStartLabel = rawIdleSegments.length > 0 ? formatTime(rawIdleSegments[0].startedAt) : null;
   const idleEndLabel = rawIdleSegments.length > 0 ? formatTime(rawIdleSegments[rawIdleSegments.length - 1].endedAt) : null;
   const idleSubtotalLabel = 'Idle Subtotal';
+  const graceLabel = gracePeriodMin > 0 ? ` (grace period is ${gracePeriodMin} mins)` : '';
   const idleGraceLabel = idleStartLabel && idleEndLabel
-    ? `${idleStartLabel} to ${idleEndLabel} (grace period is 10 mins)`
-    : 'Idle (grace period is 10 mins)';
+    ? `${idleStartLabel} to ${idleEndLabel}${graceLabel}`
+    : `Idle${graceLabel}`;
 
   const finalKwh =
     meterDerivedKwh > 0
@@ -261,15 +263,18 @@ function SessionSummary({
           emphasizeValue
         />
 
-        {idleSegments.map((segment, idx) => (
-          <ReceiptRow
-            key={`${segment.startedAt}-${segment.endedAt}-${idx}`}
-            isDark={isDark}
-            label={`${formatTime(segment.startedAt)} to ${formatTime(segment.endedAt)} * $${segment.idleFeePerMinUsd.toFixed(2)}/min (grace period is 10 mins)`}
-            value={`$${segment.amountUsd.toFixed(2)}`}
-            multilineLabel
-          />
-        ))}
+        {idleSegments.map((segment, idx) => {
+          const graceNote = idx === 0 && gracePeriodMin > 0 ? ` (grace period is ${gracePeriodMin} mins)` : '';
+          return (
+            <ReceiptRow
+              key={`${segment.startedAt}-${segment.endedAt}-${idx}`}
+              isDark={isDark}
+              label={`${formatTime(segment.startedAt)} to ${formatTime(segment.endedAt)} * $${segment.idleFeePerMinUsd.toFixed(2)}/min${graceNote}`}
+              value={`$${segment.amountUsd.toFixed(2)}`}
+              multilineLabel
+            />
+          );
+        })}
 
         {idleSegments.length === 0 && (
           <ReceiptRow
@@ -717,7 +722,7 @@ export default function SessionScreen() {
           headerBackButtonDisplayMode: 'minimal',
           headerTitleStyle: {
             color: isDark ? '#ffffff' : '#000000',
-            fontWeight: '300',
+            fontFamily: Fonts.light,
             letterSpacing: 1.5,
             fontSize: 22,
           } as any,

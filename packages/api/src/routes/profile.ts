@@ -1,7 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { prisma } from '@ev-charger/shared';
 import { requireAuth } from '../plugins/auth';
-import { sendDeletionConfirmationEmail } from '../lib/email';
 
 function trimOrNull(value: unknown, max: number): string | null {
   if (typeof value !== 'string') return null;
@@ -150,7 +149,8 @@ export async function profileRoutes(app: FastifyInstance) {
     };
   });
 
-  // Record consent acceptance (ToS + Privacy Policy)
+  // Consent persistence is temporarily unavailable in the current Prisma schema.
+  // Keep the routes alive for local dev so clients can still boot without a DB schema mismatch.
   app.post<{
     Body: {
       tosVersion: string;
@@ -163,32 +163,32 @@ export async function profileRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: 'tosVersion and privacyVersion are required' });
     }
 
-    // Consent fields are not present in the current Prisma schema.
-    return reply.status(501).send({
-      error: 'Consent tracking is temporarily unavailable.',
-    });
+    const now = new Date().toISOString();
+    return {
+      tosAcceptedAt: now,
+      tosVersion: String(tosVersion).slice(0, 20),
+      privacyAcceptedAt: now,
+      privacyVersion: String(privacyVersion).slice(0, 20),
+      persisted: false,
+    };
   });
 
-  // Get consent status
-  app.get('/me/consent', { preHandler: requireAuth }, async (req) => {
+  app.get('/me/consent', { preHandler: requireAuth }, async () => {
     return {
       tosAcceptedAt: null,
       tosVersion: null,
       privacyAcceptedAt: null,
       privacyVersion: null,
+      persisted: false,
     };
   });
 
-  // Request account deletion (soft delete — sets deletionRequestedAt)
+  // Account deletion soft-delete fields are not present in the current Prisma schema.
   app.delete('/me', { preHandler: requireAuth }, async (req, reply) => {
     const user = req.currentUser!;
-    const now = new Date();
-
-    // Keep a user-visible signal while deletion scheduling is unavailable.
-    sendDeletionConfirmationEmail(user.email, now).catch(() => {});
-
     return reply.status(501).send({
-      error: 'Account deletion requests are temporarily unavailable. Please contact privacy@lumeopower.com.',
+      error: 'Account deletion is not available in this environment until the user deletion schema is restored.',
+      email: user.email,
     });
   });
 }

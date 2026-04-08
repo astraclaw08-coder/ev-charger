@@ -351,7 +351,13 @@ export default function SessionsScreen() {
           <SessionCard
             session={item}
             isDark={isDark}
-            onPress={() => router.push(`/session/${item.id}`)}
+            onPress={() => {
+              if (item.status === 'ACTIVE') {
+                router.push(`/charger/detail/${item.connector.charger.id}`);
+              } else {
+                router.push(`/session/${item.id}`);
+              }
+            }}
           />
         )}
       />

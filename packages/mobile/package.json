@@ -7,7 +7,7 @@
     "dev": "EXPO_NO_DOTENV=1 APP_ENV=dev expo start --clear --port 8081 --scheme evcharger-dev",
     "dev:prod": "EXPO_NO_DOTENV=1 APP_ENV=prod expo start --clear --port 8083 --scheme evcharger",
     "ios": "LANG=en_US.UTF-8 EXPO_NO_DOTENV=1 APP_ENV=dev EXPO_PUBLIC_API_URL=http://127.0.0.1:3001 expo run:ios --configuration Debug --scheme EVCharger-Dev --port 8081",
-    "ios:prod": "LANG=en_US.UTF-8 EXPO_NO_DOTENV=1 APP_ENV=prod expo run:ios --configuration Release --scheme EVCharger-RC --port 8083",
+    "ios:prod": "LANG=en_US.UTF-8 EXPO_NO_DOTENV=1 APP_ENV=prod expo run:ios --configuration Release --scheme LumeoRC --port 8083",
     "android": "APP_ENV=dev expo run:android",
     "android:prod": "APP_ENV=prod expo run:android",
     "build:dev": "eas build --profile development",

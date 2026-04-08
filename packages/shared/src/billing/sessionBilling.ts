@@ -120,6 +120,51 @@ export function computeDeliveredKwh(session: {
   return Math.max(session.kwhDelivered ?? 0, meterDerivedKwh);
 }
 
+/**
+ * Derive charging windows by subtracting idle windows from the session timespan.
+ * Returns the time periods the charger was actively delivering power.
+ */
+export function deriveChargingWindows(
+  sessionStart: Date | null,
+  sessionStop: Date | null,
+  idleWindows: Array<{ startedAt: Date | string; stoppedAt: Date | string }>,
+): Array<{ startedAt: Date; stoppedAt: Date }> {
+  if (!sessionStart || !sessionStop) return [];
+  const startMs = sessionStart.getTime();
+  const stopMs = sessionStop.getTime();
+  if (stopMs <= startMs) return [];
+  if (idleWindows.length === 0) return [{ startedAt: sessionStart, stoppedAt: sessionStop }];
+
+  // Sort idle windows chronologically
+  const sorted = [...idleWindows]
+    .map((w) => ({
+      startMs: new Date(w.startedAt).getTime(),
+      stopMs: new Date(w.stoppedAt).getTime(),
+    }))
+    .filter((w) => w.stopMs > w.startMs)
+    .sort((a, b) => a.startMs - b.startMs);
+
+  const windows: Array<{ startedAt: Date; stoppedAt: Date }> = [];
+  let cursor = startMs;
+
+  for (const idle of sorted) {
+    const idleStart = Math.max(idle.startMs, startMs);
+    const idleStop = Math.min(idle.stopMs, stopMs);
+    if (idleStart >= idleStop) continue; // idle window outside session
+    if (cursor < idleStart) {
+      windows.push({ startedAt: new Date(cursor), stoppedAt: new Date(idleStart) });
+    }
+    cursor = Math.max(cursor, idleStop);
+  }
+
+  // Remaining charging after last idle window
+  if (cursor < stopMs) {
+    windows.push({ startedAt: new Date(cursor), stoppedAt: new Date(stopMs) });
+  }
+
+  return windows;
+}
+
 export function computeSessionAmounts(session: {
   meterStart?: number | null;
   meterStop?: number | null;
@@ -142,6 +187,8 @@ export function computeSessionAmounts(session: {
   softwareFeeIncludesActivation?: boolean;
   idleStartedAt?: Date | string | null;
   idleStoppedAt?: Date | string | null;
+  idleWindows?: Array<{ startedAt: Date | string; stoppedAt: Date | string }> | null;
+  segmentKwhOverrides?: number[] | null;
 }) {
   const computedKwh = computeDeliveredKwh(session);
   const durationMinutes = resolveDurationMinutes(session);
@@ -154,17 +201,51 @@ export function computeSessionAmounts(session: {
 
   const billingTimeZone = session.siteTimeZone ?? process.env.EV_TOU_TIMEZONE ?? 'America/Los_Angeles';
 
-  const rawSegments = durationMinutes != null && session.startedAt && session.stoppedAt
-    ? splitTouDuration({
-        startedAt: session.startedAt,
-        stoppedAt: session.stoppedAt,
+  // ── Derive charging windows (session span minus idle windows) ───────────
+  // This ensures energy segments only cover periods the charger was actually
+  // delivering power, not idle gaps where the EV wasn't drawing current.
+  const resolvedIdleWindowsForCharging = (session.idleWindows && session.idleWindows.length > 0)
+    ? session.idleWindows
+    : (session.idleStartedAt && session.idleStoppedAt
+        ? [{ startedAt: session.idleStartedAt, stoppedAt: session.idleStoppedAt }]
+        : []);
+
+  const chargingWindows = deriveChargingWindows(
+    session.startedAt ? new Date(session.startedAt) : null,
+    session.stoppedAt ? new Date(session.stoppedAt) : null,
+    resolvedIdleWindowsForCharging,
+  );
+
+  const rawSegments: Array<{
+    startedAt: string; endedAt: string; minutes: number;
+    pricePerKwhUsd: number; idleFeePerMinUsd: number; source: 'flat' | 'tou';
+  }> = [];
+
+  if (chargingWindows.length > 0) {
+    for (const cw of chargingWindows) {
+      const windowSegs = splitTouDuration({
+        startedAt: cw.startedAt,
+        stoppedAt: cw.stoppedAt,
         pricingMode,
         defaultPricePerKwhUsd: pricePerKwhUsd,
         defaultIdleFeePerMinUsd: idleFeePerMinUsd,
         touWindows: session.touWindows,
         timeZone: billingTimeZone,
-      })
-    : [];
+      });
+      rawSegments.push(...windowSegs);
+    }
+  } else if (durationMinutes != null && session.startedAt && session.stoppedAt) {
+    // No idle windows — full session is charging
+    rawSegments.push(...splitTouDuration({
+      startedAt: session.startedAt,
+      stoppedAt: session.stoppedAt,
+      pricingMode,
+      defaultPricePerKwhUsd: pricePerKwhUsd,
+      defaultIdleFeePerMinUsd: idleFeePerMinUsd,
+      touWindows: session.touWindows,
+      timeZone: billingTimeZone,
+    }));
+  }
 
   const fallbackSegment = rawSegments.length > 0
     ? rawSegments
@@ -179,82 +260,102 @@ export function computeSessionAmounts(session: {
 
   const segmentMinutesTotal = fallbackSegment.reduce((sum, seg) => sum + seg.minutes, 0);
 
-  const idleWindowMinutes = resolveDurationMinutes({ startedAt: session.idleStartedAt, stoppedAt: session.idleStoppedAt }) ?? 0;
-  const billableIdleMinutes = Math.max(0, idleWindowMinutes - gracePeriodMin);
+  // ── Multi-window idle billing ───────────────────────────────────────────
+  // Resolve idle windows: prefer array, fall back to single idleStartedAt/StoppedAt pair.
+  const resolvedIdleWindows = (session.idleWindows && session.idleWindows.length > 0)
+    ? session.idleWindows
+    : (session.idleStartedAt && session.idleStoppedAt
+        ? [{ startedAt: session.idleStartedAt, stoppedAt: session.idleStoppedAt }]
+        : []);
 
-  const idleRawSegments = idleWindowMinutes > 0 && session.idleStartedAt && session.idleStoppedAt
-    ? splitTouDuration({
-        startedAt: session.idleStartedAt,
-        stoppedAt: session.idleStoppedAt,
-        pricingMode,
-        defaultPricePerKwhUsd: pricePerKwhUsd,
-        defaultIdleFeePerMinUsd: idleFeePerMinUsd,
-        touWindows: session.touWindows,
-        timeZone: billingTimeZone,
-      })
-    : [];
-
-  const idleSegmentsBase = idleRawSegments.length > 0
-    ? idleRawSegments
-    : [{
-        startedAt: session.idleStartedAt ? new Date(session.idleStartedAt).toISOString() : (session.startedAt ? new Date(session.startedAt).toISOString() : new Date(0).toISOString()),
-        endedAt: session.idleStoppedAt ? new Date(session.idleStoppedAt).toISOString() : (session.startedAt ? new Date(session.startedAt).toISOString() : new Date(0).toISOString()),
-        minutes: idleWindowMinutes,
+  // Collect TOU-split idle segments from all windows
+  const idleSegmentsBase: Array<{
+    startedAt: string; endedAt: string; minutes: number;
+    pricePerKwhUsd: number; idleFeePerMinUsd: number; source: 'flat' | 'tou';
+  }> = [];
+  for (const window of resolvedIdleWindows) {
+    const windowMinutes = resolveDurationMinutes({ startedAt: window.startedAt, stoppedAt: window.stoppedAt }) ?? 0;
+    if (windowMinutes <= 0) continue;
+    const windowSegments = splitTouDuration({
+      startedAt: window.startedAt,
+      stoppedAt: window.stoppedAt,
+      pricingMode,
+      defaultPricePerKwhUsd: pricePerKwhUsd,
+      defaultIdleFeePerMinUsd: idleFeePerMinUsd,
+      touWindows: session.touWindows,
+      timeZone: billingTimeZone,
+    });
+    if (windowSegments.length > 0) {
+      idleSegmentsBase.push(...windowSegments);
+    } else {
+      idleSegmentsBase.push({
+        startedAt: new Date(window.startedAt).toISOString(),
+        endedAt: new Date(window.stoppedAt).toISOString(),
+        minutes: windowMinutes,
         pricePerKwhUsd,
         idleFeePerMinUsd,
         source: 'flat' as const,
-      }];
+      });
+    }
+  }
 
-  const idleSegmentMinutesTotal = idleSegmentsBase.reduce((sum, seg) => sum + seg.minutes, 0);
-
-  const detailedSegments: BillingSegment[] = fallbackSegment.map((seg) => {
-    const ratio = segmentMinutesTotal > 0 ? seg.minutes / segmentMinutesTotal : (fallbackSegment.length > 0 ? 1 / fallbackSegment.length : 0);
-    const kwh = deliveredKwh * ratio;
+  const detailedSegments: BillingSegment[] = fallbackSegment.map((seg, idx) => {
+    const kwh = session.segmentKwhOverrides?.[idx] != null
+      ? session.segmentKwhOverrides[idx]
+      : deliveredKwh * (segmentMinutesTotal > 0 ? seg.minutes / segmentMinutesTotal : (fallbackSegment.length > 0 ? 1 / fallbackSegment.length : 0));
     const energyAmountUsd = kwh * seg.pricePerKwhUsd;
     return {
       ...seg,
-      kwh: Number(kwh.toFixed(6)),
-      energyAmountUsd: Number(energyAmountUsd.toFixed(6)),
+      kwh: Number(kwh.toFixed(4)),
+      energyAmountUsd: Math.round(energyAmountUsd * 100) / 100,
       idleMinutes: 0,
       idleAmountUsd: 0,
     };
   });
 
-  const idleBreakdownSegments = idleSegmentsBase.map((seg) => {
-    const ratio = idleSegmentMinutesTotal > 0 ? seg.minutes / idleSegmentMinutesTotal : (idleSegmentsBase.length > 0 ? 1 / idleSegmentsBase.length : 0);
-    const minutes = billableIdleMinutes * ratio;
-    const amountUsd = minutes * seg.idleFeePerMinUsd;
+  // Apply grace period chronologically: subtract from the first idle segment,
+  // spilling remainder to subsequent segments if the first is shorter than grace.
+  const sortedIdleSegments = [...idleSegmentsBase].sort(
+    (a, b) => new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime(),
+  );
+  let remainingGrace = gracePeriodMin;
+  const idleBreakdownSegments = sortedIdleSegments.map((seg) => {
+    const segMinutesAfterGrace = Math.max(0, seg.minutes - remainingGrace);
+    remainingGrace = Math.max(0, remainingGrace - seg.minutes);
+    const amountUsd = segMinutesAfterGrace * seg.idleFeePerMinUsd;
     return {
       startedAt: seg.startedAt,
       endedAt: seg.endedAt,
-      minutes: Number(minutes.toFixed(6)),
+      minutes: Math.round(segMinutesAfterGrace * 100) / 100,
       idleFeePerMinUsd: seg.idleFeePerMinUsd,
-      amountUsd: Number(amountUsd.toFixed(6)),
+      amountUsd: Math.round(amountUsd * 100) / 100,
       source: seg.source,
     };
   });
 
-  const energyTotalUsd = detailedSegments.reduce((sum, seg) => sum + seg.energyAmountUsd, 0);
-  const idleTotalUsd = idleBreakdownSegments.reduce((sum, seg) => sum + seg.amountUsd, 0);
-  const activationTotalUsd = Math.max(0, toFiniteNumber(session.activationFeeUsd) ?? 0);
-  const breakdownGrossUsd = energyTotalUsd + idleTotalUsd + activationTotalUsd;
+  // Sum already-rounded segment values so line items always add up to subtotals.
+  const energyTotalUsd = Math.round(detailedSegments.reduce((sum, seg) => sum + seg.energyAmountUsd, 0) * 100) / 100;
+  const idleTotalUsd = Math.round(idleBreakdownSegments.reduce((sum, seg) => sum + seg.amountUsd, 0) * 100) / 100;
+  const totalBillableIdleMinutes = Math.round(idleBreakdownSegments.reduce((sum, seg) => sum + seg.minutes, 0) * 100) / 100;
+  const activationTotalUsd = Math.round(Math.max(0, toFiniteNumber(session.activationFeeUsd) ?? 0) * 100) / 100;
+  const breakdownGrossUsd = Math.round((energyTotalUsd + idleTotalUsd + activationTotalUsd) * 100) / 100;
 
   const breakdown: BillingBreakdown = {
     pricingMode,
-    durationMinutes: Number(durationForBreakdown.toFixed(6)),
-    gracePeriodMin: Number(gracePeriodMin.toFixed(6)),
+    durationMinutes: Math.round(durationForBreakdown * 100) / 100,
+    gracePeriodMin,
     energy: {
-      kwhDelivered: Number(deliveredKwh.toFixed(6)),
-      totalUsd: Number(energyTotalUsd.toFixed(6)),
+      kwhDelivered: Number(deliveredKwh.toFixed(4)),
+      totalUsd: energyTotalUsd,
       segments: detailedSegments,
     },
     idle: {
-      minutes: Number(billableIdleMinutes.toFixed(6)),
-      totalUsd: Number(idleTotalUsd.toFixed(6)),
+      minutes: totalBillableIdleMinutes,
+      totalUsd: idleTotalUsd,
       segments: idleBreakdownSegments,
     },
-    activation: { totalUsd: Number(activationTotalUsd.toFixed(6)) },
-    grossTotalUsd: Number(breakdownGrossUsd.toFixed(6)),
+    activation: { totalUsd: activationTotalUsd },
+    grossTotalUsd: breakdownGrossUsd,
   };
 
   const hasBillableSignal = session.revenueUsd != null || computedKwh != null || durationMinutes != null || (toFiniteNumber(session.activationFeeUsd) ?? 0) > 0;

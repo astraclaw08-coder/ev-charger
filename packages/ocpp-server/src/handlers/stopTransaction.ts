@@ -80,8 +80,18 @@ export async function handleStopTransaction(
   const transactionBeginWh = extractTransactionContextWh(params, 'Transaction.Begin');
   const transactionEndWh = extractTransactionContextWh(params, 'Transaction.End');
 
-  // Fallback precedence for persisted meterStop: Transaction.End > latest MeterValues > StopTransaction.meterStop.
-  const finalMeterStop = transactionEndWh ?? Math.max(meterStop, session.meterStop ?? meterStop);
+  // Detect relative vs absolute Transaction.End.
+  // Some chargers report Transaction.End as a session-relative offset (energy delivered)
+  // rather than the absolute meter register. If the value is far below meterStart,
+  // convert to absolute by adding to meterStart.
+  let resolvedEndWh = transactionEndWh;
+  if (resolvedEndWh != null && session.meterStart != null && resolvedEndWh < session.meterStart * 0.5) {
+    console.log(`[StopTransaction] Detected relative Transaction.End: ${resolvedEndWh}Wh → absolute: ${session.meterStart + resolvedEndWh}Wh`);
+    resolvedEndWh = session.meterStart + resolvedEndWh;
+  }
+
+  // Fallback precedence for persisted meterStop: resolved Transaction.End > latest MeterValues > StopTransaction.meterStop.
+  const finalMeterStop = resolvedEndWh ?? Math.max(meterStop, session.meterStop ?? meterStop);
 
   // Requested billing rule:
   // 1) kWh = (Transaction.End - Transaction.Begin)

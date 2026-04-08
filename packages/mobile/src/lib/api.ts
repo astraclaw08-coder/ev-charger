@@ -133,6 +133,7 @@ export interface Connector {
   connectorId: number;
   status: 'AVAILABLE' | 'PREPARING' | 'CHARGING' | 'SUSPENDED_EVSE' | 'SUSPENDED_EV' | 'FINISHING' | 'RESERVED' | 'UNAVAILABLE' | 'FAULTED';
   sessions?: ActiveSession[];
+  lastPlugOutAt?: string | null;
 }
 
 export interface Charger {

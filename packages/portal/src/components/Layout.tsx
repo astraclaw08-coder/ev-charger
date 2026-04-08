@@ -5,6 +5,7 @@ import BrandMark from './BrandMark';
 import { usePortalTheme } from '../theme/ThemeContext';
 import { createApiClient } from '../api/client';
 import { useToken } from '../auth/TokenContext';
+import AgentChatPanel from './AgentChat/AgentChatPanel';
 
 type IconProps = { className?: string };
 
@@ -215,7 +216,7 @@ function SidebarContent({ location, theme, toggleTheme, onNavClick, notification
         })}
       </nav>
 
-      <div className={cn('border-t border-gray-200 dark:border-slate-800 shrink-0', collapsed ? 'p-2' : 'p-3')}>
+      <div className={cn('border-t border-gray-200 dark:border-slate-800 shrink-0 overflow-hidden', collapsed ? 'p-2' : 'p-3')}>
         {collapsed ? (
           <button
             type="button"
@@ -326,7 +327,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   }, [getToken]);
 
   return (
-    <div className="flex min-h-screen flex-col lg:flex-row bg-gray-50 dark:bg-slate-950">
+    <div className="flex min-h-screen flex-col lg:flex-row bg-gray-50 dark:bg-slate-950 overflow-x-hidden">
       {/* Mobile hamburger header */}
       <div className="fixed top-0 left-0 right-0 z-40 flex h-14 items-center justify-between border-b border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-4 lg:hidden">
         <BrandMark className="w-[120px]" />
@@ -365,9 +366,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* Desktop sidebar */}
-      <div className="hidden lg:block relative shrink-0">
+      <div className="hidden lg:block relative shrink-0 overflow-hidden">
         <aside className={cn(
-          'flex h-full flex-col border-r border-gray-200 bg-white dark:border-slate-800 dark:bg-slate-950/95 transition-[width] duration-200 ease-out',
+          'flex h-full flex-col border-r border-gray-200 bg-white dark:border-slate-800 dark:bg-slate-950/95 transition-[width] duration-200 ease-out overflow-x-hidden',
           collapsed ? 'w-[60px]' : 'w-56',
         )}>
           <SidebarContent location={location} theme={theme} toggleTheme={toggleTheme} notificationCount={notificationCount} collapsed={collapsed} onToggleCollapse={toggleCollapse} />
@@ -375,7 +376,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       </div>
 
       {/* Main content */}
-      <main className="flex flex-1 flex-col overflow-auto bg-gray-50 dark:bg-slate-950 pt-14 lg:pt-0">
+      <main className="flex flex-1 min-w-0 flex-col overflow-x-hidden overflow-y-auto bg-gray-50 dark:bg-slate-950 pt-14 lg:pt-0">
         <div className="mx-auto w-full max-w-6xl flex-1 p-4 sm:p-6 page-enter">{children}</div>
         <footer className="mx-auto mt-auto w-full max-w-6xl px-4 sm:px-6 pb-6 pt-2 flex items-center justify-center gap-4 text-xs text-gray-400 dark:text-slate-600">
           <span>© {new Date().getFullYear()} Lumeo Power</span>
@@ -385,6 +386,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           <a href="/terms" className="hover:text-gray-600 dark:hover:text-slate-400 transition-colors">Terms of Service</a>
         </footer>
       </main>
+      <AgentChatPanel />
     </div>
   );
 }

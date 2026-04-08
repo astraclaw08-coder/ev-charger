@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { shortId } from '../lib/shortId';
-import { Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { createApiClient, type SiteDetail as SiteDetailType, type ChargerUptime, type SiteUptime, type Analytics as SiteAnalytics, type DailyEntry } from '../api/client';
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { createApiClient, type SiteDetail as SiteDetailType, type ChargerUptime, type SiteUptime, type Analytics as SiteAnalytics, type DailyEntry, type SessionRecord } from '../api/client';
 import { useToken } from '../auth/TokenContext';
 import ChargerMap from '../components/ChargerMap';
 import StatusBadge from '../components/StatusBadge';
@@ -13,6 +13,7 @@ import { usePortalTheme } from '../theme/ThemeContext';
 import { PageHeader, TabBar, useChartTheme } from '../components/ui';
 import { PageSkeleton } from '../components/ui/LoadingState';
 import { ErrorState } from '../components/ui';
+import SiteLoadManagement from '../components/loadManagement/SiteLoadManagement';
 
 type RangePreset = '7d' | '30d' | '60d';
 
@@ -354,6 +355,7 @@ export default function SiteDetail() {
   const [trend, setTrend] = useState<Array<{ date: string; label: string; sessions: number; kwhDelivered: number; revenueUsd: number }>>([]);
   const [activeSessions, setActiveSessions] = useState(0);
   const [siteUtilizationPct, setSiteUtilizationPct] = useState<number | null>(null);
+  const [perChargerSessions, setPerChargerSessions] = useState<Record<string, SessionRecord[]>>({});
 
   const [tariff, setTariff] = useState<TariffConfig>({ pricePerKwhUsd: 0.35, idleFeePerMinUsd: 0.08, activationFeeUsd: 0, gracePeriodMin: 10, softwareVendorFeeMode: 'none', softwareVendorFeeValue: 0, softwareFeeIncludesActivation: true, mode: 'flat', buckets: DEFAULT_BUCKETS, profiles: [], windows: [] });
   const [savedTariff, setSavedTariff] = useState<TariffConfig | null>(null);
@@ -379,7 +381,8 @@ export default function SiteDetail() {
   const [savedSafetyLimits, setSavedSafetyLimits] = useState<typeof safetyLimits | null>(null);
   const [safetyMsg, setSafetyMsg] = useState('');
 
-  const [activeTab, setActiveTab] = useState('chargers');
+  const [searchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'chargers');
 
   const hasTariffEdits = !savedTariff || tariffFingerprint(tariff) !== tariffFingerprint(savedTariff);
 
@@ -476,6 +479,11 @@ export default function SiteDetail() {
       setActiveSessions(
         chargerStatuses.filter(Boolean).reduce((sum, ch) => sum + (ch?.connectors.filter((c) => c.activeSession).length ?? 0), 0),
       );
+
+      // Store per-charger sessions for analytics breakdown
+      const sessMap: Record<string, SessionRecord[]> = {};
+      data.chargers.forEach((c, i) => { sessMap[c.id] = chargerSessions[i] ?? []; });
+      setPerChargerSessions(sessMap);
 
       const periodEndMs = Date.now();
       const periodStartMs = periodEndMs - (periodDays * 24 * 60 * 60 * 1000);
@@ -588,7 +596,6 @@ export default function SiteDetail() {
               <option value="60d">Last 60 days</option>
             </select>
             <button onClick={() => setShowEditSite((v) => !v)} className="rounded-lg border border-gray-300 dark:border-slate-600 px-3 py-2 text-sm font-medium text-gray-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors">Edit Site</button>
-            <Link to={`/sites/${site.id}/analytics`} className="rounded-lg border border-gray-300 dark:border-slate-600 px-3 py-2 text-sm font-medium text-gray-600 dark:text-slate-300 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors">Analytics</Link>
             <button onClick={() => setShowAddCharger(true)} className="rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-500 shadow-sm transition-colors">+ Add Charger</button>
           </div>
         }
@@ -609,6 +616,7 @@ export default function SiteDetail() {
         tabs={[
           { id: 'chargers', label: `Chargers (${site.chargers.length})` },
           { id: 'pricing', label: 'Pricing' },
+          { id: 'load-management', label: 'Load Management' },
           { id: 'analytics', label: 'Analytics' },
           { id: 'settings', label: 'Settings' },
         ]}
@@ -1126,49 +1134,298 @@ export default function SiteDetail() {
 
       </>}
 
+      {/* ── Load Management Tab ── */}
+      {activeTab === 'load-management' && <SiteLoadManagement siteId={site.id} />}
+
       {/* ── Analytics Tab ── */}
-      {activeTab === 'analytics' && <>
-      {/* ── Trend chart (dashboard style) ── */}
-      <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
-        <p className="text-sm font-semibold">
-          <span className="text-blue-600">Energy (kWh)</span>
-          <span className="text-gray-400 dark:text-slate-500"> | </span>
-          <span className="text-emerald-600">Revenue ($)</span>
-          <span className="text-gray-400 dark:text-slate-500"> | </span>
-          <span className="text-amber-500">Transactions</span>
-          <span className="ml-1 text-xs font-normal text-gray-400 dark:text-slate-500">({rangePreset})</span>
-        </p>
-        <div className="mt-3 h-64">
-          {trend.length === 0 ? (
-            <div className="flex h-full items-center justify-center text-sm text-gray-400 dark:text-slate-500">No trend data for selected period.</div>
-          ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={trend} margin={{ top: 4, right: 16, bottom: 0, left: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} />
-                <XAxis dataKey="label" tick={{ fontSize: 10, fill: chartColors.tick }} />
-                <YAxis yAxisId="kwh" tick={{ fontSize: 10, fill: chartColors.tick }} />
-                <YAxis yAxisId="rev" orientation="right" tick={{ fontSize: 10, fill: chartColors.tick }} tickFormatter={(v: number) => `$${v}`} />
-                <Tooltip contentStyle={chartColors.tooltip} formatter={(v: number, name: string) => name === 'revenueUsd' ? [`$${v.toFixed(2)}`, 'Revenue ($)'] : name === 'kwhDelivered' ? [`${v} kWh`, 'Energy (kWh)'] : [v, 'Transactions']} />
-                <Bar yAxisId="kwh" dataKey="kwhDelivered" fill="#3b82f6" opacity={0.7} name="Energy (kWh)" />
-                <Line yAxisId="rev" type="monotone" dataKey="revenueUsd" stroke="#10b981" dot={false} strokeWidth={2} name="Revenue ($)" />
-                <Line yAxisId="kwh" type="monotone" dataKey="sessions" stroke="#f59e0b" dot={false} strokeWidth={1.5} name="Transactions" />
-              </ComposedChart>
-            </ResponsiveContainer>
-          )}
+      {activeTab === 'analytics' && (() => {
+        // Aggregate per-charger stats from session data
+        const periodDays = rangePreset === '7d' ? 7 : rangePreset === '30d' ? 30 : 60;
+        const periodCutoff = Date.now() - periodDays * 24 * 60 * 60 * 1000;
+
+        const allSessions = Object.values(perChargerSessions).flat();
+        const periodSessions = allSessions.filter((s) => new Date(s.startedAt).getTime() >= periodCutoff);
+        const completedSessions = periodSessions.filter((s) => s.status === 'COMPLETED');
+        const failedSessions = periodSessions.filter((s) => s.status === 'FAILED');
+        const activeSess = periodSessions.filter((s) => s.status === 'ACTIVE');
+        const totalSessions = periodSessions.length;
+        // Success rate: only count finished sessions (exclude in-progress ACTIVE)
+        const finishedSessions = completedSessions.length + failedSessions.length;
+        const successRate = finishedSessions > 0 ? (completedSessions.length / finishedSessions) * 100 : (totalSessions > 0 ? 0 : 100);
+
+        // Avg session duration (completed only)
+        const durations = completedSessions
+          .filter((s) => s.stoppedAt)
+          .map((s) => (new Date(s.stoppedAt!).getTime() - new Date(s.startedAt).getTime()) / 60000);
+        const avgDurationMin = durations.length > 0 ? durations.reduce((a, b) => a + b, 0) / durations.length : 0;
+
+        // Avg kWh per session
+        const kwhValues = completedSessions.filter((s) => s.kwhDelivered != null).map((s) => s.kwhDelivered!);
+        const avgKwh = kwhValues.length > 0 ? kwhValues.reduce((a, b) => a + b, 0) / kwhValues.length : 0;
+        const totalKwhAll = kwhValues.reduce((a, b) => a + b, 0);
+
+        // Avg revenue per session
+        const revenueValues = completedSessions.filter((s) => s.effectiveAmountCents != null).map((s) => s.effectiveAmountCents! / 100);
+        const avgRevenue = revenueValues.length > 0 ? revenueValues.reduce((a, b) => a + b, 0) / revenueValues.length : 0;
+
+        // Per-charger breakdown
+        const chargerBreakdown = site.chargers.map((c) => {
+          const sessions = (perChargerSessions[c.id] ?? []).filter((s) => new Date(s.startedAt).getTime() >= periodCutoff);
+          const completed = sessions.filter((s) => s.status === 'COMPLETED');
+          const failed = sessions.filter((s) => s.status === 'FAILED');
+          const kwh = completed.filter((s) => s.kwhDelivered != null).reduce((sum, s) => sum + s.kwhDelivered!, 0);
+          const revenue = completed.filter((s) => s.effectiveAmountCents != null).reduce((sum, s) => sum + s.effectiveAmountCents! / 100, 0);
+          const durs = completed.filter((s) => s.stoppedAt).map((s) => (new Date(s.stoppedAt!).getTime() - new Date(s.startedAt).getTime()) / 60000);
+          const avgDur = durs.length > 0 ? durs.reduce((a, b) => a + b, 0) / durs.length : 0;
+          const finished = completed.length + failed.length;
+          const rate = finished > 0 ? (completed.length / finished) * 100 : (sessions.length > 0 ? 0 : 100);
+          const uptime = chargerUptime[c.id];
+          return { charger: c, sessions: sessions.length, completed: completed.length, failed: failed.length, kwh, revenue, avgDur, rate, uptime };
+        });
+
+        return <>
+      {/* ── Site KPI Summary ── */}
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Total Sessions</p>
+          <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-slate-100">{totalSessions}</p>
+          <p className="text-xs text-gray-400 dark:text-slate-500">{completedSessions.length} completed · {failedSessions.length} failed{activeSess.length > 0 ? ` · ${activeSess.length} active` : ''}</p>
+        </div>
+        <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Success Rate</p>
+          <p className={`mt-1 text-2xl font-bold ${successRate >= 90 ? 'text-green-600 dark:text-green-400' : successRate >= 70 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'}`}>{successRate.toFixed(1)}%</p>
+          <p className="text-xs text-gray-400 dark:text-slate-500">({rangePreset})</p>
+        </div>
+        <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Avg Session</p>
+          <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-slate-100">{avgDurationMin < 60 ? `${avgDurationMin.toFixed(0)} min` : `${(avgDurationMin / 60).toFixed(1)} hr`}</p>
+          <p className="text-xs text-gray-400 dark:text-slate-500">{avgKwh.toFixed(1)} kWh avg · ${avgRevenue.toFixed(2)} avg</p>
         </div>
       </div>
 
-      {/* ── Uptime summary ── */}
-      {siteUptime && (
-        <div className="grid gap-3 sm:grid-cols-4">
-          <div className="rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 text-center"><p className="text-xs text-gray-500 dark:text-slate-400">Uptime 24h</p><p className="mt-1 text-lg font-semibold text-gray-900 dark:text-slate-100">{siteUptime.uptimePercent24h.toFixed(1)}%</p></div>
-          <div className="rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 text-center"><p className="text-xs text-gray-500 dark:text-slate-400">Uptime 7d</p><p className="mt-1 text-lg font-semibold text-gray-900 dark:text-slate-100">{siteUptime.uptimePercent7d.toFixed(1)}%</p></div>
-          <div className="rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 text-center"><p className="text-xs text-gray-500 dark:text-slate-400">Uptime 30d</p><p className="mt-1 text-lg font-semibold text-gray-900 dark:text-slate-100">{siteUptime.uptimePercent30d.toFixed(1)}%</p></div>
-          <div className="rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 text-center"><p className="text-xs text-gray-500 dark:text-slate-400">Total chargers</p><p className="mt-1 text-lg font-semibold text-gray-900 dark:text-slate-100">{site.chargers.length}</p></div>
+      {/* ── Trend Charts ── */}
+      {trend.length === 0 ? (
+        <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-8 text-center text-sm text-gray-400 dark:text-slate-500">No trend data for selected period.</div>
+      ) : (
+        <div className="grid gap-4 lg:grid-cols-3">
+          {/* Energy */}
+          <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+            <div className="flex items-baseline justify-between mb-3">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Energy</p>
+                <p className="mt-0.5 text-xl font-bold text-blue-600 dark:text-blue-400">{trend.reduce((s, d) => s + d.kwhDelivered, 0).toFixed(1)} kWh</p>
+              </div>
+              <span className="text-[11px] text-gray-400 dark:text-slate-500">{rangePreset}</span>
+            </div>
+            <div className="h-28">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={trend} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
+                  <defs>
+                    <linearGradient id="kwhGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.3} />
+                      <stop offset="100%" stopColor="#3b82f6" stopOpacity={0.02} />
+                    </linearGradient>
+                  </defs>
+                  <XAxis dataKey="label" hide />
+                  <YAxis hide />
+                  <Tooltip contentStyle={{ ...chartColors.tooltip, fontSize: 12, borderRadius: 8, padding: '6px 10px' }} formatter={(v: number) => [`${v.toFixed(1)} kWh`, 'Energy']} labelFormatter={(l) => l} />
+                  <Area type="monotone" dataKey="kwhDelivered" stroke="#3b82f6" strokeWidth={2} fill="url(#kwhGrad)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="flex justify-between text-[10px] text-gray-400 dark:text-slate-500 mt-1 px-0.5">
+              <span>{trend[0]?.label}</span>
+              <span>{trend[trend.length - 1]?.label}</span>
+            </div>
+          </div>
+
+          {/* Revenue */}
+          <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+            <div className="flex items-baseline justify-between mb-3">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Revenue</p>
+                <p className="mt-0.5 text-xl font-bold text-emerald-600 dark:text-emerald-400">${trend.reduce((s, d) => s + d.revenueUsd, 0).toFixed(2)}</p>
+              </div>
+              <span className="text-[11px] text-gray-400 dark:text-slate-500">{rangePreset}</span>
+            </div>
+            <div className="h-28">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={trend} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
+                  <defs>
+                    <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#10b981" stopOpacity={0.3} />
+                      <stop offset="100%" stopColor="#10b981" stopOpacity={0.02} />
+                    </linearGradient>
+                  </defs>
+                  <XAxis dataKey="label" hide />
+                  <YAxis hide />
+                  <Tooltip contentStyle={{ ...chartColors.tooltip, fontSize: 12, borderRadius: 8, padding: '6px 10px' }} formatter={(v: number) => [`$${v.toFixed(2)}`, 'Revenue']} labelFormatter={(l) => l} />
+                  <Area type="monotone" dataKey="revenueUsd" stroke="#10b981" strokeWidth={2} fill="url(#revGrad)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="flex justify-between text-[10px] text-gray-400 dark:text-slate-500 mt-1 px-0.5">
+              <span>{trend[0]?.label}</span>
+              <span>{trend[trend.length - 1]?.label}</span>
+            </div>
+          </div>
+
+          {/* Sessions */}
+          <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+            <div className="flex items-baseline justify-between mb-3">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Sessions</p>
+                <p className="mt-0.5 text-xl font-bold text-amber-600 dark:text-amber-400">{trend.reduce((s, d) => s + d.sessions, 0)}</p>
+              </div>
+              <span className="text-[11px] text-gray-400 dark:text-slate-500">{rangePreset}</span>
+            </div>
+            <div className="h-28">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={trend} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
+                  <XAxis dataKey="label" hide />
+                  <YAxis hide />
+                  <Tooltip contentStyle={{ ...chartColors.tooltip, fontSize: 12, borderRadius: 8, padding: '6px 10px' }} formatter={(v: number) => [v, 'Sessions']} labelFormatter={(l) => l} cursor={{ fill: 'transparent' }} />
+                  <Bar dataKey="sessions" fill="#f59e0b" opacity={0.8} radius={[3, 3, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="flex justify-between text-[10px] text-gray-400 dark:text-slate-500 mt-1 px-0.5">
+              <span>{trend[0]?.label}</span>
+              <span>{trend[trend.length - 1]?.label}</span>
+            </div>
+          </div>
         </div>
       )}
 
-      </>}
+      {/* ── Site Uptime ── */}
+      {siteUptime && (
+        <div className="grid gap-3 sm:grid-cols-4">
+          <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 text-center"><p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Uptime 24h</p><p className="mt-1 text-2xl font-bold text-gray-900 dark:text-slate-100">{siteUptime.uptimePercent24h.toFixed(1)}%</p></div>
+          <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 text-center"><p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Uptime 7d</p><p className="mt-1 text-2xl font-bold text-gray-900 dark:text-slate-100">{siteUptime.uptimePercent7d.toFixed(1)}%</p></div>
+          <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 text-center"><p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Uptime 30d</p><p className="mt-1 text-2xl font-bold text-gray-900 dark:text-slate-100">{siteUptime.uptimePercent30d.toFixed(1)}%</p></div>
+          <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 text-center"><p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Total Chargers</p><p className="mt-1 text-2xl font-bold text-gray-900 dark:text-slate-100">{site.chargers.length}</p></div>
+        </div>
+      )}
+
+      {/* ── Charger Performance Breakdown ── */}
+      <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm">
+        <div className="border-b border-gray-200 dark:border-slate-700 px-5 py-4">
+          <h2 className="text-sm font-semibold text-gray-900 dark:text-slate-100">Charger Performance Breakdown</h2>
+          <p className="mt-0.5 text-xs text-gray-500 dark:text-slate-400">Per-charger metrics for the selected period ({rangePreset}).</p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-100 dark:border-slate-800 bg-gray-50 dark:bg-slate-800/40 text-left text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">
+                <th className="px-5 py-3">Charger</th>
+                <th className="px-5 py-3">Status</th>
+                <th className="px-5 py-3 text-right">Sessions</th>
+                <th className="px-5 py-3 text-right">Success Rate</th>
+                <th className="px-5 py-3 text-right">Energy (kWh)</th>
+                <th className="px-5 py-3 text-right">Revenue</th>
+                <th className="px-5 py-3 text-right">Avg Duration</th>
+                <th className="px-5 py-3 text-right">Uptime 30d</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50 dark:divide-slate-800">
+              {chargerBreakdown.map((row) => (
+                <tr key={row.charger.id} className="hover:bg-gray-50 dark:hover:bg-slate-800/60">
+                  <td className="px-5 py-3">
+                    <Link to={`/chargers/${row.charger.id}`} className="font-mono text-xs font-semibold text-brand-700 dark:text-brand-300 hover:underline">{row.charger.ocppId}</Link>
+                  </td>
+                  <td className="px-5 py-3">
+                    <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${row.charger.status === 'ONLINE' ? 'text-green-600 dark:text-green-400' : row.charger.status === 'FAULTED' ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-slate-400'}`}>
+                      <span className={`h-2 w-2 rounded-full ${row.charger.status === 'ONLINE' ? 'bg-green-500' : row.charger.status === 'FAULTED' ? 'bg-red-500' : 'bg-gray-300 dark:bg-slate-600'}`} />
+                      {row.charger.status}
+                    </span>
+                  </td>
+                  <td className="px-5 py-3 text-right">
+                    <span className="font-medium text-gray-900 dark:text-slate-100">{row.sessions}</span>
+                    {row.failed > 0 && <span className="ml-1 text-[11px] text-red-500">({row.failed} failed)</span>}
+                  </td>
+                  <td className="px-5 py-3 text-right">
+                    <span className={`font-medium ${row.rate >= 90 ? 'text-green-600 dark:text-green-400' : row.rate >= 70 ? 'text-amber-600 dark:text-amber-400' : row.sessions === 0 ? 'text-gray-400 dark:text-slate-500' : 'text-red-600 dark:text-red-400'}`}>
+                      {row.sessions > 0 ? `${row.rate.toFixed(0)}%` : '—'}
+                    </span>
+                  </td>
+                  <td className="px-5 py-3 text-right font-medium text-gray-900 dark:text-slate-100">{row.kwh > 0 ? row.kwh.toFixed(1) : '—'}</td>
+                  <td className="px-5 py-3 text-right font-medium text-gray-900 dark:text-slate-100">{row.revenue > 0 ? `$${row.revenue.toFixed(2)}` : '—'}</td>
+                  <td className="px-5 py-3 text-right text-gray-700 dark:text-slate-300">
+                    {row.avgDur > 0 ? (row.avgDur < 60 ? `${row.avgDur.toFixed(0)} min` : `${(row.avgDur / 60).toFixed(1)} hr`) : '—'}
+                  </td>
+                  <td className="px-5 py-3 text-right">
+                    {row.uptime ? (
+                      <span className={`font-medium ${row.uptime.uptimePercent30d >= 95 ? 'text-green-600 dark:text-green-400' : row.uptime.uptimePercent30d >= 80 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'}`}>
+                        {row.uptime.uptimePercent30d.toFixed(1)}%
+                      </span>
+                    ) : <span className="text-gray-400 dark:text-slate-500">—</span>}
+                  </td>
+                </tr>
+              ))}
+              {chargerBreakdown.length === 0 && (
+                <tr><td colSpan={8} className="px-5 py-8 text-center text-sm text-gray-400 dark:text-slate-500">No chargers at this site.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* ── Charger Uptime Comparison ── */}
+      {Object.keys(chargerUptime).length > 0 && (
+        <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm">
+          <div className="border-b border-gray-200 dark:border-slate-700 px-5 py-4">
+            <h2 className="text-sm font-semibold text-gray-900 dark:text-slate-100">Charger Uptime Comparison</h2>
+            <p className="mt-0.5 text-xs text-gray-500 dark:text-slate-400">Side-by-side uptime across 24h, 7d, and 30d windows.</p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-100 dark:border-slate-800 bg-gray-50 dark:bg-slate-800/40 text-left text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">
+                  <th className="px-5 py-3">Charger</th>
+                  <th className="px-5 py-3">Current Status</th>
+                  <th className="px-5 py-3 text-right">24h</th>
+                  <th className="px-5 py-3 text-right">7d</th>
+                  <th className="px-5 py-3 text-right">30d</th>
+                  <th className="px-5 py-3">Last Online</th>
+                  <th className="px-5 py-3 text-right">Recent Incidents</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50 dark:divide-slate-800">
+                {site.chargers.map((c) => {
+                  const up = chargerUptime[c.id];
+                  if (!up) return null;
+                  const uptimeColor = (pct: number) => pct >= 95 ? 'text-green-600 dark:text-green-400' : pct >= 80 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400';
+                  const recentIncidents = up.incidents?.filter((inc) => inc.event === 'OFFLINE' || inc.event === 'FAULTED').length ?? 0;
+                  return (
+                    <tr key={c.id} className="hover:bg-gray-50 dark:hover:bg-slate-800/60">
+                      <td className="px-5 py-3 font-mono text-xs font-semibold text-gray-800 dark:text-slate-200">{c.ocppId}</td>
+                      <td className="px-5 py-3">
+                        <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${up.currentStatus === 'ONLINE' ? 'text-green-600 dark:text-green-400' : up.currentStatus === 'FAULTED' ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-slate-400'}`}>
+                          <span className={`h-2 w-2 rounded-full ${up.currentStatus === 'ONLINE' ? 'bg-green-500' : up.currentStatus === 'FAULTED' ? 'bg-red-500' : 'bg-gray-300 dark:bg-slate-600'}`} />
+                          {up.currentStatus}
+                        </span>
+                      </td>
+                      <td className={`px-5 py-3 text-right font-medium ${uptimeColor(up.uptimePercent24h)}`}>{up.uptimePercent24h.toFixed(1)}%</td>
+                      <td className={`px-5 py-3 text-right font-medium ${uptimeColor(up.uptimePercent7d)}`}>{up.uptimePercent7d.toFixed(1)}%</td>
+                      <td className={`px-5 py-3 text-right font-medium ${uptimeColor(up.uptimePercent30d)}`}>{up.uptimePercent30d.toFixed(1)}%</td>
+                      <td className="px-5 py-3 text-xs text-gray-500 dark:text-slate-400">{up.lastOnlineAt ? new Date(up.lastOnlineAt).toLocaleString() : '—'}</td>
+                      <td className="px-5 py-3 text-right">
+                        {recentIncidents > 0 ? (
+                          <span className="rounded-full bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 px-2 py-0.5 text-[11px] font-medium text-red-600 dark:text-red-400">{recentIncidents}</span>
+                        ) : (
+                          <span className="text-xs text-gray-400 dark:text-slate-500">0</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      </>; })()}
 
       {/* ── Settings Tab ── */}
       {activeTab === 'settings' && <>
