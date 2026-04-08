@@ -721,3 +721,18 @@ model Portfolio {
   @@unique([name, organizationId])
   @@index([organizationId])
 }
+
+// ─── Reports ─────────────────────────────────────────────────────────────────
+
+model SavedReport {
+  id          String   @id @default(uuid())
+  operatorId  String
+  name        String
+  reportType  String   @default("interval_usage") // extensible for future report types
+  config      Json     // filter criteria: siteId, chargerIds, dateRange, intervalMinutes, etc.
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([operatorId, name])
+  @@index([operatorId, reportType])
+}
