@@ -1054,14 +1054,9 @@ export function createApiClient(token: string | null | undefined) {
     getOpenAIStatus: () =>
       request<{ connected: boolean; email?: string; connectedAt?: string; tokenExpiresAt?: string }>('/settings/openai/status', token),
 
+    /** Get the OpenAI authorization URL to open in a popup. */
     getOpenAIAuthUrl: () =>
-      request<{ url: string; state: string }>('/settings/openai/auth-url', token),
-
-    postOpenAICallback: (body: { code: string; state: string }) =>
-      request<{ success: boolean; email?: string }>('/settings/openai/callback', token, {
-        method: 'POST',
-        body: JSON.stringify(body),
-      }),
+      request<{ url: string }>('/settings/openai/auth-url', token),
 
     postOpenAIDisconnect: () =>
       request<{ success: boolean }>('/settings/openai/disconnect', token, {

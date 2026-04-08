@@ -1,19 +1,32 @@
 import crypto from 'crypto';
 
-// OpenAI OAuth 2.0 endpoints
-const OPENAI_AUTH_URL = 'https://auth.openai.com/authorize';
-const OPENAI_TOKEN_URL = 'https://auth.openai.com/token';
+// ── OpenAI Codex OAuth 2.0 (public client, PKCE) ────────────────────────────
+// Uses the same fixed client_id as Codex CLI — no app registration needed.
+// Reference: https://developers.openai.com/codex/auth
 
-// Env vars: OPENAI_OAUTH_CLIENT_ID, OPENAI_OAUTH_REDIRECT_URI, OPENAI_TOKEN_ENCRYPTION_KEY
+const CLIENT_ID = 'app_EMoamEEZ73f0CkXaXp7hrann';
+const AUTHORIZE_URL = 'https://auth.openai.com/oauth/authorize';
+const TOKEN_URL = 'https://auth.openai.com/oauth/token';
+const SCOPE = 'openid profile email offline_access';
 
-function getConfig() {
-  const clientId = process.env.OPENAI_OAUTH_CLIENT_ID;
-  const redirectUri = process.env.OPENAI_OAUTH_REDIRECT_URI ?? 'http://localhost:5173/settings/openai/callback';
-  const encryptionKey = process.env.OPENAI_TOKEN_ENCRYPTION_KEY;
-  return { clientId, redirectUri, encryptionKey };
+/**
+ * Returns the redirect URI pointing to the API server itself.
+ * In dev: http://localhost:3001/settings/openai/callback
+ * In prod: https://api-production-26cf.up.railway.app/settings/openai/callback
+ *
+ * Set API_BASE_URL env var in prod. Falls back to localhost:3001 for dev.
+ */
+function getRedirectUri(): string {
+  const base = process.env.API_BASE_URL ?? `http://localhost:${process.env.PORT ?? 3001}`;
+  return `${base}/settings/openai/callback`;
 }
 
-// PKCE helpers
+function getEncryptionKey(): string | undefined {
+  return process.env.OPENAI_TOKEN_ENCRYPTION_KEY;
+}
+
+// ── PKCE helpers ─────────────────────────────────────────────────────────────
+
 export function generateCodeVerifier(): string {
   return crypto.randomBytes(32).toString('base64url');
 }
@@ -22,40 +35,40 @@ export function generateCodeChallenge(verifier: string): string {
   return crypto.createHash('sha256').update(verifier).digest('base64url');
 }
 
-// Generate authorization URL with PKCE
+// ── Authorization URL ────────────────────────────────────────────────────────
+
 export function generateAuthUrl(state: string, codeChallenge: string): string {
-  const { clientId, redirectUri } = getConfig();
-  if (!clientId) throw new Error('OPENAI_OAUTH_CLIENT_ID not configured');
   const params = new URLSearchParams({
     response_type: 'code',
-    client_id: clientId,
-    redirect_uri: redirectUri,
-    scope: 'openid profile email offline_access',
+    client_id: CLIENT_ID,
+    redirect_uri: getRedirectUri(),
+    scope: SCOPE,
     state,
     code_challenge: codeChallenge,
     code_challenge_method: 'S256',
+    // Codex-specific params
+    id_token_add_organizations: 'true',
+    codex_cli_simplified_flow: 'true',
   });
-  return `${OPENAI_AUTH_URL}?${params.toString()}`;
+  return `${AUTHORIZE_URL}?${params.toString()}`;
 }
 
-// Exchange authorization code for tokens
+// ── Token exchange ───────────────────────────────────────────────────────────
+
 export async function exchangeCode(code: string, codeVerifier: string): Promise<{
   accessToken: string;
   refreshToken: string;
   expiresAt: Date;
   email?: string;
 }> {
-  const { clientId, redirectUri } = getConfig();
-  if (!clientId) throw new Error('OPENAI_OAUTH_CLIENT_ID not configured');
-
-  const res = await fetch(OPENAI_TOKEN_URL, {
+  const res = await fetch(TOKEN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
       grant_type: 'authorization_code',
       code,
-      redirect_uri: redirectUri,
-      client_id: clientId,
+      redirect_uri: getRedirectUri(),
+      client_id: CLIENT_ID,
       code_verifier: codeVerifier,
     }),
   });
@@ -65,15 +78,20 @@ export async function exchangeCode(code: string, codeVerifier: string): Promise<
     throw new Error(`OpenAI token exchange failed (${res.status}): ${text}`);
   }
 
-  const data = await res.json() as { access_token: string; refresh_token: string; expires_in: number; id_token?: string };
+  const data = await res.json() as {
+    access_token: string;
+    refresh_token: string;
+    expires_in: number;
+    id_token?: string;
+  };
 
-  // Try to extract email from id_token (JWT)
+  // Extract email from id_token JWT payload
   let email: string | undefined;
   if (data.id_token) {
     try {
       const payload = JSON.parse(Buffer.from(data.id_token.split('.')[1], 'base64url').toString());
       email = payload.email;
-    } catch { /* ignore */ }
+    } catch { /* ignore malformed id_token */ }
   }
 
   return {
@@ -84,22 +102,20 @@ export async function exchangeCode(code: string, codeVerifier: string): Promise<
   };
 }
 
-// Refresh access token
+// ── Token refresh ────────────────────────────────────────────────────────────
+
 export async function refreshAccessToken(refreshToken: string): Promise<{
   accessToken: string;
   refreshToken: string;
   expiresAt: Date;
 }> {
-  const { clientId } = getConfig();
-  if (!clientId) throw new Error('OPENAI_OAUTH_CLIENT_ID not configured');
-
-  const res = await fetch(OPENAI_TOKEN_URL, {
+  const res = await fetch(TOKEN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
       grant_type: 'refresh_token',
       refresh_token: refreshToken,
-      client_id: clientId,
+      client_id: CLIENT_ID,
     }),
   });
 
@@ -116,10 +132,11 @@ export async function refreshAccessToken(refreshToken: string): Promise<{
   };
 }
 
-// AES-256-GCM encryption for token storage
+// ── AES-256-GCM token encryption ─────────────────────────────────────────────
+
 export function encryptToken(plaintext: string): string {
-  const { encryptionKey } = getConfig();
-  if (!encryptionKey) return plaintext; // Dev mode: no encryption
+  const encryptionKey = getEncryptionKey();
+  if (!encryptionKey) return plaintext; // Dev mode: store plaintext
   const key = Buffer.from(encryptionKey, 'hex');
   const iv = crypto.randomBytes(12);
   const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
@@ -129,8 +146,8 @@ export function encryptToken(plaintext: string): string {
 }
 
 export function decryptToken(ciphertext: string): string {
-  const { encryptionKey } = getConfig();
-  if (!encryptionKey) return ciphertext; // Dev mode: no encryption
+  const encryptionKey = getEncryptionKey();
+  if (!encryptionKey) return ciphertext; // Dev mode: plaintext passthrough
   const key = Buffer.from(encryptionKey, 'hex');
   const buf = Buffer.from(ciphertext, 'base64');
   const iv = buf.subarray(0, 12);
@@ -141,7 +158,8 @@ export function decryptToken(ciphertext: string): string {
   return decipher.update(encrypted) + decipher.final('utf8');
 }
 
-// Get a valid OpenAI access token, refreshing if needed
+// ── Get valid token (auto-refresh) ───────────────────────────────────────────
+
 export async function getValidOpenAIToken(prisma: any, scopeKey: string): Promise<string> {
   const settings = await prisma.portalSettings.findUnique({ where: { scopeKey } });
   if (!settings?.openaiAccessToken) {
@@ -151,7 +169,7 @@ export async function getValidOpenAIToken(prisma: any, scopeKey: string): Promis
   const accessToken = decryptToken(settings.openaiAccessToken);
   const refreshTokenVal = settings.openaiRefreshToken ? decryptToken(settings.openaiRefreshToken) : null;
 
-  // If token expires in less than 5 minutes, refresh
+  // Refresh if token expires within 5 minutes
   if (settings.openaiTokenExpiresAt && new Date(settings.openaiTokenExpiresAt).getTime() < Date.now() + 5 * 60 * 1000) {
     if (!refreshTokenVal) throw new Error('OpenAI token expired and no refresh token available. Admin must reconnect.');
 

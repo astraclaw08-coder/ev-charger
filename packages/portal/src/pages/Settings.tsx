@@ -51,6 +51,7 @@ const ADMIN_TABS = [
   { id: 'billing', label: 'Billing' },
   { id: 'security', label: 'Security' },
   { id: 'charger-models', label: 'Chargers' },
+  { id: 'ai', label: 'AI Assistant' },
 ] as const;
 
 type TabId = (typeof ADMIN_TABS)[number]['id'];
@@ -466,6 +467,144 @@ function ApiKeysTab() {
   );
 }
 
+// ─── Tab: AI Assistant ───────────────────────────────────────────────────────
+function AiAssistantTab() {
+  const getToken = useToken();
+  const [status, setStatus] = useState<{ connected: boolean; email?: string; connectedAt?: string } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [connecting, setConnecting] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
+
+  const fetchStatus = async () => {
+    try {
+      const token = await getToken();
+      const api = createApiClient(token);
+      const res = await api.getOpenAIStatus();
+      setStatus(res);
+    } catch {
+      setStatus(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchStatus(); }, []);
+
+  // Listen for postMessage from OAuth popup
+  useEffect(() => {
+    function handleMessage(e: MessageEvent) {
+      if (e.data?.type === 'openai-oauth-result') {
+        setConnecting(false);
+        if (e.data.success) {
+          fetchStatus();
+        }
+      }
+    }
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
+
+  const handleConnect = async () => {
+    setConnecting(true);
+    try {
+      const token = await getToken();
+      const api = createApiClient(token);
+      const { url } = await api.getOpenAIAuthUrl();
+      // Open popup centered on screen
+      const w = 500, h = 700;
+      const left = window.screenX + (window.outerWidth - w) / 2;
+      const top = window.screenY + (window.outerHeight - h) / 2;
+      const popup = window.open(url, 'openai-oauth', `width=${w},height=${h},left=${left},top=${top},popup=1`);
+      // If popup was blocked, reset state
+      if (!popup) {
+        setConnecting(false);
+        alert('Popup blocked. Please allow popups for this site and try again.');
+      }
+    } catch {
+      setConnecting(false);
+    }
+  };
+
+  const handleDisconnect = async () => {
+    if (!confirm('Disconnect OpenAI? The AI assistant will stop working for all portal users.')) return;
+    setDisconnecting(true);
+    try {
+      const token = await getToken();
+      const api = createApiClient(token);
+      await api.postOpenAIDisconnect();
+      setStatus({ connected: false });
+    } catch { /* ignore */ } finally {
+      setDisconnecting(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <SectionCard
+        title="Lumeo AI"
+        description="Connect your OpenAI account to enable the AI assistant for all portal users."
+      >
+        {loading ? (
+          <div className="px-4 py-6 text-center">
+            <p className="text-sm text-gray-500 dark:text-slate-400">Checking connection...</p>
+          </div>
+        ) : status?.connected ? (
+          <div className="space-y-4">
+            <div className="flex items-center gap-3 rounded-lg border border-green-200 dark:border-green-800/50 bg-green-50 dark:bg-green-900/20 px-4 py-3">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-green-100 dark:bg-green-800/40">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4 text-green-600 dark:text-green-400">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-green-800 dark:text-green-300">OpenAI Connected</p>
+                {status.email && <p className="text-xs text-green-600 dark:text-green-400 truncate">{status.email}</p>}
+                {status.connectedAt && (
+                  <p className="text-xs text-green-600/70 dark:text-green-500/70">
+                    Connected {new Date(status.connectedAt).toLocaleDateString()}
+                  </p>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={handleDisconnect}
+                disabled={disconnecting}
+                className="rounded-md border border-red-300 dark:border-red-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 transition-colors"
+              >
+                {disconnecting ? 'Disconnecting...' : 'Disconnect'}
+              </button>
+            </div>
+            <div className="text-xs text-gray-500 dark:text-slate-400 space-y-1">
+              <p>The AI assistant is available to all portal users via the chat button (bottom-right).</p>
+              <p>It uses your connected OpenAI account for GPT-4o access.</p>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="rounded-lg border border-gray-100 dark:border-slate-800 bg-gray-50 dark:bg-slate-800/40 px-4 py-6 text-center">
+              <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-blue-50 dark:bg-blue-900/30">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="h-5 w-5 text-blue-500 dark:text-blue-400">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2m0 14v2m9-9h-2M5 12H3m15.364-6.364-1.414 1.414M7.05 16.95l-1.414 1.414m12.728 0-1.414-1.414M7.05 7.05 5.636 5.636M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z" />
+                </svg>
+              </div>
+              <p className="text-sm text-gray-600 dark:text-slate-300 mb-1">Connect your OpenAI account to enable Lumeo AI</p>
+              <p className="text-xs text-gray-500 dark:text-slate-400 mb-4">Uses your ChatGPT subscription for GPT-4o access. No API key needed.</p>
+              <PrimaryButton onClick={handleConnect} disabled={connecting}>
+                {connecting ? 'Connecting...' : 'Connect OpenAI'}
+              </PrimaryButton>
+            </div>
+            <div className="text-xs text-gray-500 dark:text-slate-400 space-y-1">
+              <p>A popup window will open for you to sign in with your OpenAI account.</p>
+              <p>Once connected, all portal users can use the AI assistant to query sites, chargers, and analytics.</p>
+              <p>The assistant respects each user's role and permissions — it cannot access data beyond what the user is allowed to see.</p>
+            </div>
+          </div>
+        )}
+      </SectionCard>
+    </div>
+  );
+}
+
 // ─── Tab: Billing & Remittance ────────────────────────────────────────────────
 function BillingTab({ org, setOrg, onSave, valid }: {
   org: OrgDraft; setOrg: React.Dispatch<React.SetStateAction<OrgDraft>>; onSave: () => void; valid: boolean;
@@ -848,6 +987,7 @@ export default function Settings() {
       {activeTab === 'billing' && <BillingTab org={org} setOrg={setOrg} onSave={saveOrg} valid={orgValid} />}
       {activeTab === 'security' && <SecurityTab />}
       {activeTab === 'charger-models' && <ChargerModelsTab models={models} newModel={newModel} setNewModel={setNewModel} modelValid={modelValid} onAdd={addModel} onToggle={toggleModel} />}
+      {activeTab === 'ai' && <AiAssistantTab />}
     </div>
   );
 }
