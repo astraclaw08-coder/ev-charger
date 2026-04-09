@@ -256,7 +256,7 @@ export default function LoadManagement() {
                   </td>
                   <td className="px-5 py-4">
                     {d.minLimit != null ? (
-                      <p className="font-mono text-sm font-semibold text-gray-900 dark:text-slate-100">
+                      <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">
                         {d.minLimit === d.maxLimit ? `${d.minLimit} kW` : `${d.minLimit}–${d.maxLimit} kW`}
                       </p>
                     ) : (
@@ -331,7 +331,7 @@ export default function LoadManagement() {
                       </td>
                       <td className="px-5 py-3"><ScopePill scope={p.scope} /></td>
                       <td className="px-5 py-3 text-xs text-gray-600 dark:text-slate-300">{targetName}</td>
-                      <td className="px-5 py-3 font-mono text-xs font-semibold text-gray-900 dark:text-slate-100">
+                      <td className="px-5 py-3 text-xs font-semibold text-gray-900 dark:text-slate-100">
                         {p.defaultLimitKw != null ? `${p.defaultLimitKw} kW` : '—'}
                       </td>
                       <td className="px-5 py-3">

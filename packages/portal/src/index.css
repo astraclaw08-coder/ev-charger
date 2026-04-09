@@ -2,6 +2,11 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Override Tailwind preflight monospace defaults — must be outside @layer to win specificity */
+kbd, code, pre, samp, tt {
+  font-family: "Nunito Sans", system-ui, sans-serif;
+}
+
 /* Prevent horizontal scrollbar globally */
 html, body, #root {
   overflow-x: hidden;

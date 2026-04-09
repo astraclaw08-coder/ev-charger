@@ -278,7 +278,7 @@ export default function IntervalUsageExport() {
                         onChange={() => toggleCharger(c.id)}
                         className="rounded border-gray-300 dark:border-slate-500"
                       />
-                      <span className="text-gray-800 dark:text-slate-200 font-mono text-xs">{c.ocppId}</span>
+                      <span className="text-gray-800 dark:text-slate-200 text-xs">{c.ocppId}</span>
                     </label>
                   ))}
                 </div>
@@ -332,7 +332,7 @@ export default function IntervalUsageExport() {
                         <tr key={i} className="border-b border-gray-100 dark:border-slate-700/50">
                           <td className="py-1.5 pr-3 whitespace-nowrap">{formatDate(row.intervalStart)}</td>
                           <td className="py-1.5 pr-3 whitespace-nowrap">{row.siteName}</td>
-                          <td className="py-1.5 pr-3 font-mono">{row.chargerOcppId}</td>
+                          <td className="py-1.5 pr-3">{row.chargerOcppId}</td>
                           <td className="py-1.5 pr-3 text-center">{row.connectorId}</td>
                           <td className="py-1.5 pr-3 text-right tabular-nums">{row.energyKwh.toFixed(4)}</td>
                           <td className="py-1.5 pr-3 text-right tabular-nums">{row.avgPowerKw.toFixed(2)}</td>

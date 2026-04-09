@@ -344,7 +344,7 @@ export default function Dashboard() {
           <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
             <h2 className="text-sm font-semibold text-gray-900 dark:text-slate-100">Fleet Health</h2>
             <p className="text-xs text-gray-500 dark:text-slate-400">
-              <span className="font-mono font-medium text-gray-700 dark:text-slate-300">{fleetStatus.totalChargers}</span> chargers · <span className="font-mono font-medium text-gray-700 dark:text-slate-300">{fleetStatus.totalConnectors}</span> connectors
+              <span className="font-medium text-gray-700 dark:text-slate-300">{fleetStatus.totalChargers}</span> chargers · <span className="font-medium text-gray-700 dark:text-slate-300">{fleetStatus.totalConnectors}</span> connectors
             </p>
           </div>
 
@@ -407,7 +407,7 @@ export default function Dashboard() {
                 .filter((entry) => !['AVAILABLE', 'PREPARING', 'CHARGING', 'FINISHING', 'SUSPENDED_EV', 'SUSPENDED_EVSE', 'FAULTED', 'UNAVAILABLE', 'OFFLINE'].includes(entry.status))
                 .map((entry) => (
                   <span key={entry.status} className="rounded-full border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 px-2.5 py-1 text-xs font-medium text-gray-600 dark:text-slate-400">
-                    {entry.status}: <span className="font-mono">{entry.count}</span>
+                    {entry.status}: <span className="font-semibold tabular-nums">{entry.count}</span>
                   </span>
                 ))}
             </div>
@@ -429,7 +429,7 @@ export default function Dashboard() {
                 href={`/sites/${site.id}`}
                 className="flex items-center gap-3 rounded-lg border border-gray-100 dark:border-slate-700/50 bg-gray-50/50 dark:bg-slate-800/40 px-3 py-2.5 transition-all hover:border-brand-300 hover:bg-brand-50 dark:hover:border-brand-600/50 dark:hover:bg-brand-900/20 hover:shadow-sm"
               >
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gray-200 dark:bg-slate-700 text-xs font-bold font-mono text-gray-600 dark:text-slate-300">{idx + 1}</span>
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gray-200 dark:bg-slate-700 text-xs font-bold text-gray-600 dark:text-slate-300">{idx + 1}</span>
                 <div className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium text-gray-900 dark:text-slate-100">
                     {site.name}
@@ -439,7 +439,7 @@ export default function Dashboard() {
                   </span>
                   <span className="block truncate text-xs text-gray-500 dark:text-slate-400">{site.address}</span>
                 </div>
-                <span className="shrink-0 text-sm font-bold font-mono tabular-nums text-gray-900 dark:text-slate-100">{site.utilizationPct.toFixed(1)}%</span>
+                <span className="shrink-0 text-sm font-bold tabular-nums text-gray-900 dark:text-slate-100">{site.utilizationPct.toFixed(1)}%</span>
                 <div className="hidden w-28 sm:block">
                   <div className="h-2 rounded-full bg-gray-200 dark:bg-slate-700">
                     <div
@@ -603,7 +603,7 @@ function FleetHealthTile({ label, count, total, color, icon }: { label: string; 
         <span className={cn('text-xs font-medium', c.text)}>{label}</span>
       </div>
       <div className="flex items-baseline gap-1.5">
-        <span className={cn('text-2xl font-bold font-mono tabular-nums', c.text)}>{count}</span>
+        <span className={cn('text-2xl font-bold tabular-nums', c.text)}>{count}</span>
         <span className="text-xs text-gray-400 dark:text-slate-500">/ {total}</span>
       </div>
       <div className="mt-2 h-1.5 rounded-full bg-gray-200 dark:bg-slate-700 overflow-hidden">
@@ -619,7 +619,7 @@ function UptimeTile({ label, value }: { label: string; value: number }) {
   return (
     <div className="rounded-lg bg-gray-50 dark:bg-slate-800/60 p-3">
       <p className="text-xs text-gray-500 dark:text-slate-400">{label}</p>
-      <p className={cn('text-xl font-bold font-mono tabular-nums mt-0.5', color)}>{value.toFixed(2)}%</p>
+      <p className={cn('text-xl font-bold tabular-nums mt-0.5', color)}>{value.toFixed(2)}%</p>
     </div>
   );
 }

@@ -284,7 +284,7 @@ export default function FleetAnalytics() {
         </div>}
       </div>
 
-      <TabBar tabs={ANALYTICS_TABS} activeTab={activeTab} onChange={setActiveTab} variant="underline" />
+      <TabBar tabs={ANALYTICS_TABS} activeTab={activeTab} onChange={setActiveTab} />
 
       {activeTab === 'reports' && <IntervalUsageExport />}
 
@@ -567,7 +567,7 @@ function KpiTile({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2.5">
       <p className="truncate text-[10px] font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">{label}</p>
-      <p className="mt-1 truncate text-lg font-semibold leading-tight text-gray-900 dark:text-slate-100">{value}</p>
+      <p className="mt-1 truncate text-lg font-bold tabular-nums leading-tight text-gray-900 dark:text-slate-100">{value}</p>
     </div>
   );
 }

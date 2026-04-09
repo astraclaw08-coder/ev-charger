@@ -1306,7 +1306,7 @@ export default function SiteDetail() {
               {chargerBreakdown.map((row) => (
                 <tr key={row.charger.id} className="hover:bg-gray-50 dark:hover:bg-slate-800/60">
                   <td className="px-5 py-3">
-                    <Link to={`/chargers/${row.charger.id}`} className="font-mono text-xs font-semibold text-brand-700 dark:text-brand-300 hover:underline">{row.charger.ocppId}</Link>
+                    <Link to={`/chargers/${row.charger.id}`} className="text-xs font-semibold text-brand-700 dark:text-brand-300 hover:underline">{row.charger.ocppId}</Link>
                   </td>
                   <td className="px-5 py-3">
                     <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${row.charger.status === 'ONLINE' ? 'text-green-600 dark:text-green-400' : row.charger.status === 'FAULTED' ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-slate-400'}`}>
@@ -1373,7 +1373,7 @@ export default function SiteDetail() {
                   const recentIncidents = up.incidents?.filter((inc) => inc.event === 'OFFLINE' || inc.event === 'FAULTED').length ?? 0;
                   return (
                     <tr key={c.id} className="hover:bg-gray-50 dark:hover:bg-slate-800/60">
-                      <td className="px-5 py-3 font-mono text-xs font-semibold text-gray-800 dark:text-slate-200">{c.ocppId}</td>
+                      <td className="px-5 py-3 text-xs font-semibold text-gray-800 dark:text-slate-200">{c.ocppId}</td>
                       <td className="px-5 py-3">
                         <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${up.currentStatus === 'ONLINE' ? 'text-green-600 dark:text-green-400' : up.currentStatus === 'FAULTED' ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-slate-400'}`}>
                           <span className={`h-2 w-2 rounded-full ${up.currentStatus === 'ONLINE' ? 'bg-green-500' : up.currentStatus === 'FAULTED' ? 'bg-red-500' : 'bg-gray-300 dark:bg-slate-600'}`} />
@@ -1578,7 +1578,7 @@ export default function SiteDetail() {
           <div className="w-full max-w-md rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-6 shadow-xl">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">Unassign Charger</h3>
             <p className="mt-2 text-sm text-gray-600 dark:text-slate-400">
-              Are you sure you want to unassign <span className="font-mono font-semibold text-gray-900 dark:text-slate-100">{unassignTarget.ocppId}</span> from this site?
+              Are you sure you want to unassign <span className="font-semibold text-gray-900 dark:text-slate-100">{unassignTarget.ocppId}</span> from this site?
             </p>
             <p className="mt-1 text-xs text-gray-500 dark:text-slate-500">
               All historical charging sessions will be preserved. The charger will appear as unassigned and can be reassigned to another site later.
@@ -1637,7 +1637,7 @@ function ChargerListRow({ charger, uptime, onUnassign }: { charger: SiteDetailTy
   return (
     <div className="grid gap-3 px-4 py-3 md:grid-cols-[1.6fr_1fr_1.8fr_0.8fr] md:items-center">
       <div>
-        <Link to={`/chargers/${shortId(charger.id)}`} className="font-mono text-sm font-semibold text-gray-900 dark:text-slate-100 hover:text-brand-700 hover:underline">
+        <Link to={`/chargers/${shortId(charger.id)}`} className="text-sm font-semibold text-gray-900 dark:text-slate-100 hover:text-brand-700 hover:underline">
           {charger.ocppId}
         </Link>
         <p className="text-xs text-gray-500 dark:text-slate-400">{charger.vendor} {charger.model} · S/N {charger.serialNumber}</p>
@@ -1685,7 +1685,7 @@ function ChargerCard({ charger, uptime, onUnassign }: { charger: SiteDetailType[
     <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 shadow-sm">
       <div className="flex items-start justify-between">
         <div>
-          <Link to={`/chargers/${shortId(charger.id)}`} className="font-semibold text-gray-900 dark:text-slate-100 font-mono hover:text-brand-700 hover:underline">
+          <Link to={`/chargers/${shortId(charger.id)}`} className="font-semibold text-gray-900 dark:text-slate-100 hover:text-brand-700 hover:underline">
             {charger.ocppId}
           </Link>
           <p className="text-xs text-gray-500 dark:text-slate-400">{charger.vendor} {charger.model}</p>

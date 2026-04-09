@@ -184,7 +184,7 @@ function renderInline(text: string): ReactNode[] {
     } else if (match[4] !== undefined) {
       // Inline code `text`
       parts.push(
-        <code key={match.index} className="rounded bg-gray-100 dark:bg-slate-800 px-1 py-0.5 text-xs font-mono">
+        <code key={match.index} className="rounded bg-gray-100 dark:bg-slate-800 px-1 py-0.5 text-xs">
           {match[4]}
         </code>,
       );
