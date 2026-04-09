@@ -20,7 +20,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, apiBaseUrl, envLabel } from '@/lib/api';
 import { useAppTheme } from '@/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { useSafeTabBarHeight } from '../../src/hooks/useSafeTabBarHeight';
 import { useAppAuth } from '@/providers/AuthProvider';
 import { useChargingNotifications } from '@/providers/ChargingNotificationsProvider';
 
@@ -61,14 +61,16 @@ const safeEnvLabel = typeof envLabel === 'string' && envLabel.trim().length > 0 
 const mobileVersion = `${expoVersion} (${safeEnvLabel.toLowerCase()})`;
 const GOOGLE_PLACES_KEY = process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY ?? '';
 
+type ProfileTab = 'profile' | 'vehicle' | 'payment';
+
 export default function ProfileScreen() {
   const { isDark, setMode } = useAppTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const tabBarHeight = useBottomTabBarHeight();
+  const tabBarHeight = useSafeTabBarHeight();
   const [profile, setProfile] = useState<DriverProfile>(EMPTY);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
-  const [showVehicleForm, setShowVehicleForm] = useState(false);
+  const [activeTab, setActiveTab] = useState<ProfileTab>('profile');
   const queryClient = useQueryClient();
   const { isGuest, signOut, biometricAvailable, biometricEnabled, biometricLabel, toggleBiometric } = useAppAuth();
   const { unreadCount } = useChargingNotifications();
@@ -137,6 +139,16 @@ export default function ProfileScreen() {
     );
   }, [data, profile]);
 
+  const hasVehicleChanges = useMemo(() => {
+    if (!data) return false;
+    return (
+      profile.vehicleName !== (data.vehicleName ?? '') ||
+      profile.vehicleMake !== (data.vehicleMake ?? '') ||
+      profile.vehicleModel !== (data.vehicleModel ?? '') ||
+      profile.vehicleYear !== (data.vehicleYear ?? '')
+    );
+  }, [data, profile.vehicleName, profile.vehicleMake, profile.vehicleModel, profile.vehicleYear]);
+
   const saveMutation = useMutation({
     mutationFn: () =>
       api.profile.update({
@@ -156,7 +168,7 @@ export default function ProfileScreen() {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['me-profile'] });
-      Alert.alert('Saved', 'Your profile sync is updated.');
+      Alert.alert('Saved', 'Your profile has been updated.');
     },
     onError: (err: Error) => Alert.alert('Save failed', err.message),
   });
@@ -204,8 +216,8 @@ export default function ProfileScreen() {
       contentContainerStyle={[styles.content, { paddingBottom: Math.max(36 + insets.bottom, tabBarHeight + 24), flexGrow: 1 }]}
       keyboardShouldPersistTaps="handled"
     >
-      <View style={styles.headerRow}>
-        <Text style={[styles.title, { color: isDark ? '#f9fafb' : '#111827' }]}>Driver Profile</Text>
+      <View style={[styles.headerRow, { marginBottom: 0 }]}>
+        <View style={{ flex: 1 }} />
         <View style={styles.headerActions}>
           <TouchableOpacity
             onPress={() => router.push('/notifications' as any)}
@@ -243,247 +255,339 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         </View>
       </View>
-      <Text style={[styles.subtitle, { color: isDark ? '#9ca3af' : '#6b7280' }]}>Set your details once and use them across devices.</Text>
 
-      <View style={[styles.card, { backgroundColor: isDark ? '#111827' : '#fff', borderColor: isDark ? '#374151' : '#e5e7eb' }]}>
-        <Text style={[styles.sectionTitle, { color: isDark ? '#f9fafb' : '#111827' }]}>Payment Methods</Text>
-        <Text style={[styles.paymentSummary, { color: isDark ? '#9ca3af' : '#4b5563' }]}>
-          {profile.paymentProfile || 'No payment method added yet'}
-        </Text>
-        <TouchableOpacity
-          style={[
-            styles.paymentBtn,
-            isDark ? styles.paymentBtnDark : styles.paymentBtnLight,
-          ]}
-          onPress={() => router.push('/profile/payment' as any)}
-        >
-          <Text style={styles.paymentBtnText}>Add Payment Method</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* ── My Vehicle ────────────────────────────────────────────── */}
-      <View style={[styles.card, { backgroundColor: isDark ? '#111827' : '#fff', borderColor: isDark ? '#374151' : '#e5e7eb' }]}>
-        <Text style={[styles.sectionTitle, { color: isDark ? '#f9fafb' : '#111827' }]}>My Vehicle</Text>
-        {!showVehicleForm && (profile.vehicleMake || profile.vehicleModel) ? (
-          <>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-              <Ionicons name="car-sport-outline" size={18} color={isDark ? '#9ca3af' : '#6b7280'} />
-              <Text style={{ fontSize: 15, fontWeight: '600', color: isDark ? '#f9fafb' : '#111827' }}>
-                {[profile.vehicleMake, profile.vehicleModel].filter(Boolean).join(' ')}{profile.vehicleYear ? ` (${profile.vehicleYear})` : ''}
-              </Text>
-            </View>
-            {profile.vehicleName ? (
-              <Text style={{ fontSize: 13, color: isDark ? '#9ca3af' : '#6b7280', marginLeft: 26, marginBottom: 8 }}>{profile.vehicleName}</Text>
-            ) : null}
+      {/* ── Sub-tab Selector ───────────────────────────────────────── */}
+      <View style={[styles.tabBar, { backgroundColor: isDark ? '#111827' : '#f3f4f6', borderColor: isDark ? '#374151' : '#e5e7eb' }]}>
+        {(['profile', 'vehicle', 'payment'] as ProfileTab[]).map((tab) => {
+          const active = activeTab === tab;
+          const label = tab === 'profile' ? 'Driver' : tab === 'vehicle' ? 'My Vehicle' : 'Payment';
+          const icon = tab === 'profile' ? 'person-outline' : tab === 'vehicle' ? 'car-sport-outline' : 'card-outline';
+          return (
             <TouchableOpacity
-              style={[styles.paymentBtn, isDark ? styles.paymentBtnDark : styles.paymentBtnLight]}
-              onPress={() => setShowVehicleForm(true)}
-            >
-              <Text style={styles.paymentBtnText}>Edit Vehicle</Text>
-            </TouchableOpacity>
-          </>
-        ) : !showVehicleForm ? (
-          <>
-            <Text style={[styles.paymentSummary, { color: isDark ? '#9ca3af' : '#4b5563' }]}>No vehicle added yet</Text>
-            <TouchableOpacity
-              style={[styles.paymentBtn, isDark ? styles.paymentBtnDark : styles.paymentBtnLight]}
-              onPress={() => setShowVehicleForm(true)}
-            >
-              <Text style={styles.paymentBtnText}>Add Vehicle</Text>
-            </TouchableOpacity>
-          </>
-        ) : (
-          <>
-            <Field label="Nickname" value={profile.vehicleName} onChangeText={(v) => set('vehicleName', v)} isDark={isDark} placeholder="e.g. My Daily Driver" />
-            <Field label="Make" value={profile.vehicleMake} onChangeText={(v) => set('vehicleMake', v)} isDark={isDark} placeholder="e.g. Tesla" />
-            <Field label="Model" value={profile.vehicleModel} onChangeText={(v) => set('vehicleModel', v)} isDark={isDark} placeholder="e.g. Model 3" />
-            <Field label="Year" value={profile.vehicleYear} onChangeText={(v) => set('vehicleYear', v.replace(/\D/g, '').slice(0, 4))} isDark={isDark} keyboardType="number-pad" placeholder="e.g. 2023" />
-            <TouchableOpacity
-              style={[styles.paymentBtn, isDark ? styles.paymentBtnDark : styles.paymentBtnLight]}
-              onPress={() => {
-                // Cancel: revert to saved values
-                if (data) {
-                  set('vehicleName', data.vehicleName ?? '');
-                  set('vehicleMake', data.vehicleMake ?? '');
-                  set('vehicleModel', data.vehicleModel ?? '');
-                  set('vehicleYear', data.vehicleYear ?? '');
-                }
-                setShowVehicleForm(false);
-              }}
-            >
-              <Text style={styles.paymentBtnText}>Cancel</Text>
-            </TouchableOpacity>
-          </>
-        )}
-      </View>
-
-      <Field label="Name" value={profile.name} onChangeText={(v) => set('name', v)} isDark={isDark} autoCapitalize="words" />
-      <Field label="Email" value={profile.email} onChangeText={(v) => set('email', v)} isDark={isDark} keyboardType="email-address" autoCapitalize="none" />
-      <Field label="Phone" value={profile.phone} onChangeText={(v) => set('phone', v)} isDark={isDark} keyboardType="phone-pad" />
-      <View style={styles.fieldWrap}>
-        <Text style={[styles.label, { color: isDark ? '#d1d5db' : '#374151' }]}>Site Address</Text>
-        {GOOGLE_PLACES_KEY ? (
-          <GooglePlacesAutocomplete
-            ref={placesRef}
-            placeholder="Start typing an address..."
-            textInputProps={{
-              value: profile.homeSiteAddress,
-              onChangeText: (v: string) => set('homeSiteAddress', v),
-              placeholderTextColor: isDark ? '#6b7280' : '#9ca3af',
-            }}
-            onPress={(_data, detail) => {
-              if (!detail?.geometry?.location) return;
-              const formatted = detail.formatted_address ?? _data.description ?? '';
-              set('homeSiteAddress', formatted);
-              // Extract structured components
-              const get = (type: string, short = false) => {
-                const c = detail.address_components?.find((ac: any) => ac.types.includes(type));
-                return c ? (short ? c.short_name : c.long_name) : '';
-              };
-              const city = get('locality') || get('sublocality') || get('administrative_area_level_2');
-              const state = get('administrative_area_level_1', true);
-              const zip = get('postal_code');
-              if (city) set('homeCity', city);
-              if (state) set('homeState', state);
-              if (zip) set('homeZipCode', zip);
-            }}
-            query={{ key: GOOGLE_PLACES_KEY, language: 'en', types: 'address' }}
-            fetchDetails
-            enablePoweredByContainer={false}
-            debounce={300}
-            styles={{
-              container: { flex: 0, zIndex: 10 },
-              textInputContainer: { backgroundColor: 'transparent' },
-              textInput: {
-                backgroundColor: isDark ? '#111827' : '#ffffff',
-                borderColor: isDark ? '#374151' : '#d1d5db',
-                borderWidth: 1,
-                borderRadius: 12,
-                paddingHorizontal: 12,
-                paddingVertical: 10,
-                fontSize: 15,
-                color: isDark ? '#f9fafb' : '#111827',
-              },
-              listView: {
-                backgroundColor: isDark ? '#1f2937' : '#ffffff',
-                borderRadius: 8,
-                borderWidth: 1,
-                borderColor: isDark ? '#374151' : '#d1d5db',
-                marginTop: 4,
-                ...(Platform.OS === 'ios' ? {
+              key={tab}
+              onPress={() => setActiveTab(tab)}
+              style={[
+                styles.tabItem,
+                active && {
+                  backgroundColor: isDark ? '#1f2937' : '#ffffff',
+                  borderColor: isDark ? '#4b5563' : '#d1d5db',
+                  borderWidth: 1,
                   shadowColor: '#000',
-                  shadowOffset: { width: 0, height: 2 },
-                  shadowOpacity: 0.1,
+                  shadowOpacity: 0.06,
                   shadowRadius: 4,
-                } : { elevation: 4 }),
-              },
-              row: {
-                backgroundColor: isDark ? '#1f2937' : '#ffffff',
-                paddingVertical: 10,
-                paddingHorizontal: 12,
-              },
-              description: {
-                color: isDark ? '#f9fafb' : '#111827',
-                fontSize: 14,
-              },
-              separator: {
-                backgroundColor: isDark ? '#374151' : '#e5e7eb',
-                height: StyleSheet.hairlineWidth,
-              },
-            }}
-          />
-        ) : (
-          <TextInput
-            value={profile.homeSiteAddress}
-            onChangeText={(v) => set('homeSiteAddress', v)}
-            placeholder="Site Address"
-            placeholderTextColor={isDark ? '#6b7280' : '#9ca3af'}
-            style={[
-              styles.input,
-              {
-                backgroundColor: isDark ? '#111827' : '#ffffff',
-                borderColor: isDark ? '#374151' : '#d1d5db',
-                color: isDark ? '#f9fafb' : '#111827',
-              },
-            ]}
-          />
-        )}
-      </View>
-      <Field label="City" value={profile.homeCity} onChangeText={(v) => set('homeCity', v)} isDark={isDark} autoCapitalize="words" />
-      <View style={styles.row}>
-        <View style={styles.stateItem}>
-          <Field label="State" value={profile.homeState} onChangeText={(v) => set('homeState', v.toUpperCase())} isDark={isDark} autoCapitalize="characters" maxLength={2} />
-        </View>
-        <View style={styles.zipItem}>
-          <Field label="Zip Code" value={profile.homeZipCode} onChangeText={(v) => set('homeZipCode', v)} isDark={isDark} keyboardType="number-pad" maxLength={10} />
-        </View>
+                  shadowOffset: { width: 0, height: 2 },
+                  elevation: 2,
+                },
+              ]}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: active }}
+            >
+              <Ionicons
+                name={icon as any}
+                size={16}
+                color={active ? (isDark ? '#f9fafb' : '#111827') : (isDark ? '#6b7280' : '#9ca3af')}
+              />
+              <Text style={[
+                styles.tabLabel,
+                { color: active ? (isDark ? '#f9fafb' : '#111827') : (isDark ? '#6b7280' : '#9ca3af') },
+                active && { fontWeight: '700' },
+              ]}>
+                {label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
 
-      <TouchableOpacity
-        style={[
-          styles.saveBtn,
-          !hasProfileChanges && {
-            backgroundColor: isDark ? '#374151' : '#e5e7eb',
-            borderColor: isDark ? '#4b5563' : '#d1d5db',
-            borderWidth: 1,
-          },
-          (isLoading || saveMutation.isPending) && { opacity: 0.6 },
-        ]}
-        onPress={() => saveMutation.mutate()}
-        disabled={isLoading || saveMutation.isPending || !hasProfileChanges}
-      >
-        <Text style={[styles.saveText, !hasProfileChanges && { color: isDark ? '#d1d5db' : '#6b7280' }]}>Save Profile</Text>
-      </TouchableOpacity>
+      {/* ── Profile Tab ────────────────────────────────────────────── */}
+      {activeTab === 'profile' && (
+        <>
+          <Text style={[styles.subtitle, { color: isDark ? '#9ca3af' : '#6b7280' }]}>Set your details once and use them across devices.</Text>
 
-      {biometricAvailable && (
-        <View style={[styles.biometricRow, { backgroundColor: isDark ? '#111827' : '#fff', borderColor: isDark ? '#374151' : '#e5e7eb' }]}>
-          <View style={styles.biometricInfo}>
-            <Ionicons
-              name={biometricLabel === 'Face ID' ? 'scan-outline' : 'finger-print-outline'}
-              size={20}
-              color={isDark ? '#f9fafb' : '#111827'}
-            />
-            <View>
-              <Text style={[styles.biometricTitle, { color: isDark ? '#f9fafb' : '#111827' }]}>
-                {biometricLabel}
-              </Text>
-              <Text style={[styles.biometricSubtitle, { color: isDark ? '#9ca3af' : '#6b7280' }]}>
-                Unlock app with {biometricLabel.toLowerCase()}
-              </Text>
+          <Field label="Name" value={profile.name} onChangeText={(v) => set('name', v)} isDark={isDark} autoCapitalize="words" />
+          <Field label="Email" value={profile.email} onChangeText={(v) => set('email', v)} isDark={isDark} keyboardType="email-address" autoCapitalize="none" />
+          <Field label="Phone" value={profile.phone} onChangeText={(v) => set('phone', v)} isDark={isDark} keyboardType="phone-pad" />
+          <View style={styles.fieldWrap}>
+            <Text style={[styles.label, { color: isDark ? '#d1d5db' : '#374151' }]}>Site Address</Text>
+            {GOOGLE_PLACES_KEY ? (
+              <GooglePlacesAutocomplete
+                ref={placesRef}
+                placeholder="Start typing an address..."
+                textInputProps={{
+                  value: profile.homeSiteAddress,
+                  onChangeText: (v: string) => set('homeSiteAddress', v),
+                  placeholderTextColor: isDark ? '#6b7280' : '#9ca3af',
+                }}
+                onPress={(_data, detail) => {
+                  if (!detail?.geometry?.location) return;
+                  const formatted = detail.formatted_address ?? _data.description ?? '';
+                  set('homeSiteAddress', formatted);
+                  const get = (type: string, short = false) => {
+                    const c = detail.address_components?.find((ac: any) => ac.types.includes(type));
+                    return c ? (short ? c.short_name : c.long_name) : '';
+                  };
+                  const city = get('locality') || get('sublocality') || get('administrative_area_level_2');
+                  const state = get('administrative_area_level_1', true);
+                  const zip = get('postal_code');
+                  if (city) set('homeCity', city);
+                  if (state) set('homeState', state);
+                  if (zip) set('homeZipCode', zip);
+                }}
+                query={{ key: GOOGLE_PLACES_KEY, language: 'en', types: 'address' }}
+                fetchDetails
+                enablePoweredByContainer={false}
+                debounce={300}
+                styles={{
+                  container: { flex: 0, zIndex: 10 },
+                  textInputContainer: { backgroundColor: 'transparent' },
+                  textInput: {
+                    backgroundColor: isDark ? '#111827' : '#ffffff',
+                    borderColor: isDark ? '#374151' : '#d1d5db',
+                    borderWidth: 1,
+                    borderRadius: 12,
+                    paddingHorizontal: 12,
+                    paddingVertical: 10,
+                    fontSize: 15,
+                    color: isDark ? '#f9fafb' : '#111827',
+                  },
+                  listView: {
+                    backgroundColor: isDark ? '#1f2937' : '#ffffff',
+                    borderRadius: 8,
+                    borderWidth: 1,
+                    borderColor: isDark ? '#374151' : '#d1d5db',
+                    marginTop: 4,
+                    ...(Platform.OS === 'ios' ? {
+                      shadowColor: '#000',
+                      shadowOffset: { width: 0, height: 2 },
+                      shadowOpacity: 0.1,
+                      shadowRadius: 4,
+                    } : { elevation: 4 }),
+                  },
+                  row: {
+                    backgroundColor: isDark ? '#1f2937' : '#ffffff',
+                    paddingVertical: 10,
+                    paddingHorizontal: 12,
+                  },
+                  description: {
+                    color: isDark ? '#f9fafb' : '#111827',
+                    fontSize: 14,
+                  },
+                  separator: {
+                    backgroundColor: isDark ? '#374151' : '#e5e7eb',
+                    height: StyleSheet.hairlineWidth,
+                  },
+                }}
+              />
+            ) : (
+              <TextInput
+                value={profile.homeSiteAddress}
+                onChangeText={(v) => set('homeSiteAddress', v)}
+                placeholder="Site Address"
+                placeholderTextColor={isDark ? '#6b7280' : '#9ca3af'}
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: isDark ? '#111827' : '#ffffff',
+                    borderColor: isDark ? '#374151' : '#d1d5db',
+                    color: isDark ? '#f9fafb' : '#111827',
+                  },
+                ]}
+              />
+            )}
+          </View>
+          <Field label="City" value={profile.homeCity} onChangeText={(v) => set('homeCity', v)} isDark={isDark} autoCapitalize="words" />
+          <View style={styles.row}>
+            <View style={styles.stateItem}>
+              <Field label="State" value={profile.homeState} onChangeText={(v) => set('homeState', v.toUpperCase())} isDark={isDark} autoCapitalize="characters" maxLength={2} />
+            </View>
+            <View style={styles.zipItem}>
+              <Field label="Zip Code" value={profile.homeZipCode} onChangeText={(v) => set('homeZipCode', v)} isDark={isDark} keyboardType="number-pad" maxLength={10} />
             </View>
           </View>
+
           <TouchableOpacity
             style={[
-              styles.biometricToggle,
-              biometricEnabled
-                ? { backgroundColor: '#10b981' }
-                : { backgroundColor: isDark ? '#374151' : '#d1d5db' },
+              styles.saveBtn,
+              !hasProfileChanges && {
+                backgroundColor: isDark ? '#374151' : '#e5e7eb',
+                borderColor: isDark ? '#4b5563' : '#d1d5db',
+                borderWidth: 1,
+              },
+              (isLoading || saveMutation.isPending) && { opacity: 0.6 },
             ]}
-            onPress={toggleBiometric}
-            accessibilityRole="switch"
-            accessibilityState={{ checked: biometricEnabled }}
-            accessibilityLabel={`${biometricLabel} unlock ${biometricEnabled ? 'enabled' : 'disabled'}`}
+            onPress={() => saveMutation.mutate()}
+            disabled={isLoading || saveMutation.isPending || !hasProfileChanges}
           >
-            <View
-              style={[
-                styles.biometricToggleThumb,
-                biometricEnabled ? { transform: [{ translateX: 20 }] } : { transform: [{ translateX: 2 }] },
-              ]}
-            />
+            <Text style={[styles.saveText, !hasProfileChanges && { color: isDark ? '#d1d5db' : '#6b7280' }]}>Save Profile</Text>
           </TouchableOpacity>
-        </View>
+
+          {biometricAvailable && (
+            <View style={[styles.biometricRow, { backgroundColor: isDark ? '#111827' : '#fff', borderColor: isDark ? '#374151' : '#e5e7eb' }]}>
+              <View style={styles.biometricInfo}>
+                <Ionicons
+                  name={biometricLabel === 'Face ID' ? 'scan-outline' : 'finger-print-outline'}
+                  size={20}
+                  color={isDark ? '#f9fafb' : '#111827'}
+                />
+                <View>
+                  <Text style={[styles.biometricTitle, { color: isDark ? '#f9fafb' : '#111827' }]}>
+                    {biometricLabel}
+                  </Text>
+                  <Text style={[styles.biometricSubtitle, { color: isDark ? '#9ca3af' : '#6b7280' }]}>
+                    Unlock app with {biometricLabel.toLowerCase()}
+                  </Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                style={[
+                  styles.biometricToggle,
+                  biometricEnabled
+                    ? { backgroundColor: '#10b981' }
+                    : { backgroundColor: isDark ? '#374151' : '#d1d5db' },
+                ]}
+                onPress={toggleBiometric}
+                accessibilityRole="switch"
+                accessibilityState={{ checked: biometricEnabled }}
+                accessibilityLabel={`${biometricLabel} unlock ${biometricEnabled ? 'enabled' : 'disabled'}`}
+              >
+                <View
+                  style={[
+                    styles.biometricToggleThumb,
+                    biometricEnabled ? { transform: [{ translateX: 20 }] } : { transform: [{ translateX: 2 }] },
+                  ]}
+                />
+              </TouchableOpacity>
+            </View>
+          )}
+
+          <TouchableOpacity
+            style={[styles.logoutBtn, { backgroundColor: isDark ? '#6b7280' : '#4b5563' }]}
+            onPress={() => setShowLogoutConfirm(true)}
+          >
+            <Text style={styles.logoutText}>Log Out</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.logoutBtn, { backgroundColor: '#7f1d1d', marginTop: 8 }]}
+            onPress={() => {
+              Alert.alert(
+                'Delete Account',
+                'Are you sure? Your personal data will be permanently removed after a 30-day grace period. This cannot be undone.',
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  {
+                    text: 'Delete My Account',
+                    style: 'destructive',
+                    onPress: async () => {
+                      try {
+                        const result = await api.account.deleteAccount();
+                        Alert.alert('Account Deletion Requested', result.message);
+                      } catch {
+                        Alert.alert('Error', 'Failed to request account deletion. Please try again or contact privacy@lumeopower.com.');
+                      }
+                    },
+                  },
+                ],
+              );
+            }}
+          >
+            <Text style={styles.logoutText}>Delete My Account</Text>
+          </TouchableOpacity>
+
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 10, gap: 10 }}>
+            <TouchableOpacity onPress={() => Linking.openURL('https://portal.lumeopower.com/privacy')}>
+              <Text style={{ fontSize: 15, color: '#3b82f6', fontWeight: '500' }}>Privacy Policy</Text>
+            </TouchableOpacity>
+            <Text style={{ fontSize: 15, color: isDark ? '#6b7280' : '#9ca3af' }}>|</Text>
+            <TouchableOpacity onPress={() => Linking.openURL('https://portal.lumeopower.com/terms')}>
+              <Text style={{ fontSize: 15, color: '#3b82f6', fontWeight: '500' }}>Terms of Service</Text>
+            </TouchableOpacity>
+          </View>
+
+          <Text style={[styles.versionText, { color: isDark ? '#6b7280' : '#9ca3af' }]}>Version {mobileVersion}</Text>
+          <Text style={[styles.versionText, { color: isDark ? '#6b7280' : '#9ca3af' }]}>Environment {envLabel}</Text>
+          <Text style={[styles.versionText, { color: isDark ? '#6b7280' : '#9ca3af' }]} numberOfLines={1}>API {apiBaseUrl}</Text>
+        </>
       )}
 
-      <TouchableOpacity
-        style={[
-          styles.logoutBtn,
-          { backgroundColor: isDark ? '#6b7280' : '#4b5563' },
-        ]}
-        onPress={() => setShowLogoutConfirm(true)}
-      >
-        <Text style={styles.logoutText}>Log Out</Text>
-      </TouchableOpacity>
+      {/* ── My Vehicle Tab ─────────────────────────────────────────── */}
+      {activeTab === 'vehicle' && (
+        <>
+          <Text style={[styles.subtitle, { color: isDark ? '#9ca3af' : '#6b7280' }]}>Your vehicle info is shown during active charging sessions.</Text>
 
+          {(profile.vehicleMake || profile.vehicleModel) ? (
+            <View style={[styles.card, { backgroundColor: isDark ? '#111827' : '#fff', borderColor: isDark ? '#374151' : '#e5e7eb', marginBottom: 16 }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+                <View style={[styles.vehicleIconWrap, { backgroundColor: isDark ? '#1f2937' : '#f3f4f6' }]}>
+                  <Ionicons name="car-sport-outline" size={22} color={isDark ? '#60a5fa' : '#3b82f6'} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 16, fontWeight: '700', color: isDark ? '#f9fafb' : '#111827' }}>
+                    {[profile.vehicleMake, profile.vehicleModel].filter(Boolean).join(' ')}
+                  </Text>
+                  <Text style={{ fontSize: 13, color: isDark ? '#9ca3af' : '#6b7280', marginTop: 2 }}>
+                    {[profile.vehicleYear, profile.vehicleName].filter(Boolean).join(' · ') || 'No year or nickname set'}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          ) : (
+            <View style={[styles.card, { backgroundColor: isDark ? '#111827' : '#fff', borderColor: isDark ? '#374151' : '#e5e7eb', marginBottom: 16, alignItems: 'center', paddingVertical: 24 }]}>
+              <Ionicons name="car-sport-outline" size={36} color={isDark ? '#4b5563' : '#d1d5db'} />
+              <Text style={{ fontSize: 14, color: isDark ? '#6b7280' : '#9ca3af', marginTop: 8 }}>No vehicle added yet</Text>
+            </View>
+          )}
+
+          <Field label="Nickname" value={profile.vehicleName} onChangeText={(v) => set('vehicleName', v)} isDark={isDark} placeholder="e.g. My Daily Driver" />
+          <Field label="Make" value={profile.vehicleMake} onChangeText={(v) => set('vehicleMake', v)} isDark={isDark} placeholder="e.g. Tesla" />
+          <Field label="Model" value={profile.vehicleModel} onChangeText={(v) => set('vehicleModel', v)} isDark={isDark} placeholder="e.g. Model 3" />
+          <Field label="Year" value={profile.vehicleYear} onChangeText={(v) => set('vehicleYear', v.replace(/\D/g, '').slice(0, 4))} isDark={isDark} keyboardType="number-pad" placeholder="e.g. 2023" />
+
+          <TouchableOpacity
+            style={[
+              styles.saveBtn,
+              !hasVehicleChanges && {
+                backgroundColor: isDark ? '#374151' : '#e5e7eb',
+                borderColor: isDark ? '#4b5563' : '#d1d5db',
+                borderWidth: 1,
+              },
+              (isLoading || saveMutation.isPending) && { opacity: 0.6 },
+            ]}
+            onPress={() => saveMutation.mutate()}
+            disabled={isLoading || saveMutation.isPending || !hasVehicleChanges}
+          >
+            <Text style={[styles.saveText, !hasVehicleChanges && { color: isDark ? '#d1d5db' : '#6b7280' }]}>Save Vehicle</Text>
+          </TouchableOpacity>
+        </>
+      )}
+
+      {/* ── Payment Tab ────────────────────────────────────────────── */}
+      {activeTab === 'payment' && (
+        <>
+          <Text style={[styles.subtitle, { color: isDark ? '#9ca3af' : '#6b7280' }]}>Manage your payment methods for charging sessions.</Text>
+
+          <View style={[styles.card, { backgroundColor: isDark ? '#111827' : '#fff', borderColor: isDark ? '#374151' : '#e5e7eb' }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+              <View style={[styles.vehicleIconWrap, { backgroundColor: isDark ? '#1f2937' : '#f3f4f6' }]}>
+                <Ionicons name="card-outline" size={22} color={isDark ? '#60a5fa' : '#3b82f6'} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 15, fontWeight: '600', color: isDark ? '#f9fafb' : '#111827' }}>
+                  {profile.paymentProfile || 'No payment method on file'}
+                </Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              style={[styles.paymentBtn, isDark ? styles.paymentBtnDark : styles.paymentBtnLight]}
+              onPress={() => router.push('/profile/payment' as any)}
+            >
+              <Text style={styles.paymentBtnText}>{profile.paymentProfile ? 'Manage Payment Methods' : 'Add Payment Method'}</Text>
+            </TouchableOpacity>
+          </View>
+        </>
+      )}
+
+      {/* ── Logout Modal ───────────────────────────────────────────── */}
       <Modal visible={showLogoutConfirm} transparent animationType="fade" onRequestClose={() => setShowLogoutConfirm(false)}>
         <Pressable style={styles.modalBackdrop} onPress={() => setShowLogoutConfirm(false)}>
           <Pressable
@@ -515,47 +619,6 @@ export default function ProfileScreen() {
           </Pressable>
         </Pressable>
       </Modal>
-
-      <TouchableOpacity
-        style={[styles.logoutBtn, { backgroundColor: '#7f1d1d', marginTop: 8 }]}
-        onPress={() => {
-          Alert.alert(
-            'Delete Account',
-            'Are you sure? Your personal data will be permanently removed after a 30-day grace period. This cannot be undone.',
-            [
-              { text: 'Cancel', style: 'cancel' },
-              {
-                text: 'Delete My Account',
-                style: 'destructive',
-                onPress: async () => {
-                  try {
-                    const result = await api.account.deleteAccount();
-                    Alert.alert('Account Deletion Requested', result.message);
-                  } catch {
-                    Alert.alert('Error', 'Failed to request account deletion. Please try again or contact privacy@lumeopower.com.');
-                  }
-                },
-              },
-            ],
-          );
-        }}
-      >
-        <Text style={styles.logoutText}>Delete My Account</Text>
-      </TouchableOpacity>
-
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 10, gap: 10 }}>
-        <TouchableOpacity onPress={() => Linking.openURL('https://portal.lumeopower.com/privacy')}>
-          <Text style={{ fontSize: 15, color: '#3b82f6', fontWeight: '500' }}>Privacy Policy</Text>
-        </TouchableOpacity>
-        <Text style={{ fontSize: 15, color: isDark ? '#6b7280' : '#9ca3af' }}>|</Text>
-        <TouchableOpacity onPress={() => Linking.openURL('https://portal.lumeopower.com/terms')}>
-          <Text style={{ fontSize: 15, color: '#3b82f6', fontWeight: '500' }}>Terms of Service</Text>
-        </TouchableOpacity>
-      </View>
-
-      <Text style={[styles.versionText, { color: isDark ? '#6b7280' : '#9ca3af' }]}>Version {mobileVersion}</Text>
-      <Text style={[styles.versionText, { color: isDark ? '#6b7280' : '#9ca3af' }]}>Environment {envLabel}</Text>
-      <Text style={[styles.versionText, { color: isDark ? '#6b7280' : '#9ca3af' }]} numberOfLines={1}>API {apiBaseUrl}</Text>
     </ScrollView>
   );
 }
@@ -600,6 +663,31 @@ const styles = StyleSheet.create({
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   title: { fontSize: 24, fontWeight: '800' },
   subtitle: { fontSize: 13, marginBottom: 10 },
+  tabBar: {
+    flexDirection: 'row',
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 3,
+    marginBottom: 14,
+    marginTop: 6,
+  },
+  tabItem: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  tabLabel: { fontSize: 12, fontWeight: '600' },
+  vehicleIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   bellBtn: {
     width: 40,
     height: 40,
