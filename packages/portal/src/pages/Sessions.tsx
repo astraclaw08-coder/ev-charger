@@ -250,10 +250,10 @@ export default function Sessions() {
                   const isActive = row.status === 'ACTIVE';
                   return (
                     <tr key={row.id} className={`hoverable stagger-item border-t border-gray-100 dark:border-slate-800 ${isActive ? 'bg-brand-50/30 dark:bg-brand-500/5' : ''}`}>
-                      <td className="py-3 text-xs font-mono tabular-nums text-gray-500 dark:text-slate-400">{new Date(row.startedAt).toLocaleString()}</td>
-                      <td className="py-3 font-mono text-gray-700 dark:text-slate-300">{row.transactionId ?? '—'}</td>
+                      <td className="py-3 text-xs tabular-nums text-gray-500 dark:text-slate-400">{new Date(row.startedAt).toLocaleString()}</td>
+                      <td className="py-3 text-gray-700 dark:text-slate-300">{row.transactionId ?? '—'}</td>
                       <td className="py-3 text-gray-700 dark:text-slate-300">{row.site.name}</td>
-                      <td className="py-3 font-medium font-mono text-brand-600 dark:text-brand-400">{row.charger.ocppId}</td>
+                      <td className="py-3 font-medium text-brand-600 dark:text-brand-400">{row.charger.ocppId}</td>
                       <td className="py-3">
                         <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
                           isActive
@@ -265,8 +265,8 @@ export default function Sessions() {
                                 : 'bg-gray-100 text-gray-600 dark:bg-slate-700 dark:text-slate-400'
                         }`}>{row.status}</span>
                       </td>
-                      <td className="py-3 font-mono tabular-nums text-gray-700 dark:text-slate-300">{row.energyKwh.toFixed(2)} kWh</td>
-                      <td className="py-3 font-mono tabular-nums text-gray-700 dark:text-slate-300">${row.revenueUsd.toFixed(2)}</td>
+                      <td className="py-3 tabular-nums text-gray-700 dark:text-slate-300">{row.energyKwh.toFixed(2)} kWh</td>
+                      <td className="py-3 tabular-nums text-gray-700 dark:text-slate-300">${row.revenueUsd.toFixed(2)}</td>
                       <td className="py-3 text-right">
                         <button
                           type="button"
@@ -314,8 +314,8 @@ function ReceiptModal({ row, onClose }: { row: EnrichedTransaction | null; onClo
     <Modal open={!!row} onClose={onClose} title="Session Receipt" maxWidth="max-w-2xl">
       <div className="mb-4 space-y-1 text-sm text-gray-600 dark:text-slate-300">
         <p className="text-base font-semibold text-gray-900 dark:text-slate-100">{row.site.name}</p>
-        <p>Charger: <span className="font-mono">{row.charger.serialNumber || row.charger.ocppId}</span></p>
-        <p>Transaction: <span className="font-mono">#{row.transactionId ?? '—'}</span></p>
+        <p>Charger: <span className="font-semibold">{row.charger.serialNumber || row.charger.ocppId}</span></p>
+        <p>Transaction: <span className="font-semibold">#{row.transactionId ?? '—'}</span></p>
       </div>
 
       <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-slate-700">
@@ -360,7 +360,7 @@ function ReceiptLine({ label, value, emphasize, emphasizeValue }: { label: strin
   return (
     <div className="flex items-start justify-between gap-3 border-b border-gray-100 dark:border-slate-700/50 py-2 text-xs">
       <span className={`text-gray-600 dark:text-slate-400 ${emphasize ? 'font-semibold text-sm text-gray-900 dark:text-slate-100' : ''}`}>{label}</span>
-      <span className={`text-right font-mono tabular-nums ${emphasize ? 'font-bold text-sm text-gray-900 dark:text-slate-100' : emphasizeValue ? 'font-semibold text-gray-800 dark:text-slate-200' : 'text-gray-700 dark:text-slate-300'} min-w-[88px]`}>{value}</span>
+      <span className={`text-right tabular-nums ${emphasize ? 'font-bold text-sm text-gray-900 dark:text-slate-100' : emphasizeValue ? 'font-semibold text-gray-800 dark:text-slate-200' : 'text-gray-700 dark:text-slate-300'} min-w-[88px]`}>{value}</span>
     </div>
   );
 }

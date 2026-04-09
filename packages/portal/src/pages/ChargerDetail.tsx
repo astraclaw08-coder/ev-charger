@@ -507,10 +507,10 @@ export default function ChargerDetail() {
               <tbody className="divide-y divide-gray-50 dark:divide-slate-800">
                 {sessions.map((s) => (
                   <tr key={s.id} className="bg-white dark:bg-slate-800/60 hover:bg-gray-50 dark:hover:bg-slate-700">
-                    <td className="px-5 py-3 font-mono text-xs text-gray-700 dark:text-slate-300">
+                    <td className="px-5 py-3 text-xs text-gray-700 dark:text-slate-300">
                       {s.transactionId ?? '—'}
                     </td>
-                    <td className="px-5 py-3 font-mono text-xs text-gray-500 dark:text-slate-400">
+                    <td className="px-5 py-3 text-xs text-gray-500 dark:text-slate-400">
                       #{s.connector.connectorId}
                     </td>
                     <td className="px-5 py-3 text-gray-700 dark:text-slate-300">

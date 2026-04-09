@@ -122,17 +122,17 @@ export default function AddChargerDialog({ siteId, onAdd, onClose }: Props) {
               <strong>once</strong> — save it now.
             </p>
 
-            <div className="mt-4 space-y-3 rounded-lg bg-gray-50 dark:bg-slate-800/60 p-4 font-mono text-sm">
+            <div className="mt-4 space-y-3 rounded-lg bg-gray-50 dark:bg-slate-800/60 p-4 text-sm">
               <div>
-                <p className="text-xs font-sans font-medium text-gray-500 dark:text-slate-400 uppercase">OCPP Endpoint</p>
+                <p className="text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">OCPP Endpoint</p>
                 <p className="mt-0.5 break-all text-gray-900 dark:text-slate-100">{created?.ocppEndpoint}</p>
               </div>
               <div>
-                <p className="text-xs font-sans font-medium text-gray-500 dark:text-slate-400 uppercase">Identity</p>
+                <p className="text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">Identity</p>
                 <p className="mt-0.5 text-gray-900 dark:text-slate-100">{created?.ocppId}</p>
               </div>
               <div>
-                <p className="text-xs font-sans font-medium text-gray-500 dark:text-slate-400 uppercase">Password</p>
+                <p className="text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">Password</p>
                 <p className="mt-0.5 font-bold text-red-700 dark:text-red-400">{created?.password}</p>
               </div>
             </div>

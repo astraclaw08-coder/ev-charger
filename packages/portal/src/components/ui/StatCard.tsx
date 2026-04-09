@@ -27,7 +27,7 @@ export default function StatCard({ icon, value, label, trend, sparkline, classNa
         <p className="text-[11px] font-medium text-gray-500 dark:text-slate-400 truncate leading-tight">{label}</p>
       </div>
       <div className="mt-1.5 flex items-baseline gap-1.5">
-        <span className="text-[clamp(0.85rem,1.4vw,1.35rem)] font-bold font-mono text-gray-900 dark:text-slate-100 tabular-nums whitespace-nowrap leading-tight">
+        <span className="text-[clamp(0.85rem,1.4vw,1.35rem)] font-bold text-gray-900 dark:text-slate-100 tabular-nums whitespace-nowrap leading-tight">
           {value}
         </span>
         {trend && (

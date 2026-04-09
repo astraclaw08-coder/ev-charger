@@ -1035,7 +1035,7 @@ function SecurityTab() {
           <FieldRow label="Identity Provider Entity ID"><Input placeholder="https://idp.company.com/saml/metadata" /></FieldRow>
           <FieldRow label="SSO Login URL"><Input placeholder="https://idp.company.com/saml/login" /></FieldRow>
           <FieldRow label="X.509 Certificate (PEM)">
-            <textarea className="w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100 placeholder-gray-400 dark:placeholder-slate-500 font-mono h-20 resize-y" placeholder="-----BEGIN CERTIFICATE-----&#10;..." />
+            <textarea className="w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100 placeholder-gray-400 dark:placeholder-slate-500 h-20 resize-y" placeholder="-----BEGIN CERTIFICATE-----&#10;..." />
           </FieldRow>
           <FieldRow label="Protocol">
             <select className="w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100">

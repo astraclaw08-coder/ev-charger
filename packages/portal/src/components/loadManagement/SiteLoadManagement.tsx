@@ -262,7 +262,7 @@ function ActiveLimitsSection({
                               <p className="text-[11px] text-gray-400 dark:text-slate-500">Priority: {e.profile.priority}</p>
                             </td>
                             <td className="py-2 pr-3"><ScopePill scope={e.scope} /></td>
-                            <td className="py-2 pr-3 text-xs text-gray-600 dark:text-slate-300 font-mono">{stackLevel}</td>
+                            <td className="py-2 pr-3 text-xs text-gray-600 dark:text-slate-300">{stackLevel}</td>
                             <td className="py-2 pr-3 text-xs text-gray-600 dark:text-slate-300">{windowSummary}</td>
                             <td className="py-2"><p className={`text-xs font-medium ${color}`}>{label}</p></td>
                           </tr>
@@ -880,7 +880,7 @@ export default function SiteLoadManagement({ siteId }: { siteId: string }) {
                 const state = stateByChargerId[c.id];
                 return (
                   <tr key={c.id} className="bg-white dark:bg-slate-800/60 hover:bg-gray-50 dark:hover:bg-slate-700">
-                    <td className="px-5 py-3 font-mono text-xs font-semibold text-gray-800 dark:text-slate-200">{c.ocppId}</td>
+                    <td className="px-5 py-3 text-xs font-semibold text-gray-800 dark:text-slate-200">{c.ocppId}</td>
                     <td className="px-5 py-3"><StatusBadge status={c.status} type="charger" /></td>
                     <td className="px-5 py-3 font-semibold text-gray-900 dark:text-slate-100">
                       {state ? `${state.effectiveLimitKw} kW` : <span className="text-gray-400 dark:text-slate-500">—</span>}
@@ -959,7 +959,7 @@ export default function SiteLoadManagement({ siteId }: { siteId: string }) {
                 .filter((c) => (c as unknown as { groupId?: string }).groupId === editingGroup.id)
                 .map((c) => (
                   <div key={c.id} className="flex items-center justify-between rounded-md border border-gray-100 dark:border-slate-800 bg-gray-50 dark:bg-slate-800/60 px-3 py-2 text-xs">
-                    <span className="font-mono text-gray-700 dark:text-slate-300">{c.ocppId}</span>
+                    <span className="text-gray-700 dark:text-slate-300">{c.ocppId}</span>
                     <button onClick={() => handleUnassignCharger(editingGroup.id, c.id)} className="rounded border border-red-200 px-2 py-0.5 text-red-600 hover:bg-red-50">Remove</button>
                   </div>
                 ))}
@@ -979,7 +979,7 @@ export default function SiteLoadManagement({ siteId }: { siteId: string }) {
           <div className="flex items-center justify-between border-b border-gray-300 dark:border-slate-700 px-5 py-4">
             <div>
               <h2 className="text-sm font-semibold text-gray-900 dark:text-slate-100">Edit Load Profile</h2>
-              <p className="mt-0.5 text-xs text-gray-500 dark:text-slate-400 font-mono truncate">{editingProfile.name}</p>
+              <p className="mt-0.5 text-xs text-gray-500 dark:text-slate-400 truncate">{editingProfile.name}</p>
             </div>
             <button onClick={() => { setEditingProfile(null); setEditForm(null); }} className="rounded-md p-1 text-gray-400 dark:text-slate-500 hover:bg-gray-100 dark:hover:bg-slate-800 hover:text-gray-600">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-4 w-4"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>

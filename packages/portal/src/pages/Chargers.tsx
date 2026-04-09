@@ -179,13 +179,13 @@ export default function Chargers() {
                 {filtered.map((row) => (
                   <tr key={row.id} className="hoverable stagger-item border-t border-gray-100 dark:border-slate-800">
                     <td className="py-3 font-medium">
-                      <Link to={`/chargers/${row.id}`} className="font-mono text-brand-600 dark:text-brand-400 hover:underline">{row.ocppId}</Link>
+                      <Link to={`/chargers/${row.id}`} className="text-brand-600 dark:text-brand-400 hover:underline">{row.ocppId}</Link>
                     </td>
                     <td className="py-3"><StatusBadge status={row.status} /></td>
                     <td className="py-3 text-gray-700 dark:text-slate-300">{row.site.name}</td>
                     <td className="py-3 text-gray-600 dark:text-slate-400">{row.vendor} {row.model}</td>
-                    <td className="py-3 font-mono text-gray-700 dark:text-slate-300">{row.connectors.length}</td>
-                    <td className="py-3 text-xs font-mono text-gray-500 dark:text-slate-400 tabular-nums">{row.lastHeartbeat ? new Date(row.lastHeartbeat).toLocaleString() : '—'}</td>
+                    <td className="py-3 text-gray-700 dark:text-slate-300">{row.connectors.length}</td>
+                    <td className="py-3 text-xs text-gray-500 dark:text-slate-400 tabular-nums">{row.lastHeartbeat ? new Date(row.lastHeartbeat).toLocaleString() : '—'}</td>
                   </tr>
                 ))}
               </tbody>

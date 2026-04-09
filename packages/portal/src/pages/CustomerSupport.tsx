@@ -446,7 +446,7 @@ function SessionsTab({ data, loading, page, onPageChange, filter, setFilter, onA
                     <td className="py-2.5 px-3 text-[var(--color-text-primary,#111)]">{fmtDate(s.startedAt)}</td>
                     <td className="py-2.5 px-3"><StatusBadge status={s.status} /></td>
                     <td className="py-2.5 px-3 text-[var(--color-text-primary,#111)]">{s.siteName ?? '—'}</td>
-                    <td className="py-2.5 px-3 text-[var(--color-text-secondary,#6b7280)] font-mono text-xs">{s.chargerOcppId ?? '—'}</td>
+                    <td className="py-2.5 px-3 text-[var(--color-text-secondary,#6b7280)] text-xs">{s.chargerOcppId ?? '—'}</td>
                     <td className="py-2.5 px-3 text-right text-[var(--color-text-primary,#111)]">{s.energyKwh != null ? `${s.energyKwh.toFixed(2)} kWh` : '—'}</td>
                     <td className="py-2.5 px-3 text-right text-[var(--color-text-primary,#111)]">{s.costUsd != null ? `$${s.costUsd.toFixed(2)}` : '—'}</td>
                   </tr>
@@ -495,10 +495,10 @@ function OcppTab({ driver, editForm, setEditForm, saving, onSave, saveMsg }: {
                 value={editForm.idTag ?? ''}
                 onChange={(e) => setEditForm({ ...editForm, idTag: e.target.value })}
                 maxLength={20}
-                className="px-3 py-2 rounded-md border border-[var(--color-border,#d1d5db)] bg-[var(--color-bg-primary,#fff)] text-sm text-[var(--color-text-primary,#111)] font-mono w-64 focus:ring-2 focus:ring-blue-500/40"
+                className="px-3 py-2 rounded-md border border-[var(--color-border,#d1d5db)] bg-[var(--color-bg-primary,#fff)] text-sm text-[var(--color-text-primary,#111)] w-64 focus:ring-2 focus:ring-blue-500/40"
               />
             ) : (
-              <span className="text-sm font-mono text-[var(--color-text-primary,#111)]">{driver.idTag}</span>
+              <span className="text-sm text-[var(--color-text-primary,#111)]">{driver.idTag}</span>
             )}
           </div>
           {!editingIdTag ? (
@@ -519,7 +519,7 @@ function OcppTab({ driver, editForm, setEditForm, saving, onSave, saveMsg }: {
 
       <div className="p-4 rounded-lg bg-[var(--color-bg-secondary,#f9fafb)] border border-[var(--color-border,#e5e7eb)]">
         <label className="block text-xs font-medium text-[var(--color-text-secondary,#6b7280)] mb-1">Internal User ID</label>
-        <span className="text-sm font-mono text-[var(--color-text-secondary,#6b7280)]">{driver.id}</span>
+        <span className="text-sm text-[var(--color-text-secondary,#6b7280)]">{driver.id}</span>
       </div>
     </div>
   );
@@ -586,7 +586,7 @@ function ActivityTab({ driver }: { driver: SupportDriverDetail }) {
 
       <div className="p-4 rounded-lg bg-[var(--color-bg-secondary,#f9fafb)] border border-[var(--color-border,#e5e7eb)]">
         <label className="block text-xs font-medium text-[var(--color-text-secondary,#6b7280)] mb-1">Auth Provider ID</label>
-        <div className="text-sm font-mono text-[var(--color-text-secondary,#6b7280)]">{driver.clerkId}</div>
+        <div className="text-sm text-[var(--color-text-secondary,#6b7280)]">{driver.clerkId}</div>
       </div>
     </div>
   );
