@@ -252,6 +252,10 @@ export interface UserProfile {
   homeState: string | null;
   homeZipCode: string | null;
   paymentProfile: string | null;
+  vehicleName: string | null;
+  vehicleMake: string | null;
+  vehicleModel: string | null;
+  vehicleYear: string | null;
 }
 
 export interface Payment {
@@ -533,7 +537,7 @@ export const api = {
     get() {
       return request<UserProfile>('/me/profile');
     },
-    update(input: Partial<Pick<UserProfile, 'name' | 'email' | 'phone' | 'homeAddress' | 'homeSiteAddress' | 'homeCity' | 'homeState' | 'homeZipCode' | 'paymentProfile'>>) {
+    update(input: Partial<Pick<UserProfile, 'name' | 'email' | 'phone' | 'homeAddress' | 'homeSiteAddress' | 'homeCity' | 'homeState' | 'homeZipCode' | 'paymentProfile' | 'vehicleName' | 'vehicleMake' | 'vehicleModel' | 'vehicleYear'>>) {
       return request<UserProfile>('/me/profile', {
         method: 'PUT',
         body: JSON.stringify(input),

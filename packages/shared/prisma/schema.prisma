@@ -307,6 +307,10 @@ model User {
   homeState       String?
   homeZipCode     String?
   paymentProfile  String?
+  vehicleName     String?   // Custom nickname (e.g. "My Daily Driver")
+  vehicleMake     String?   // e.g. "Tesla"
+  vehicleModel    String?   // e.g. "Model 3"
+  vehicleYear     String?   // e.g. "2023"
   idTag           String    @unique // OCPP idTag for this driver (max 20 chars)
   sessions        Session[]
   payments        Payment[]

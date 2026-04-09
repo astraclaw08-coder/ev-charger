@@ -18,6 +18,7 @@ import {
   Image,
 } from 'react-native';
 import { useLocalSearchParams, Stack } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, isDevMode, type Session } from '@/lib/api';
 import { useAppTheme } from '@/theme';
@@ -529,11 +530,13 @@ function LiveSessionView({
   onStop,
   stopping,
   showConnectorLabel,
+  vehicleLabel,
 }: {
   session: Session;
   onStop: () => void;
   stopping: boolean;
   showConnectorLabel: boolean;
+  vehicleLabel?: string | null;
 }) {
   const { isDark } = useAppTheme();
   const [showStopModal, setShowStopModal] = useState(false);
@@ -576,6 +579,12 @@ function LiveSessionView({
         <Text style={[styles.liveConnector, { color: isDark ? '#9ca3af' : '#6b7280' }]}>
           Connector {session.connector.connectorId}
         </Text>
+      ) : null}
+      {vehicleLabel ? (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4, marginBottom: 4 }}>
+          <Ionicons name="car-sport-outline" size={14} color={isDark ? '#94a3b8' : '#6b7280'} />
+          <Text style={{ fontSize: 13, fontWeight: '500', color: isDark ? '#94a3b8' : '#6b7280' }}>{vehicleLabel}</Text>
+        </View>
       ) : null}
 
       {/* Big kWh counter */}
@@ -646,6 +655,19 @@ export default function SessionScreen() {
     enabled: Boolean(session?.connector.charger.id),
     staleTime: 30_000,
   });
+
+  const { data: profileData } = useQuery({
+    queryKey: ['me-profile'],
+    queryFn: () => api.profile.get(),
+    staleTime: 60_000,
+  });
+
+  const vehicleLabel = useMemo(() => {
+    if (!profileData?.vehicleMake && !profileData?.vehicleModel) return null;
+    const parts = [profileData.vehicleMake, profileData.vehicleModel].filter(Boolean).join(' ');
+    const year = profileData.vehicleYear ? ` (${profileData.vehicleYear})` : '';
+    return `${parts}${year}`;
+  }, [profileData]);
 
   const showConnectorLabel = (chargerDetails?.connectors?.length ?? 1) > 1;
   const isLiveSession = session?.status === 'ACTIVE' && !session?.endedAt;
@@ -736,6 +758,7 @@ export default function SessionScreen() {
             onStop={() => stopMutation.mutate()}
             stopping={stopMutation.isPending}
             showConnectorLabel={showConnectorLabel}
+            vehicleLabel={vehicleLabel}
           />
         ) : (
           <SessionSummary

@@ -30,6 +30,13 @@ function validateState(value: unknown): string | null {
   return upper;
 }
 
+function validateVehicleYear(value: unknown): string | null {
+  const year = trimOrNull(value, 4);
+  if (!year) return null;
+  if (!/^\d{4}$/.test(year)) throw new Error('Vehicle year must be 4 digits');
+  return year;
+}
+
 function validateZip(value: unknown): string | null {
   const zip = trimOrNull(value, 10);
   if (!zip) return null;
@@ -71,6 +78,10 @@ export async function profileRoutes(app: FastifyInstance) {
       homeState: fresh!.homeState,
       homeZipCode: fresh!.homeZipCode,
       paymentProfile: fresh!.paymentProfile,
+      vehicleName: fresh!.vehicleName,
+      vehicleMake: fresh!.vehicleMake,
+      vehicleModel: fresh!.vehicleModel,
+      vehicleYear: fresh!.vehicleYear,
     };
   });
 
@@ -85,6 +96,10 @@ export async function profileRoutes(app: FastifyInstance) {
       homeState?: string | null;
       homeZipCode?: string | null;
       paymentProfile?: string | null;
+      vehicleName?: string | null;
+      vehicleMake?: string | null;
+      vehicleModel?: string | null;
+      vehicleYear?: string | null;
     };
   }>('/me/profile', { preHandler: requireAuth }, async (req, reply) => {
     const user = req.currentUser!;
@@ -100,6 +115,10 @@ export async function profileRoutes(app: FastifyInstance) {
       homeState?: string | null;
       homeZipCode?: string | null;
       paymentProfile?: string | null;
+      vehicleName?: string | null;
+      vehicleMake?: string | null;
+      vehicleModel?: string | null;
+      vehicleYear?: string | null;
     };
 
     try {
@@ -113,6 +132,10 @@ export async function profileRoutes(app: FastifyInstance) {
         homeState: body.homeState !== undefined ? validateState(body.homeState) : undefined,
         homeZipCode: body.homeZipCode !== undefined ? validateZip(body.homeZipCode) : undefined,
         paymentProfile: body.paymentProfile !== undefined ? validatePaymentReference(body.paymentProfile) : undefined,
+        vehicleName: body.vehicleName !== undefined ? trimOrNull(body.vehicleName, 120) : undefined,
+        vehicleMake: body.vehicleMake !== undefined ? trimOrNull(body.vehicleMake, 80) : undefined,
+        vehicleModel: body.vehicleModel !== undefined ? trimOrNull(body.vehicleModel, 80) : undefined,
+        vehicleYear: body.vehicleYear !== undefined ? validateVehicleYear(body.vehicleYear) : undefined,
       };
     } catch (err) {
       return reply.status(400).send({
@@ -132,6 +155,10 @@ export async function profileRoutes(app: FastifyInstance) {
         homeState: validated.homeState,
         homeZipCode: validated.homeZipCode,
         paymentProfile: validated.paymentProfile,
+        vehicleName: validated.vehicleName,
+        vehicleMake: validated.vehicleMake,
+        vehicleModel: validated.vehicleModel,
+        vehicleYear: validated.vehicleYear,
       },
     });
 
@@ -146,6 +173,10 @@ export async function profileRoutes(app: FastifyInstance) {
       homeState: updated.homeState,
       homeZipCode: updated.homeZipCode,
       paymentProfile: updated.paymentProfile,
+      vehicleName: updated.vehicleName,
+      vehicleMake: updated.vehicleMake,
+      vehicleModel: updated.vehicleModel,
+      vehicleYear: updated.vehicleYear,
     };
   });
 

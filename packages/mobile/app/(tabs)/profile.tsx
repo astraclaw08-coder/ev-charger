@@ -34,6 +34,10 @@ type DriverProfile = {
   homeState: string;
   homeZipCode: string;
   paymentProfile: string;
+  vehicleName: string;
+  vehicleMake: string;
+  vehicleModel: string;
+  vehicleYear: string;
 };
 
 const EMPTY: DriverProfile = {
@@ -46,6 +50,10 @@ const EMPTY: DriverProfile = {
   homeState: '',
   homeZipCode: '',
   paymentProfile: '',
+  vehicleName: '',
+  vehicleMake: '',
+  vehicleModel: '',
+  vehicleYear: '',
 };
 
 const expoVersion = Constants.expoConfig?.version || '1.0.0';
@@ -60,6 +68,7 @@ export default function ProfileScreen() {
   const tabBarHeight = useBottomTabBarHeight();
   const [profile, setProfile] = useState<DriverProfile>(EMPTY);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [showVehicleForm, setShowVehicleForm] = useState(false);
   const queryClient = useQueryClient();
   const { isGuest, signOut, biometricAvailable, biometricEnabled, biometricLabel, toggleBiometric } = useAppAuth();
   const { unreadCount } = useChargingNotifications();
@@ -84,6 +93,10 @@ export default function ProfileScreen() {
       homeState: data.homeState ?? '',
       homeZipCode: data.homeZipCode ?? '',
       paymentProfile: data.paymentProfile ?? '',
+      vehicleName: data.vehicleName ?? '',
+      vehicleMake: data.vehicleMake ?? '',
+      vehicleModel: data.vehicleModel ?? '',
+      vehicleYear: data.vehicleYear ?? '',
     });
     if (placesRef.current && addr) {
       placesRef.current.setAddressText(addr);
@@ -102,6 +115,10 @@ export default function ProfileScreen() {
       homeState: data.homeState ?? '',
       homeZipCode: data.homeZipCode ?? '',
       paymentProfile: data.paymentProfile ?? '',
+      vehicleName: data.vehicleName ?? '',
+      vehicleMake: data.vehicleMake ?? '',
+      vehicleModel: data.vehicleModel ?? '',
+      vehicleYear: data.vehicleYear ?? '',
     };
     return (
       profile.name !== baseline.name ||
@@ -112,7 +129,11 @@ export default function ProfileScreen() {
       profile.homeCity !== baseline.homeCity ||
       profile.homeState !== baseline.homeState ||
       profile.homeZipCode !== baseline.homeZipCode ||
-      profile.paymentProfile !== baseline.paymentProfile
+      profile.paymentProfile !== baseline.paymentProfile ||
+      profile.vehicleName !== baseline.vehicleName ||
+      profile.vehicleMake !== baseline.vehicleMake ||
+      profile.vehicleModel !== baseline.vehicleModel ||
+      profile.vehicleYear !== baseline.vehicleYear
     );
   }, [data, profile]);
 
@@ -128,6 +149,10 @@ export default function ProfileScreen() {
         homeState: profile.homeState,
         homeZipCode: profile.homeZipCode,
         paymentProfile: profile.paymentProfile,
+        vehicleName: profile.vehicleName || null,
+        vehicleMake: profile.vehicleMake || null,
+        vehicleModel: profile.vehicleModel || null,
+        vehicleYear: profile.vehicleYear || null,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['me-profile'] });
@@ -236,6 +261,61 @@ export default function ProfileScreen() {
         </TouchableOpacity>
       </View>
 
+      {/* ── My Vehicle ────────────────────────────────────────────── */}
+      <View style={[styles.card, { backgroundColor: isDark ? '#111827' : '#fff', borderColor: isDark ? '#374151' : '#e5e7eb' }]}>
+        <Text style={[styles.sectionTitle, { color: isDark ? '#f9fafb' : '#111827' }]}>My Vehicle</Text>
+        {!showVehicleForm && (profile.vehicleMake || profile.vehicleModel) ? (
+          <>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+              <Ionicons name="car-sport-outline" size={18} color={isDark ? '#9ca3af' : '#6b7280'} />
+              <Text style={{ fontSize: 15, fontWeight: '600', color: isDark ? '#f9fafb' : '#111827' }}>
+                {[profile.vehicleMake, profile.vehicleModel].filter(Boolean).join(' ')}{profile.vehicleYear ? ` (${profile.vehicleYear})` : ''}
+              </Text>
+            </View>
+            {profile.vehicleName ? (
+              <Text style={{ fontSize: 13, color: isDark ? '#9ca3af' : '#6b7280', marginLeft: 26, marginBottom: 8 }}>{profile.vehicleName}</Text>
+            ) : null}
+            <TouchableOpacity
+              style={[styles.paymentBtn, isDark ? styles.paymentBtnDark : styles.paymentBtnLight]}
+              onPress={() => setShowVehicleForm(true)}
+            >
+              <Text style={styles.paymentBtnText}>Edit Vehicle</Text>
+            </TouchableOpacity>
+          </>
+        ) : !showVehicleForm ? (
+          <>
+            <Text style={[styles.paymentSummary, { color: isDark ? '#9ca3af' : '#4b5563' }]}>No vehicle added yet</Text>
+            <TouchableOpacity
+              style={[styles.paymentBtn, isDark ? styles.paymentBtnDark : styles.paymentBtnLight]}
+              onPress={() => setShowVehicleForm(true)}
+            >
+              <Text style={styles.paymentBtnText}>Add Vehicle</Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <>
+            <Field label="Nickname" value={profile.vehicleName} onChangeText={(v) => set('vehicleName', v)} isDark={isDark} placeholder="e.g. My Daily Driver" />
+            <Field label="Make" value={profile.vehicleMake} onChangeText={(v) => set('vehicleMake', v)} isDark={isDark} placeholder="e.g. Tesla" />
+            <Field label="Model" value={profile.vehicleModel} onChangeText={(v) => set('vehicleModel', v)} isDark={isDark} placeholder="e.g. Model 3" />
+            <Field label="Year" value={profile.vehicleYear} onChangeText={(v) => set('vehicleYear', v.replace(/\D/g, '').slice(0, 4))} isDark={isDark} keyboardType="number-pad" placeholder="e.g. 2023" />
+            <TouchableOpacity
+              style={[styles.paymentBtn, isDark ? styles.paymentBtnDark : styles.paymentBtnLight]}
+              onPress={() => {
+                // Cancel: revert to saved values
+                if (data) {
+                  set('vehicleName', data.vehicleName ?? '');
+                  set('vehicleMake', data.vehicleMake ?? '');
+                  set('vehicleModel', data.vehicleModel ?? '');
+                  set('vehicleYear', data.vehicleYear ?? '');
+                }
+                setShowVehicleForm(false);
+              }}
+            >
+              <Text style={styles.paymentBtnText}>Cancel</Text>
+            </TouchableOpacity>
+          </>
+        )}
+      </View>
 
       <Field label="Name" value={profile.name} onChangeText={(v) => set('name', v)} isDark={isDark} autoCapitalize="words" />
       <Field label="Email" value={profile.email} onChangeText={(v) => set('email', v)} isDark={isDark} keyboardType="email-address" autoCapitalize="none" />
