@@ -163,10 +163,27 @@
 **Done when:** Nightly report generates for test site with real telemetry data; viewable in portal.
 
 ### Subtask 155.6: Portal UI — Diagnostics Chat + Health Dashboard
-- [ ] New portal page: `/diagnostics` — chat interface for conversational charger diagnostics
+
+#### 155.6a: Tabbed AI Diagnostic Chat in Operations ✅ COMPLETE (2026-04-09)
+> Narrowed scope: leverage existing Lumeo AI chat + 25 agent tools (no new backend)
+
+- [x] `AgentChatContext` — shared React context for chat open/tab state, replaces self-contained isOpen
+- [x] Tab bar in `AgentChatPanel` — General tab (always) + up to 3 closeable Diagnostic tabs
+- [x] Independent message history per tab (separate localStorage keys, `lumeo.agent-chat.diag.${chargerId}`)
+- [x] Tab metadata persistence (`lumeo.agent-chat.tabs`) survives page refresh
+- [x] `TabSession` remount pattern (`key={activeTab.id}`) — clean lifecycle, no cross-tab async leaks
+- [x] `seedState`/`seedVersion` state machine for idempotent auto-send of diagnostic prompts
+- [x] `diagnostic-seed` message meta — renders as system event row, not user bubble
+- [x] "✦ AI Diagnose" button on every charger card in NetworkOps health grid
+- [x] One active stream globally — tab switch aborts previous, partial response preserved
+- [x] Close preserves transcript, clear resets seedState to idle
+- [x] Deployed to production: `portal.lumeopower.com` (Vercel, commit `e2b0f28`)
+
+**Files:** `AgentChatContext.tsx` (new), `AgentChatPanel.tsx`, `useAgentChat.ts`, `types.ts`, `Layout.tsx`, `NetworkOps.tsx`
+
+#### 155.6b: Remaining (not yet started)
+- [ ] New portal page: `/diagnostics` — dedicated chat interface for conversational charger diagnostics
 - [ ] Conversation sidebar: list past conversations, create new, delete
-- [ ] Chat area: message bubbles, streaming response display, charger context cards
-- [ ] Charger selector: pick which charger(s) to diagnose (pre-fills context)
 - [ ] Health dashboard widget on site detail page: latest health report summary, trend sparklines, alert badges
 - [ ] Health reports page: `/sites/:id/health-reports` — full report history with drill-down
 
