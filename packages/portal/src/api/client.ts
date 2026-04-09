@@ -655,7 +655,7 @@ const DEV_OPERATOR_ID = import.meta.env.VITE_DEV_OPERATOR_ID ?? 'operator-001';
 const AUTH_MODE = String(import.meta.env.VITE_AUTH_MODE ?? '').trim().toLowerCase();
 const IS_DEV_MODE = AUTH_MODE === 'dev';
 
-const GET_CACHE_TTL_MS = 30_000;
+const GET_CACHE_TTL_MS = 300_000;
 type CacheEntry = { expiresAt: number; value: unknown };
 const responseCache = new Map<string, CacheEntry>();
 const inFlightGets = new Map<string, Promise<unknown>>();

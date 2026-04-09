@@ -6,6 +6,8 @@ export { default as FilterBar } from './FilterBar';
 export type { DropdownFilter } from './FilterBar';
 export { default as EmptyState } from './EmptyState';
 export { default as ErrorState } from './ErrorState';
+export { default as Pagination } from './Pagination';
+export type { PaginationProps } from './Pagination';
 export { default as ChartTooltip, useChartTheme } from './ChartTooltip';
 export {
   CardSkeleton,

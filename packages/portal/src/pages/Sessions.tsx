@@ -3,9 +3,10 @@ import { Modal } from '../components/Modal';
 import { createApiClient, type EnrichedTransaction } from '../api/client';
 import { useToken } from '../auth/TokenContext';
 import { usePortalScope } from '../context/PortalScopeContext';
-import { PageHeader, StatCard, FilterBar, ErrorState, EmptyState } from '../components/ui';
+import { PageHeader, StatCard, FilterBar, ErrorState, EmptyState, Pagination } from '../components/ui';
 import { StatCardSkeleton, TableSkeleton } from '../components/ui/LoadingState';
 import { exportToCsv, type CsvColumn } from '../lib/csvExport';
+import usePagination from '../hooks/usePagination';
 
 const SESSION_CSV_COLUMNS: CsvColumn<EnrichedTransaction>[] = [
   { header: 'Started', accessor: (r) => r.startedAt },
@@ -30,6 +31,7 @@ export default function Sessions() {
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [query, setQuery] = useState('');
   const [selectedReceipt, setSelectedReceipt] = useState<EnrichedTransaction | null>(null);
+  const [serverTotal, setServerTotal] = useState(0);
 
   async function load() {
     try {
@@ -44,7 +46,7 @@ export default function Sessions() {
       const [sites, data] = await Promise.all([
         api.getSites(),
         api.getEnrichedTransactions({
-          limit: 100,
+          limit: 500,
           offset: 0,
           siteId: siteId || undefined,
           startDate: start,
@@ -53,6 +55,7 @@ export default function Sessions() {
       ]);
 
       setSiteOptions(sites.map((s) => ({ id: s.id, name: s.name })));
+      setServerTotal(data.total);
 
       if (data.transactions.length > 0) {
         setRows(data.transactions);
@@ -124,9 +127,10 @@ export default function Sessions() {
             return Number.isFinite(startedMs) && startedMs >= startMs && startedMs <= endMs;
           })
           .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime())
-          .slice(0, 100);
+          .slice(0, 500);
 
         setRows(merged);
+        setServerTotal(merged.length);
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to load sessions');
@@ -151,6 +155,8 @@ export default function Sessions() {
       || r.status.toLowerCase().includes(q),
     );
   }, [rows, statusFilter, query]);
+
+  const { pageItems, paginationProps } = usePagination(filtered);
 
   const totals = useMemo(() => ({
     count: filtered.length,
@@ -224,6 +230,12 @@ export default function Sessions() {
           ]}
         />
 
+        {serverTotal > 500 && (
+          <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
+            Showing first 500 of {serverTotal.toLocaleString()} sessions, narrow your date range or site filter for complete results.
+          </div>
+        )}
+
         {filtered.length === 0 ? (
           <EmptyState
             title="No sessions found"
@@ -246,7 +258,7 @@ export default function Sessions() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((row) => {
+                {pageItems.map((row) => {
                   const isActive = row.status === 'ACTIVE';
                   return (
                     <tr key={row.id} className={`hoverable stagger-item border-t border-gray-100 dark:border-slate-800 ${isActive ? 'bg-brand-50/30 dark:bg-brand-500/5' : ''}`}>
@@ -284,6 +296,8 @@ export default function Sessions() {
             </table>
           </div>
         )}
+
+        <Pagination {...paginationProps} />
       </div>
 
       <ReceiptModal row={selectedReceipt} onClose={() => setSelectedReceipt(null)} />

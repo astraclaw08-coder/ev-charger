@@ -4,9 +4,10 @@ import { createApiClient, type ChargerListItem } from '../api/client';
 import { useToken } from '../auth/TokenContext';
 import { usePortalScope } from '../context/PortalScopeContext';
 import StatusBadge from '../components/StatusBadge';
-import { PageHeader, StatCard, FilterBar, ErrorState, EmptyState } from '../components/ui';
+import { PageHeader, StatCard, FilterBar, ErrorState, EmptyState, Pagination } from '../components/ui';
 import { StatCardSkeleton, TableSkeleton } from '../components/ui/LoadingState';
 import { exportToCsv, type CsvColumn } from '../lib/csvExport';
+import usePagination from '../hooks/usePagination';
 
 const CHARGER_CSV_COLUMNS: CsvColumn<ChargerListItem>[] = [
   { header: 'OCPP ID', accessor: (r) => r.ocppId },
@@ -64,6 +65,8 @@ export default function Chargers() {
       || r.site.name.toLowerCase().includes(q),
     );
   }, [sorted, statusFilter, siteId, query]);
+
+  const { pageItems, paginationProps } = usePagination(filtered);
 
   const summary = useMemo(() => ({
     total: rows.length,
@@ -176,7 +179,7 @@ export default function Chargers() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((row) => (
+                {pageItems.map((row) => (
                   <tr key={row.id} className="hoverable stagger-item border-t border-gray-100 dark:border-slate-800">
                     <td className="py-3 font-medium">
                       <Link to={`/chargers/${row.id}`} className="text-brand-600 dark:text-brand-400 hover:underline">{row.ocppId}</Link>
@@ -192,6 +195,8 @@ export default function Chargers() {
             </table>
           </div>
         )}
+
+        <Pagination {...paginationProps} />
       </div>
     </div>
   );

@@ -22,6 +22,8 @@ import { createApiClient, type SiteListItem } from '../api/client';
 import { useToken } from '../auth/TokenContext';
 import { shortId } from '../lib/shortId';
 import AddressAutocomplete from '../components/AddressAutocomplete';
+import { Pagination } from '../components/ui';
+import usePagination from '../hooks/usePagination';
 
 export default function Sites() {
   const getToken = useToken();
@@ -75,6 +77,8 @@ export default function Sites() {
       || (site.portfolio?.name ?? site.portfolioName ?? '').toLowerCase().includes(q),
     );
   }, [sites, query]);
+
+  const { pageItems, paginationProps } = usePagination(filteredSites);
 
   async function handleCreateSite(e: React.FormEvent) {
     e.preventDefault();
@@ -182,17 +186,23 @@ export default function Sites() {
             <span className="text-right">Action</span>
           </div>
           <div className="divide-y divide-gray-100 dark:divide-slate-800">
-            {filteredSites.map((site) => (
+            {pageItems.map((site) => (
               <SiteListRow key={site.id} site={site} />
             ))}
           </div>
+          <div className="px-4 pb-4">
+            <Pagination {...paginationProps} className="mt-0 border-t-0 pt-0" />
+          </div>
         </div>
       ) : (
-        <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {filteredSites.map((site) => (
-            <SiteCard key={site.id} site={site} />
-          ))}
-        </div>
+        <>
+          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {pageItems.map((site) => (
+              <SiteCard key={site.id} site={site} />
+            ))}
+          </div>
+          <Pagination {...paginationProps} />
+        </>
       )}
 
       <Modal open={showAddSiteModal} onClose={() => setShowAddSiteModal(false)} title="Add Site" subtitle="Owner/Operator action — create a new charging site.">
