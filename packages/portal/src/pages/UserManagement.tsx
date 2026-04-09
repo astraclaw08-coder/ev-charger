@@ -94,10 +94,6 @@ export default function UserManagement() {
     refresh().catch((err) => setLoadError(err instanceof Error ? err.message : 'Failed to load users'));
   }, []);
 
-  useEffect(() => {
-    refresh().catch((err) => setLoadError(err instanceof Error ? err.message : 'Failed to load users'));
-  }, [search]);
-
   function openEdit(user: AdminUser) {
     setEditingUser(user);
     setEditForm({
