@@ -45,7 +45,7 @@ export default function ChartTooltip({ active, payload, label, formatValue }: Ch
           <span className={`text-xs ${isDark ? 'text-slate-300' : 'text-gray-600'}`}>
             {entry.name}:
           </span>
-          <span className="font-mono font-medium tabular-nums">
+          <span className="font-medium tabular-nums">
             {formatValue ? formatValue(entry.value as number, entry.name as string) : entry.value}
           </span>
         </div>

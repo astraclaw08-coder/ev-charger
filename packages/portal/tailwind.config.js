@@ -6,7 +6,6 @@ export default {
     extend: {
       fontFamily: {
         sans: ['"Nunito Sans"', 'system-ui', 'sans-serif'],
-        mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
       },
       colors: {
         brand: {
