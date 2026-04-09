@@ -57,8 +57,10 @@ const EMPTY: DriverProfile = {
 };
 
 const expoVersion = Constants.expoConfig?.version || '1.0.0';
+const buildNum = Constants.expoConfig?.extra?.buildNumber ?? 0;
+const gitHash = Constants.expoConfig?.extra?.gitHash ?? '';
 const safeEnvLabel = typeof envLabel === 'string' && envLabel.trim().length > 0 ? envLabel : 'DEV';
-const mobileVersion = `${expoVersion} (${safeEnvLabel.toLowerCase()})`;
+const mobileVersion = `${expoVersion} b${buildNum}${gitHash ? ` (${gitHash})` : ''} · ${safeEnvLabel.toLowerCase()}`;
 const GOOGLE_PLACES_KEY = process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY ?? '';
 
 type ProfileTab = 'profile' | 'vehicle' | 'payment';
@@ -504,8 +506,7 @@ export default function ProfileScreen() {
             </TouchableOpacity>
           </View>
 
-          <Text style={[styles.versionText, { color: isDark ? '#6b7280' : '#9ca3af' }]}>Version {mobileVersion}</Text>
-          <Text style={[styles.versionText, { color: isDark ? '#6b7280' : '#9ca3af' }]}>Environment {envLabel}</Text>
+          <Text style={[styles.versionText, { color: isDark ? '#6b7280' : '#9ca3af' }]}>{mobileVersion}</Text>
           <Text style={[styles.versionText, { color: isDark ? '#6b7280' : '#9ca3af' }]} numberOfLines={1}>API {apiBaseUrl}</Text>
         </>
       )}

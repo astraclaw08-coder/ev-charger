@@ -1,4 +1,22 @@
+import { execSync } from 'child_process';
 import type { ExpoConfig } from 'expo/config';
+
+// ── Auto-versioning ──────────────────────────────────────────────
+// Marketing version: semver in package.json (bump manually for releases)
+// Build number: git commit count (auto-increments every commit)
+// Display: "1.2.0 build 347 (abc1234)" in the app
+function gitInfo(): { commitCount: number; shortHash: string } {
+  try {
+    const count = parseInt(execSync('git rev-list --count HEAD', { encoding: 'utf8' }).trim(), 10);
+    const hash = execSync('git rev-parse --short=7 HEAD', { encoding: 'utf8' }).trim();
+    return { commitCount: isNaN(count) ? 0 : count, shortHash: hash };
+  } catch {
+    return { commitCount: 0, shortHash: 'unknown' };
+  }
+}
+
+const { commitCount: buildNumber, shortHash: gitHash } = gitInfo();
+const marketingVersion = '1.1.0'; // bump on meaningful releases
 
 type AppEnv = 'dev' | 'rc' | 'prod';
 
@@ -33,7 +51,7 @@ const androidGoogleMapsApiKey = process.env.GOOGLE_MAPS_API_KEY_ANDROID || '';
 const config: ExpoConfig = {
   name,
   slug,
-  version: '1.0.0',
+  version: marketingVersion,
   orientation: 'portrait',
   icon: './assets/icon.png',
   scheme,
@@ -46,6 +64,7 @@ const config: ExpoConfig = {
   ios: {
     supportsTablet: true,
     bundleIdentifier,
+    buildNumber: String(buildNumber),
     config: {
       googleMapsApiKey: iosGoogleMapsApiKey,
     },
@@ -61,6 +80,7 @@ const config: ExpoConfig = {
       foregroundImage: './assets/adaptive-icon.png',
       backgroundColor: '#ffffff',
     },
+    versionCode: buildNumber,
     package: androidPackage,
     config: {
       googleMaps: {
@@ -92,6 +112,8 @@ const config: ExpoConfig = {
     apiUrl: resolvedApiUrl,
     authMode: 'keycloak',
     envLabel: isProd ? 'PROD' : isRC ? 'RC' : 'DEV',
+    buildNumber,
+    gitHash,
     eas: {
       projectId: '39b3fbf7-b459-4a59-99ad-1c224595c1a6',
     },
