@@ -2,6 +2,18 @@ import 'dotenv/config';
 import { buildServer } from './server';
 import { assertDatabaseUrlSafety, assertKeycloakConfig, getAppEnv } from './lib/envGuard';
 import { materializeUptime } from './workers/uptimeMaterializer';
+import * as fs from 'fs';
+import * as path from 'path';
+
+// Build diagnostics: log compiled route files
+const routesDir = path.join(__dirname, 'routes');
+try {
+  const files = fs.readdirSync(routesDir).filter(f => f.endsWith('.js'));
+  console.log(`[Build diag] Compiled route files (${files.length}):`, files.join(', '));
+  console.log(`[Build diag] reports.js present:`, files.includes('reports.js') ? 'YES' : 'NO');
+} catch (e) {
+  console.log(`[Build diag] Could not read routes dir:`, e);
+}
 
 const PORT = parseInt(process.env.PORT ?? '3001', 10);
 const HOST = process.env.HOST ?? '0.0.0.0';
