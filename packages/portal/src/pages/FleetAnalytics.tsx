@@ -284,7 +284,7 @@ export default function FleetAnalytics() {
         </div>}
       </div>
 
-      <TabBar tabs={ANALYTICS_TABS} activeTab={activeTab} onChange={setActiveTab} variant="underline" />
+      <TabBar tabs={ANALYTICS_TABS} activeTab={activeTab} onChange={setActiveTab} />
 
       {activeTab === 'reports' && <IntervalUsageExport />}
 
