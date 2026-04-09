@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { createApiClient, type ChargerListItem, type SiteListItem, type SiteDetail } from '../api/client';
 import { useToken } from '../auth/TokenContext';
+import { useAgentChatContext } from '../components/AgentChat/AgentChatContext';
 
 type Incident = { id: string; chargerId: string; title: string; createdAt: string; severity: 'low'|'medium'|'high' };
 type FirmwareRollout = { id: string; chargerId: string; version: string; status: 'queued'|'rolling'|'done'; createdAt: string };
@@ -17,6 +18,7 @@ function save<T>(k: string, v: T[]) { localStorage.setItem(k, JSON.stringify(v.s
 
 export default function NetworkOps() {
   const getToken = useToken();
+  const { openDiagnostic } = useAgentChatContext();
   const [sites, setSites] = useState<SiteListItem[]>([]);
   const [allChargers, setAllChargers] = useState<ChargerListItem[]>([]);
   const [site, setSite] = useState<SiteDetail | null>(null);
@@ -165,6 +167,9 @@ export default function NetworkOps() {
                     const incident: Incident={id:crypto.randomUUID(), chargerId:c.id, title:`Offline triage opened for ${c.ocppId}`, severity:c.status==='FAULTED'?'high':'medium', createdAt:new Date().toISOString()};
                     const next=[incident,...incidents]; setIncidents(next); save(incidentsKey(site.id),next);
                   }}>Open triage ticket</button>
+                  <button className="rounded-md border border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/30 px-2 py-1 text-xs font-medium text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-800/40" onClick={()=>{
+                    openDiagnostic({ chargerId: c.id, ocppId: c.ocppId, status: c.status, lastHeartbeat: c.lastHeartbeat });
+                  }}>✦ AI Diagnose</button>
                 </div>
               </div>
             ))}

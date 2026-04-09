@@ -20,6 +20,7 @@ export type ChatMessage = {
   content: string;
   toolChips?: ToolChip[];
   timestamp: number;
+  meta?: { kind: 'diagnostic-seed' };
 };
 
 export type Conversation = {
@@ -27,4 +28,28 @@ export type Conversation = {
   messages: ChatMessage[];
   createdAt: number;
   title?: string;
+};
+
+// ── Tabbed chat types ──────────────────────────────────────────────
+
+export type ChatTab = {
+  id: string;
+  label: string;
+  type: 'general' | 'diagnostic';
+  chargerId?: string;
+  ocppId?: string;
+  status?: string;
+  storageKey: string;
+  initialPrompt?: string;
+  seedState: 'idle' | 'pending' | 'sent';
+  seedVersion: number;
+  createdAt: number;
+  lastViewedAt: number;
+};
+
+export type DiagnosticRequest = {
+  chargerId: string;
+  ocppId: string;
+  status: string;
+  lastHeartbeat: string | null;
 };
