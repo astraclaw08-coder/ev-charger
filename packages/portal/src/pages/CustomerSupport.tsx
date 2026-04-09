@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { createApiClient, type SupportDriverSummary, type SupportDriverDetail, type SupportDriverSession, type SupportDriverSessionsResponse, type SupportDriverPaymentCard } from '../api/client';
 import { useToken } from '../auth/TokenContext';
+import { Pagination } from '../components/ui';
 
 // ── Tab type ─────────────────────────────────────────────────────────────
 type Tab = 'profile' | 'sessions' | 'ocpp' | 'payment' | 'activity';
@@ -455,20 +456,12 @@ function SessionsTab({ data, loading, page, onPageChange, filter, setFilter, onA
             </table>
           </div>
 
-          {/* Pagination */}
-          <div className="flex items-center justify-between pt-2">
-            <span className="text-xs text-[var(--color-text-secondary,#6b7280)]">
-              Page {data.page} of {data.pages} · {data.total} total
-            </span>
-            <div className="flex gap-2">
-              <button disabled={page <= 1} onClick={() => onPageChange(page - 1)} className="px-3 py-1 text-sm rounded border border-[var(--color-border,#d1d5db)] disabled:opacity-40 hover:bg-[var(--color-bg-secondary,#f9fafb)] transition">
-                Previous
-              </button>
-              <button disabled={page >= data.pages} onClick={() => onPageChange(page + 1)} className="px-3 py-1 text-sm rounded border border-[var(--color-border,#d1d5db)] disabled:opacity-40 hover:bg-[var(--color-bg-secondary,#f9fafb)] transition">
-                Next
-              </button>
-            </div>
-          </div>
+          <Pagination
+            page={page}
+            total={data.total}
+            pageSize={15}
+            onPageChange={onPageChange}
+          />
         </>
       )}
     </div>

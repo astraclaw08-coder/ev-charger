@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { createApiClient, type AdminUser } from '../api/client';
 import { useToken } from '../auth/TokenContext';
 import { cn } from '../lib/utils';
+import { Pagination } from '../components/ui';
+import usePagination from '../hooks/usePagination';
 
 // Must match shared RBAC_ROLES. Only super_admin should assign admin-class roles.
 const ASSIGNABLE_ROLES = [
@@ -62,11 +64,24 @@ export default function UserManagement() {
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
 
+  const filteredUsers = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return users;
+    return users.filter((user) => {
+      const name = `${user.firstName ?? ''} ${user.lastName ?? ''}`.toLowerCase();
+      return (user.email ?? '').toLowerCase().includes(q)
+        || (user.username ?? '').toLowerCase().includes(q)
+        || name.includes(q);
+    });
+  }, [users, search]);
+
+  const { pageItems, paginationProps } = usePagination(filteredUsers);
+
   async function refresh() {
     try {
       const token = await getToken();
       const api = createApiClient(token);
-      const u = await api.listAdminUsers({ search: search || undefined, max: 100 });
+      const u = await api.listAdminUsers({ max: 100 });
       setUsers(Array.isArray(u) ? u : []);
       setLoadError(null);
     } catch (err) {
@@ -78,6 +93,10 @@ export default function UserManagement() {
   useEffect(() => {
     refresh().catch((err) => setLoadError(err instanceof Error ? err.message : 'Failed to load users'));
   }, []);
+
+  useEffect(() => {
+    refresh().catch((err) => setLoadError(err instanceof Error ? err.message : 'Failed to load users'));
+  }, [search]);
 
   function openEdit(user: AdminUser) {
     setEditingUser(user);
@@ -206,7 +225,7 @@ export default function UserManagement() {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50 dark:divide-slate-800">
-            {users.map((u) => {
+            {pageItems.map((u) => {
               const role = getUserRole(u);
               return (
                 <tr key={u.id} className="hover:bg-gray-50 dark:hover:bg-slate-800/40">
@@ -238,12 +257,14 @@ export default function UserManagement() {
                 </tr>
               );
             })}
-            {users.length === 0 && !loadError && (
+            {filteredUsers.length === 0 && !loadError && (
               <tr><td colSpan={5} className="px-4 py-8 text-center text-xs text-gray-500 dark:text-slate-400">No users found.</td></tr>
             )}
           </tbody>
         </table>
       </div>
+
+      <Pagination {...paginationProps} />
 
       {/* ── Edit User Modal ───────────────────────────────────────────────── */}
       {editingUser && (
