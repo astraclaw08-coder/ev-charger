@@ -60,7 +60,23 @@ export async function sessionRoutes(app: FastifyInstance) {
     if (!connector) return reply.status(404).send({ error: 'Connector not found' });
 
     const startableStates = new Set(['AVAILABLE', 'PREPARING', 'SUSPENDED_EV']);
-    if (!startableStates.has(connector.status)) {
+    // Allow RESERVED connectors if the requesting user holds the reservation
+    if (connector.status === 'RESERVED') {
+      const activeReservation = await prisma.reservation.findFirst({
+        where: {
+          connectorRefId: connector.id,
+          status: { in: ['PENDING', 'CONFIRMED'] },
+        },
+        select: { userId: true },
+      });
+      if (activeReservation && activeReservation.userId === user.id) {
+        // Reservation holder — allow start
+      } else {
+        return reply.status(409).send({
+          error: 'Connector is RESERVED by another user',
+        });
+      }
+    } else if (!startableStates.has(connector.status)) {
       return reply.status(409).send({
         error: `Connector is ${connector.status}, not startable (requires AVAILABLE, PREPARING, or SUSPENDED_EV)`,
       });

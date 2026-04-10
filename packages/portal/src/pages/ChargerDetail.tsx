@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { buildChargerQrRedirectUrl, createApiClient, type ChargerStatus, type SessionRecord, type ChargerUptime } from '../api/client';
+import { buildChargerQrRedirectUrl, createApiClient, type ChargerStatus, type SessionRecord, type ChargerUptime, type AdminReservation } from '../api/client';
 import { useToken } from '../auth/TokenContext';
 import StatusBadge from '../components/StatusBadge';
 import { PageHeader, ErrorState } from '../components/ui';
@@ -58,6 +58,10 @@ export default function ChargerDetail() {
   const [qrBusy, setQrBusy] = useState(false);
   const [qrMsg, setQrMsg] = useState('');
   const [showQrModal, setShowQrModal] = useState(false);
+  const [reservations, setReservations] = useState<AdminReservation[]>([]);
+  const [showReservations, setShowReservations] = useState(false);
+  const [reservationsLoading, setReservationsLoading] = useState(false);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -223,6 +227,37 @@ export default function ChargerDetail() {
     document.body.appendChild(a);
     a.click();
     a.remove();
+  }
+
+  async function loadReservations() {
+    const targetId = resolvedChargerId ?? id;
+    if (!targetId || !chargerSite) return;
+    setReservationsLoading(true);
+    try {
+      const token = await getToken();
+      const client = createApiClient(token);
+      const res = await client.getAdminReservations({ siteId: chargerSite.id, limit: 50 });
+      // Filter to only this charger's reservations
+      setReservations(res.reservations.filter((r) => r.chargerId === targetId));
+    } catch {
+      setReservations([]);
+    } finally {
+      setReservationsLoading(false);
+    }
+  }
+
+  async function handleCancelReservation(reservationId: string) {
+    setCancellingId(reservationId);
+    try {
+      const token = await getToken();
+      const client = createApiClient(token);
+      await client.cancelAdminReservation(reservationId);
+      await loadReservations();
+    } catch {
+      // silently fail — user can retry
+    } finally {
+      setCancellingId(null);
+    }
   }
 
   if (loading) return <PageSkeleton />;
@@ -545,6 +580,72 @@ export default function ChargerDetail() {
               </tbody>
             </table>
           </div>
+        )}
+      </div>
+
+      {/* Reservations */}
+      <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm">
+        <button
+          className="flex w-full items-center justify-between border-b border-gray-300 dark:border-slate-700 px-5 py-4 text-left"
+          onClick={() => {
+            const next = !showReservations;
+            setShowReservations(next);
+            if (next && reservations.length === 0) loadReservations();
+          }}
+        >
+          <h2 className="text-sm font-semibold text-gray-700 dark:text-slate-300">Reservations</h2>
+          <svg className={`h-4 w-4 text-gray-400 transition-transform ${showReservations ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" /></svg>
+        </button>
+
+        {showReservations && (
+          <>
+            {reservationsLoading ? (
+              <div className="p-10 text-center text-sm text-gray-400 dark:text-slate-500">Loading reservations...</div>
+            ) : reservations.length === 0 ? (
+              <div className="p-10 text-center text-sm text-gray-400 dark:text-slate-500">No reservations found</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-100 dark:border-slate-800 bg-gray-50 dark:bg-slate-800/60 text-left text-xs font-medium text-gray-500 dark:text-slate-400">
+                      <th className="px-5 py-3">Reservation ID</th>
+                      <th className="px-5 py-3">Connector</th>
+                      <th className="px-5 py-3">User</th>
+                      <th className="px-5 py-3">Status</th>
+                      <th className="px-5 py-3">Hold Start</th>
+                      <th className="px-5 py-3">Hold Expires</th>
+                      <th className="px-5 py-3">Created</th>
+                      <th className="px-5 py-3">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50 dark:divide-slate-800">
+                    {reservations.map((r) => (
+                      <tr key={r.id} className="bg-white dark:bg-slate-800/60 hover:bg-gray-50 dark:hover:bg-slate-700">
+                        <td className="px-5 py-3 text-xs text-gray-700 dark:text-slate-300 font-mono">{shortId(r.id)}</td>
+                        <td className="px-5 py-3 text-xs text-gray-500 dark:text-slate-400">#{r.connectorId}</td>
+                        <td className="px-5 py-3 text-xs text-gray-700 dark:text-slate-300">{r.user?.name ?? r.user?.email ?? r.idTag ?? '—'}</td>
+                        <td className="px-5 py-3"><StatusBadge status={r.status} type="charger" /></td>
+                        <td className="px-5 py-3 text-xs text-gray-500 dark:text-slate-400">{r.holdStartedAt ? formatDate(r.holdStartedAt) : '—'}</td>
+                        <td className="px-5 py-3 text-xs text-gray-500 dark:text-slate-400">{r.holdExpiresAt ? formatDate(r.holdExpiresAt) : '—'}</td>
+                        <td className="px-5 py-3 text-xs text-gray-500 dark:text-slate-400">{formatDate(r.createdAt)}</td>
+                        <td className="px-5 py-3">
+                          {(r.status === 'PENDING' || r.status === 'CONFIRMED') && (
+                            <button
+                              onClick={() => handleCancelReservation(r.id)}
+                              disabled={cancellingId === r.id}
+                              className="inline-flex items-center rounded-md border border-red-200 px-2.5 py-1 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+                            >
+                              {cancellingId === r.id ? 'Cancelling...' : 'Cancel'}
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

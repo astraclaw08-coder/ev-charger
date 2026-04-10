@@ -124,6 +124,18 @@ export async function chargerRoutes(app: FastifyInstance) {
         connectors: {
           include: {
             sessions: { where: { status: 'ACTIVE' }, take: 1 },
+            reservations: {
+              where: { status: { in: ['PENDING', 'CONFIRMED'] } },
+              take: 1,
+              select: {
+                id: true,
+                reservationId: true,
+                userId: true,
+                status: true,
+                holdStartsAt: true,
+                holdExpiresAt: true,
+              },
+            },
           },
         },
       },
@@ -150,6 +162,7 @@ export async function chargerRoutes(app: FastifyInstance) {
       connectors: safeCharger.connectors.map((c: any) => ({
         ...c,
         lastPlugOutAt: plugOutMap.get(c.connectorId)?.toISOString() ?? null,
+        activeReservation: c.reservations?.[0] ?? null,
       })),
     };
   });

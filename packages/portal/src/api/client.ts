@@ -146,6 +146,8 @@ export interface SiteDetail {
   maxChargeDurationMin?: number | null;
   maxIdleDurationMin?: number | null;
   maxSessionCostUsd?: number | null;
+  reservationEnabled?: boolean;
+  reservationMaxDurationMin?: number | null;
   createdAt: string;
   chargers: ChargerInfo[];
 }
@@ -647,6 +649,28 @@ export interface CompositeScheduleResponse {
   };
 }
 
+export interface AdminReservation {
+  id: string;
+  connectorId: number;
+  status: string;
+  userId?: string | null;
+  user?: { id: string; name: string | null; email: string } | null;
+  idTag?: string | null;
+  chargerId: string;
+  chargerOcppId?: string;
+  holdStartedAt?: string | null;
+  holdExpiresAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminReservationsResponse {
+  reservations: AdminReservation[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
 // ─── Client ──────────────────────────────────────────────────────────────────
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
@@ -854,6 +878,8 @@ export function createApiClient(token: string | null | undefined) {
         maxChargeDurationMin?: number | null;
         maxIdleDurationMin?: number | null;
         maxSessionCostUsd?: number | null;
+        reservationEnabled?: boolean;
+        reservationMaxDurationMin?: number | null;
       },
     ) =>
       request<SiteDetail>(`/sites/${id}`, token, {
@@ -1220,5 +1246,19 @@ export function createApiClient(token: string | null | undefined) {
 
     deleteSavedReport: (id: string) =>
       request<void>(`/reports/saved/${id}`, token, { method: 'DELETE' }),
+
+    // ── Reservations ──────────────────────────────────────────────────────
+    getAdminReservations: (params?: { siteId?: string; chargerId?: string; status?: string; limit?: number; offset?: number }) => {
+      const qs = new URLSearchParams();
+      if (params?.siteId) qs.set('siteId', params.siteId);
+      if (params?.chargerId) qs.set('chargerId', params.chargerId);
+      if (params?.status) qs.set('status', params.status);
+      if (params?.limit != null) qs.set('limit', String(params.limit));
+      if (params?.offset != null) qs.set('offset', String(params.offset));
+      return request<AdminReservationsResponse>(`/admin/reservations${qs.toString() ? `?${qs}` : ''}`, token);
+    },
+
+    cancelAdminReservation: (id: string) =>
+      request<{ success: boolean }>(`/admin/reservations/${id}/cancel`, token, { method: 'POST' }),
   };
 }
