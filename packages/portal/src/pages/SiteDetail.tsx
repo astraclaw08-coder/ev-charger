@@ -387,7 +387,9 @@ export default function SiteDetail() {
   const [reservationSettings, setReservationSettings] = useState<{
     reservationEnabled: boolean;
     reservationMaxDurationMin: string;
-  }>({ reservationEnabled: false, reservationMaxDurationMin: '' });
+    reservationFeeUsd: string;
+    reservationCancelGraceMin: string;
+  }>({ reservationEnabled: false, reservationMaxDurationMin: '', reservationFeeUsd: '', reservationCancelGraceMin: '' });
   const [savedReservationSettings, setSavedReservationSettings] = useState<typeof reservationSettings | null>(null);
   const [reservationMsg, setReservationMsg] = useState('');
 
@@ -427,6 +429,8 @@ export default function SiteDetail() {
       const loadedReservation = {
         reservationEnabled: data.reservationEnabled ?? false,
         reservationMaxDurationMin: data.reservationMaxDurationMin != null ? String(data.reservationMaxDurationMin) : '',
+        reservationFeeUsd: data.reservationFeeUsd != null ? String(data.reservationFeeUsd) : '',
+        reservationCancelGraceMin: data.reservationCancelGraceMin != null ? String(data.reservationCancelGraceMin) : '',
       };
       setReservationSettings(loadedReservation);
       setSavedReservationSettings(loadedReservation);
@@ -1546,9 +1550,43 @@ export default function SiteDetail() {
               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">min</span>
             </div>
           </label>
+          <label className="text-sm text-gray-700 dark:text-slate-300">
+            Reservation Fee
+            <div className="relative mt-1">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">$</span>
+              <input
+                type="number"
+                min="0"
+                step="0.25"
+                placeholder="0 (free)"
+                className="w-full rounded-md border border-gray-300 dark:border-slate-600 pl-7 pr-14 py-1.5 text-sm"
+                value={reservationSettings.reservationFeeUsd}
+                onChange={(e) => setReservationSettings({ ...reservationSettings, reservationFeeUsd: e.target.value })}
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">USD</span>
+            </div>
+          </label>
+          <label className="text-sm text-gray-700 dark:text-slate-300">
+            Cancel Grace Period
+            <div className="relative mt-1">
+              <input
+                type="number"
+                min="0"
+                step="1"
+                placeholder="5"
+                className="w-full rounded-md border border-gray-300 dark:border-slate-600 px-3 py-1.5 pr-14 text-sm"
+                value={reservationSettings.reservationCancelGraceMin}
+                onChange={(e) => setReservationSettings({ ...reservationSettings, reservationCancelGraceMin: e.target.value })}
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">min</span>
+            </div>
+            <span className="text-xs text-gray-400 dark:text-slate-500 mt-1 block">Driver gets full refund if cancelled within this window</span>
+          </label>
         </div>
         {(reservationSettings.reservationEnabled !== (savedReservationSettings?.reservationEnabled ?? false) ||
-          reservationSettings.reservationMaxDurationMin !== (savedReservationSettings?.reservationMaxDurationMin ?? '')) && (
+          reservationSettings.reservationMaxDurationMin !== (savedReservationSettings?.reservationMaxDurationMin ?? '') ||
+          reservationSettings.reservationFeeUsd !== (savedReservationSettings?.reservationFeeUsd ?? '') ||
+          reservationSettings.reservationCancelGraceMin !== (savedReservationSettings?.reservationCancelGraceMin ?? '')) && (
           <div className="mt-4 flex items-center gap-3">
             <button
               className="rounded-md bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
@@ -1564,6 +1602,8 @@ export default function SiteDetail() {
                     lng: site.lng,
                     reservationEnabled: reservationSettings.reservationEnabled,
                     reservationMaxDurationMin: reservationSettings.reservationMaxDurationMin ? parseInt(reservationSettings.reservationMaxDurationMin, 10) : null,
+                    reservationFeeUsd: reservationSettings.reservationFeeUsd ? parseFloat(reservationSettings.reservationFeeUsd) : 0,
+                    reservationCancelGraceMin: reservationSettings.reservationCancelGraceMin ? parseInt(reservationSettings.reservationCancelGraceMin, 10) : 5,
                   });
                   setSavedReservationSettings({ ...reservationSettings });
                   setReservationMsg('Reservation settings saved');
@@ -1587,7 +1627,9 @@ export default function SiteDetail() {
           </div>
         )}
         {reservationMsg && !(reservationSettings.reservationEnabled !== (savedReservationSettings?.reservationEnabled ?? false) ||
-          reservationSettings.reservationMaxDurationMin !== (savedReservationSettings?.reservationMaxDurationMin ?? '')) && (
+          reservationSettings.reservationMaxDurationMin !== (savedReservationSettings?.reservationMaxDurationMin ?? '') ||
+          reservationSettings.reservationFeeUsd !== (savedReservationSettings?.reservationFeeUsd ?? '') ||
+          reservationSettings.reservationCancelGraceMin !== (savedReservationSettings?.reservationCancelGraceMin ?? '')) && (
           <p className="mt-3 text-xs">{reservationMsg}</p>
         )}
       </div>

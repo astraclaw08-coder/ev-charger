@@ -449,6 +449,8 @@ export default function ChargerStartScreen() {
   // Reservation state
   const currentUserId = getAuthIdentityKey();
   const reservationEnabled = Boolean(charger?.site?.reservationEnabled);
+  const reservationFeeUsd = charger?.site?.reservationFeeUsd ?? 0;
+  const reservationCancelGraceMin = charger?.site?.reservationCancelGraceMin ?? 5;
 
   const { data: activeReservation, refetch: refetchReservation } = useQuery({
     queryKey: ['reservation-active'],
@@ -1048,7 +1050,17 @@ export default function ChargerStartScreen() {
                 <TouchableOpacity
                   style={[styles.reservationCancelBtn, { backgroundColor: isDark ? '#312e81' : '#ddd6fe' }]}
                   onPress={() => {
-                    Alert.alert('Cancel reservation?', 'This will release your hold on this connector.', [
+                    const hasFee = connectorReservation.feeAmountCents && connectorReservation.feeAmountCents > 0;
+                    const withinGrace = connectorReservation.feeCancelGraceExpiresAt
+                      ? new Date() < new Date(connectorReservation.feeCancelGraceExpiresAt)
+                      : false;
+                    const feeStr = hasFee ? `$${(connectorReservation.feeAmountCents! / 100).toFixed(2)}` : '';
+                    const msg = hasFee
+                      ? withinGrace
+                        ? `Your ${feeStr} reservation fee will be fully refunded.`
+                        : `Your ${feeStr} reservation fee is non-refundable.`
+                      : 'This will release your hold on this connector.';
+                    Alert.alert('Cancel reservation?', msg, [
                       { text: 'Keep', style: 'cancel' },
                       { text: 'Cancel Reservation', style: 'destructive', onPress: () => cancelReservationMutation.mutate(connectorReservation.id) },
                     ]);
@@ -1084,15 +1096,42 @@ export default function ChargerStartScreen() {
                     </TouchableOpacity>
                   ))}
                 </View>
+                {reservationFeeUsd > 0 && (
+                  <View style={{ marginTop: 8, marginBottom: 4 }}>
+                    <Text style={{ color: isDark ? '#e2e8f0' : '#334155', fontSize: 13, fontWeight: '600' }}>
+                      Reservation fee: ${reservationFeeUsd.toFixed(2)}
+                    </Text>
+                    <Text style={{ color: isDark ? '#94a3b8' : '#64748b', fontSize: 11, marginTop: 2 }}>
+                      Free cancellation within {reservationCancelGraceMin} min
+                    </Text>
+                  </View>
+                )}
                 <TouchableOpacity
                   style={[styles.reserveBtn, { backgroundColor: isDark ? '#4f46e5' : '#6d28d9', opacity: reserveMutation.isPending ? 0.6 : 1 }]}
                   onPress={() => {
                     if (!selectedConnector) return;
-                    reserveMutation.mutate({ connectorId: selectedConnector.id, holdMinutes: reserveHoldMin });
+                    if (reservationFeeUsd > 0) {
+                      Alert.alert(
+                        'Confirm reservation',
+                        `A $${reservationFeeUsd.toFixed(2)} fee will be charged to your card. You can cancel for free within ${reservationCancelGraceMin} minutes.`,
+                        [
+                          { text: 'Cancel', style: 'cancel' },
+                          { text: 'Reserve', onPress: () => reserveMutation.mutate({ connectorId: selectedConnector.id, holdMinutes: reserveHoldMin }) },
+                        ],
+                      );
+                    } else {
+                      reserveMutation.mutate({ connectorId: selectedConnector.id, holdMinutes: reserveHoldMin });
+                    }
                   }}
                   disabled={reserveMutation.isPending}
                 >
-                  <Text style={styles.reserveBtnText}>{reserveMutation.isPending ? 'Reserving…' : 'Reserve'}</Text>
+                  <Text style={styles.reserveBtnText}>
+                    {reserveMutation.isPending
+                      ? 'Reserving…'
+                      : reservationFeeUsd > 0
+                        ? `Reserve ($${reservationFeeUsd.toFixed(2)})`
+                        : 'Reserve'}
+                  </Text>
                 </TouchableOpacity>
               </View>
             ) : null}

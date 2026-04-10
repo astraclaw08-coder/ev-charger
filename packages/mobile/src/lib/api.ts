@@ -135,6 +135,9 @@ export interface ConnectorActiveReservation {
   status: string;
   holdStartsAt: string;
   holdExpiresAt: string;
+  feeAmountCents?: number | null;
+  feeStatus?: string | null;
+  feeCancelGraceExpiresAt?: string | null;
 }
 
 export interface Connector {
@@ -167,6 +170,8 @@ export interface Charger {
     touWindows?: unknown;
     reservationEnabled?: boolean;
     reservationMaxDurationMin?: number;
+    reservationFeeUsd?: number;
+    reservationCancelGraceMin?: number;
   };
   connectors: Connector[];
 }

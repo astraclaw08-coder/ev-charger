@@ -7,6 +7,22 @@ import { reserveNow, cancelReservation } from '../lib/ocppClient';
 // Active statuses where a reservation is still "live"
 const ACTIVE_STATUSES = ['PENDING', 'CONFIRMED'] as const;
 
+// Lazy-load Stripe to avoid requiring STRIPE_SECRET_KEY at import time
+async function getStripe() {
+  const stripeKey = process.env.STRIPE_SECRET_KEY;
+  if (!stripeKey) return null;
+  const { default: Stripe } = await import('stripe');
+  return new Stripe(stripeKey, { apiVersion: '2024-06-20' as any });
+}
+
+async function findStripeCustomerId(userId: string): Promise<string | null> {
+  const existing = await prisma.payment.findFirst({
+    where: { userId, stripeCustomerId: { not: null } },
+    select: { stripeCustomerId: true },
+  });
+  return existing?.stripeCustomerId ?? null;
+}
+
 export async function reservationRoutes(app: FastifyInstance) {
 
   // ── Driver endpoints ─────────────────────────────────────────────────
@@ -55,7 +71,64 @@ export async function reservationRoutes(app: FastifyInstance) {
     const maxMin = site.reservationMaxDurationMin;
     const requestedMin = Math.max(1, Math.min(holdMinutes ?? 30, maxMin));
 
+    // ── Fee authorization (if site charges for reservations) ──────────
+    const feeUsd = site.reservationFeeUsd ?? 0;
+    const feeAmountCents = Math.round(feeUsd * 100);
+    let stripePaymentIntentId: string | null = null;
+
+    if (feeAmountCents > 0) {
+      const stripe = await getStripe();
+      if (!stripe) {
+        return reply.status(503).send({ error: 'Payment processing not configured' });
+      }
+
+      const stripeCustomerId = await findStripeCustomerId(user.id);
+      if (!stripeCustomerId) {
+        return reply.status(402).send({ error: 'No payment method on file. Please add a card first.' });
+      }
+
+      // Get customer's default payment method
+      const paymentMethods = await stripe.paymentMethods.list({
+        customer: stripeCustomerId,
+        type: 'card',
+        limit: 1,
+      });
+      if (paymentMethods.data.length === 0) {
+        return reply.status(402).send({ error: 'No payment method on file. Please add a card first.' });
+      }
+
+      try {
+        const pi = await stripe.paymentIntents.create({
+          amount: feeAmountCents,
+          currency: 'usd',
+          customer: stripeCustomerId,
+          payment_method: paymentMethods.data[0].id,
+          capture_method: 'manual', // authorize now, capture after grace period
+          confirm: true,
+          off_session: true,
+          metadata: {
+            type: 'reservation_fee',
+            userId: user.id,
+            siteId: site.id,
+            connectorId,
+          },
+        });
+        stripePaymentIntentId = pi.id;
+        console.log(`[Reservation] Stripe PI authorized: ${pi.id} amount=${feeAmountCents}c for user=${user.id}`);
+      } catch (stripeErr: any) {
+        console.error(`[Reservation] Stripe authorization failed for user=${user.id}:`, stripeErr.message);
+        return reply.status(402).send({
+          error: 'Payment authorization failed',
+          detail: stripeErr.message,
+        });
+      }
+    }
+
     // Atomic check: one active reservation per user, one per connector
+    const graceExpiresAt = feeAmountCents > 0
+      ? new Date(Date.now() + (site.reservationCancelGraceMin ?? 5) * 60_000)
+      : null;
+
     try {
       const reservation = await prisma.$transaction(async (tx) => {
         // Check user doesn't have an active reservation
@@ -80,9 +153,14 @@ export async function reservationRoutes(app: FastifyInstance) {
             userId: user.id,
             connectorRefId: connectorId,
             siteId: site.id,
-            status: 'CONFIRMED', // software-confirmed immediately
+            status: 'CONFIRMED',
             holdStartsAt: new Date(),
             holdExpiresAt,
+            // Fee fields (null when free)
+            feeAmountCents: feeAmountCents > 0 ? feeAmountCents : null,
+            feeStripePaymentIntentId: stripePaymentIntentId,
+            feeStatus: feeAmountCents > 0 ? 'PENDING' : null,
+            feeCancelGraceExpiresAt: graceExpiresAt,
           },
         });
       });
@@ -97,7 +175,7 @@ export async function reservationRoutes(app: FastifyInstance) {
         reservation.reservationId,
       );
 
-      console.log(`[Reservation] created id=${reservation.id} reservationId=${reservation.reservationId} user=${user.id} connector=${connectorId} expiresAt=${reservation.holdExpiresAt.toISOString()}`);
+      console.log(`[Reservation] created id=${reservation.id} reservationId=${reservation.reservationId} user=${user.id} connector=${connectorId} fee=${feeAmountCents}c expiresAt=${reservation.holdExpiresAt.toISOString()}`);
 
       return reply.status(201).send({
         id: reservation.id,
@@ -107,10 +185,23 @@ export async function reservationRoutes(app: FastifyInstance) {
         holdExpiresAt: reservation.holdExpiresAt,
         connectorRefId: reservation.connectorRefId,
         siteId: reservation.siteId,
+        feeAmountCents: reservation.feeAmountCents,
+        feeStatus: reservation.feeStatus,
+        feeCancelGraceExpiresAt: reservation.feeCancelGraceExpiresAt,
       });
     } catch (err) {
       if (err instanceof ConflictError) {
+        // Void the Stripe authorization if DB conflict
+        if (stripePaymentIntentId) {
+          voidStripeAuthorization(stripePaymentIntentId).catch((e) =>
+            console.error('[Reservation] Failed to void PI after conflict:', e));
+        }
         return reply.status(409).send({ error: err.message });
+      }
+      // Void on unexpected error too
+      if (stripePaymentIntentId) {
+        voidStripeAuthorization(stripePaymentIntentId).catch((e) =>
+          console.error('[Reservation] Failed to void PI after error:', e));
       }
       throw err;
     }
@@ -196,9 +287,44 @@ export async function reservationRoutes(app: FastifyInstance) {
       return reply.status(409).send({ error: `Reservation is ${reservation.status}, cannot cancel` });
     }
 
+    // ── Fee refund logic ──────────────────────────────────────────────
+    let feeRefunded = false;
+    if (reservation.feeAmountCents && reservation.feeStripePaymentIntentId && reservation.feeStatus === 'PENDING') {
+      const withinGrace = reservation.feeCancelGraceExpiresAt
+        ? new Date() < reservation.feeCancelGraceExpiresAt
+        : false;
+
+      if (withinGrace) {
+        // Within grace period — void/cancel the authorization (no charge)
+        const voided = await voidStripeAuthorization(reservation.feeStripePaymentIntentId);
+        feeRefunded = voided;
+        console.log(`[Reservation] Fee voided (grace period) reservationId=${reservation.reservationId} pi=${reservation.feeStripePaymentIntentId}`);
+      } else {
+        // Past grace period — fee is non-refundable, capture it now
+        try {
+          const stripe = await getStripe();
+          if (stripe) {
+            await stripe.paymentIntents.capture(reservation.feeStripePaymentIntentId);
+            console.log(`[Reservation] Fee captured on cancel (past grace) reservationId=${reservation.reservationId}`);
+          }
+        } catch (captureErr: any) {
+          console.error(`[Reservation] Fee capture on cancel failed:`, captureErr.message);
+        }
+      }
+    } else if (reservation.feeAmountCents && reservation.feeStripePaymentIntentId && reservation.feeStatus === 'CAPTURED') {
+      // Already captured, no refund after grace period
+      console.log(`[Reservation] Fee already captured, no refund for reservationId=${reservation.reservationId}`);
+    }
+
     await prisma.reservation.update({
       where: { id },
-      data: { status: 'CANCELLED', cancelledBy: 'driver', updatedAt: new Date() },
+      data: {
+        status: 'CANCELLED',
+        cancelledBy: 'driver',
+        feeStatus: feeRefunded ? 'VOIDED' : reservation.feeStatus === 'PENDING' ? 'CAPTURED' : reservation.feeStatus,
+        feeRefundedAt: feeRefunded ? new Date() : undefined,
+        updatedAt: new Date(),
+      },
     });
 
     // Send OCPP CancelReservation if we sent ReserveNow
@@ -206,8 +332,8 @@ export async function reservationRoutes(app: FastifyInstance) {
       sendOcppCancelReservation(reservation);
     }
 
-    console.log(`[Reservation] cancelled id=${id} by=driver`);
-    return reply.send({ ok: true });
+    console.log(`[Reservation] cancelled id=${id} by=driver feeRefunded=${feeRefunded}`);
+    return reply.send({ ok: true, feeRefunded });
   });
 
   // ── Operator endpoints ───────────────────────────────────────────────
@@ -268,17 +394,43 @@ export async function reservationRoutes(app: FastifyInstance) {
       return reply.status(409).send({ error: `Reservation is ${reservation.status}, cannot cancel` });
     }
 
+    // Operator cancels always refund the fee (driver shouldn't pay for operator-initiated cancel)
+    let feeRefunded = false;
+    if (reservation.feeAmountCents && reservation.feeStripePaymentIntentId) {
+      if (reservation.feeStatus === 'PENDING') {
+        feeRefunded = await voidStripeAuthorization(reservation.feeStripePaymentIntentId);
+      } else if (reservation.feeStatus === 'CAPTURED') {
+        // Already captured — issue a full refund
+        try {
+          const stripe = await getStripe();
+          if (stripe) {
+            await stripe.refunds.create({ payment_intent: reservation.feeStripePaymentIntentId });
+            feeRefunded = true;
+            console.log(`[Reservation] Fee refunded (operator cancel) reservationId=${reservation.reservationId}`);
+          }
+        } catch (refundErr: any) {
+          console.error(`[Reservation] Fee refund on operator cancel failed:`, refundErr.message);
+        }
+      }
+    }
+
     await prisma.reservation.update({
       where: { id },
-      data: { status: 'CANCELLED', cancelledBy: 'operator', updatedAt: new Date() },
+      data: {
+        status: 'CANCELLED',
+        cancelledBy: 'operator',
+        feeStatus: feeRefunded ? (reservation.feeStatus === 'CAPTURED' ? 'REFUNDED' : 'VOIDED') : reservation.feeStatus,
+        feeRefundedAt: feeRefunded ? new Date() : undefined,
+        updatedAt: new Date(),
+      },
     });
 
     if (reservation.ocppSent) {
       sendOcppCancelReservation(reservation);
     }
 
-    console.log(`[Reservation] cancelled id=${id} by=operator`);
-    return reply.send({ ok: true });
+    console.log(`[Reservation] cancelled id=${id} by=operator feeRefunded=${feeRefunded}`);
+    return reply.send({ ok: true, feeRefunded });
   });
 }
 
@@ -315,6 +467,27 @@ async function sendOcppReserveNow(
   } catch (err) {
     console.error(`[Reservation] OCPP ReserveNow failed reservationId=${reservationId}:`, err);
     // Reservation remains CONFIRMED — software-only enforcement
+  }
+}
+
+/**
+ * Void/cancel a Stripe PaymentIntent authorization (before capture).
+ * Returns true if successfully voided.
+ */
+async function voidStripeAuthorization(paymentIntentId: string): Promise<boolean> {
+  try {
+    const stripe = await getStripe();
+    if (!stripe) return false;
+    await stripe.paymentIntents.cancel(paymentIntentId);
+    return true;
+  } catch (err: any) {
+    // Already cancelled or captured — not an error
+    if (err?.code === 'payment_intent_unexpected_state') {
+      console.warn(`[Reservation] PI ${paymentIntentId} already in terminal state`);
+      return false;
+    }
+    console.error(`[Reservation] Failed to void PI ${paymentIntentId}:`, err.message);
+    return false;
   }
 }
 

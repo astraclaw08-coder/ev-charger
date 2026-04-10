@@ -112,6 +112,8 @@ model Site {
   // Reservation settings
   reservationEnabled        Boolean  @default(false)
   reservationMaxDurationMin Int      @default(30)   // max hold window in minutes
+  reservationFeeUsd         Float    @default(0)    // 0 = free reservations
+  reservationCancelGraceMin Int      @default(5)    // minutes where cancel = full refund
   chargers         Charger[]
   chargerGroups    ChargerGroup[]
   chargingProfiles SmartChargingProfile[]
@@ -328,10 +330,10 @@ model User {
   idTag           String    @unique // OCPP idTag for this driver (max 20 chars)
   sessions        Session[]
   payments        Payment[]
+  reservations    Reservation[]
   favoriteChargers UserFavoriteCharger[]
   inAppNotificationDeliveries InAppNotificationDelivery[]
   authSessions    AuthSession[]
-  reservations    Reservation[]
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 }
@@ -778,6 +780,12 @@ model Reservation {
   fulfilledSessionId String?           @unique // Set when session starts against this reservation
   cancelledBy        String?           // 'driver' | 'operator' | 'system'
   cancelReason       String?
+  // Reservation fee tracking
+  feeAmountCents            Int?      // fee charged at creation (null = no fee)
+  feeStripePaymentIntentId  String?   // Stripe PaymentIntent id (manual capture)
+  feeStatus                 String?   // PENDING | CAPTURED | REFUNDED | VOIDED | FAILED
+  feeCancelGraceExpiresAt   DateTime? // when grace period ends (after this, fee is non-refundable)
+  feeRefundedAt             DateTime? // when refund/void was issued
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
 
