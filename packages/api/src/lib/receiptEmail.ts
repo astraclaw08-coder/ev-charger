@@ -64,11 +64,10 @@ export async function processReceiptEmail(
       connector: {
         include: {
           charger: {
-            select: { id: true, ocppId: true, name: true },
             include: {
               site: { select: { name: true, timeZone: true } },
             },
-          } as any,
+          },
         },
       },
     },
