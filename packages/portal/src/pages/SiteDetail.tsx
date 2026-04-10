@@ -383,6 +383,14 @@ export default function SiteDetail() {
   const [savedSafetyLimits, setSavedSafetyLimits] = useState<typeof safetyLimits | null>(null);
   const [safetyMsg, setSafetyMsg] = useState('');
 
+  // Reservation settings
+  const [reservationSettings, setReservationSettings] = useState<{
+    reservationEnabled: boolean;
+    reservationMaxDurationMin: string;
+  }>({ reservationEnabled: false, reservationMaxDurationMin: '' });
+  const [savedReservationSettings, setSavedReservationSettings] = useState<typeof reservationSettings | null>(null);
+  const [reservationMsg, setReservationMsg] = useState('');
+
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'chargers');
 
@@ -416,6 +424,12 @@ export default function SiteDetail() {
       };
       setSafetyLimits(loadedSafety);
       setSavedSafetyLimits(loadedSafety);
+      const loadedReservation = {
+        reservationEnabled: data.reservationEnabled ?? false,
+        reservationMaxDurationMin: data.reservationMaxDurationMin != null ? String(data.reservationMaxDurationMin) : '',
+      };
+      setReservationSettings(loadedReservation);
+      setSavedReservationSettings(loadedReservation);
       const loadedWindows: TouWindow[] = Array.isArray(data.touWindows)
         ? (data.touWindows as Array<Partial<TouWindow>>).map((w) => ({
             id: typeof w.id === 'string' && w.id.length > 0 ? w.id : crypto.randomUUID(),
@@ -1500,6 +1514,81 @@ export default function SiteDetail() {
           safetyLimits.maxIdleDurationMin !== (savedSafetyLimits?.maxIdleDurationMin ?? '') ||
           safetyLimits.maxSessionCostUsd !== (savedSafetyLimits?.maxSessionCostUsd ?? '')) && (
           <p className="mt-3 text-xs">{safetyMsg}</p>
+        )}
+      </div>
+
+      {/* ── Reservation Settings ── */}
+      <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-5">
+        <h2 className="text-sm font-semibold text-gray-700 dark:text-slate-300">Reservation Settings</h2>
+        <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">Allow drivers to reserve a connector before arriving. The hold expires after the configured duration.</p>
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <label className="flex items-center gap-3 text-sm text-gray-700 dark:text-slate-300">
+            <input
+              type="checkbox"
+              checked={reservationSettings.reservationEnabled}
+              onChange={(e) => setReservationSettings({ ...reservationSettings, reservationEnabled: e.target.checked })}
+              className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+            />
+            Enable Reservations
+          </label>
+          <label className="text-sm text-gray-700 dark:text-slate-300">
+            Max Hold Duration
+            <div className="relative mt-1">
+              <input
+                type="number"
+                min="1"
+                step="1"
+                placeholder="No limit"
+                className="w-full rounded-md border border-gray-300 dark:border-slate-600 px-3 py-1.5 pr-14 text-sm"
+                value={reservationSettings.reservationMaxDurationMin}
+                onChange={(e) => setReservationSettings({ ...reservationSettings, reservationMaxDurationMin: e.target.value })}
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">min</span>
+            </div>
+          </label>
+        </div>
+        {(reservationSettings.reservationEnabled !== (savedReservationSettings?.reservationEnabled ?? false) ||
+          reservationSettings.reservationMaxDurationMin !== (savedReservationSettings?.reservationMaxDurationMin ?? '')) && (
+          <div className="mt-4 flex items-center gap-3">
+            <button
+              className="rounded-md bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+              onClick={async () => {
+                setReservationMsg('');
+                try {
+                  const token = await getToken();
+                  const client = createApiClient(token);
+                  await client.updateSite(site.id, {
+                    name: site.name,
+                    address: site.address,
+                    lat: site.lat,
+                    lng: site.lng,
+                    reservationEnabled: reservationSettings.reservationEnabled,
+                    reservationMaxDurationMin: reservationSettings.reservationMaxDurationMin ? parseInt(reservationSettings.reservationMaxDurationMin, 10) : null,
+                  });
+                  setSavedReservationSettings({ ...reservationSettings });
+                  setReservationMsg('Reservation settings saved');
+                } catch (err: any) {
+                  setReservationMsg(`Failed: ${err.message ?? 'Failed to save'}`);
+                }
+              }}
+            >
+              Save
+            </button>
+            <button
+              className="rounded-md border border-gray-300 dark:border-slate-600 px-4 py-1.5 text-sm text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800"
+              onClick={() => {
+                if (savedReservationSettings) setReservationSettings({ ...savedReservationSettings });
+                setReservationMsg('');
+              }}
+            >
+              Reset
+            </button>
+            {reservationMsg && <span className="text-xs">{reservationMsg}</span>}
+          </div>
+        )}
+        {reservationMsg && !(reservationSettings.reservationEnabled !== (savedReservationSettings?.reservationEnabled ?? false) ||
+          reservationSettings.reservationMaxDurationMin !== (savedReservationSettings?.reservationMaxDurationMin ?? '')) && (
+          <p className="mt-3 text-xs">{reservationMsg}</p>
         )}
       </div>
 

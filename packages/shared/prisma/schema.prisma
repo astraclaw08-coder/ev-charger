@@ -65,6 +65,15 @@ enum OcppOutboxStatus {
   FAILED
 }
 
+enum ReservationStatus {
+  PENDING       // Created, awaiting OCPP confirmation or software-only hold
+  CONFIRMED     // OCPP ReserveNow accepted OR software-only confirmed
+  FULFILLED     // Driver started a session against this reservation
+  EXPIRED       // Hold window elapsed without session start
+  CANCELLED     // Driver or operator cancelled
+  REJECTED      // OCPP ReserveNow rejected by charger
+}
+
 enum SmartChargingScope {
   CHARGER
   GROUP
@@ -100,12 +109,16 @@ model Site {
   maxChargeDurationMin  Int?    // Auto-stop active charging after N minutes
   maxIdleDurationMin    Int?    // Auto-stop/disconnect after N minutes idle post-charge
   maxSessionCostUsd     Float?  // Auto-stop when estimated session cost reaches this cap (USD)
+  // Reservation settings
+  reservationEnabled        Boolean  @default(false)
+  reservationMaxDurationMin Int      @default(30)   // max hold window in minutes
   chargers         Charger[]
   chargerGroups    ChargerGroup[]
   chargingProfiles SmartChargingProfile[]
   sessionFacts     SessionFact[]
   rebateIntervals  RebateInterval15m[]
   siteDailyFacts   SiteDailyFact[]
+  reservations     Reservation[]
   createdAt        DateTime            @default(now())
   updatedAt        DateTime            @updatedAt
 
@@ -243,6 +256,7 @@ model Connector {
   status            ConnectorStatus            @default(UNAVAILABLE)
   sessions          Session[]
   stateTransitions  ConnectorStateTransition[]
+  reservations      Reservation[]
   createdAt         DateTime                   @default(now())
   updatedAt         DateTime                   @updatedAt
 
@@ -317,6 +331,7 @@ model User {
   favoriteChargers UserFavoriteCharger[]
   inAppNotificationDeliveries InAppNotificationDelivery[]
   authSessions    AuthSession[]
+  reservations    Reservation[]
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 }
@@ -742,4 +757,32 @@ model SavedReport {
 
   @@unique([operatorId, name])
   @@index([operatorId, reportType])
+}
+
+// ─── Reservations ────────────────────────────────────────────────────────────
+
+model Reservation {
+  id                 String            @id @default(uuid())
+  reservationId      Int               @unique @default(autoincrement()) // OCPP-compatible integer ID
+  userId             String
+  user               User              @relation(fields: [userId], references: [id])
+  connectorRefId     String            // FK to Connector.id (the Prisma UUID)
+  connector          Connector         @relation(fields: [connectorRefId], references: [id])
+  siteId             String
+  site               Site              @relation(fields: [siteId], references: [id])
+  status             ReservationStatus @default(PENDING)
+  holdStartsAt       DateTime          @default(now())
+  holdExpiresAt      DateTime          // When the reservation auto-expires
+  ocppSent           Boolean           @default(false)  // Was ReserveNow sent to charger?
+  ocppAccepted       Boolean?          // null = not sent, true/false = charger response
+  fulfilledSessionId String?           @unique // Set when session starts against this reservation
+  cancelledBy        String?           // 'driver' | 'operator' | 'system'
+  cancelReason       String?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  @@index([userId, status])
+  @@index([connectorRefId, status])
+  @@index([siteId, status])
+  @@index([holdExpiresAt, status])
 }
