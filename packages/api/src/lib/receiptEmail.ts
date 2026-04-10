@@ -35,7 +35,8 @@ type ReceiptData = {
   driverEmail: string;
   transactionId: number | null;
   siteName: string;
-  chargerLabel: string;        // serialNumber or ocppId
+  siteAddress: string;
+  chargerLabel: string;        // serialNumber or ocppId, SN- prefix stripped
   plugInAt: string;            // formatted full datetime
   plugOutAt: string | null;    // formatted full datetime
   energySegments: EnergySegment[];
@@ -76,7 +77,7 @@ export async function processReceiptEmail(
         include: {
           charger: {
             include: {
-              site: { select: { name: true, timeZone: true } },
+              site: { select: { name: true, address: true, timeZone: true } },
             },
           },
         },
@@ -124,7 +125,8 @@ export async function processReceiptEmail(
     driverEmail,
     transactionId: session.transactionId,
     siteName: site?.name || 'Unknown Site',
-    chargerLabel: charger?.serialNumber || charger?.ocppId || charger?.name || 'Unknown Charger',
+    siteAddress: site?.address || '',
+    chargerLabel: stripSnPrefix(charger?.serialNumber || charger?.ocppId || charger?.name || 'Unknown Charger'),
     plugInAt: formatDateTime(snapshot.chargingStartedAt || session.startedAt, siteTimeZone),
     plugOutAt: snapshot.plugOutAt ? formatDateTime(snapshot.plugOutAt, siteTimeZone) : null,
     energySegments: extractEnergySegments(breakdown, siteTimeZone),
@@ -231,6 +233,10 @@ function usd(amount: number): string {
   return `$${amount.toFixed(2)}`;
 }
 
+function stripSnPrefix(label: string): string {
+  return label.replace(/^SN-/i, '');
+}
+
 // ── HTML receipt line helper ─────────────────────────────────────────────
 
 function receiptLineHtml(label: string, value: string, opts?: { emphasize?: boolean; emphasizeValue?: boolean }): string {
@@ -291,8 +297,9 @@ function formatReceiptHtml(d: ReceiptData): string {
     <div style="background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">
 
       <!-- Header info -->
-      <div style="padding:20px 20px 16px;border-bottom:1px solid #f3f4f6;">
-        <p style="margin:0 0 4px;font-size:16px;font-weight:600;color:#111827;">${d.siteName}</p>
+      <div style="padding:20px 20px 16px;border-bottom:1px solid #f3f4f6;text-align:center;">
+        <p style="margin:0 0 2px;font-size:16px;font-weight:600;color:#111827;">${d.siteName}</p>
+        ${d.siteAddress ? `<p style="margin:0 0 4px;font-size:13px;color:#6b7280;">${d.siteAddress}</p>` : ''}
         <p style="margin:0 0 2px;font-size:13px;color:#6b7280;">Charger: <span style="font-weight:600;color:#374151;">${d.chargerLabel}</span></p>
         ${txLabel ? `<p style="margin:0;font-size:13px;color:#6b7280;">Transaction: <span style="font-weight:600;color:#374151;">${txLabel}</span></p>` : ''}
       </div>
@@ -346,6 +353,7 @@ function formatReceiptText(d: ReceiptData): string {
     '='.repeat(24 + txLabel.length),
     '',
     d.siteName,
+    ...(d.siteAddress ? [d.siteAddress] : []),
     `Charger: ${d.chargerLabel}`,
     ...(d.transactionId ? [`Transaction: #${d.transactionId}`] : []),
     '',
