@@ -128,12 +128,22 @@ export class ApiError extends Error {
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
+export interface ConnectorActiveReservation {
+  id: string;
+  reservationId: number;
+  userId: string;
+  status: string;
+  holdStartsAt: string;
+  holdExpiresAt: string;
+}
+
 export interface Connector {
   id: string;
   connectorId: number;
   status: 'AVAILABLE' | 'PREPARING' | 'CHARGING' | 'SUSPENDED_EVSE' | 'SUSPENDED_EV' | 'FINISHING' | 'RESERVED' | 'UNAVAILABLE' | 'FAULTED';
   sessions?: ActiveSession[];
   lastPlugOutAt?: string | null;
+  activeReservation?: ConnectorActiveReservation | null;
 }
 
 export interface Charger {
@@ -155,6 +165,8 @@ export interface Charger {
     gracePeriodMin?: number;
     pricingMode?: 'flat' | 'tou';
     touWindows?: unknown;
+    reservationEnabled?: boolean;
+    reservationMaxDurationMin?: number;
   };
   connectors: Connector[];
 }
@@ -590,6 +602,33 @@ export const api = {
     },
     markRead(id: string) {
       return request<{ ok: boolean }>(`/me/notifications/${id}/read`, {
+        method: 'POST',
+      });
+    },
+  },
+
+  reservations: {
+    create(connectorId: string, holdMinutes?: number) {
+      return request<{ id: string; reservationId: number; status: string; holdStartsAt: string; holdExpiresAt: string }>(
+        '/reservations',
+        {
+          method: 'POST',
+          body: JSON.stringify({ connectorId, ...(holdMinutes != null ? { holdMinutes } : {}) }),
+        },
+      );
+    },
+    getActive() {
+      return request<{ id: string; reservationId: number; userId: string; connectorId: string; status: string; holdStartsAt: string; holdExpiresAt: string } | null>(
+        '/reservations/active',
+      );
+    },
+    list(limit = 20, offset = 0) {
+      return request<{ reservations: Array<{ id: string; reservationId: number; status: string; holdStartsAt: string; holdExpiresAt: string }>; total: number; limit: number; offset: number }>(
+        `/reservations?limit=${limit}&offset=${offset}`,
+      );
+    },
+    cancel(id: string) {
+      return request<{ ok: boolean }>(`/reservations/${id}/cancel`, {
         method: 'POST',
       });
     },

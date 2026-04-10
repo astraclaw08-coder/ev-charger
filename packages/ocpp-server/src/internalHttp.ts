@@ -2,7 +2,7 @@ import http from 'http';
 import crypto from 'crypto';
 import { prisma } from '@ev-charger/shared';
 import { clientRegistry } from './clientRegistry';
-import { remoteStartTransaction, remoteStopTransaction, remoteReset, remoteTriggerMessage, remoteGetConfiguration, remoteSetChargingProfile } from './remote';
+import { remoteStartTransaction, remoteStopTransaction, remoteReset, remoteTriggerMessage, remoteGetConfiguration, remoteSetChargingProfile, remoteReserveNow, remoteCancelReservation } from './remote';
 
 function parseBody(req: http.IncomingMessage): Promise<Record<string, unknown>> {
   return new Promise((resolve, reject) => {
@@ -56,7 +56,8 @@ export function attachInternalRoutes(httpServer: http.Server): void {
     }
 
     if (url === '/remote-start' || url === '/remote-stop' || url === '/reset' || url === '/trigger-message' || url === '/get-configuration' || url === '/set-charging-profile' ||
-        url === '/charger-reset-password' || url === '/charger-clear-password' || url === '/charger-add' || url === '/get-composite-schedule' || url === '/reconcile-smart-charging') {
+        url === '/charger-reset-password' || url === '/charger-clear-password' || url === '/charger-add' || url === '/get-composite-schedule' || url === '/reconcile-smart-charging' ||
+        url === '/reserve-now' || url === '/cancel-reservation') {
       if (method !== 'POST') {
         return sendJson(res, 405, { error: 'Method not allowed' });
       }
@@ -116,6 +117,28 @@ export function attachInternalRoutes(httpServer: http.Server): void {
             return sendJson(res, 400, { error: 'ocppId and profile are required' });
           }
           const status = await remoteSetChargingProfile(ocppId, profile);
+          return sendJson(res, 200, { status });
+        }
+
+        // POST /reserve-now — send OCPP ReserveNow to a connected charger
+        if (url === '/reserve-now') {
+          const { ocppId, connectorId, expiryDate, idTag, reservationId } = body as {
+            ocppId: string; connectorId: number; expiryDate: string; idTag: string; reservationId: number;
+          };
+          if (!ocppId || connectorId == null || !expiryDate || !idTag || reservationId == null) {
+            return sendJson(res, 400, { error: 'ocppId, connectorId, expiryDate, idTag, and reservationId required' });
+          }
+          const status = await remoteReserveNow(ocppId, connectorId, expiryDate, idTag, reservationId);
+          return sendJson(res, 200, { status });
+        }
+
+        // POST /cancel-reservation — send OCPP CancelReservation to a connected charger
+        if (url === '/cancel-reservation') {
+          const { ocppId, reservationId } = body as { ocppId: string; reservationId: number };
+          if (!ocppId || reservationId == null) {
+            return sendJson(res, 400, { error: 'ocppId and reservationId required' });
+          }
+          const status = await remoteCancelReservation(ocppId, reservationId);
           return sendJson(res, 200, { status });
         }
 
@@ -238,5 +261,5 @@ export function attachInternalRoutes(httpServer: http.Server): void {
     // The OCPP server returns 404 for non-WebSocket HTTP requests.
   });
 
-  console.log('[InternalHTTP] Management routes attached (/health, /status, /remote-start, /remote-stop, /reset, /trigger-message, /get-configuration, /set-charging-profile, /charger-add, /charger-reset-password, /charger-clear-password)');
+  console.log('[InternalHTTP] Management routes attached (/health, /status, /remote-start, /remote-stop, /reset, /trigger-message, /get-configuration, /set-charging-profile, /charger-add, /charger-reset-password, /charger-clear-password, /reserve-now, /cancel-reservation)');
 }

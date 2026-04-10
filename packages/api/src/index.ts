@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { buildServer } from './server';
 import { assertDatabaseUrlSafety, assertKeycloakConfig, getAppEnv } from './lib/envGuard';
 import { materializeUptime } from './workers/uptimeMaterializer';
+import { startReservationExpiryJob } from './jobs/reservationExpiry';
 
 const PORT = parseInt(process.env.PORT ?? '3001', 10);
 const HOST = process.env.HOST ?? '0.0.0.0';
@@ -30,6 +31,9 @@ buildServer()
         materializeUptime().catch((e) => console.error('[UptimeMaterializer] Periodic run failed:', e));
       }, 5 * 60 * 1000);
       console.log('[UptimeMaterializer] Scheduled every 5 minutes');
+
+      // Reservation expiry job: expire stale reservations every 30s
+      startReservationExpiryJob();
     });
   })
   .catch((err) => {

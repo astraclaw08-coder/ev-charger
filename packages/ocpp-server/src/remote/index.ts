@@ -173,6 +173,62 @@ export async function remoteSetChargingProfile(
   }
 }
 
+/**
+ * Send ReserveNow to a connected charger (OCPP 1.6J §5.10).
+ * Called by the REST API when a driver reserves a connector.
+ */
+export async function remoteReserveNow(
+  ocppId: string,
+  connectorId: number,
+  expiryDate: string,
+  idTag: string,
+  reservationId: number,
+): Promise<'Accepted' | 'Rejected' | 'Faulted' | 'Occupied' | 'Unavailable'> {
+  const client = clientRegistry.get(ocppId);
+  if (!client) {
+    console.warn(`[RemoteReserveNow] Charger ${ocppId} is not connected`);
+    return 'Rejected';
+  }
+
+  try {
+    const result = await client.call('ReserveNow', {
+      connectorId,
+      expiryDate,
+      idTag,
+      reservationId,
+    });
+    console.log(`[RemoteReserveNow] Charger ${ocppId} responded: ${result.status}`);
+    return result.status as 'Accepted' | 'Rejected' | 'Faulted' | 'Occupied' | 'Unavailable';
+  } catch (err) {
+    console.error(`[RemoteReserveNow] Error calling charger ${ocppId}:`, err);
+    return 'Rejected';
+  }
+}
+
+/**
+ * Send CancelReservation to a connected charger (OCPP 1.6J §5.2).
+ * Called when a reservation is cancelled or expires (if originally OCPP-sent).
+ */
+export async function remoteCancelReservation(
+  ocppId: string,
+  reservationId: number,
+): Promise<'Accepted' | 'Rejected'> {
+  const client = clientRegistry.get(ocppId);
+  if (!client) {
+    console.warn(`[RemoteCancelReservation] Charger ${ocppId} is not connected`);
+    return 'Rejected';
+  }
+
+  try {
+    const result = await client.call('CancelReservation', { reservationId });
+    console.log(`[RemoteCancelReservation] Charger ${ocppId} responded: ${result.status}`);
+    return result.status as 'Accepted' | 'Rejected';
+  } catch (err) {
+    console.error(`[RemoteCancelReservation] Error calling charger ${ocppId}:`, err);
+    return 'Rejected';
+  }
+}
+
 export async function remoteGetCompositeSchedule(
   ocppId: string,
   payload: { connectorId: number; duration: number; chargingRateUnit?: string },

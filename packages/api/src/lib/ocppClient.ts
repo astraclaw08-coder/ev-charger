@@ -121,3 +121,38 @@ export async function getCompositeSchedule(
     return null;
   }
 }
+
+// ── Reservation commands ─────────────────────────────────────────────────
+
+export async function reserveNow(
+  ocppId: string,
+  connectorId: number,
+  expiryDate: string,
+  idTag: string,
+  reservationId: number,
+): Promise<'Accepted' | 'Rejected' | 'Faulted' | 'Occupied' | 'Unavailable'> {
+  try {
+    const data = await post<{ status: string }>('/reserve-now', {
+      ocppId, connectorId, expiryDate, idTag, reservationId,
+    });
+    return data.status as 'Accepted' | 'Rejected' | 'Faulted' | 'Occupied' | 'Unavailable';
+  } catch (err) {
+    console.error('[OcppClient] reserveNow failed:', err);
+    return 'Rejected';
+  }
+}
+
+export async function cancelReservation(
+  ocppId: string,
+  reservationId: number,
+): Promise<'Accepted' | 'Rejected'> {
+  try {
+    const data = await post<{ status: string }>('/cancel-reservation', {
+      ocppId, reservationId,
+    });
+    return data.status as 'Accepted' | 'Rejected';
+  } catch (err) {
+    console.error('[OcppClient] cancelReservation failed:', err);
+    return 'Rejected';
+  }
+}

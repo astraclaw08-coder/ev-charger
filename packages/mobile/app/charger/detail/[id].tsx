@@ -17,7 +17,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useNavigation, usePreventRemove } from '@react-navigation/native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api, type Connector, type Session } from '@/lib/api';
+import { api, getAuthIdentityKey, type Connector, type Session } from '@/lib/api';
 import { useAppTheme } from '@/theme';
 import { useAppAuth } from '@/providers/AuthProvider';
 import { useFavorites } from '@/hooks/useFavorites';
@@ -48,6 +48,7 @@ function connectorStatusLabel(status: Connector['status']): string {
     case 'SUSPENDED_EV':
     case 'SUSPENDED_EVSE': return 'Paused';
     case 'FINISHING': return 'Finishing';
+    case 'RESERVED': return 'Reserved';
     case 'FAULTED': return 'Faulted';
     case 'UNAVAILABLE': return 'Unavailable';
     default: return 'Unknown';
@@ -59,6 +60,7 @@ function connectorTone(status: Connector['status']): { bg: string; text: string 
   if (status === 'CHARGING') return { bg: '#cffafe', text: '#0e7490' };
   if (status === 'PREPARING') return { bg: '#dbeafe', text: '#1d4ed8' };
   if (status === 'SUSPENDED_EV' || status === 'SUSPENDED_EVSE') return { bg: '#fef9c3', text: '#854d0e' };
+  if (status === 'RESERVED') return { bg: '#ede9fe', text: '#5b21b6' };
   if (status === 'FAULTED') return { bg: '#fee2e2', text: '#b91c1c' };
   return { bg: '#e5e7eb', text: '#374151' };
 }
@@ -432,9 +434,44 @@ export default function ChargerStartScreen() {
   const [activationTimedOut, setActivationTimedOut] = useState(false);
   const [activationModalDismissed, setActivationModalDismissed] = useState(false);
   const [awaitingPlugIn, setAwaitingPlugIn] = useState(false);
+  const [reserveHoldMin, setReserveHoldMin] = useState(30);
   const activationPollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activationModalDismissedRef = useRef(false);
   const flowLocked = sliderInteracting || starting != null || showActivationModal || awaitingPlugIn;
+
+  // Reservation state
+  const currentUserId = getAuthIdentityKey();
+  const reservationEnabled = Boolean(charger?.site?.reservationEnabled);
+
+  const { data: activeReservation, refetch: refetchReservation } = useQuery({
+    queryKey: ['reservation-active'],
+    queryFn: () => api.reservations.getActive(),
+    enabled: !isGuest && reservationEnabled,
+    refetchInterval: 5000,
+    staleTime: 0,
+  });
+
+  const reserveMutation = useMutation({
+    mutationFn: (args: { connectorId: string; holdMinutes: number }) =>
+      api.reservations.create(args.connectorId, args.holdMinutes),
+    onSuccess: async () => {
+      await refetchReservation();
+      await queryClient.invalidateQueries({ queryKey: ['charger', id] });
+    },
+    onError: (err: Error) => Alert.alert('Reservation Failed', err.message),
+  });
+
+  const cancelReservationMutation = useMutation({
+    mutationFn: (reservationId: string) => api.reservations.cancel(reservationId),
+    onSuccess: async () => {
+      await refetchReservation();
+      await queryClient.invalidateQueries({ queryKey: ['charger', id] });
+    },
+    onError: (err: Error) => Alert.alert('Cancel Failed', err.message),
+  });
+
+  // Countdown for reservation expiry
+  const [reserveCountdown, setReserveCountdown] = useState('');
 
   usePreventRemove(flowLocked, () => {});
 
@@ -480,6 +517,32 @@ export default function ChargerStartScreen() {
     if (charger.connectors.length === 1) return charger.connectors[0] ?? null;
     return charger.connectors.find((c) => c.connectorId === selectedConnectorId) ?? preferredConnector;
   }, [charger, preferredConnector, selectedConnectorId]);
+
+  // Reservation: derived from selected connector
+  const connectorReservation = selectedConnector?.activeReservation ?? null;
+  const isMyReservation = connectorReservation != null && connectorReservation.userId === currentUserId;
+  const isOtherReservation = connectorReservation != null && connectorReservation.userId !== currentUserId;
+
+  useEffect(() => {
+    if (!isMyReservation || !connectorReservation) {
+      setReserveCountdown('');
+      return;
+    }
+    const tick = () => {
+      const remain = Math.max(0, new Date(connectorReservation.holdExpiresAt).getTime() - Date.now());
+      if (remain <= 0) {
+        setReserveCountdown('Expired');
+        return;
+      }
+      const totalSec = Math.ceil(remain / 1000);
+      const mm = String(Math.floor(totalSec / 60)).padStart(2, '0');
+      const ss = String(totalSec % 60).padStart(2, '0');
+      setReserveCountdown(`${mm}:${ss}`);
+    };
+    tick();
+    const timer = setInterval(tick, 1000);
+    return () => clearInterval(timer);
+  }, [isMyReservation, connectorReservation?.holdExpiresAt]);
 
   // Reset activation UI when connector returns to AVAILABLE
   // (covers the activation-timeout / no EV connected scenario)
@@ -699,6 +762,18 @@ export default function ChargerStartScreen() {
       return;
     }
     if (!charger) return;
+
+    if (connector.status === 'RESERVED') {
+      const currentUserId = getAuthIdentityKey();
+      if (connector.activeReservation?.userId === currentUserId) {
+        // User owns this reservation — allow start
+        startMutation.mutate({ chargerId: charger.id, connectorId: connector.connectorId });
+        return;
+      }
+      Alert.alert('Connector reserved', 'This connector is reserved by another driver.');
+      return;
+    }
+
     if (!['AVAILABLE', 'PREPARING', 'SUSPENDED_EV'].includes(connector.status)) {
       Alert.alert('Connector not ready', 'Selected connector is not ready. Please choose a ready connector.');
       return;
@@ -949,6 +1024,71 @@ export default function ChargerStartScreen() {
 
             {!activeSession && starting ? <Text style={[styles.subText, { color: isDark ? '#a7f3d0' : '#065f46' }]}>Sending start command to connector {starting}…</Text> : null}
             {!activeSession && startError ? <Text style={[styles.subText, { color: isDark ? '#fca5a5' : '#b91c1c' }]}>{startError}</Text> : null}
+
+            {/* Reservation: other user */}
+            {!activeSession && isOtherReservation ? (
+              <View style={[styles.reservationBanner, { backgroundColor: isDark ? '#1e1b4b' : '#ede9fe' }]}>
+                <Text style={[styles.reservationBannerText, { color: isDark ? '#c4b5fd' : '#5b21b6' }]}>Reserved by another driver</Text>
+              </View>
+            ) : null}
+
+            {/* Reservation: my reservation countdown + cancel */}
+            {!activeSession && isMyReservation && connectorReservation ? (
+              <View style={[styles.reservationBanner, { backgroundColor: isDark ? '#1e1b4b' : '#ede9fe' }]}>
+                <Text style={[styles.reservationBannerText, { color: isDark ? '#c4b5fd' : '#5b21b6' }]}>
+                  Your reservation — {reserveCountdown || 'loading…'}
+                </Text>
+                <TouchableOpacity
+                  style={[styles.reservationCancelBtn, { backgroundColor: isDark ? '#312e81' : '#ddd6fe' }]}
+                  onPress={() => {
+                    Alert.alert('Cancel reservation?', 'This will release your hold on this connector.', [
+                      { text: 'Keep', style: 'cancel' },
+                      { text: 'Cancel Reservation', style: 'destructive', onPress: () => cancelReservationMutation.mutate(connectorReservation.id) },
+                    ]);
+                  }}
+                  disabled={cancelReservationMutation.isPending}
+                >
+                  <Text style={[styles.reservationCancelText, { color: isDark ? '#c4b5fd' : '#5b21b6' }]}>
+                    {cancelReservationMutation.isPending ? 'Cancelling…' : 'Cancel Reservation'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
+
+            {/* Reserve button: show when connector is available, no session, no existing reservation by user, site supports it */}
+            {!activeSession && !isMyReservation && !isOtherReservation && reservationEnabled && selectedConnector?.status === 'AVAILABLE' && !isGuest ? (
+              <View style={[styles.reservationSection, { backgroundColor: isDark ? '#0f172a' : '#f8fafc', borderColor: isDark ? '#334155' : '#cbd5e1' }]}>
+                <Text style={[styles.reservationSectionTitle, { color: isDark ? '#f8fafc' : '#0f172a' }]}>Reserve this connector</Text>
+                <View style={styles.holdPickerRow}>
+                  {[15, 30, 45, 60].map((min) => (
+                    <TouchableOpacity
+                      key={min}
+                      style={[
+                        styles.holdPickerBtn,
+                        {
+                          backgroundColor: reserveHoldMin === min ? (isDark ? '#4f46e5' : '#6d28d9') : (isDark ? '#1e293b' : '#e2e8f0'),
+                        },
+                      ]}
+                      onPress={() => setReserveHoldMin(min)}
+                    >
+                      <Text style={{ color: reserveHoldMin === min ? '#ffffff' : (isDark ? '#cbd5e1' : '#334155'), fontSize: 13, fontWeight: '600' }}>
+                        {min} min
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <TouchableOpacity
+                  style={[styles.reserveBtn, { backgroundColor: isDark ? '#4f46e5' : '#6d28d9', opacity: reserveMutation.isPending ? 0.6 : 1 }]}
+                  onPress={() => {
+                    if (!selectedConnector) return;
+                    reserveMutation.mutate({ connectorId: selectedConnector.id, holdMinutes: reserveHoldMin });
+                  }}
+                  disabled={reserveMutation.isPending}
+                >
+                  <Text style={styles.reserveBtnText}>{reserveMutation.isPending ? 'Reserving…' : 'Reserve'}</Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
           </View>
         </View>
 
@@ -1293,5 +1433,59 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 8,
     paddingBottom: 16,
+  },
+
+  // Reservation styles
+  reservationBanner: {
+    marginTop: 12,
+    borderRadius: 12,
+    padding: 14,
+    alignItems: 'center',
+    gap: 10,
+  },
+  reservationBannerText: {
+    fontSize: 14,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  reservationCancelBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  reservationCancelText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  reservationSection: {
+    marginTop: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 14,
+    gap: 10,
+  },
+  reservationSectionTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  holdPickerRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  holdPickerBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  reserveBtn: {
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  reserveBtnText: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '700',
   },
 });
