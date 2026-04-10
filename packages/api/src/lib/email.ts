@@ -1,9 +1,13 @@
 /**
  * Lightweight email utility.
- * When SMTP_URL is configured, sends via nodemailer.
- * Otherwise logs to console (dev/staging fallback).
+ *
+ * Transport priority:
+ * 1. RESEND_API_KEY → Resend HTTP API (recommended for Railway/cloud)
+ * 2. SMTP_URL → nodemailer SMTP (for environments where SMTP ports are open)
+ * 3. Neither → console log fallback (dev/staging)
  */
 
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const SMTP_URL = process.env.SMTP_URL; // e.g. smtps://user:pass@smtp.gmail.com
 const EMAIL_FROM = process.env.EMAIL_FROM || 'Lumeo Power <no-reply@lumeopower.com>';
 
@@ -15,12 +19,54 @@ interface EmailPayload {
 }
 
 export async function sendEmail(payload: EmailPayload): Promise<boolean> {
-  if (!SMTP_URL) {
-    console.log(`[email] (no SMTP configured) Would send to=${payload.to} subject="${payload.subject}"`);
-    console.log(`[email] body: ${payload.text.slice(0, 200)}`);
-    return true; // Don't block flows when email isn't configured
+  // Prefer Resend HTTP API (works on Railway where SMTP is blocked)
+  if (RESEND_API_KEY) {
+    return sendViaResend(payload);
   }
 
+  // Fallback: nodemailer SMTP
+  if (SMTP_URL) {
+    return sendViaSMTP(payload);
+  }
+
+  // Dev fallback: log only
+  console.log(`[email] (no transport configured) Would send to=${payload.to} subject="${payload.subject}"`);
+  console.log(`[email] body: ${payload.text.slice(0, 200)}`);
+  return true;
+}
+
+async function sendViaResend(payload: EmailPayload): Promise<boolean> {
+  try {
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${RESEND_API_KEY}`,
+      },
+      body: JSON.stringify({
+        from: EMAIL_FROM,
+        to: [payload.to],
+        subject: payload.subject,
+        text: payload.text,
+        html: payload.html,
+      }),
+    });
+
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      console.error(`[email] Resend API error (${res.status}): ${body}`);
+      return false;
+    }
+
+    console.log(`[email] Sent via Resend to=${payload.to} subject="${payload.subject}"`);
+    return true;
+  } catch (err) {
+    console.error(`[email] Resend send failed to=${payload.to}:`, err);
+    return false;
+  }
+}
+
+async function sendViaSMTP(payload: EmailPayload): Promise<boolean> {
   try {
     // Dynamic require so nodemailer is optional (not a hard dependency)
     // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -33,10 +79,10 @@ export async function sendEmail(payload: EmailPayload): Promise<boolean> {
       text: payload.text,
       html: payload.html,
     });
-    console.log(`[email] Sent to=${payload.to} subject="${payload.subject}"`);
+    console.log(`[email] Sent via SMTP to=${payload.to} subject="${payload.subject}"`);
     return true;
   } catch (err) {
-    console.error(`[email] Failed to send to=${payload.to}:`, err);
+    console.error(`[email] SMTP send failed to=${payload.to}:`, err);
     return false;
   }
 }
