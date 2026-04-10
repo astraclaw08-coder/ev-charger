@@ -19,6 +19,7 @@ import { openaiOAuthRoutes } from './routes/openaiOAuth';
 import { organizationRoutes } from './routes/organizations';
 import { portfolioRoutes } from './routes/portfolios';
 import { reportRoutes } from './routes/reports';
+import { internalRoutes } from './routes/internal';
 // Temporarily disabled until notification Prisma models/types are aligned.
 // import { notificationRoutes } from './routes/notifications';
 import { prisma } from '@ev-charger/shared';
@@ -86,6 +87,7 @@ export async function buildServer() {
   await app.register(agentChatRoutes);
   await app.register(openaiOAuthRoutes);
   await app.register(reportRoutes);
+  await app.register(internalRoutes);
   // await app.register(notificationRoutes);
 
   return app;
