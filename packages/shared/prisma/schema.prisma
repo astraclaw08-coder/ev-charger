@@ -387,6 +387,9 @@ model SessionBillingSnapshot {
   idleStoppedAt        DateTime?
   plugOutAt            DateTime?
 
+  // ── Receipt delivery ────────────────────────────────────────────────────
+  receiptSentAt        DateTime?                 // set when receipt email sent successfully
+
   snapshotVersion      String    @default("v1")
   capturedAt           DateTime  @default(now())
   updatedAt            DateTime  @updatedAt

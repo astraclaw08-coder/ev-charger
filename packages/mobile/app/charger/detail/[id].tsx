@@ -8,12 +8,12 @@ import {
   ActivityIndicator,
   Alert,
   Animated,
+  PanResponder,
   RefreshControl,
   Image,
   Easing,
   Modal,
 } from 'react-native';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useNavigation, usePreventRemove } from '@react-navigation/native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -121,6 +121,11 @@ function SlideToStart({
   const x = useRef(new Animated.Value(0)).current;
   const valueRef = useRef(0);
   const interactingRef = useRef(false);
+  const disabledRef = useRef(disabled);
+  const maxXRef = useRef(maxX);
+  disabledRef.current = disabled;
+  maxXRef.current = maxX;
+
   const completeThreshold = maxX * 0.85;
 
   const resetKnob = useCallback(() => {
@@ -135,10 +140,10 @@ function SlideToStart({
   }, [onInteractionChange]);
 
   const beginInteraction = useCallback(() => {
-    if (disabled || interactingRef.current) return;
+    if (disabledRef.current || interactingRef.current) return;
     interactingRef.current = true;
     onInteractionChange?.(true);
-  }, [disabled, onInteractionChange]);
+  }, [onInteractionChange]);
 
   useEffect(() => {
     const sub = x.addListener(({ value }) => {
@@ -155,33 +160,37 @@ function SlideToStart({
 
   useEffect(() => () => finishInteraction(), [finishInteraction]);
 
-  const sliderGesture = useMemo(
+  const panResponder = useMemo(
     () =>
-      Gesture.Pan()
-        .enabled(!disabled)
-        .activeOffsetX(8)
-        .failOffsetY([-12, 12])
-        .shouldCancelWhenOutside(false)
-        .onBegin(() => {
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => !disabledRef.current,
+        onMoveShouldSetPanResponder: (_, gs) =>
+          !disabledRef.current && Math.abs(gs.dx) > 8 && Math.abs(gs.dy) < 12,
+        onPanResponderGrant: () => {
           beginInteraction();
-        })
-        .onUpdate((event) => {
-          if (disabled) return;
-          const next = Math.max(0, Math.min(maxX, event.translationX));
+        },
+        onPanResponderMove: (_, gs) => {
+          if (disabledRef.current) return;
+          const next = Math.max(0, Math.min(maxXRef.current, gs.dx));
           x.setValue(next);
-        })
-        .onFinalize(() => {
+        },
+        onPanResponderRelease: () => {
           finishInteraction();
-          if (valueRef.current >= completeThreshold) {
-            Animated.timing(x, { toValue: maxX, duration: 110, useNativeDriver: true }).start(() => {
+          if (valueRef.current >= maxXRef.current * 0.85) {
+            Animated.timing(x, { toValue: maxXRef.current, duration: 110, useNativeDriver: true }).start(() => {
               onComplete();
               resetKnob();
             });
             return;
           }
           resetKnob();
-        }),
-    [beginInteraction, completeThreshold, disabled, finishInteraction, maxX, onComplete, resetKnob, x],
+        },
+        onPanResponderTerminate: () => {
+          finishInteraction();
+          resetKnob();
+        },
+      }),
+    [beginInteraction, finishInteraction, onComplete, resetKnob, x],
   );
 
   return (
@@ -201,15 +210,13 @@ function SlideToStart({
       ]}
     >
       <Text style={[styles.slideLabel, { color: isDark ? '#d1d5db' : '#374151' }]}>{label}</Text>
-      <GestureDetector gesture={sliderGesture}>
-        <Animated.View style={[styles.slideKnob, { transform: [{ translateX: x }] }]}>
-          <Image
-            source={require('../../../assets/branding/lumeo_logo_swirl_only.png')}
-            style={styles.slideKnobLogo}
-            resizeMode="contain"
-          />
-        </Animated.View>
-      </GestureDetector>
+      <Animated.View {...panResponder.panHandlers} style={[styles.slideKnob, { transform: [{ translateX: x }] }]}>
+        <Image
+          source={require('../../../assets/branding/lumeo_logo_swirl_only.png')}
+          style={styles.slideKnobLogo}
+          resizeMode="contain"
+        />
+      </Animated.View>
     </View>
   );
 }
