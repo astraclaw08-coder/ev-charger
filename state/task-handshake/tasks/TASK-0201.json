@@ -1,0 +1,123 @@
+{
+  "schemaVersion": "1.0",
+  "taskId": "TASK-0201",
+  "title": "Portal user groups with billing-profile assignment and email-domain auto grouping",
+  "status": "draft",
+  "lastUpdatedBy": "astra",
+  "goal": "Allow portal admins to create user groups, assign a unique billing profile to each group, and resolve driver membership either manually or automatically by email domain so billing behavior can vary by driver segment in a deterministic, auditable way.",
+  "acceptanceCriteria": [
+    "Portal admin can create, edit, archive, and remove user groups within the chosen scope",
+    "Each user group can be assigned exactly one billing profile",
+    "Portal admin can manually assign and remove drivers from groups",
+    "Portal admin can define email-domain auto-assignment rules for groups",
+    "Email-domain resolution is deterministic and auditable when multiple rules could match",
+    "Manual membership overrides auto-assigned domain membership",
+    "If no group applies, default billing behavior remains unchanged",
+    "Resolved billing profile is snapshotted onto session/billing records so historical sessions do not change retroactively when group rules are edited later",
+    "Portal can display the effective group/billing profile for a driver or session where relevant",
+    "Existing drivers and billing flows without groups continue to work unchanged"
+  ],
+  "scope": {
+    "inScope": [
+      "Define user-group model, membership model, and email-domain auto-assignment rule model",
+      "Choose and implement deterministic precedence between manual assignment, domain auto-assignment, and default pricing",
+      "Portal admin CRUD for groups and domain rules",
+      "Portal admin UX for manual driver assignment/removal",
+      "Billing-profile resolution engine for driver -> group -> billing profile",
+      "Session/billing snapshot integration so effective profile/group is preserved historically",
+      "Basic admin visibility into how a driver was assigned (manual vs domain rule)"
+    ],
+    "outOfScope": [
+      "A generic RBAC/permissions system for portal users",
+      "Groups controlling app permissions or portal access beyond billing segmentation",
+      "Fuzzy domain matching, wildcard subdomain trees, or advanced rule engines in v1",
+      "Multi-group blended pricing on a single session",
+      "Retroactive repricing of historical sessions after group/profile changes",
+      "Promotions, coupons, or campaign logic unrelated to group-based billing"
+    ]
+  },
+  "decisions": [
+    {
+      "decision": "Keep v1 focused on billing segmentation, not general-purpose roles/permissions",
+      "rationale": "The feature request is about billing-profile assignment by driver segment. Expanding into broader user roles would create large unrelated scope.",
+      "by": "astra",
+      "timestamp": "2026-04-11T00:52:00Z"
+    },
+    {
+      "decision": "Manual assignment must override email-domain auto-assignment",
+      "rationale": "Admins need an explicit escape hatch for exceptions without fighting the automation.",
+      "by": "astra",
+      "timestamp": "2026-04-11T00:52:00Z"
+    },
+    {
+      "decision": "Historical billing must snapshot the resolved group/profile at session start",
+      "rationale": "Otherwise changing a rule later would mutate historical billing interpretation and reporting integrity.",
+      "by": "astra",
+      "timestamp": "2026-04-11T00:52:00Z"
+    },
+    {
+      "decision": "Prefer exact normalized email-domain matching in v1",
+      "rationale": "Exact lowercased domain matching is easier to reason about, test, and audit than wildcard/fuzzy matching.",
+      "by": "astra",
+      "timestamp": "2026-04-11T00:52:00Z"
+    }
+  ],
+  "assumptions": [
+    "The current system already has or can support a billing profile abstraction suitable for assignment",
+    "Driver email is available and trustworthy enough for domain-based grouping at auth/profile sync time",
+    "Portal admins need visibility into effective billing behavior by driver segment",
+    "The correct first scope may be site-level or organization-level depending on current pricing architecture; this must be confirmed before implementation"
+  ],
+  "implementationPlan": [
+    "1. Confirm scope boundary: site-scoped vs organization-scoped groups, based on current billing/profile architecture",
+    "2. Inspect existing billing profile model and determine resolution insertion point for group-based overrides",
+    "3. Add schema for user groups, memberships, and email-domain rules",
+    "4. Implement deterministic resolution order and overlap validation for domain rules",
+    "5. Add portal admin APIs for group CRUD, membership management, and domain rules",
+    "6. Add portal UI for managing groups, assigning billing profiles, and manually assigning drivers",
+    "7. Integrate domain-based assignment/reconciliation into the appropriate auth/profile sync path or an explicit reconciliation process",
+    "8. Snapshot effective group/profile into session or billing snapshot records at session start",
+    "9. Run QC: typecheck, rule resolution proof, manual override proof, billing snapshot proof, regression proof for default pricing"
+  ],
+  "filesExpectedToChange": [
+    "packages/shared/prisma/schema.prisma",
+    "packages/shared/prisma/migrations/YYYYMMDD_add_user_groups/migration.sql",
+    "packages/api/src/routes or services related to billing profiles, users, and admin management",
+    "packages/api/src/plugins/auth.ts or related driver sync/reconciliation path",
+    "packages/api/src/services/sessionService.ts and/or billing snapshot logic",
+    "packages/portal/src/pages for admin group management and driver assignment",
+    "packages/portal/src/api/client.ts",
+    "shared types and read models for effective billing profile/group visibility"
+  ],
+  "risks": [
+    "If precedence rules are vague, admins will get surprising billing outcomes",
+    "If domain rules overlap without validation or priority, effective group resolution becomes ambiguous",
+    "If group/profile is not snapshotted onto sessions, historical billing/reporting can drift after config edits",
+    "If manual and automated assignments are not modeled separately, reconciliation can overwrite intentional admin choices",
+    "If scope is chosen poorly (site vs org), the feature may require expensive rework"
+  ],
+  "openQuestions": [
+    "Should user groups be site-scoped or organization-scoped in v1?",
+    "Does a billing profile already exist as a first-class entity, or must this task introduce/reshape that abstraction?",
+    "Should a driver be allowed to have multiple simultaneous group memberships if only one effective billing profile is used?",
+    "Should domain assignment occur at login only, on profile update, or through an explicit reconciliation job as well?",
+    "What portal surfaces should display effective group/profile to make billing decisions auditable?"
+  ],
+  "blockers": [],
+  "planReview": null,
+  "finalReview": null,
+  "proofOfWork": [
+    {
+      "by": "astra",
+      "summary": "Scoped user-group billing feature with explicit precedence, automation boundaries, and billing snapshot requirement before implementation.",
+      "artifact": "Task contract defines domain-rule auto-assignment, manual override, deterministic resolution, and historical billing snapshot constraints.",
+      "timestamp": "2026-04-11T00:52:00Z"
+    }
+  ],
+  "reviewHistory": [],
+  "changedFiles": [],
+  "verification": [],
+  "completionEvidence": [],
+  "createdAt": "2026-04-11T00:52:00Z",
+  "updatedAt": "2026-04-11T00:52:00Z"
+}
