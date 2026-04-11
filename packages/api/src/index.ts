@@ -4,6 +4,7 @@ import { assertDatabaseUrlSafety, assertKeycloakConfig, getAppEnv } from './lib/
 import { materializeUptime } from './workers/uptimeMaterializer';
 import { startReservationExpiryJob } from './jobs/reservationExpiry';
 import { startReservationFeeCaptureJob } from './jobs/reservationFeeCapture';
+import { startStaleSessionCleanupJob } from './jobs/staleSessionCleanup';
 
 const PORT = parseInt(process.env.PORT ?? '3001', 10);
 const HOST = process.env.HOST ?? '0.0.0.0';
@@ -38,6 +39,9 @@ buildServer()
 
       // Reservation fee capture job: capture authorized fees after grace period
       startReservationFeeCaptureJob();
+
+      // Stale session cleanup: auto-close ACTIVE sessions older than 6h with no updates
+      startStaleSessionCleanupJob();
     });
   })
   .catch((err) => {

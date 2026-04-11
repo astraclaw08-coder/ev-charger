@@ -13,6 +13,7 @@ import {
   Image,
   Easing,
   Modal,
+  Pressable,
 } from 'react-native';
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useNavigation, usePreventRemove } from '@react-navigation/native';
@@ -442,6 +443,8 @@ export default function ChargerStartScreen() {
   const [activationModalDismissed, setActivationModalDismissed] = useState(false);
   const [awaitingPlugIn, setAwaitingPlugIn] = useState(false);
   const [reserveHoldMin, setReserveHoldMin] = useState(30);
+  const [showReserveModal, setShowReserveModal] = useState(false);
+  const [reserveError, setReserveError] = useState('');
   const activationPollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activationModalDismissedRef = useRef(false);
   const flowLocked = sliderInteracting || starting != null || showActivationModal || awaitingPlugIn;
@@ -464,10 +467,14 @@ export default function ChargerStartScreen() {
     mutationFn: (args: { connectorId: string; holdMinutes: number }) =>
       api.reservations.create(args.connectorId, args.holdMinutes),
     onSuccess: async () => {
+      setShowReserveModal(false);
+      setReserveError('');
       await refetchReservation();
       await queryClient.invalidateQueries({ queryKey: ['charger', id] });
     },
-    onError: (err: Error) => Alert.alert('Reservation Failed', err.message),
+    onError: (err: Error) => {
+      setReserveError(err.message || 'Reservation failed. Please try again.');
+    },
   });
 
   const cancelReservationMutation = useMutation({
@@ -993,22 +1000,6 @@ export default function ChargerStartScreen() {
           </View>
 
           <View style={[styles.startCard, { backgroundColor: isDark ? '#111827' : '#ffffff' }]}>
-            {!activeSession ? (
-              <TouchableOpacity
-                style={[styles.paymentCard, { backgroundColor: isDark ? '#0f172a' : '#f8fafc', borderColor: isDark ? '#334155' : '#cbd5e1' }]}
-                onPress={() => router.push('/profile/payment' as any)}
-                activeOpacity={0.9}
-              >
-                <Text style={[styles.paymentCardTitle, { color: isDark ? '#f8fafc' : '#0f172a' }]}>Payment Method</Text>
-                <Text style={[styles.paymentCardBody, { color: isDark ? '#cbd5e1' : '#334155' }]}>
-                  {hasPaymentMethod ? paymentLabel : 'No payment method added yet'}
-                </Text>
-                <Text style={[styles.paymentCardHint, { color: isDark ? '#93c5fd' : '#1d4ed8' }]}>
-                  {hasPaymentMethod ? 'Tap to change card or add a new card' : 'Tap to add a payment card'}
-                </Text>
-              </TouchableOpacity>
-            ) : null}
-
             <SlideToStart
               isDark={isDark}
               disabled={activeSession ? stopMutation.isPending : (starting != null || !selectedConnector)}
@@ -1044,8 +1035,11 @@ export default function ChargerStartScreen() {
             {/* Reservation: my reservation countdown + cancel */}
             {!activeSession && isMyReservation && connectorReservation ? (
               <View style={[styles.reservationBanner, { backgroundColor: isDark ? '#1e1b4b' : '#ede9fe' }]}>
-                <Text style={[styles.reservationBannerText, { color: isDark ? '#c4b5fd' : '#5b21b6' }]}>
-                  Your reservation — {reserveCountdown || 'loading…'}
+                <Text style={{ color: isDark ? '#e9d5ff' : '#5b21b6', fontSize: 16, fontWeight: '800', textAlign: 'center' }}>
+                  {reserveCountdown || '…'}
+                </Text>
+                <Text style={{ color: isDark ? '#a78bfa' : '#7c3aed', fontSize: 12, fontWeight: '600', textAlign: 'center' }}>
+                  Your reservation
                 </Text>
                 <TouchableOpacity
                   style={[styles.reservationCancelBtn, { backgroundColor: isDark ? '#312e81' : '#ddd6fe' }]}
@@ -1074,69 +1068,150 @@ export default function ChargerStartScreen() {
               </View>
             ) : null}
 
-            {/* Reserve button: show when connector is available, no session, no existing reservation by user, site supports it */}
+            {/* Reserve button: show when connector is available, no session, no existing reservation, site supports it, not guest */}
             {!activeSession && !isMyReservation && !isOtherReservation && reservationEnabled && selectedConnector?.status === 'AVAILABLE' && !isGuest ? (
-              <View style={[styles.reservationSection, { backgroundColor: isDark ? '#0f172a' : '#f8fafc', borderColor: isDark ? '#334155' : '#cbd5e1' }]}>
-                <Text style={[styles.reservationSectionTitle, { color: isDark ? '#f8fafc' : '#0f172a' }]}>Reserve this connector</Text>
-                <View style={styles.holdPickerRow}>
-                  {[15, 30, 45, 60].map((min) => (
-                    <TouchableOpacity
-                      key={min}
-                      style={[
-                        styles.holdPickerBtn,
-                        {
-                          backgroundColor: reserveHoldMin === min ? (isDark ? '#4f46e5' : '#6d28d9') : (isDark ? '#1e293b' : '#e2e8f0'),
-                        },
-                      ]}
-                      onPress={() => setReserveHoldMin(min)}
-                    >
-                      <Text style={{ color: reserveHoldMin === min ? '#ffffff' : (isDark ? '#cbd5e1' : '#334155'), fontSize: 13, fontWeight: '600' }}>
-                        {min} min
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-                {reservationFeeUsd > 0 && (
-                  <View style={{ marginTop: 8, marginBottom: 4 }}>
-                    <Text style={{ color: isDark ? '#e2e8f0' : '#334155', fontSize: 13, fontWeight: '600' }}>
-                      Reservation fee: ${reservationFeeUsd.toFixed(2)}
-                    </Text>
-                    <Text style={{ color: isDark ? '#94a3b8' : '#64748b', fontSize: 11, marginTop: 2 }}>
-                      Free cancellation within {reservationCancelGraceMin} min
-                    </Text>
-                  </View>
-                )}
+              <View style={{ marginTop: 14, alignItems: 'center', gap: 6 }}>
                 <TouchableOpacity
-                  style={[styles.reserveBtn, { backgroundColor: isDark ? '#4f46e5' : '#6d28d9', opacity: reserveMutation.isPending ? 0.6 : 1 }]}
+                  style={[styles.reserveBtn, {
+                    backgroundColor: isDark ? '#334155' : '#e2e8f0',
+                    alignSelf: 'stretch',
+                    opacity: (reservationFeeUsd > 0 && !hasPaymentMethod) ? 0.45 : 1,
+                  }]}
                   onPress={() => {
-                    if (!selectedConnector) return;
-                    if (reservationFeeUsd > 0) {
-                      Alert.alert(
-                        'Confirm reservation',
-                        `A $${reservationFeeUsd.toFixed(2)} fee will be charged to your card. You can cancel for free within ${reservationCancelGraceMin} minutes.`,
-                        [
-                          { text: 'Cancel', style: 'cancel' },
-                          { text: 'Reserve', onPress: () => reserveMutation.mutate({ connectorId: selectedConnector.id, holdMinutes: reserveHoldMin }) },
-                        ],
-                      );
-                    } else {
-                      reserveMutation.mutate({ connectorId: selectedConnector.id, holdMinutes: reserveHoldMin });
-                    }
+                    setReserveError('');
+                    setShowReserveModal(true);
                   }}
-                  disabled={reserveMutation.isPending}
+                  disabled={reservationFeeUsd > 0 && !hasPaymentMethod}
                 >
-                  <Text style={styles.reserveBtnText}>
-                    {reserveMutation.isPending
-                      ? 'Reserving…'
-                      : reservationFeeUsd > 0
-                        ? `Reserve ($${reservationFeeUsd.toFixed(2)})`
-                        : 'Reserve'}
-                  </Text>
+                  <Text style={[styles.reserveBtnText, { color: isDark ? '#e2e8f0' : '#334155' }]}>Reserve</Text>
                 </TouchableOpacity>
+                <Text style={{ color: isDark ? '#94a3b8' : '#64748b', fontSize: 12, textAlign: 'center' }}>
+                  {reservationFeeUsd > 0 && !hasPaymentMethod
+                    ? 'Add a payment method in Profile to reserve'
+                    : 'Hold this connector for 15–60 min'}
+                </Text>
               </View>
             ) : null}
           </View>
         </View>
+
+        {/* ── Reserve Modal ── */}
+        <Modal
+          visible={showReserveModal}
+          transparent
+          animationType="fade"
+          onRequestClose={() => {
+            if (!reserveMutation.isPending) {
+              setShowReserveModal(false);
+              setReserveError('');
+            }
+          }}
+        >
+          <Pressable
+            style={styles.modalBackdrop}
+            onPress={() => {
+              if (!reserveMutation.isPending) {
+                setShowReserveModal(false);
+                setReserveError('');
+              }
+            }}
+          >
+            <Pressable
+              style={[styles.reserveModalCard, { backgroundColor: isDark ? '#1e293b' : '#ffffff' }]}
+              onPress={() => {}} // prevent backdrop dismiss when tapping card
+            >
+              {/* Header */}
+              <View style={styles.reserveModalHeader}>
+                <Text style={[styles.reserveModalTitle, { color: isDark ? '#f8fafc' : '#0f172a' }]}>
+                  Reserve Connector
+                </Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    if (!reserveMutation.isPending) {
+                      setShowReserveModal(false);
+                      setReserveError('');
+                    }
+                  }}
+                  disabled={reserveMutation.isPending}
+                  hitSlop={12}
+                >
+                  <Text style={{ fontSize: 20, color: isDark ? '#94a3b8' : '#64748b', opacity: reserveMutation.isPending ? 0.3 : 1 }}>✕</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Connector info */}
+              {selectedConnector && charger && (
+                <Text style={{ color: isDark ? '#94a3b8' : '#64748b', fontSize: 13, paddingHorizontal: 20, marginBottom: 16 }}>
+                  Connector {selectedConnector.connectorId} · {charger.ocppId}
+                </Text>
+              )}
+
+              {/* Hold duration picker */}
+              <Text style={{ color: isDark ? '#e2e8f0' : '#334155', fontSize: 14, fontWeight: '600', paddingHorizontal: 20, marginBottom: 10 }}>
+                Hold duration
+              </Text>
+              <View style={[styles.holdPickerRow, { paddingHorizontal: 20, marginBottom: 16 }]}>
+                {[15, 30, 45, 60].map((min) => (
+                  <TouchableOpacity
+                    key={min}
+                    style={[
+                      styles.holdPickerBtn,
+                      { backgroundColor: reserveHoldMin === min ? (isDark ? '#4f46e5' : '#6d28d9') : (isDark ? '#334155' : '#e2e8f0') },
+                    ]}
+                    onPress={() => setReserveHoldMin(min)}
+                  >
+                    <Text style={{ color: reserveHoldMin === min ? '#ffffff' : (isDark ? '#cbd5e1' : '#334155'), fontSize: 13, fontWeight: '600' }}>
+                      {min} min
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Fee info */}
+              {reservationFeeUsd > 0 && (
+                <View style={{ paddingHorizontal: 20, marginBottom: 16, paddingTop: 4, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: isDark ? '#334155' : '#e2e8f0' }}>
+                  <Text style={{ color: isDark ? '#f8fafc' : '#0f172a', fontSize: 14, fontWeight: '700', marginTop: 12 }}>
+                    Reservation fee: ${reservationFeeUsd.toFixed(2)}
+                  </Text>
+                  <Text style={{ color: isDark ? '#94a3b8' : '#64748b', fontSize: 12, marginTop: 3 }}>
+                    Free cancellation within {reservationCancelGraceMin} min
+                  </Text>
+                </View>
+              )}
+
+              {/* Error message */}
+              {reserveError ? (
+                <Text style={{ color: '#ef4444', fontSize: 13, paddingHorizontal: 20, marginBottom: 12 }}>
+                  {reserveError}
+                </Text>
+              ) : null}
+
+              {/* Confirm button */}
+              <View style={{ paddingHorizontal: 20, paddingBottom: 24 }}>
+                <TouchableOpacity
+                  style={[styles.reserveBtn, {
+                    backgroundColor: isDark ? '#334155' : '#e2e8f0',
+                    opacity: reserveMutation.isPending ? 0.6 : 1,
+                  }]}
+                  onPress={() => {
+                    if (!selectedConnector) return;
+                    setReserveError('');
+                    reserveMutation.mutate({ connectorId: selectedConnector.id, holdMinutes: reserveHoldMin });
+                  }}
+                  disabled={reserveMutation.isPending}
+                >
+                  <Text style={[styles.reserveBtnText, { color: isDark ? '#e2e8f0' : '#334155' }]}>
+                    {reserveMutation.isPending
+                      ? 'Reserving…'
+                      : reservationFeeUsd > 0
+                        ? `Confirm ($${reservationFeeUsd.toFixed(2)})`
+                        : 'Confirm Reservation'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </Pressable>
+          </Pressable>
+        </Modal>
 
         <Modal
           visible={showActivationModal}
@@ -1397,10 +1472,24 @@ const styles = StyleSheet.create({
   startCard: { borderRadius: 18, padding: 16, gap: 10 },
   sectionTitle: { fontSize: 18, fontWeight: '800' },
   subText: { fontSize: 13 },
-  paymentCard: { borderWidth: 1, borderRadius: 12, padding: 12, gap: 4, alignItems: 'center' },
-  paymentCardTitle: { fontSize: 13, fontWeight: '800', textAlign: 'center' },
-  paymentCardBody: { fontSize: 13, fontWeight: '700', textAlign: 'center' },
-  paymentCardHint: { fontSize: 12, fontWeight: '700', textAlign: 'center' },
+  // Reserve modal
+  reserveModalCard: {
+    width: '100%',
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  reserveModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 12,
+  },
+  reserveModalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+  },
 
   connectorRow: {
     borderWidth: 1,
@@ -1501,17 +1590,6 @@ const styles = StyleSheet.create({
   },
   reservationCancelText: {
     fontSize: 13,
-    fontWeight: '700',
-  },
-  reservationSection: {
-    marginTop: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    padding: 14,
-    gap: 10,
-  },
-  reservationSectionTitle: {
-    fontSize: 14,
     fontWeight: '700',
   },
   holdPickerRow: {
