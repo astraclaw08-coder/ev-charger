@@ -97,6 +97,15 @@ User (Driver) → has many Sessions, Favorites
 20. **Dev realm `ev-charger` / Prod realm `ev-charger-prod`.** Same env var names, different values.
 21. **`assertKeycloakConfig()` validates on startup.** No legacy Clerk aliases.
 
+### Payments (Stripe)
+22. **Stripe `paymentIntents.create` with `confirm: true` requires `payment_method_types: ['card']`.** Without it, Stripe defaults to dashboard-enabled methods which may include redirect-based types, causing `return_url` errors. Discovered during sandbox QC — production code must always include this.
+23. **Charging = preauth + capture.** Two distinct Stripe operations. Preauth before session start, capture after StopTransaction. Never a single charge.
+24. **Reservation = final sale.** Different `PaymentPurpose` — uses immediate capture, NOT preauth flow.
+25. **Guest skips preauth.** No `stripeCustomerId` → no payment gate. Session creation has no payment dependency.
+26. **Overflow → partial capture + deficit.** If billing exceeds authorized hold: capture up to authorized amount, persist `deficitCents` as `PARTIAL_CAPTURED`. No automatic second charge in v1.
+27. **Session completion never depends on payment.** Physical charging happened. StopTransaction always succeeds; capture failure is non-fatal and retryable.
+28. **CAS race protection on capture.** `FOR UPDATE SKIP LOCKED` prevents duplicate charges when StopTransaction and orphan cleanup converge.
+
 ### General
-22. **Verify full chain with curl before telling user to retry.**
-23. **QC gate mandatory:** build check, runtime UI verify, API/data verify, acceptance criteria, regression spot-check.
+29. **Verify full chain with curl before telling user to retry.**
+30. **QC gate mandatory:** build check, runtime UI verify, API/data verify, acceptance criteria, regression spot-check.
