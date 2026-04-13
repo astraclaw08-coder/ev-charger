@@ -433,6 +433,42 @@ export default function ChargerStartScreen() {
 
   const isFlowing = Boolean(activeSession && activeConnectorStatus === 'CHARGING');
 
+  // ── Auto-navigate to receipt when session completes ──────────────────
+  // Track the active session in a ref so we can detect the ACTIVE → null
+  // transition and route the user to the finished receipt screen.
+  useEffect(() => {
+    if (rawActiveSession) {
+      // Session is live — remember it for later transition detection.
+      // Guard: only track sessions that belong to this charger screen.
+      if (rawActiveSession.connector.charger.id === id) {
+        prevActiveSessionRef.current = {
+          id: rawActiveSession.id,
+          connectorCharger: rawActiveSession.connector.charger.id,
+        };
+        hasEverHadActiveSession.current = true;
+      }
+      return;
+    }
+
+    // rawActiveSession just became null.
+    const prev = prevActiveSessionRef.current;
+    if (!prev || !hasEverHadActiveSession.current) return;
+    // Only navigate if the previous session belonged to this screen.
+    if (prev.connectorCharger !== id) return;
+
+    // Reset refs before navigating to prevent duplicate fires from
+    // polling flicker (e.g. brief null between two poll responses).
+    prevActiveSessionRef.current = null;
+    hasEverHadActiveSession.current = false;
+
+    // Small delay lets the API status settle so the session screen
+    // renders the receipt immediately rather than flashing ACTIVE.
+    const timer = setTimeout(() => {
+      router.push(`/session/${prev.id}` as any);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [rawActiveSession, id, router]);
+
   const [starting, setStarting] = useState<number | null>(null);
   const [selectedConnectorId, setSelectedConnectorId] = useState<number | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
@@ -447,6 +483,8 @@ export default function ChargerStartScreen() {
   const [reserveError, setReserveError] = useState('');
   const activationPollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activationModalDismissedRef = useRef(false);
+  const prevActiveSessionRef = useRef<{ id: string; connectorCharger: string } | null>(null);
+  const hasEverHadActiveSession = useRef(false);
   const flowLocked = sliderInteracting || starting != null || showActivationModal || awaitingPlugIn;
 
   // Reservation state
