@@ -187,7 +187,7 @@ export async function sessionRoutes(app: FastifyInstance) {
               },
             },
           },
-          payment: true,
+          payments: { where: { purpose: 'CHARGING' }, orderBy: { createdAt: 'desc' }, take: 1 },
           billingSnapshot: { select: { billingBreakdownJson: true, grossAmountUsd: true, kwhDelivered: true, capturedAt: true } },
         },
       }),
@@ -243,6 +243,7 @@ export async function sessionRoutes(app: FastifyInstance) {
       );
       const amounts = computeSessionAmounts({
         ...s,
+        payment: s.payments?.[0] ?? null,
         startedAt: s.startedAt,
         stoppedAt: s.stoppedAt,
         pricingMode: s.connector?.charger?.site?.pricingMode,
@@ -272,8 +273,10 @@ export async function sessionRoutes(app: FastifyInstance) {
       const snapshot = (s as any).billingSnapshot;
       const snapshotGrossUsd = snapshot?.grossAmountUsd != null ? Number(snapshot.grossAmountUsd) : null;
       const snapshotGrossCents = snapshotGrossUsd != null ? Math.round(snapshotGrossUsd * 100) : null;
+      const { payments: _payments, ...sRest } = s;
       return {
-        ...s,
+        ...sRest,
+        payment: s.payments?.[0] ?? null,
         startedAt: s.startedAt,
         stoppedAt: sessionTimings.plugOutAt ? new Date(sessionTimings.plugOutAt) : s.stoppedAt,
         plugInAt: sessionTimings.plugInAt ? new Date(sessionTimings.plugInAt) : undefined,
@@ -328,7 +331,7 @@ export async function sessionRoutes(app: FastifyInstance) {
             },
           },
         },
-        payment: true,
+        payments: { where: { purpose: 'CHARGING' }, orderBy: { createdAt: 'desc' }, take: 1 },
         billingSnapshot: { select: { billingBreakdownJson: true, grossAmountUsd: true, netAmountUsd: true, vendorFeeUsd: true, kwhDelivered: true, capturedAt: true } },
       },
     });
@@ -357,6 +360,7 @@ export async function sessionRoutes(app: FastifyInstance) {
 
     const amounts = computeSessionAmounts({
       ...session,
+      payment: (session as any).payments?.[0] ?? null,
       startedAt: session.startedAt,
       stoppedAt: session.stoppedAt,
       pricingMode: session.connector?.charger?.site?.pricingMode,
@@ -389,8 +393,10 @@ export async function sessionRoutes(app: FastifyInstance) {
       }
     }
 
+    const { payments: _payments, ...sessionRest } = session as any;
     return {
-      ...session,
+      ...sessionRest,
+      payment: (session as any).payments?.[0] ?? null,
       startedAt: session.startedAt,
       stoppedAt: sessionTimings.plugOutAt ? new Date(sessionTimings.plugOutAt) : session.stoppedAt,
       plugInAt: sessionTimings.plugInAt ? new Date(sessionTimings.plugInAt) : undefined,
@@ -448,7 +454,7 @@ export async function sessionRoutes(app: FastifyInstance) {
         take: limit,
         skip: offset,
         include: {
-          payment: { select: { status: true, amountCents: true } },
+          payments: { where: { purpose: 'CHARGING' }, select: { status: true, amountCents: true }, orderBy: { createdAt: 'desc' }, take: 1 },
           billingSnapshot: { select: { billingBreakdownJson: true, grossAmountUsd: true, netAmountUsd: true, vendorFeeUsd: true, kwhDelivered: true, capturedAt: true } },
           connector: {
             include: {
@@ -533,8 +539,8 @@ export async function sessionRoutes(app: FastifyInstance) {
           plugInAt: sessionTimings.plugInAt ? new Date(sessionTimings.plugInAt) : undefined,
           plugOutAt: sessionTimings.plugOutAt ? new Date(sessionTimings.plugOutAt) : undefined,
           energyKwh: amounts.kwhDelivered,
-          revenueUsd: ((amounts.effectiveAmountCents ?? amounts.estimatedAmountCents ?? row.payment?.amountCents ?? 0) / 100),
-          payment: row.payment,
+          revenueUsd: ((amounts.effectiveAmountCents ?? amounts.estimatedAmountCents ?? row.payments?.[0]?.amountCents ?? 0) / 100),
+          payment: row.payments?.[0] ?? null,
           effectiveAmountCents: amounts.effectiveAmountCents,
           estimatedAmountCents: amounts.estimatedAmountCents,
           amountState: amounts.amountState,

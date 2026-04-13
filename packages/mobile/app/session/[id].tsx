@@ -187,6 +187,33 @@ function SessionSummary({
       ? 'Card on file'
       : '-';
 
+  const paymentStatus = session.payment?.status;
+  const paymentStatusLabel = (() => {
+    switch (paymentStatus) {
+      case 'CAPTURED': return 'Payment complete';
+      case 'PARTIAL_CAPTURED':
+        return session.payment?.deficitCents
+          ? `Partial payment — $${(session.payment.deficitCents / 100).toFixed(2)} remaining`
+          : 'Partial payment';
+      case 'AUTHORIZED': return 'Payment authorized — capture pending';
+      case 'CAPTURE_IN_PROGRESS': return 'Processing payment…';
+      case 'FAILED': return 'Payment failed';
+      case 'CANCELED': return 'Payment canceled';
+      case 'REFUNDED': return 'Payment refunded';
+      default: return null;
+    }
+  })();
+  const paymentStatusColor = (() => {
+    switch (paymentStatus) {
+      case 'CAPTURED': case 'REFUNDED': return { bg: '#d1fae5', text: '#065f46' };
+      case 'PARTIAL_CAPTURED': return { bg: '#fef3c7', text: '#713f12' };
+      case 'AUTHORIZED': case 'CAPTURE_IN_PROGRESS': return { bg: '#dbeafe', text: '#1e40af' };
+      case 'FAILED': return { bg: '#fee2e2', text: '#991b1b' };
+      case 'CANCELED': return { bg: '#f3f4f6', text: '#6b7280' };
+      default: return null;
+    }
+  })();
+
   return (
     <View style={styles.summaryContainer}>
       <Text style={[styles.summarySubtitle, { color: isDark ? '#cbd5e1' : '#111827' }]}>{session.connector.charger.site.name}</Text>
@@ -210,7 +237,15 @@ function SessionSummary({
         />
       </View>
 
-      {session.amountState === 'FINAL' && (
+      {paymentStatusLabel && paymentStatusColor && (
+        <View style={[styles.paymentStatusBanner, { backgroundColor: paymentStatusColor.bg }]}>
+          <Text style={[styles.paymentStatusText, { color: paymentStatusColor.text }]}>
+            {paymentStatusLabel}
+          </Text>
+        </View>
+      )}
+
+      {!paymentStatusLabel && session.amountState === 'FINAL' && (
         <View style={styles.paymentSuccess}>
           <Text style={styles.paymentSuccessText}>
             Final payment: ${cost.toFixed(2)}
@@ -218,7 +253,7 @@ function SessionSummary({
         </View>
       )}
 
-      {session.amountState === 'PENDING' && (
+      {!paymentStatusLabel && session.amountState === 'PENDING' && (
         <View style={styles.paymentPending}>
           <Text style={styles.paymentPendingText}>Stripe settlement pending · shown total is estimated.</Text>
         </View>
@@ -309,6 +344,14 @@ function SessionSummary({
           label="Payment card used"
           value={paymentMethod}
         />
+        {session.payment?.amountCents != null && (paymentStatus === 'CAPTURED' || paymentStatus === 'PARTIAL_CAPTURED') && (
+          <ReceiptRow
+            isDark={isDark}
+            label="Amount charged"
+            value={`$${(session.payment.amountCents / 100).toFixed(2)}`}
+            emphasizeValue
+          />
+        )}
 
         <View style={[styles.receiptRow, styles.receiptRowNoBorder]}>
           <Text style={[styles.receiptThanks, { color: isDark ? '#cbd5e1' : '#374151' }]}>Thank you for charging with us!</Text>
@@ -930,6 +973,13 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   paymentPendingText: { color: '#713f12', fontSize: 13, textAlign: 'center' },
+  paymentStatusBanner: {
+    borderRadius: 10,
+    padding: 10,
+    width: '100%',
+    marginBottom: 16,
+  },
+  paymentStatusText: { fontSize: 13, textAlign: 'center', fontWeight: '600' },
   summaryMeta: {
     backgroundColor: '#f3f4f6',
     borderRadius: 12,

@@ -110,12 +110,13 @@ export async function getSiteAnalytics(siteId: string, periodDays: number) {
         { stoppedAt: null, status: 'ACTIVE' },
       ],
     },
-    include: { payment: true },
+    include: { payments: { where: { purpose: 'CHARGING' }, orderBy: { createdAt: 'desc' }, take: 1 } },
   });
 
   const getEffectiveAmountCents = (s: any) => (
     computeSessionAmounts({
       ...s,
+      payment: s.payments?.[0] ?? null,
       pricingMode: site.pricingMode,
       pricePerKwhUsd: site.pricePerKwhUsd,
       idleFeePerMinUsd: site.idleFeePerMinUsd,

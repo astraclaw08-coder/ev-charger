@@ -71,6 +71,7 @@ export async function profileRoutes(app: FastifyInstance) {
       homeState: fresh!.homeState,
       homeZipCode: fresh!.homeZipCode,
       paymentProfile: fresh!.paymentProfile,
+      stripeCustomerId: fresh!.stripeCustomerId, // read-only — set by payment flows, not profile update
     };
   });
 
@@ -146,6 +147,7 @@ export async function profileRoutes(app: FastifyInstance) {
       homeState: updated.homeState,
       homeZipCode: updated.homeZipCode,
       paymentProfile: updated.paymentProfile,
+      stripeCustomerId: updated.stripeCustomerId,
     };
   });
 

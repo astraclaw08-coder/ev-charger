@@ -212,6 +212,35 @@ export async function handleStartTransaction(
     }
   }
 
+  // ── Link pending preauth payment to this session ───────────────────
+  // Side-channel linkage: find the most recent AUTHORIZED charging payment
+  // for this user+connector (created within 5 min) and attach sessionId.
+  try {
+    const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000);
+    const pendingPreauth = await prisma.payment.findFirst({
+      where: {
+        userId: user.id,
+        connectorRefId: connector.id,
+        purpose: 'CHARGING',
+        status: 'AUTHORIZED',
+        sessionId: null,
+        createdAt: { gte: fiveMinAgo },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (pendingPreauth) {
+      await prisma.payment.update({
+        where: { id: pendingPreauth.id },
+        data: { sessionId: session.id },
+      });
+      console.log(`[StartTransaction] Linked preauth payment=${pendingPreauth.id} (token=${pendingPreauth.preauthToken}) to session=${session.id}`);
+    }
+  } catch (err) {
+    // Non-fatal — session started regardless of payment linkage
+    console.error(`[StartTransaction] Failed to link preauth payment to session=${session.id}:`, err);
+  }
+
   console.log(`[StartTransaction] Session ${session.id} started, transactionId=${transactionId}`);
 
   return { idTagInfo: { status: 'Accepted' }, transactionId };

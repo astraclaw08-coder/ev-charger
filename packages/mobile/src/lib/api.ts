@@ -264,12 +264,16 @@ export interface UserProfile {
   homeState: string | null;
   homeZipCode: string | null;
   paymentProfile: string | null;
+  stripeCustomerId: string | null;
 }
 
 export interface Payment {
   id: string;
-  status: string;
+  status: 'PENDING' | 'REQUIRES_ACTION' | 'AUTHORIZED' | 'CAPTURE_IN_PROGRESS' | 'CAPTURED' | 'PARTIAL_CAPTURED' | 'FAILED' | 'CANCELED' | 'REFUNDED';
+  purpose: 'CHARGING' | 'RESERVATION' | 'REMAINDER' | 'REFUND_ADJUSTMENT';
   amountCents: number | null;
+  authorizedCents: number | null;
+  deficitCents: number | null;
   stripeCustomerId: string | null;
   stripeIntentId: string | null;
 }
@@ -536,6 +540,24 @@ export const api = {
   payments: {
     setupIntent() {
       return request<{ clientSecret: string; stripeCustomerId: string }>('/payments/setup-intent', {
+        method: 'POST',
+      });
+    },
+    preauth(connectorRefId: string) {
+      return request<{
+        paymentId: string;
+        preauthToken: string;
+        authorizedCents: number;
+        status: 'AUTHORIZED' | 'REQUIRES_ACTION' | 'FAILED';
+        clientSecret?: string;
+        alreadyExists?: boolean;
+      }>('/payments/preauth', {
+        method: 'POST',
+        body: JSON.stringify({ connectorRefId }),
+      });
+    },
+    cancel(paymentId: string) {
+      return request<{ status: string }>(`/payments/${paymentId}/cancel`, {
         method: 'POST',
       });
     },

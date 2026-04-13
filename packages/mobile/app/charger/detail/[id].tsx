@@ -434,10 +434,12 @@ export default function ChargerStartScreen() {
   const [activationTimedOut, setActivationTimedOut] = useState(false);
   const [activationModalDismissed, setActivationModalDismissed] = useState(false);
   const [awaitingPlugIn, setAwaitingPlugIn] = useState(false);
+  const [preauthInProgress, setPreauthInProgress] = useState(false);
   const [reserveHoldMin, setReserveHoldMin] = useState(30);
   const activationPollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activationModalDismissedRef = useRef(false);
-  const flowLocked = sliderInteracting || starting != null || showActivationModal || awaitingPlugIn;
+  const activePreauthRef = useRef<{ paymentId: string; preauthToken: string } | null>(null);
+  const flowLocked = sliderInteracting || starting != null || preauthInProgress || showActivationModal || awaitingPlugIn;
 
   // Reservation state
   const currentUserId = getAuthIdentityKey();
@@ -754,7 +756,7 @@ export default function ChargerStartScreen() {
     onError: (err: Error) => Alert.alert('Stop Failed', err.message),
   });
 
-  function handleStart(connector: Connector) {
+  async function handleStart(connector: Connector) {
     setStartError(null);
     if (authLoading) return;
     if (isGuest) {
@@ -766,19 +768,68 @@ export default function ChargerStartScreen() {
     if (connector.status === 'RESERVED') {
       const currentUserId = getAuthIdentityKey();
       if (connector.activeReservation?.userId === currentUserId) {
-        // User owns this reservation — allow start
-        startMutation.mutate({ chargerId: charger.id, connectorId: connector.connectorId });
+        // User owns this reservation — allow start (preauth still applies)
+      } else {
+        Alert.alert('Connector reserved', 'This connector is reserved by another driver.');
         return;
       }
-      Alert.alert('Connector reserved', 'This connector is reserved by another driver.');
-      return;
-    }
-
-    if (!['AVAILABLE', 'PREPARING', 'SUSPENDED_EV'].includes(connector.status)) {
+    } else if (!['AVAILABLE', 'PREPARING', 'SUSPENDED_EV'].includes(connector.status)) {
       Alert.alert('Connector not ready', 'Selected connector is not ready. Please choose a ready connector.');
       return;
     }
-    startMutation.mutate({ chargerId: charger.id, connectorId: connector.connectorId });
+
+    // ── Preauth gate: authenticated users with a payment method ──────
+    const hasStripe = Boolean(profile?.stripeCustomerId);
+    if (hasStripe) {
+      setPreauthInProgress(true);
+      try {
+        const preauth = await api.payments.preauth(connector.id);
+
+        if (preauth.status === 'REQUIRES_ACTION') {
+          // 3DS/SCA challenge — user must complete in Stripe SDK
+          // For now, show an alert (full 3DS handling is Phase 4+)
+          setPreauthInProgress(false);
+          Alert.alert('Card Verification Required', 'Your bank requires additional verification. Please try again or use a different card.');
+          return;
+        }
+
+        if (preauth.status === 'FAILED') {
+          setPreauthInProgress(false);
+          setStartError('Payment authorization failed. Please check your card.');
+          return;
+        }
+
+        // AUTHORIZED — store reference for potential cancel-on-failure
+        activePreauthRef.current = { paymentId: preauth.paymentId, preauthToken: preauth.preauthToken };
+      } catch (err: any) {
+        setPreauthInProgress(false);
+        const msg = err?.message ?? 'Payment authorization failed.';
+        if (msg.includes('No saved payment method') || msg.includes('402')) {
+          Alert.alert('Payment Required', 'Please add a payment method before starting a session.', [
+            { text: 'Add Card', onPress: () => router.push('/profile/payment' as any) },
+            { text: 'Cancel', style: 'cancel' },
+          ]);
+        } else {
+          setStartError(msg);
+        }
+        return;
+      }
+      setPreauthInProgress(false);
+    }
+
+    // ── Remote start ─────────────────────────────────────────────────
+    startMutation.mutate(
+      { chargerId: charger.id, connectorId: connector.connectorId },
+      {
+        onError: () => {
+          // If remote start fails and we have an active preauth, void it
+          if (activePreauthRef.current) {
+            api.payments.cancel(activePreauthRef.current.paymentId).catch(() => {});
+            activePreauthRef.current = null;
+          }
+        },
+      },
+    );
   }
 
   function confirmStop() {
@@ -859,11 +910,13 @@ export default function ChargerStartScreen() {
               : 'available';
   const sliderLabel = activeSession
     ? 'Slide to stop'
-    : awaitingPlugIn
-      ? 'Plug in to start'
-      : 'Slide to charge';
+    : preauthInProgress
+      ? 'Authorizing payment…'
+      : awaitingPlugIn
+        ? 'Plug in to start'
+        : 'Slide to charge';
   const paymentLabel = profile?.paymentProfile?.trim() || '';
-  const hasPaymentMethod = Boolean(paymentLabel);
+  const hasPaymentMethod = Boolean(profile?.stripeCustomerId) || Boolean(paymentLabel);
 
   return (
     <>
@@ -1002,7 +1055,7 @@ export default function ChargerStartScreen() {
 
             <SlideToStart
               isDark={isDark}
-              disabled={activeSession ? stopMutation.isPending : (starting != null || !selectedConnector)}
+              disabled={activeSession ? stopMutation.isPending : (starting != null || preauthInProgress || !selectedConnector)}
               onInteractionChange={setSliderInteracting}
               label={sliderLabel}
               onComplete={() => {

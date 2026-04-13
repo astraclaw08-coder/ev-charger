@@ -35,10 +35,21 @@ enum SessionStatus {
 
 enum PaymentStatus {
   PENDING
+  REQUIRES_ACTION
   AUTHORIZED
+  CAPTURE_IN_PROGRESS
   CAPTURED
+  PARTIAL_CAPTURED
   FAILED
+  CANCELED
   REFUNDED
+}
+
+enum PaymentPurpose {
+  CHARGING
+  RESERVATION
+  REMAINDER
+  REFUND_ADJUSTMENT
 }
 
 enum OcppDirection {
@@ -109,6 +120,8 @@ model Site {
   maxChargeDurationMin  Int?    // Auto-stop active charging after N minutes
   maxIdleDurationMin    Int?    // Auto-stop/disconnect after N minutes idle post-charge
   maxSessionCostUsd     Float?  // Auto-stop when estimated session cost reaches this cap (USD)
+  // Payment settings
+  preauthAmountCents        Int      @default(5000)  // preauth hold amount in USD cents ($50 default)
   // Reservation settings
   reservationEnabled        Boolean  @default(false)
   reservationMaxDurationMin Int      @default(30)   // max hold window in minutes
@@ -297,7 +310,7 @@ model Session {
   kwhDelivered    Float? // computed: (meterStop - meterStart) / 1000
   ratePerKwh      Float? // price locked at session start (USD)
   status          SessionStatus       @default(ACTIVE)
-  payment         Payment?
+  payments        Payment[]           // multiple payments per session (preauth, remainder, etc.)
   sessionFact     SessionFact?
   billingSnapshot SessionBillingSnapshot?
   rebateIntervals RebateInterval15m[]
@@ -320,7 +333,8 @@ model User {
   homeCity        String?
   homeState       String?
   homeZipCode     String?
-  paymentProfile  String?
+  paymentProfile  String?   // Display label (e.g. "Card •••• 4242") — NOT a Stripe customer ID
+  stripeCustomerId String?  // Canonical Stripe customer ID (cus_xxx)
   idTag           String    @unique // OCPP idTag for this driver (max 20 chars)
   sessions        Session[]
   payments        Payment[]
@@ -345,20 +359,28 @@ model UserFavoriteCharger {
 }
 
 model Payment {
-  id               String        @id @default(uuid())
-  sessionId        String        @unique
-  session          Session       @relation(fields: [sessionId], references: [id])
+  id               String         @id @default(uuid())
+  sessionId        String?        // nullable at preauth time; set on StartTransaction. Not unique — multiple payments per session possible.
+  session          Session?       @relation(fields: [sessionId], references: [id])
   userId           String
-  user             User          @relation(fields: [userId], references: [id])
-  stripeIntentId   String?
+  user             User           @relation(fields: [userId], references: [id])
+  purpose          PaymentPurpose @default(CHARGING)
+  connectorRefId   String?        // connector UUID — temporary linkage before session exists
+  preauthToken     String?        @unique  // UUID for precise preauth→session matching via side-channel
+  stripeIntentId   String?        @unique  // Stripe PaymentIntent ID — unique prevents double-capture
   stripeCustomerId String?
-  amountCents      Int? // in USD cents
-  status           PaymentStatus @default(PENDING)
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
+  authorizedCents  Int?           // original preauth hold amount
+  amountCents      Int?           // final captured amount (in USD cents)
+  deficitCents     Int?           // billing - captured; null if no overflow
+  status           PaymentStatus  @default(PENDING)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
 
+  @@index([sessionId])
   @@index([userId])
   @@index([status])
+  @@index([connectorRefId, userId, status])
+  @@index([preauthToken])
 }
 
 /// Immutable billing record captured at session completion.

@@ -26,7 +26,7 @@ export async function captureSessionBillingSnapshot(sessionId: string): Promise<
   const session = await prisma.session.findUnique({
     where: { id: sessionId },
     include: {
-      payment: { select: { status: true, amountCents: true } },
+      payments: { where: { purpose: 'CHARGING' }, select: { status: true, amountCents: true }, orderBy: { createdAt: 'desc' }, take: 1 },
       billingSnapshot: { select: { id: true } },
       connector: {
         include: {
@@ -59,8 +59,9 @@ export async function captureSessionBillingSnapshot(sessionId: string): Promise<
   }
 
   // Immutability guard — never overwrite a finalised payment
-  if (session.billingSnapshot && session.payment && FINAL_STATUSES.has(session.payment.status)) {
-    console.log(`[BillingSnapshot] Skipping — payment finalised (${session.payment.status}) for session ${sessionId}`);
+  const primaryPayment = session.payments?.[0] ?? null;
+  if (session.billingSnapshot && primaryPayment && FINAL_STATUSES.has(primaryPayment.status)) {
+    console.log(`[BillingSnapshot] Skipping — payment finalised (${primaryPayment.status}) for session ${sessionId}`);
     return false;
   }
 
@@ -227,7 +228,7 @@ export async function backfillBillingSnapshots(opts?: { dryRun?: boolean; force?
       status: 'COMPLETED',
       // force=true: recapture all non-final sessions; false: only sessions without a snapshot
       ...(force ? {} : { billingSnapshot: null }),
-      NOT: { payment: { status: { in: ['CAPTURED', 'REFUNDED'] } } },
+      NOT: { payments: { some: { status: { in: ['CAPTURED', 'REFUNDED'] }, purpose: 'CHARGING' } } },
     },
     select: { id: true, transactionId: true },
     orderBy: { createdAt: 'asc' },

@@ -507,6 +507,7 @@ export interface SupportDriverDetail {
   homeState: string | null;
   homeZipCode: string | null;
   paymentProfile: string | null;
+  stripeCustomerId: string | null;
   idTag: string;
   createdAt: string;
   sessionCount: number;

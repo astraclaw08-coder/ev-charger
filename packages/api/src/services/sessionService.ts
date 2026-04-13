@@ -67,7 +67,7 @@ export async function listTransactions(
             id: true, transactionId: true, idTag: true, meterStart: true, meterStop: true,
             kwhDelivered: true, ratePerKwh: true,
             connector: { select: { connectorId: true } },
-            payment: { select: { status: true, amountCents: true } },
+            payments: { where: { purpose: 'CHARGING' }, select: { status: true, amountCents: true }, orderBy: { createdAt: 'desc' }, take: 1 },
             billingSnapshot: {
               select: {
                 billingBreakdownJson: true, grossAmountUsd: true, netAmountUsd: true,
@@ -99,7 +99,7 @@ export async function listTransactions(
           meterStop: session.meterStop,
           kwhDelivered: session.kwhDelivered ?? row.energyKwh ?? 0,
           ratePerKwh: session.ratePerKwh,
-          payment: session.payment ?? { status: 'none', amountCents: 0 },
+          payment: session.payments?.[0] ?? { status: 'none', amountCents: 0 },
           durationMinutes: row.durationMinutes ?? 0,
           startedAt: row.startedAt,
           stoppedAt: row.stoppedAt,
@@ -129,7 +129,7 @@ export async function listTransactions(
       energyKwh: row.energyKwh != null ? Number(row.energyKwh) : null,
       amountUsd,
       amountState,
-      paymentStatus: session?.payment?.status ?? null,
+      paymentStatus: session?.payments?.[0]?.status ?? null,
       charger: row.charger ? { id: row.charger.id, ocppId: row.charger.ocppId, model: row.charger.model } : null,
       site: site ? { id: site.id, name: site.name } : null,
       connectorId: session?.connector?.connectorId ?? null,
@@ -183,7 +183,7 @@ export async function listSessionsByCharger(
     include: {
       connector: { select: { connectorId: true } },
       user: { select: { name: true, email: true } },
-      payment: { select: { status: true, amountCents: true } },
+      payments: { where: { purpose: 'CHARGING' }, select: { status: true, amountCents: true }, orderBy: { createdAt: 'desc' }, take: 1 },
       billingSnapshot: { select: { kwhDelivered: true, grossAmountUsd: true, billingBreakdownJson: true } },
     },
   });
@@ -197,8 +197,8 @@ export async function listSessionsByCharger(
       startedAt: s.startedAt,
       stoppedAt: s.stoppedAt,
       kwhDelivered: s.billingSnapshot?.kwhDelivered != null ? Number(s.billingSnapshot.kwhDelivered) : (s.kwhDelivered ?? null),
-      amountUsd: s.billingSnapshot?.grossAmountUsd != null ? Number(s.billingSnapshot.grossAmountUsd) : (s.payment?.amountCents ? s.payment.amountCents / 100 : null),
-      paymentStatus: s.payment?.status ?? null,
+      amountUsd: s.billingSnapshot?.grossAmountUsd != null ? Number(s.billingSnapshot.grossAmountUsd) : (s.payments?.[0]?.amountCents ? s.payments[0].amountCents / 100 : null),
+      paymentStatus: s.payments?.[0]?.status ?? null,
       connectorId: s.connector?.connectorId ?? null,
       user: s.user ? { name: s.user.name, email: s.user.email } : null,
     })),
@@ -224,7 +224,7 @@ export async function getSessionDetail(sessionId: string, claims: PortalAccessCl
         },
       },
       user: { select: { id: true, name: true, email: true, phone: true } },
-      payment: { select: { id: true, status: true, amountCents: true, stripeIntentId: true } },
+      payments: { where: { purpose: 'CHARGING' }, select: { id: true, status: true, amountCents: true, stripeIntentId: true }, orderBy: { createdAt: 'desc' }, take: 1 },
       billingSnapshot: {
         select: {
           billingBreakdownJson: true, grossAmountUsd: true, netAmountUsd: true,
@@ -260,7 +260,7 @@ export async function getSessionDetail(sessionId: string, claims: PortalAccessCl
     netAmountUsd: snap?.netAmountUsd != null ? Number(snap.netAmountUsd) : null,
     vendorFeeUsd: snap?.vendorFeeUsd != null ? Number(snap.vendorFeeUsd) : null,
     billingBreakdown: snap?.billingBreakdownJson ?? null,
-    payment: (session as any).payment ?? null,
+    payment: (session as any).payments?.[0] ?? null,
     user: (session as any).user ?? null,
     charger: charger ? { id: charger.id, ocppId: charger.ocppId, model: charger.model, vendor: charger.vendor } : null,
     site: charger?.site ?? null,

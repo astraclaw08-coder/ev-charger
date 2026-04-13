@@ -375,7 +375,7 @@ function ProfileTab({ driver, editing, setEditing, editForm, setEditForm, saving
             <div className="text-xs text-[var(--color-text-secondary,#6b7280)]">Joined</div>
           </div>
           <div>
-            <div className="text-sm font-medium text-[var(--color-text-primary,#111)]">{driver.paymentProfile ? 'Connected' : 'None'}</div>
+            <div className="text-sm font-medium text-[var(--color-text-primary,#111)]">{driver.stripeCustomerId ? 'Connected' : 'None'}</div>
             <div className="text-xs text-[var(--color-text-secondary,#6b7280)]">Stripe</div>
           </div>
         </div>
@@ -573,7 +573,7 @@ function ActivityTab({ driver }: { driver: SupportDriverDetail }) {
         </div>
         <div className="p-4 rounded-lg bg-[var(--color-bg-secondary,#f9fafb)] border border-[var(--color-border,#e5e7eb)]">
           <label className="block text-xs font-medium text-[var(--color-text-secondary,#6b7280)] mb-1">Stripe Connected</label>
-          <div className="text-sm text-[var(--color-text-primary,#111)]">{driver.paymentProfile ? '✅ Yes' : '❌ No'}</div>
+          <div className="text-sm text-[var(--color-text-primary,#111)]">{driver.stripeCustomerId ? '✅ Yes' : '❌ No'}</div>
         </div>
       </div>
 

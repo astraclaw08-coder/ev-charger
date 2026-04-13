@@ -3,6 +3,7 @@ import { buildServer } from './server';
 import { assertDatabaseUrlSafety, assertKeycloakConfig, getAppEnv } from './lib/envGuard';
 import { materializeUptime } from './workers/uptimeMaterializer';
 import { startReservationExpiryJob } from './jobs/reservationExpiry';
+import { startPreauthCleanupJob } from './jobs/preauthCleanup';
 
 const PORT = parseInt(process.env.PORT ?? '3001', 10);
 const HOST = process.env.HOST ?? '0.0.0.0';
@@ -34,6 +35,9 @@ buildServer()
 
       // Reservation expiry job: expire stale reservations every 30s
       startReservationExpiryJob();
+
+      // Preauth cleanup: void orphan holds + recover stuck captures every 5 min
+      startPreauthCleanupJob();
     });
   })
   .catch((err) => {

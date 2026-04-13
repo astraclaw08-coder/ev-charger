@@ -169,16 +169,16 @@ export async function supportDriverRoutes(app: FastifyInstance) {
 
     const user = await prisma.user.findUnique({
       where: { id: req.params.id },
-      select: { paymentProfile: true, email: true },
+      select: { stripeCustomerId: true, email: true },
     });
     if (!user) return reply.status(404).send({ error: 'Driver not found.' });
-    if (!user.paymentProfile) return { cards: [] };
+    if (!user.stripeCustomerId) return { cards: [] };
 
     try {
       const { default: Stripe } = await import('stripe');
       const stripe = new Stripe(stripeKey);
       const paymentMethods = await stripe.paymentMethods.list({
-        customer: user.paymentProfile,
+        customer: user.stripeCustomerId,
         type: 'card',
         limit: 10,
       });

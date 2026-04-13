@@ -75,7 +75,7 @@ export async function assessChargerHealth(
         },
         orderBy: { startedAt: 'desc' },
         take: 20,
-        include: { payment: { select: { status: true } } },
+        include: { payments: { where: { purpose: 'CHARGING' }, select: { status: true }, orderBy: { createdAt: 'desc' }, take: 1 } },
       }),
     ]);
 
@@ -257,7 +257,7 @@ function analyzeSessionAnomalies(
     kwhDelivered: number | null;
     meterStart: number | null;
     meterStop: number | null;
-    payment: { status: string } | null;
+    payments: Array<{ status: string }>;
   }>,
 ): HealthModuleResult {
   const m: HealthModuleResult = {

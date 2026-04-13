@@ -50,8 +50,8 @@ export type BillingBreakdown = {
   grossTotalUsd: number;
 };
 
-const FINAL_PAYMENT_STATUSES = new Set(['CAPTURED', 'REFUNDED']);
-const PENDING_PAYMENT_STATUSES = new Set(['PENDING', 'AUTHORIZED']);
+const FINAL_PAYMENT_STATUSES = new Set(['CAPTURED', 'PARTIAL_CAPTURED', 'REFUNDED']);
+const PENDING_PAYMENT_STATUSES = new Set(['PENDING', 'REQUIRES_ACTION', 'AUTHORIZED', 'CAPTURE_IN_PROGRESS']);
 
 function toFiniteNumber(value: unknown): number | null {
   const n = Number(value);

@@ -358,7 +358,7 @@ export async function chargerRoutes(app: FastifyInstance) {
           },
         },
         user: { select: { name: true, email: true } },
-        payment: { select: { status: true, amountCents: true } },
+        payments: { where: { purpose: 'CHARGING' }, select: { status: true, amountCents: true }, orderBy: { createdAt: 'desc' }, take: 1 },
         billingSnapshot: {
           select: {
             kwhDelivered: true,
@@ -382,6 +382,7 @@ export async function chargerRoutes(app: FastifyInstance) {
       const sessionTimings = resolveSessionStatusTimings(s, chargerStatusLogs);
       const amounts = computeSessionAmounts({
         ...s,
+        payment: s.payments?.[0] ?? null,
         startedAt: sessionTimings.plugOutAt ? s.startedAt : s.startedAt,
         stoppedAt: sessionTimings.plugOutAt ? new Date(sessionTimings.plugOutAt) : s.stoppedAt,
         plugOutAt: sessionTimings.plugOutAt ? new Date(sessionTimings.plugOutAt) : undefined,
@@ -397,8 +398,10 @@ export async function chargerRoutes(app: FastifyInstance) {
       });
       const snapshot = s.billingSnapshot;
       const snapshotGrossCents = snapshot?.grossAmountUsd != null ? Math.round(Number(snapshot.grossAmountUsd) * 100) : null;
+      const { payments: _payments, ...sRest } = s;
       return {
-        ...s,
+        ...sRest,
+        payment: s.payments?.[0] ?? null,
         plugInAt: sessionTimings.plugInAt ?? s.startedAt,
         plugOutAt: sessionTimings.plugOutAt ?? s.stoppedAt,
         kwhDelivered: snapshot?.kwhDelivered ?? amounts.kwhDelivered,

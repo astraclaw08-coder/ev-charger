@@ -183,12 +183,23 @@ export async function handleStatusNotification(
     });
   });
 
-  // Capture billing snapshot for auto-closed orphan session (non-blocking, outside tx)
+  // Capture billing snapshot + payment for auto-closed orphan session (non-blocking, outside tx)
   if (orphanSessionIdToSnapshot) {
     try {
       await captureSessionBillingSnapshot(orphanSessionIdToSnapshot);
     } catch (snapErr) {
       console.error(`[StatusNotification] Failed to capture billing snapshot for auto-closed session ${orphanSessionIdToSnapshot}:`, snapErr);
+    }
+
+    // Trigger payment capture via API (Stripe ownership boundary: API only)
+    const apiBase = process.env.API_BASE_URL ?? 'http://localhost:3001';
+    try {
+      await fetch(`${apiBase}/internal/payments/${orphanSessionIdToSnapshot}/capture`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+    } catch (capErr) {
+      console.error(`[StatusNotification] Failed to trigger payment capture for orphan session ${orphanSessionIdToSnapshot}:`, capErr);
     }
   }
 

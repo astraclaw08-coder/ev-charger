@@ -402,7 +402,7 @@ export default function ChargerDetailScreen() {
     c.connectors.some((connector) => connector.status === 'AVAILABLE'),
   ).length;
 
-  const hasDefaultPaymentMethod = Boolean(profile?.paymentProfile?.trim());
+  const hasDefaultPaymentMethod = Boolean(profile?.stripeCustomerId) || Boolean(profile?.paymentProfile?.trim());
   const pricePerKwhUsd = Number(selectedCharger?.site.pricePerKwhUsd ?? 0);
   const idleFeePerMinUsd = Number(selectedCharger?.site.idleFeePerMinUsd ?? 0);
   const activationFeeUsd = Number(

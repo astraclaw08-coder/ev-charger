@@ -34,11 +34,32 @@ function extractTransactionContextWh(
   return bestWh;
 }
 
+const API_BASE_URL = process.env.API_BASE_URL ?? 'http://localhost:3001';
+
 async function triggerBillingHook(sessionId: string, kwhDelivered: number, ratePerKwh: number, amountUsd: number) {
   console.log(
     `[Billing] Session ${sessionId} — ${kwhDelivered.toFixed(3)} kWh @ $${ratePerKwh.toFixed(4)}/kWh (effective) = $${amountUsd.toFixed(2)}`,
   );
-  // TODO Phase 3: initiate Stripe capture here
+
+  // Call API's internal capture endpoint (Stripe ownership boundary: API only)
+  try {
+    const res = await fetch(`${API_BASE_URL}/internal/payments/${sessionId}/capture`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    const result = await res.json() as { ok?: boolean; status?: string; amountCents?: number; deficitCents?: number; reason?: string };
+    if (result.ok) {
+      console.log(`[Billing] Payment captured for session ${sessionId}: status=${result.status} amount=${result.amountCents}c${result.deficitCents ? ` deficit=${result.deficitCents}c` : ''}`);
+    } else if (result.reason === 'no_authorized_payment') {
+      // No preauth for this session — guest or legacy flow. Not an error.
+      console.log(`[Billing] No preauth payment for session ${sessionId} — skipping capture`);
+    } else {
+      console.warn(`[Billing] Capture returned non-ok for session ${sessionId}:`, result);
+    }
+  } catch (err) {
+    // Non-fatal: session is already closed. Capture can be retried.
+    console.error(`[Billing] Failed to call capture API for session ${sessionId}:`, err);
+  }
 }
 
 export async function handleStopTransaction(

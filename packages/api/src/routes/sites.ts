@@ -418,12 +418,13 @@ export async function siteRoutes(app: FastifyInstance) {
           { stoppedAt: null, status: 'ACTIVE' },
         ],
       },
-      include: { payment: true },
+      include: { payments: { where: { purpose: 'CHARGING' }, orderBy: { createdAt: 'desc' }, take: 1 } },
     });
 
-    const getEffectiveAmountCents = (s: { meterStart: number | null; meterStop: number | null; kwhDelivered: number | null; ratePerKwh: number | null; payment: { status: string; amountCents: number | null } | null; startedAt: Date; stoppedAt: Date | null }) => (
+    const getEffectiveAmountCents = (s: any) => (
       computeSessionAmounts({
         ...s,
+        payment: s.payments?.[0] ?? null,
         pricingMode: site.pricingMode,
         pricePerKwhUsd: site.pricePerKwhUsd,
         idleFeePerMinUsd: site.idleFeePerMinUsd,
