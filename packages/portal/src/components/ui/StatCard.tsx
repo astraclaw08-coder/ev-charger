@@ -18,7 +18,7 @@ export default function StatCard({ icon, value, label, trend, sparkline, classNa
         className,
       )}
     >
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 min-h-[28px]">
         {icon && (
           <div className="hidden lg:flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-brand-50 text-brand-600 dark:bg-brand-500/10 dark:text-brand-400 [&>svg]:h-3.5 [&>svg]:w-3.5 [&>span]:scale-75">
             {icon}

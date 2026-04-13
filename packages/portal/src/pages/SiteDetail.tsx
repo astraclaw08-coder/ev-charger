@@ -1292,11 +1292,10 @@ export default function SiteDetail() {
 
       {/* ── Site Uptime ── */}
       {siteUptime && (
-        <div className="grid gap-3 sm:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-3">
           <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 text-center"><p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Uptime 24h</p><p className="mt-1 text-2xl font-bold text-gray-900 dark:text-slate-100">{siteUptime.uptimePercent24h.toFixed(1)}%</p></div>
           <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 text-center"><p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Uptime 7d</p><p className="mt-1 text-2xl font-bold text-gray-900 dark:text-slate-100">{siteUptime.uptimePercent7d.toFixed(1)}%</p></div>
           <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 text-center"><p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Uptime 30d</p><p className="mt-1 text-2xl font-bold text-gray-900 dark:text-slate-100">{siteUptime.uptimePercent30d.toFixed(1)}%</p></div>
-          <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 text-center"><p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Total Chargers</p><p className="mt-1 text-2xl font-bold text-gray-900 dark:text-slate-100">{site.chargers.length}</p></div>
         </div>
       )}
 
