@@ -168,6 +168,7 @@ export async function paymentRoutes(app: FastifyInstance) {
         currency: 'usd',
         customer: stripeCustomerId,
         payment_method: defaultPM.id,
+        payment_method_types: ['card'],
         capture_method: 'manual',
         confirm: true,
         metadata: {
