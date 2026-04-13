@@ -433,36 +433,51 @@ export default function ChargerStartScreen() {
 
   const isFlowing = Boolean(activeSession && activeConnectorStatus === 'CHARGING');
 
-  // ── Auto-navigate to receipt when session completes ──────────────────
-  // Track the active session in a ref so we can detect the ACTIVE → null
-  // transition and route the user to the finished receipt screen.
+  // ── Auto-navigate to receipt when session ends ───────────────────────
+  // Two paths lead here:
+  //   1. Plug-out detected (fast path) — pluggedOut flips true while
+  //      rawActiveSession is still ACTIVE. Navigate immediately; the
+  //      session screen handles the ACTIVE→COMPLETED transition itself.
+  //   2. Session status goes COMPLETED (fallback) — rawActiveSession
+  //      goes null. Covers manual stops or chargers that don't produce
+  //      a PLUG_OUT transition.
+
+  // Track the active session for fallback detection.
   useEffect(() => {
-    if (rawActiveSession) {
-      // Session is live — remember it for later transition detection.
-      // Guard: only track sessions that belong to this charger screen.
-      if (rawActiveSession.connector.charger.id === id) {
-        prevActiveSessionRef.current = {
-          id: rawActiveSession.id,
-          connectorCharger: rawActiveSession.connector.charger.id,
-        };
-        hasEverHadActiveSession.current = true;
-      }
-      return;
+    if (rawActiveSession && rawActiveSession.connector.charger.id === id) {
+      prevActiveSessionRef.current = {
+        id: rawActiveSession.id,
+        connectorCharger: rawActiveSession.connector.charger.id,
+      };
+      hasEverHadActiveSession.current = true;
     }
+  }, [rawActiveSession, id]);
 
-    // rawActiveSession just became null.
-    const prev = prevActiveSessionRef.current;
-    if (!prev || !hasEverHadActiveSession.current) return;
-    // Only navigate if the previous session belonged to this screen.
-    if (prev.connectorCharger !== id) return;
+  // Fast path: plug-out detected — navigate immediately.
+  useEffect(() => {
+    if (!pluggedOut || !rawActiveSession) return;
+    if (rawActiveSession.connector.charger.id !== id) return;
 
-    // Reset refs before navigating to prevent duplicate fires from
-    // polling flicker (e.g. brief null between two poll responses).
+    // Reset refs to prevent the fallback from double-navigating.
     prevActiveSessionRef.current = null;
     hasEverHadActiveSession.current = false;
 
-    // Small delay lets the API status settle so the session screen
-    // renders the receipt immediately rather than flashing ACTIVE.
+    router.push(`/session/${rawActiveSession.id}` as any);
+  }, [pluggedOut, rawActiveSession, id, router]);
+
+  // Fallback: session status changed to COMPLETED (rawActiveSession → null).
+  useEffect(() => {
+    if (rawActiveSession) return;
+
+    const prev = prevActiveSessionRef.current;
+    if (!prev || !hasEverHadActiveSession.current) return;
+    if (prev.connectorCharger !== id) return;
+
+    prevActiveSessionRef.current = null;
+    hasEverHadActiveSession.current = false;
+
+    // Small delay lets the API settle so the session screen shows
+    // the receipt immediately rather than briefly flashing ACTIVE.
     const timer = setTimeout(() => {
       router.push(`/session/${prev.id}` as any);
     }, 500);
