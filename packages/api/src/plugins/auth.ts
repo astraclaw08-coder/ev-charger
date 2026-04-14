@@ -13,6 +13,8 @@ declare module 'fastify' {
       email: string;
       name: string | null;
       idTag: string;
+      stripeCustomerId: string | null;
+      defaultPaymentMethodId: string | null;
     };
     currentOperator?: {
       id: string;
@@ -170,6 +172,8 @@ export const requireAuth: preHandlerHookHandler = async (req, reply) => {
     email: user.email,
     name: user.name,
     idTag: user.idTag,
+    stripeCustomerId: user.stripeCustomerId ?? null,
+    defaultPaymentMethodId: user.defaultPaymentMethodId ?? null,
   };
 };
 

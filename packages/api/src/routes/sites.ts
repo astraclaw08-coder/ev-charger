@@ -149,6 +149,10 @@ export async function siteRoutes(app: FastifyInstance) {
       maxChargeDurationMin: site.maxChargeDurationMin,
       maxIdleDurationMin: site.maxIdleDurationMin,
       maxSessionCostUsd: site.maxSessionCostUsd,
+      reservationEnabled: site.reservationEnabled,
+      reservationMaxDurationMin: site.reservationMaxDurationMin,
+      reservationFeeUsd: site.reservationFeeUsd,
+      reservationCancelGraceMin: site.reservationCancelGraceMin,
       createdAt: site.createdAt,
       chargers: site.chargers.map(({ password: _pw, ...c }: { password: string; [k: string]: unknown }) => c),
     };
