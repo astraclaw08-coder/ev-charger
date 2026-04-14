@@ -16,6 +16,14 @@ async function getStripe() {
 }
 
 async function findStripeCustomerId(userId: string): Promise<string | null> {
+  // Check User model first (primary storage since Stripe customer persistence)
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { stripeCustomerId: true },
+  });
+  if (user?.stripeCustomerId) return user.stripeCustomerId;
+
+  // Fallback: legacy Payment table lookup
   const existing = await prisma.payment.findFirst({
     where: { userId, stripeCustomerId: { not: null } },
     select: { stripeCustomerId: true },
