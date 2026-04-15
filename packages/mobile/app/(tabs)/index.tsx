@@ -15,7 +15,6 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
-import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useQuery } from '@tanstack/react-query';
 import * as Location from 'expo-location';
 import { CameraView, type BarcodeScanningResult, useCameraPermissions } from 'expo-camera';
@@ -120,7 +119,6 @@ export default function MapScreen() {
   const searchInputRef = useRef<TextInput | null>(null);
   const regionRef = useRef<Region | null>(null);
   const { isDark } = useAppTheme();
-  const tabBarHeight = useBottomTabBarHeight(); // kept for potential other uses
   const insets = useSafeAreaInsets();
   const { activeSession } = useChargingNotifications();
 

@@ -18,7 +18,6 @@ import {
   api,
   isEvcPlatformReadModelEnabled,
   type EnrichedTransaction,
-  type Payment,
   type Session,
 } from '@/lib/api';
 import { useAppTheme } from '@/theme';
@@ -96,11 +95,8 @@ function mapEnrichedToSession(tx: EnrichedTransaction): Session {
     payment: tx.payment
       ? {
           id: tx.id,
-          status: tx.payment.status as Payment['status'],
-          purpose: (tx.payment as any).purpose ?? 'CHARGING' as const,
+          status: tx.payment.status,
           amountCents: tx.payment.amountCents,
-          authorizedCents: (tx.payment as any).authorizedCents ?? null,
-          deficitCents: (tx.payment as any).deficitCents ?? null,
           stripeCustomerId: null,
           stripeIntentId: null,
         }

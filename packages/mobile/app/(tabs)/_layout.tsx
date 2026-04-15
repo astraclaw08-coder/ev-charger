@@ -1,7 +1,7 @@
 import React from 'react';
 import { Tabs, useRouter } from 'expo-router';
 import { TouchableOpacity, Text, View } from 'react-native';
-import { BottomTabBar, type BottomTabBarProps } from '@react-navigation/bottom-tabs';
+import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '@/theme';
 import { Fonts } from '@/fonts';
@@ -38,7 +38,9 @@ function FloatingTabBar({
   isDark,
   safeAreaBottom,
   bannerVisible,
-  ...tabProps
+  state,
+  descriptors,
+  navigation,
 }: BottomTabBarProps & { isDark: boolean; safeAreaBottom: number; bannerVisible: boolean }) {
   return (
     <View
@@ -65,17 +67,47 @@ function FloatingTabBar({
           shadowOffset: { width: 0, height: 6 },
           elevation: 10,
           maxHeight: 72,
+          flexDirection: 'row',
+          paddingTop: 6,
+          paddingBottom: 8,
         }}
       >
-        <BottomTabBar
-          {...tabProps}
-          style={{
-            borderTopWidth: 0,
-            backgroundColor: 'transparent',
-            paddingTop: 2,
-            paddingBottom: 6,
-          }}
-        />
+        {state.routes.map((route, index) => {
+          const { options } = descriptors[route.key];
+          if ((options as any).href === null) return null;
+          const isFocused = state.index === index;
+          const tintColor = isFocused
+            ? (isDark ? '#ffffff' : '#000000')
+            : (isDark ? '#94a3b8' : '#6b7280');
+
+          const onPress = () => {
+            const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
+            if (!isFocused && !event.defaultPrevented) {
+              navigation.navigate(route.name, route.params);
+            }
+          };
+
+          return (
+            <TouchableOpacity
+              key={route.key}
+              accessibilityRole="button"
+              accessibilityState={isFocused ? { selected: true } : {}}
+              onPress={onPress}
+              style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 2 }}
+            >
+              {options.tabBarIcon?.({ focused: isFocused, color: tintColor, size: 22 })}
+              <Text style={{
+                color: tintColor,
+                fontSize: 11,
+                fontFamily: Fonts.bold,
+                letterSpacing: 0.2,
+                marginTop: 1,
+              }}>
+                {typeof options.tabBarLabel === 'string' ? options.tabBarLabel : options.title ?? route.name}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
     </View>
   );

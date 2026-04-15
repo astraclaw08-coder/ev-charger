@@ -18,6 +18,7 @@ import {
   Image,
 } from 'react-native';
 import { useLocalSearchParams, Stack } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, isDevMode, type Session } from '@/lib/api';
 import { useAppTheme } from '@/theme';
@@ -187,33 +188,6 @@ function SessionSummary({
       ? 'Card on file'
       : '-';
 
-  const paymentStatus = session.payment?.status;
-  const paymentStatusLabel = (() => {
-    switch (paymentStatus) {
-      case 'CAPTURED': return 'Payment complete';
-      case 'PARTIAL_CAPTURED':
-        return session.payment?.deficitCents
-          ? `Partial payment — $${(session.payment.deficitCents / 100).toFixed(2)} remaining`
-          : 'Partial payment';
-      case 'AUTHORIZED': return 'Payment authorized — capture pending';
-      case 'CAPTURE_IN_PROGRESS': return 'Processing payment…';
-      case 'FAILED': return 'Payment failed';
-      case 'CANCELED': return 'Payment canceled';
-      case 'REFUNDED': return 'Payment refunded';
-      default: return null;
-    }
-  })();
-  const paymentStatusColor = (() => {
-    switch (paymentStatus) {
-      case 'CAPTURED': case 'REFUNDED': return { bg: '#d1fae5', text: '#065f46' };
-      case 'PARTIAL_CAPTURED': return { bg: '#fef3c7', text: '#713f12' };
-      case 'AUTHORIZED': case 'CAPTURE_IN_PROGRESS': return { bg: '#dbeafe', text: '#1e40af' };
-      case 'FAILED': return { bg: '#fee2e2', text: '#991b1b' };
-      case 'CANCELED': return { bg: '#f3f4f6', text: '#6b7280' };
-      default: return null;
-    }
-  })();
-
   return (
     <View style={styles.summaryContainer}>
       <Text style={[styles.summarySubtitle, { color: isDark ? '#cbd5e1' : '#111827' }]}>{session.connector.charger.site.name}</Text>
@@ -237,15 +211,7 @@ function SessionSummary({
         />
       </View>
 
-      {paymentStatusLabel && paymentStatusColor && (
-        <View style={[styles.paymentStatusBanner, { backgroundColor: paymentStatusColor.bg }]}>
-          <Text style={[styles.paymentStatusText, { color: paymentStatusColor.text }]}>
-            {paymentStatusLabel}
-          </Text>
-        </View>
-      )}
-
-      {!paymentStatusLabel && session.amountState === 'FINAL' && (
+      {session.amountState === 'FINAL' && (
         <View style={styles.paymentSuccess}>
           <Text style={styles.paymentSuccessText}>
             Final payment: ${cost.toFixed(2)}
@@ -253,7 +219,7 @@ function SessionSummary({
         </View>
       )}
 
-      {!paymentStatusLabel && session.amountState === 'PENDING' && (
+      {session.amountState === 'PENDING' && (
         <View style={styles.paymentPending}>
           <Text style={styles.paymentPendingText}>Stripe settlement pending · shown total is estimated.</Text>
         </View>
@@ -344,14 +310,6 @@ function SessionSummary({
           label="Payment card used"
           value={paymentMethod}
         />
-        {session.payment?.amountCents != null && (paymentStatus === 'CAPTURED' || paymentStatus === 'PARTIAL_CAPTURED') && (
-          <ReceiptRow
-            isDark={isDark}
-            label="Amount charged"
-            value={`$${(session.payment.amountCents / 100).toFixed(2)}`}
-            emphasizeValue
-          />
-        )}
 
         <View style={[styles.receiptRow, styles.receiptRowNoBorder]}>
           <Text style={[styles.receiptThanks, { color: isDark ? '#cbd5e1' : '#374151' }]}>Thank you for charging with us!</Text>
@@ -572,11 +530,13 @@ function LiveSessionView({
   onStop,
   stopping,
   showConnectorLabel,
+  vehicleLabel,
 }: {
   session: Session;
   onStop: () => void;
   stopping: boolean;
   showConnectorLabel: boolean;
+  vehicleLabel?: string | null;
 }) {
   const { isDark } = useAppTheme();
   const [showStopModal, setShowStopModal] = useState(false);
@@ -619,6 +579,12 @@ function LiveSessionView({
         <Text style={[styles.liveConnector, { color: isDark ? '#9ca3af' : '#6b7280' }]}>
           Connector {session.connector.connectorId}
         </Text>
+      ) : null}
+      {vehicleLabel ? (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4, marginBottom: 4 }}>
+          <Ionicons name="car-sport-outline" size={14} color={isDark ? '#94a3b8' : '#6b7280'} />
+          <Text style={{ fontSize: 13, fontWeight: '500', color: isDark ? '#94a3b8' : '#6b7280' }}>{vehicleLabel}</Text>
+        </View>
       ) : null}
 
       {/* Big kWh counter */}
@@ -689,6 +655,19 @@ export default function SessionScreen() {
     enabled: Boolean(session?.connector.charger.id),
     staleTime: 30_000,
   });
+
+  const { data: profileData } = useQuery({
+    queryKey: ['me-profile'],
+    queryFn: () => api.profile.get(),
+    staleTime: 60_000,
+  });
+
+  const vehicleLabel = useMemo(() => {
+    if (!profileData?.vehicleMake && !profileData?.vehicleModel) return null;
+    const parts = [profileData.vehicleMake, profileData.vehicleModel].filter(Boolean).join(' ');
+    const year = profileData.vehicleYear ? ` (${profileData.vehicleYear})` : '';
+    return `${parts}${year}`;
+  }, [profileData]);
 
   const showConnectorLabel = (chargerDetails?.connectors?.length ?? 1) > 1;
   const isLiveSession = session?.status === 'ACTIVE' && !session?.endedAt;
@@ -779,6 +758,7 @@ export default function SessionScreen() {
             onStop={() => stopMutation.mutate()}
             stopping={stopMutation.isPending}
             showConnectorLabel={showConnectorLabel}
+            vehicleLabel={vehicleLabel}
           />
         ) : (
           <SessionSummary
@@ -973,13 +953,6 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   paymentPendingText: { color: '#713f12', fontSize: 13, textAlign: 'center' },
-  paymentStatusBanner: {
-    borderRadius: 10,
-    padding: 10,
-    width: '100%',
-    marginBottom: 16,
-  },
-  paymentStatusText: { fontSize: 13, textAlign: 'center', fontWeight: '600' },
   summaryMeta: {
     backgroundColor: '#f3f4f6',
     borderRadius: 12,

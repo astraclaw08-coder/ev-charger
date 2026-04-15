@@ -9,13 +9,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '@/theme';
 import { parseChargerQrPayload } from '@/lib/chargerQr';
 import { api, type Charger } from '@/lib/api';
-import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { useSafeTabBarHeight } from '../../src/hooks/useSafeTabBarHeight';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function ScanScreen() {
   const router = useRouter();
   const { isDark } = useAppTheme();
-  const tabBarHeight = useBottomTabBarHeight();
+  const tabBarHeight = useSafeTabBarHeight();
   const insets = useSafeAreaInsets();
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [scanLocked, setScanLocked] = useState(false);

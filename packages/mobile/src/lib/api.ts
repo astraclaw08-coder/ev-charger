@@ -135,6 +135,9 @@ export interface ConnectorActiveReservation {
   status: string;
   holdStartsAt: string;
   holdExpiresAt: string;
+  feeAmountCents?: number | null;
+  feeStatus?: string | null;
+  feeCancelGraceExpiresAt?: string | null;
 }
 
 export interface Connector {
@@ -167,6 +170,8 @@ export interface Charger {
     touWindows?: unknown;
     reservationEnabled?: boolean;
     reservationMaxDurationMin?: number;
+    reservationFeeUsd?: number;
+    reservationCancelGraceMin?: number;
   };
   connectors: Connector[];
 }
@@ -264,16 +269,16 @@ export interface UserProfile {
   homeState: string | null;
   homeZipCode: string | null;
   paymentProfile: string | null;
-  stripeCustomerId: string | null;
+  vehicleName: string | null;
+  vehicleMake: string | null;
+  vehicleModel: string | null;
+  vehicleYear: string | null;
 }
 
 export interface Payment {
   id: string;
-  status: 'PENDING' | 'REQUIRES_ACTION' | 'AUTHORIZED' | 'CAPTURE_IN_PROGRESS' | 'CAPTURED' | 'PARTIAL_CAPTURED' | 'FAILED' | 'CANCELED' | 'REFUNDED';
-  purpose: 'CHARGING' | 'RESERVATION' | 'REMAINDER' | 'REFUND_ADJUSTMENT';
+  status: string;
   amountCents: number | null;
-  authorizedCents: number | null;
-  deficitCents: number | null;
   stripeCustomerId: string | null;
   stripeIntentId: string | null;
 }
@@ -543,31 +548,13 @@ export const api = {
         method: 'POST',
       });
     },
-    preauth(connectorRefId: string) {
-      return request<{
-        paymentId: string;
-        preauthToken: string;
-        authorizedCents: number;
-        status: 'AUTHORIZED' | 'REQUIRES_ACTION' | 'FAILED';
-        clientSecret?: string;
-        alreadyExists?: boolean;
-      }>('/payments/preauth', {
-        method: 'POST',
-        body: JSON.stringify({ connectorRefId }),
-      });
-    },
-    cancel(paymentId: string) {
-      return request<{ status: string }>(`/payments/${paymentId}/cancel`, {
-        method: 'POST',
-      });
-    },
   },
 
   profile: {
     get() {
       return request<UserProfile>('/me/profile');
     },
-    update(input: Partial<Pick<UserProfile, 'name' | 'email' | 'phone' | 'homeAddress' | 'homeSiteAddress' | 'homeCity' | 'homeState' | 'homeZipCode' | 'paymentProfile'>>) {
+    update(input: Partial<Pick<UserProfile, 'name' | 'email' | 'phone' | 'homeAddress' | 'homeSiteAddress' | 'homeCity' | 'homeState' | 'homeZipCode' | 'paymentProfile' | 'vehicleName' | 'vehicleMake' | 'vehicleModel' | 'vehicleYear'>>) {
       return request<UserProfile>('/me/profile', {
         method: 'PUT',
         body: JSON.stringify(input),
