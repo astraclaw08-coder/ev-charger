@@ -277,106 +277,140 @@ async function applySmartChargingStacked(chargerId: string, trigger: string): Pr
     console.log(`[SmartCharging:Stacked] Cleared stale profile ${stale.sourceProfileId} from ${charger.ocppId}`);
   }
 
-  // Push each active profile
-  for (const entry of activeEntries) {
-    const existing: any = existingByProfileId.get(entry.profile.id);
-    let status: string = 'PENDING_OFFLINE';
-    let lastError: string | null = null;
-    let lastAppliedAt: Date | null = existing?.lastAppliedAt ?? null;
+  // ── Merge all active profiles into a SINGLE Absolute OCPP profile ──
+  // Instead of pushing one OCPP profile per SmartChargingProfile entry (which
+  // creates stack-level conflicts on chargers like LOOP EX-1762 that don't
+  // correctly replace profiles at the same stackLevel), we compute the MINIMUM
+  // effective limit across all active entries and push one merged profile.
+  // This is the correct OCPP 1.6 semantic (ChargePointMaxProfile = the cap)
+  // and avoids firmware-specific stacking bugs entirely.
 
-    if (isOnline && connectionReady) {
-      // Compute fingerprint of the profile definition to detect changes.
-      // Also compare the currently-active window limit — if the effective
-      // limit changed (e.g. entered a new window) we must re-push even if
-      // the profile definition didn't change, because the charger handles
-      // Recurring Weekly schedules natively and we need to re-send after
-      // any boot that wiped the charger's RAM profiles.
-      const fp = profileFingerprint(entry.profile);
-      const currentEffectiveKw = resolveCurrentLimitKw(entry.profile, now);
-      const alreadyEquivalent = Boolean(
+  const MERGED_STACK_LEVEL = 60;
+  const MERGED_PROFILE_ID = 1;
+
+  // Resolve each entry's current effective kW and fingerprint
+  const entryDetails = activeEntries.map((entry) => ({
+    entry,
+    effectiveKw: resolveCurrentLimitKw(entry.profile, now),
+    fingerprint: profileFingerprint(entry.profile),
+  }));
+
+  // The merged limit is the MINIMUM across all active profiles
+  const mergedLimitKw = entryDetails.length > 0
+    ? Math.min(...entryDetails.map((d) => d.effectiveKw))
+    : SAFE_LIMIT_KW;
+
+  // Build a composite fingerprint from all contributing profiles
+  const mergedFingerprint = entryDetails.map((d) => `${d.entry.profile.id}:${d.fingerprint}:${d.effectiveKw}`).sort().join('|');
+
+  let mergedStatus: string = 'PENDING_OFFLINE';
+  let mergedLastError: string | null = null;
+  let mergedLastAppliedAt: Date | null = null;
+
+  if (isOnline && connectionReady) {
+    // Check if ALL existing states are APPLIED with matching fingerprints and limits
+    const allEquivalent = entryDetails.every((d) => {
+      const existing: any = existingByProfileId.get(d.entry.profile.id);
+      return Boolean(
         existing
         && existing.status === 'APPLIED'
-        && existing.ocppStackLevel === entry.ocppStackLevel
-        && existing.ocppChargingProfileId === entry.ocppChargingProfileId
-        && existing.profileFingerprint === fp
-        && Math.abs(existing.effectiveLimitKw - currentEffectiveKw) < 0.001,
+        && existing.profileFingerprint === d.fingerprint
+        && Math.abs(existing.effectiveLimitKw - d.effectiveKw) < 0.001,
       );
+    });
 
-      if (alreadyEquivalent) {
-        console.log(`[SmartCharging:Stacked] ${charger.ocppId} profile "${entry.profile.name}" already equivalent (fp=${fp}, limit=${currentEffectiveKw}kW) — skipping push`);
-        status = 'APPLIED';
-        lastError = null;
-      } else {
-        console.log(`[SmartCharging:Stacked] ${charger.ocppId} profile "${entry.profile.name}" needs push (fp=${fp}, currentLimit=${currentEffectiveKw}kW, existingFp=${existing?.profileFingerprint ?? 'none'}, existingLimit=${existing?.effectiveLimitKw ?? 'none'}, existingStatus=${existing?.status ?? 'none'})`);
-
-        // Use Absolute profile with the resolved current limit rather than a
-        // Recurring Weekly schedule.  Many charger firmwares (including LOOP
-        // EX-1762) accept Recurring Weekly profiles but miscompute the schedule
-        // period offsets, silently applying the default limit instead of the
-        // active window's limit.  An Absolute profile with a single period is
-        // universally supported and heartbeat-driven re-push handles window
-        // transitions automatically.
-        const payload = buildAbsolutePayloadFromCurrentLimit(entry, currentEffectiveKw);
-
-        const ocppStatus = await remoteSetChargingProfile(charger.ocppId, payload);
-        if (ocppStatus === 'Accepted') {
-          status = 'APPLIED';
-          lastAppliedAt = now;
-        } else if (ocppStatus === 'NotSupported') {
-          // Charger doesn't support stacking — flag it and fallback to legacy
-          stackingUnsupportedChargers.add(chargerId);
-          console.warn(`[SmartCharging:Stacked] ${charger.ocppId} returned NotSupported — flagging for legacy fallback`);
-          return applySmartChargingLegacy(chargerId, trigger);
-        } else {
-          status = 'ERROR';
-          lastError = `SetChargingProfile rejected (${ocppStatus})`;
-        }
-      }
-    } else if (!isOnline) {
-      status = 'PENDING_OFFLINE';
+    if (allEquivalent) {
+      console.log(`[SmartCharging:Stacked] ${charger.ocppId} merged profile already equivalent (limit=${mergedLimitKw}kW, ${entryDetails.length} sources) — skipping push`);
+      mergedStatus = 'APPLIED';
     } else {
-      status = 'PENDING_OFFLINE';
-      lastError = 'Connection not ready';
+      console.log(`[SmartCharging:Stacked] ${charger.ocppId} pushing MERGED profile: ${mergedLimitKw}kW (${toA(mergedLimitKw)}A) from ${entryDetails.length} active profiles`);
+      for (const d of entryDetails) {
+        console.log(`  → "${d.entry.profile.name}" [${d.entry.scope}] effective=${d.effectiveKw}kW`);
+      }
+
+      // Clear ALL ChargePointMaxProfile from the charger first to remove any
+      // stale profiles (including manually-pushed test profiles)
+      try {
+        await remoteClearChargingProfile(charger.ocppId, {
+          connectorId: 0,
+          chargingProfilePurpose: 'ChargePointMaxProfile',
+        });
+        console.log(`[SmartCharging:Stacked] ${charger.ocppId} cleared all ChargePointMaxProfile`);
+      } catch (err) {
+        console.warn(`[SmartCharging:Stacked] ${charger.ocppId} clear failed (non-fatal):`, err);
+      }
+
+      // Push a single merged Absolute profile
+      const payload = {
+        connectorId: 0,
+        csChargingProfiles: {
+          chargingProfileId: MERGED_PROFILE_ID,
+          stackLevel: MERGED_STACK_LEVEL,
+          chargingProfilePurpose: 'ChargePointMaxProfile',
+          chargingProfileKind: 'Absolute',
+          chargingSchedule: {
+            chargingRateUnit: 'A',
+            chargingSchedulePeriod: [{ startPeriod: 0, limit: toA(mergedLimitKw) }],
+          },
+        },
+      };
+
+      const ocppStatus = await remoteSetChargingProfile(charger.ocppId, payload);
+      if (ocppStatus === 'Accepted') {
+        mergedStatus = 'APPLIED';
+        mergedLastAppliedAt = now;
+      } else if (ocppStatus === 'NotSupported') {
+        stackingUnsupportedChargers.add(chargerId);
+        console.warn(`[SmartCharging:Stacked] ${charger.ocppId} returned NotSupported — flagging for legacy fallback`);
+        return applySmartChargingLegacy(chargerId, trigger);
+      } else {
+        mergedStatus = 'ERROR';
+        mergedLastError = `SetChargingProfile rejected (${ocppStatus})`;
+      }
     }
+  } else if (!isOnline) {
+    mergedStatus = 'PENDING_OFFLINE';
+  } else {
+    mergedStatus = 'PENDING_OFFLINE';
+    mergedLastError = 'Connection not ready';
+  }
 
-    // Store the ACTUAL currently-active window limit (not defaultLimitKw).
-    // This is what the charger should be enforcing right now.
-    const effectiveLimit = resolveCurrentLimitKw(entry.profile, now);
-    const fp = profileFingerprint(entry.profile);
-
+  // Update state rows for each source profile (tracking which DB profiles contributed)
+  for (const d of entryDetails) {
+    const existing: any = existingByProfileId.get(d.entry.profile.id);
     await prisma.smartChargingState.upsert({
-      where: { chargerId_sourceProfileId: { chargerId: charger.id, sourceProfileId: entry.profile.id } },
+      where: { chargerId_sourceProfileId: { chargerId: charger.id, sourceProfileId: d.entry.profile.id } },
       create: {
         chargerId: charger.id,
-        effectiveLimitKw: effectiveLimit,
+        effectiveLimitKw: d.effectiveKw,
         fallbackApplied: false,
-        sourceScope: entry.scope,
-        sourceProfileId: entry.profile.id,
+        sourceScope: d.entry.scope,
+        sourceProfileId: d.entry.profile.id,
         sourceWindowId: null,
-        sourceReason: `Stacked ${entry.scope.toLowerCase()} profile "${entry.profile.name}"; trigger=${trigger}`,
-        status,
+        sourceReason: `Merged ${d.entry.scope.toLowerCase()} profile "${d.entry.profile.name}" → min=${mergedLimitKw}kW; trigger=${trigger}`,
+        status: mergedStatus,
         lastAttemptAt: now,
-        lastAppliedAt,
-        lastError,
-        ocppChargingProfileId: entry.ocppChargingProfileId,
-        ocppStackLevel: entry.ocppStackLevel,
-        profileFingerprint: fp,
+        lastAppliedAt: mergedLastAppliedAt ?? existing?.lastAppliedAt ?? null,
+        lastError: mergedLastError,
+        ocppChargingProfileId: MERGED_PROFILE_ID,
+        ocppStackLevel: MERGED_STACK_LEVEL,
+        profileFingerprint: d.fingerprint,
       },
       update: {
-        effectiveLimitKw: effectiveLimit,
+        effectiveLimitKw: d.effectiveKw,
         fallbackApplied: false,
-        sourceScope: entry.scope,
-        sourceProfileId: entry.profile.id,
-        sourceReason: `Stacked ${entry.scope.toLowerCase()} profile "${entry.profile.name}"; trigger=${trigger}`,
-        status,
+        sourceScope: d.entry.scope,
+        sourceProfileId: d.entry.profile.id,
+        sourceReason: `Merged ${d.entry.scope.toLowerCase()} profile "${d.entry.profile.name}" → min=${mergedLimitKw}kW; trigger=${trigger}`,
+        status: mergedStatus,
         lastAttemptAt: now,
-        lastAppliedAt,
-        lastError,
-        ocppChargingProfileId: entry.ocppChargingProfileId,
-        ocppStackLevel: entry.ocppStackLevel,
+        lastAppliedAt: mergedLastAppliedAt ?? existing?.lastAppliedAt ?? null,
+        lastError: mergedLastError,
+        ocppChargingProfileId: MERGED_PROFILE_ID,
+        ocppStackLevel: MERGED_STACK_LEVEL,
         compositeScheduleVerified: false,
         compositeScheduleVerifiedAt: null,
-        profileFingerprint: fp,
+        profileFingerprint: d.fingerprint,
       },
     });
   }
