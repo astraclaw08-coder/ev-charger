@@ -309,8 +309,14 @@ async function applySmartChargingStacked(chargerId: string, trigger: string): Pr
       } else {
         console.log(`[SmartCharging:Stacked] ${charger.ocppId} profile "${entry.profile.name}" needs push (fp=${fp}, currentLimit=${currentEffectiveKw}kW, existingFp=${existing?.profileFingerprint ?? 'none'}, existingLimit=${existing?.effectiveLimitKw ?? 'none'}, existingStatus=${existing?.status ?? 'none'})`);
 
-        const payload = buildRecurringWeeklyPayloadStacked(entry, SAFE_LIMIT_KW, now)
-          ?? buildConstantPayloadStacked(entry);
+        // Use Absolute profile with the resolved current limit rather than a
+        // Recurring Weekly schedule.  Many charger firmwares (including LOOP
+        // EX-1762) accept Recurring Weekly profiles but miscompute the schedule
+        // period offsets, silently applying the default limit instead of the
+        // active window's limit.  An Absolute profile with a single period is
+        // universally supported and heartbeat-driven re-push handles window
+        // transitions automatically.
+        const payload = buildAbsolutePayloadFromCurrentLimit(entry, currentEffectiveKw);
 
         const ocppStatus = await remoteSetChargingProfile(charger.ocppId, payload);
         if (ocppStatus === 'Accepted') {
@@ -461,6 +467,29 @@ function buildConstantPayloadStacked(entry: StackedProfileEntry) {
       chargingSchedule: {
         chargingRateUnit: 'A',
         chargingSchedulePeriod: [{ startPeriod: 0, limit: toA(limitKw) }],
+      },
+    },
+  };
+}
+
+/**
+ * Build an Absolute profile that sets the current effective limit.
+ * This avoids firmware-specific bugs in Recurring Weekly schedule interpretation
+ * and relies on heartbeat-driven re-push to handle window transitions.
+ */
+function buildAbsolutePayloadFromCurrentLimit(entry: StackedProfileEntry, currentLimitKw: number) {
+  return {
+    connectorId: 0,
+    csChargingProfiles: {
+      chargingProfileId: entry.ocppChargingProfileId,
+      stackLevel: entry.ocppStackLevel,
+      chargingProfilePurpose: 'ChargePointMaxProfile',
+      chargingProfileKind: 'Absolute',
+      ...(entry.profile.validFrom ? { validFrom: entry.profile.validFrom.toISOString() } : {}),
+      ...(entry.profile.validTo ? { validTo: entry.profile.validTo.toISOString() } : {}),
+      chargingSchedule: {
+        chargingRateUnit: 'A',
+        chargingSchedulePeriod: [{ startPeriod: 0, limit: toA(currentLimitKw) }],
       },
     },
   };
