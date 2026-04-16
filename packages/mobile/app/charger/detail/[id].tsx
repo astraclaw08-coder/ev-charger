@@ -18,7 +18,7 @@ import {
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useNavigation, usePreventRemove } from '@react-navigation/native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api, getAuthIdentityKey, type Connector, type Session } from '@/lib/api';
+import { api, type Connector, type Session } from '@/lib/api';
 import { useAppTheme } from '@/theme';
 import { useAppAuth } from '@/providers/AuthProvider';
 import { useFavorites } from '@/hooks/useFavorites';
@@ -504,7 +504,6 @@ export default function ChargerStartScreen() {
   const flowLocked = sliderInteracting || starting != null || showActivationModal || awaitingPlugIn;
 
   // Reservation state
-  const currentUserId = getAuthIdentityKey();
   const reservationEnabled = Boolean(charger?.site?.reservationEnabled);
   const reservationFeeUsd = charger?.site?.reservationFeeUsd ?? 0;
   const reservationCancelGraceMin = charger?.site?.reservationCancelGraceMin ?? 5;
@@ -590,8 +589,11 @@ export default function ChargerStartScreen() {
 
   // Reservation: derived from selected connector
   const connectorReservation = selectedConnector?.activeReservation ?? null;
-  const isMyReservation = connectorReservation != null && connectorReservation.userId === currentUserId;
-  const isOtherReservation = connectorReservation != null && connectorReservation.userId !== currentUserId;
+  const myActiveReservation = activeReservation?.reservation ?? null;
+  // Compare reservation IDs (not user IDs) to avoid Keycloak sub vs DB User.id mismatch
+  const isMyReservation = connectorReservation != null && myActiveReservation != null && connectorReservation.id === myActiveReservation.id;
+  const isOtherReservation = connectorReservation != null && !isMyReservation;
+
 
   useEffect(() => {
     if (!isMyReservation || !connectorReservation) {
@@ -834,8 +836,9 @@ export default function ChargerStartScreen() {
     if (!charger) return;
 
     if (connector.status === 'RESERVED') {
-      const currentUserId = getAuthIdentityKey();
-      if (connector.activeReservation?.userId === currentUserId) {
+      // Compare reservation IDs (not user IDs) to avoid Keycloak sub vs DB User.id mismatch
+      const myRes = activeReservation?.reservation;
+      if (myRes && connector.activeReservation?.id === myRes.id) {
         // User owns this reservation — allow start
         startMutation.mutate({ chargerId: charger.id, connectorId: connector.connectorId });
         return;

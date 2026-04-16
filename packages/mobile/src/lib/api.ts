@@ -627,7 +627,7 @@ export const api = {
       );
     },
     getActive() {
-      return request<{ id: string; reservationId: number; userId: string; connectorId: string; status: string; holdStartsAt: string; holdExpiresAt: string } | null>(
+      return request<{ reservation: { id: string; reservationId: number; userId: string; connectorRefId: string; status: string; holdStartsAt: string; holdExpiresAt: string; connector?: any; site?: any } | null }>(
         '/reservations/active',
       );
     },
