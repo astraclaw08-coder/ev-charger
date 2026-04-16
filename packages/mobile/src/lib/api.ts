@@ -1,15 +1,30 @@
 import Constants from 'expo-constants';
+import * as Application from 'expo-application';
 import { Buffer } from 'buffer';
 
-const API_URL =
+// ── Runtime env detection ──────────────────────────────────────────
+// In dev-client builds, both Lumeo Dev and Lumeo RC load JS from the
+// same metro server, so EXPO_PUBLIC_* and Constants.expoConfig.extra
+// are identical.  Detect the actual app variant from the native bundle
+// identifier (differs per installed binary) and override accordingly.
+const _bundleId = Application.applicationId ?? '';
+const _runtimeEnv: 'dev' | 'rc' | 'prod' =
+  _bundleId === 'app.evcharger.app' ? 'prod' :
+  _bundleId === 'rc.evcharger.app'  ? 'rc'   : 'dev';
+
+const PROD_API = 'https://api-production-26cf.up.railway.app';
+
+const _configApiUrl =
   (Constants.expoConfig?.extra?.apiUrl as string | undefined) ||
   process.env.EXPO_PUBLIC_API_URL ||
   'http://127.0.0.1:3001';
 
-export const appEnv =
-  ((Constants.expoConfig?.extra?.appEnv as string | undefined) || process.env.APP_ENV || 'dev').toLowerCase();
-export const envLabel =
-  (Constants.expoConfig?.extra?.envLabel as string | undefined) || process.env.EXPO_PUBLIC_ENV_LABEL || 'DEV';
+// Override: RC/prod apps must never hit localhost, even if metro served dev config
+const API_URL =
+  _runtimeEnv === 'dev' ? _configApiUrl : PROD_API;
+
+export const appEnv = _runtimeEnv;
+export const envLabel = _runtimeEnv === 'prod' ? 'PROD' : _runtimeEnv === 'rc' ? 'RC' : 'DEV';
 export const apiBaseUrl = API_URL;
 
 const DEV_USER_ID = process.env.EXPO_PUBLIC_DEV_USER_ID || 'user-test-driver-001';
