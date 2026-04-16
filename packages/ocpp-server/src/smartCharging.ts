@@ -1,6 +1,7 @@
 import { prisma, parseSmartChargingSchedule, resolveEffectiveSmartChargingLimit, resolveAllActiveProfiles, type SmartChargingProfileLike, type StackedProfileEntry } from '@ev-charger/shared';
 import { remoteClearChargingProfile, remoteSetChargingProfile, remoteGetCompositeSchedule } from './remote';
 import { clientRegistry } from './clientRegistry';
+import { createHash } from 'crypto';
 
 // Stacking ON by default — set SMART_CHARGING_STACKING=false to force legacy mode globally
 const STACKING_ENABLED = process.env.SMART_CHARGING_STACKING !== 'false';
@@ -78,6 +79,50 @@ function toProfileLike(profile: any): SmartChargingProfileLike {
 const NOMINAL_VOLTAGE = Number(process.env.SMART_CHARGING_NOMINAL_VOLTAGE ?? '240') || 240;
 function toA(limitKw: number): number {
   return Math.max(1, Math.round((limitKw * 1000) / NOMINAL_VOLTAGE));
+}
+
+/**
+ * Compute a fingerprint of the profile definition (schedule + defaultLimitKw + validity).
+ * Used to detect when the profile definition has changed on the server side and
+ * the charger needs a fresh SetChargingProfile push.
+ */
+function profileFingerprint(profile: SmartChargingProfileLike): string {
+  const canonical = JSON.stringify({
+    d: profile.defaultLimitKw,
+    s: profile.schedule,
+    vf: profile.validFrom?.toISOString() ?? null,
+    vt: profile.validTo?.toISOString() ?? null,
+  });
+  return createHash('sha256').update(canonical).digest('hex').slice(0, 16);
+}
+
+/**
+ * Resolve the currently-active window limit for a profile at a given time.
+ * Returns the window's limitKw if a window is active, else the defaultLimitKw.
+ * Schedule times are stored in UTC (portal converts local→UTC on save).
+ */
+function resolveCurrentLimitKw(profile: SmartChargingProfileLike, at: Date): number {
+  const parsed = parseSmartChargingSchedule(profile.schedule);
+  for (const w of parsed.windows) {
+    const day = at.getUTCDay();
+    if (!w.daysOfWeek.includes(day)) continue;
+    const minuteOfDay = at.getUTCHours() * 60 + at.getUTCMinutes();
+    const start = hhmmToMinuteOfDay(w.startTime);
+    const end = hhmmToMinuteOfDay(w.endTime);
+    if (start == null || end == null) continue;
+    let active = false;
+    if (start === end) active = true;
+    else if (start < end) active = minuteOfDay >= start && minuteOfDay < end;
+    else active = minuteOfDay >= start || minuteOfDay < end; // overnight
+    if (active) return w.limitKw;
+  }
+  return profile.defaultLimitKw ?? SAFE_LIMIT_KW;
+}
+
+function hhmmToMinuteOfDay(v: string): number | null {
+  const parts = v.split(':').map(Number);
+  if (parts.length < 2 || isNaN(parts[0]) || isNaN(parts[1])) return null;
+  return parts[0] * 60 + parts[1];
 }
 
 function startOfUtcWeek(at: Date): Date {
@@ -240,19 +285,30 @@ async function applySmartChargingStacked(chargerId: string, trigger: string): Pr
     let lastAppliedAt: Date | null = existing?.lastAppliedAt ?? null;
 
     if (isOnline && connectionReady) {
-      // Check if already applied with same params
+      // Compute fingerprint of the profile definition to detect changes.
+      // Also compare the currently-active window limit — if the effective
+      // limit changed (e.g. entered a new window) we must re-push even if
+      // the profile definition didn't change, because the charger handles
+      // Recurring Weekly schedules natively and we need to re-send after
+      // any boot that wiped the charger's RAM profiles.
+      const fp = profileFingerprint(entry.profile);
+      const currentEffectiveKw = resolveCurrentLimitKw(entry.profile, now);
       const alreadyEquivalent = Boolean(
         existing
         && existing.status === 'APPLIED'
         && existing.ocppStackLevel === entry.ocppStackLevel
         && existing.ocppChargingProfileId === entry.ocppChargingProfileId
-        && Math.abs(existing.effectiveLimitKw - (entry.profile.defaultLimitKw ?? 0)) < 0.001,
+        && existing.profileFingerprint === fp
+        && Math.abs(existing.effectiveLimitKw - currentEffectiveKw) < 0.001,
       );
 
       if (alreadyEquivalent) {
+        console.log(`[SmartCharging:Stacked] ${charger.ocppId} profile "${entry.profile.name}" already equivalent (fp=${fp}, limit=${currentEffectiveKw}kW) — skipping push`);
         status = 'APPLIED';
         lastError = null;
       } else {
+        console.log(`[SmartCharging:Stacked] ${charger.ocppId} profile "${entry.profile.name}" needs push (fp=${fp}, currentLimit=${currentEffectiveKw}kW, existingFp=${existing?.profileFingerprint ?? 'none'}, existingLimit=${existing?.effectiveLimitKw ?? 'none'}, existingStatus=${existing?.status ?? 'none'})`);
+
         const payload = buildRecurringWeeklyPayloadStacked(entry, SAFE_LIMIT_KW, now)
           ?? buildConstantPayloadStacked(entry);
 
@@ -277,7 +333,10 @@ async function applySmartChargingStacked(chargerId: string, trigger: string): Pr
       lastError = 'Connection not ready';
     }
 
-    const effectiveLimit = entry.profile.defaultLimitKw ?? SAFE_LIMIT_KW;
+    // Store the ACTUAL currently-active window limit (not defaultLimitKw).
+    // This is what the charger should be enforcing right now.
+    const effectiveLimit = resolveCurrentLimitKw(entry.profile, now);
+    const fp = profileFingerprint(entry.profile);
 
     await prisma.smartChargingState.upsert({
       where: { chargerId_sourceProfileId: { chargerId: charger.id, sourceProfileId: entry.profile.id } },
@@ -295,6 +354,7 @@ async function applySmartChargingStacked(chargerId: string, trigger: string): Pr
         lastError,
         ocppChargingProfileId: entry.ocppChargingProfileId,
         ocppStackLevel: entry.ocppStackLevel,
+        profileFingerprint: fp,
       },
       update: {
         effectiveLimitKw: effectiveLimit,
@@ -310,6 +370,7 @@ async function applySmartChargingStacked(chargerId: string, trigger: string): Pr
         ocppStackLevel: entry.ocppStackLevel,
         compositeScheduleVerified: false,
         compositeScheduleVerifiedAt: null,
+        profileFingerprint: fp,
       },
     });
   }

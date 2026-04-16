@@ -146,6 +146,12 @@ export async function remoteClearChargingProfile(
   try {
     const result = await client.call('ClearChargingProfile', payload);
     console.log(`[RemoteClearChargingProfile] Charger ${ocppId} responded: ${result.status}`);
+    // Audit log for debugging smart charging issues
+    const chargerId = client?.session?.chargerId ?? '';
+    if (chargerId) {
+      await logOcppMessage(chargerId, 'OUTBOUND', 'ClearChargingProfile', payload);
+      await logOcppMessage(chargerId, 'INBOUND', 'ClearChargingProfileResponse', result ?? {});
+    }
     return result.status as 'Accepted' | 'Rejected' | 'Unknown';
   } catch (err) {
     console.error(`[RemoteClearChargingProfile] Error calling charger ${ocppId}:`, err);
@@ -166,6 +172,12 @@ export async function remoteSetChargingProfile(
   try {
     const result = await client.call('SetChargingProfile', profile);
     console.log(`[RemoteSetChargingProfile] Charger ${ocppId} responded: ${result.status}`);
+    // Audit log for debugging smart charging issues
+    const chargerId = client?.session?.chargerId ?? '';
+    if (chargerId) {
+      await logOcppMessage(chargerId, 'OUTBOUND', 'SetChargingProfile', profile);
+      await logOcppMessage(chargerId, 'INBOUND', 'SetChargingProfileResponse', result ?? {});
+    }
     return result.status as 'Accepted' | 'Rejected' | 'NotSupported';
   } catch (err) {
     console.error(`[RemoteSetChargingProfile] Error calling charger ${ocppId}:`, err);
