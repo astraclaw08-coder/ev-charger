@@ -308,8 +308,13 @@ async function applySmartChargingStacked(chargerId: string, trigger: string): Pr
   let mergedLastAppliedAt: Date | null = null;
 
   if (isOnline && connectionReady) {
-    // Check if ALL existing states are APPLIED with matching fingerprints and limits
-    const allEquivalent = entryDetails.every((d) => {
+    // Check if the merged profile is unchanged:
+    // 1. No stale profiles were just removed (set of active profiles unchanged)
+    // 2. ALL existing states are APPLIED with matching fingerprints and limits
+    // If stale profiles were cleared, the merged limit may have changed even if
+    // remaining profiles' individual fingerprints are identical.
+    const setChanged = staleStates.length > 0;
+    const allEquivalent = !setChanged && entryDetails.every((d) => {
       const existing: any = existingByProfileId.get(d.entry.profile.id);
       return Boolean(
         existing
