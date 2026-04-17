@@ -1,3 +1,24 @@
+/**
+ * Smart Charging — OCPP 1.6 ChargePointMaxProfile management
+ *
+ * Architecture: MERGED-PROFILE MODEL
+ * -----------------------------------
+ * The DB can hold multiple SmartChargingProfile rows per charger (site-level,
+ * group-level, charger-level).  However, the charger receives exactly ONE
+ * Absolute ChargePointMaxProfile whose limit is the minimum of all active
+ * profiles' effective limits at the current point in time.
+ *
+ * Do NOT assume charger firmware correctly handles native OCPP profile
+ * stacking (multiple profiles at different stackLevels).  See CLAUDE.md
+ * rules 8-11 under "Smart Charging (Firmware)" for the production incident
+ * history that led to this design.
+ *
+ * Key flows:
+ *  - applySmartChargingStacked()  — called on heartbeat, boot, reconnect,
+ *    and API-triggered reconcile.  Merges + pushes the single profile.
+ *  - applySmartChargingLegacy()   — fallback for chargers that reject
+ *    ChargePointMaxProfile entirely.
+ */
 import { prisma, parseSmartChargingSchedule, resolveEffectiveSmartChargingLimit, resolveAllActiveProfiles, type SmartChargingProfileLike, type StackedProfileEntry } from '@ev-charger/shared';
 import { remoteClearChargingProfile, remoteSetChargingProfile, remoteGetCompositeSchedule } from './remote';
 import { clientRegistry } from './clientRegistry';
@@ -215,8 +236,30 @@ export async function applySmartChargingForCharger(chargerId: string, trigger: s
 }
 
 /**
- * Stacking mode: push ALL applicable profiles to the charger at different stackLevels.
- * Charger natively enforces the lowest effective limit at any point in time.
+ * Merged-profile mode (formerly "stacking mode").
+ *
+ * WHY NOT NATIVE STACKING:
+ * OCPP 1.6 says chargers should accept multiple ChargePointMaxProfile at
+ * different stackLevels and enforce the minimum.  In practice, LOOP EX-1762
+ * firmware (and likely other budget chargers) keeps multiple profiles at the
+ * SAME stackLevel and applies the HIGHER limit, not the lower.  Recurring
+ * Weekly profiles are also unreliable — firmware accepts them but miscomputes
+ * schedule period offsets, silently applying the wrong limit.
+ *
+ * WHAT THIS FUNCTION DOES INSTEAD:
+ * 1. Resolves ALL enabled SmartChargingProfile entries for the charger
+ * 2. Computes the MINIMUM effective limit (kW) across all active entries
+ * 3. Clears ALL existing ChargePointMaxProfile from the charger
+ * 4. Pushes a SINGLE Absolute ChargePointMaxProfile with that minimum limit
+ * 5. Heartbeat-driven re-invocations handle schedule window transitions
+ *
+ * The DB still tracks per-source-profile state rows (for the portal to show
+ * which profiles are contributing), but the charger only ever sees ONE OCPP
+ * profile.  When the set of active profiles changes (enable/disable/delete),
+ * the merged profile is always recomputed and re-pushed — never skipped by
+ * the equivalence check.
+ *
+ * Verified on production charger 1A32 (LOOP EX-1762) — 2026-04-16.
  */
 async function applySmartChargingStacked(chargerId: string, trigger: string): Promise<void> {
   const charger = await prisma.charger.findUnique({

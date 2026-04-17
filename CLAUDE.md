@@ -73,30 +73,36 @@ User (Driver) → has many Sessions, Favorites
 6. **Single process per port:** After restart, verify only one process on port 9000. Stale `dist/` processes serve old code.
 7. **WSS URL = `wss://host/<ocppId>`:** Exactly one path segment. No double-identity.
 
+### Smart Charging (Firmware)
+8. **Never assume native stacking works.** LOOP EX-1762 (and likely other budget firmware) accepts multiple `ChargePointMaxProfile` at the same stackLevel but applies the HIGHER limit, not the lower. OCPP 1.6 spec says replace, firmware says keep both. The server must merge all active profiles into a **single Absolute profile** with `min(effectiveLimits)` and push that one profile. See `ocpp-server/smartCharging.ts` merged-profile model.
+9. **Recurring Weekly profiles are unreliable.** LOOP EX-1762 accepts them (`Accepted`) but miscomputes schedule period offsets — `GetCompositeSchedule` returns wrong limits. Use Absolute profiles with heartbeat-driven re-push for window transitions instead.
+10. **Profile-set changes must force re-push.** When a contributing profile is disabled/deleted, the stale clear removes the merged OCPP profile from the charger. The remaining profiles' individual fingerprints haven't changed, so equivalence checks can falsely skip the re-push. Always re-push when the active profile set changes (stale count > 0).
+11. **`resolveCurrentLimitKw` uses UTC.** Schedule window matching in `ocpp-server/smartCharging.ts` checks `getUTCHours()`/`getUTCDay()`, not site timezone. Known issue — same class of bug as rule 13 below.
+
 ### Timezone / Billing
-8. **TOU must use site timezone:** `resolveTouRateAt()` needs `timeZone` param. Without it, PDT sessions evaluate at wrong UTC offset.
-9. **`isWindowActive()` in `shared/src/smartCharging.ts` uses UTC:** Needs timezone-aware fix (like `touPricing.ts` `localDayMinute` pattern).
-10. **Midnight = `"00:00"` not `"23:59"`:** Legacy values cause 1-min billing gaps.
+12. **TOU must use site timezone:** `resolveTouRateAt()` needs `timeZone` param. Without it, PDT sessions evaluate at wrong UTC offset.
+13. **`isWindowActive()` in `shared/src/smartCharging.ts` uses UTC:** Needs timezone-aware fix (like `touPricing.ts` `localDayMinute` pattern).
+14. **Midnight = `"00:00"` not `"23:59"`:** Legacy values cause 1-min billing gaps.
 
 ### Mobile / Expo
-11. **Xcode ignores `.env`:** Build vars must be in `project.pbxproj` build settings. Empty Google Maps key → SIGABRT.
-12. **Dev key ≠ Prod key:** RC builds must use prod Google Maps API key.
-13. **React singleton:** Root `node_modules/react` must symlink → mobile's React. Duplicate = hook crashes.
-14. **Safe area ≠ visual height:** Don't use `tabBarHeight` for control positioning — use measured visual constants.
+15. **Xcode ignores `.env`:** Build vars must be in `project.pbxproj` build settings. Empty Google Maps key → SIGABRT.
+16. **Dev key ≠ Prod key:** RC builds must use prod Google Maps API key.
+17. **React singleton:** Root `node_modules/react` must symlink → mobile's React. Duplicate = hook crashes.
+18. **Safe area ≠ visual height:** Don't use `tabBarHeight` for control positioning — use measured visual constants.
 
 ### Database
-15. **Never `db push` in prod.** Generate migration in dev → commit → `prisma migrate deploy` in prod.
-16. **Schema drift check in CI.** Prevents deploying code referencing missing tables.
+19. **Never `db push` in prod.** Generate migration in dev → commit → `prisma migrate deploy` in prod.
+20. **Schema drift check in CI.** Prevents deploying code referencing missing tables.
 
 ### Deploy
-17. **Vercel does NOT auto-deploy.** After `main` merge: `cd packages/portal && vercel --prod --yes`.
-18. **Check endpoints post-deploy:** API `/health`, OCPP `/health`, OCPP `/status`.
-19. **Prod portal changes require PR.** No direct deploys from dev branch.
+21. **Vercel does NOT auto-deploy.** After `main` merge: `cd packages/portal && vercel --prod --yes`.
+22. **Check endpoints post-deploy:** API `/health`, OCPP `/health`, OCPP `/status`.
+23. **Prod portal changes require PR.** No direct deploys from dev branch.
 
 ### Auth (Keycloak)
-20. **Dev realm `ev-charger` / Prod realm `ev-charger-prod`.** Same env var names, different values.
-21. **`assertKeycloakConfig()` validates on startup.** No legacy Clerk aliases.
+24. **Dev realm `ev-charger` / Prod realm `ev-charger-prod`.** Same env var names, different values.
+25. **`assertKeycloakConfig()` validates on startup.** No legacy Clerk aliases.
 
 ### General
-22. **Verify full chain with curl before telling user to retry.**
-23. **QC gate mandatory:** build check, runtime UI verify, API/data verify, acceptance criteria, regression spot-check.
+26. **Verify full chain with curl before telling user to retry.**
+27. **QC gate mandatory:** build check, runtime UI verify, API/data verify, acceptance criteria, regression spot-check.
