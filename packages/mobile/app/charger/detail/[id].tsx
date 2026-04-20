@@ -1204,20 +1204,28 @@ export default function ChargerStartScreen() {
                 Hold duration
               </Text>
               <View style={[styles.holdPickerRow, { paddingHorizontal: 20, marginBottom: 16 }]}>
-                {[15, 30, 45, 60].map((min) => (
-                  <TouchableOpacity
-                    key={min}
-                    style={[
-                      styles.holdPickerBtn,
-                      { backgroundColor: reserveHoldMin === min ? (isDark ? '#4f46e5' : '#6d28d9') : (isDark ? '#334155' : '#e2e8f0') },
-                    ]}
-                    onPress={() => setReserveHoldMin(min)}
-                  >
-                    <Text style={{ color: reserveHoldMin === min ? '#ffffff' : (isDark ? '#cbd5e1' : '#334155'), fontSize: 13, fontWeight: '600' }}>
-                      {min} min
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+                {[15, 30, 45, 60].map((min) => {
+                  const selected = reserveHoldMin === min;
+                  // Per design spec (2026-04-20):
+                  //   selected   → blue in both themes
+                  //   unselected → strict black in light, slate-gray in dark
+                  //   text       → white in all 4 states
+                  const bg = selected
+                    ? '#2563eb'                  // blue-600
+                    : isDark ? '#475569'         // slate-600
+                             : '#000000';        // strict black
+                  return (
+                    <TouchableOpacity
+                      key={min}
+                      style={[styles.holdPickerBtn, { backgroundColor: bg }]}
+                      onPress={() => setReserveHoldMin(min)}
+                    >
+                      <Text style={{ color: '#ffffff', fontSize: 13, fontWeight: '600' }}>
+                        {min} min
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
 
               {/* Fee info */}
