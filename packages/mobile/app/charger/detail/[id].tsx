@@ -18,7 +18,7 @@ import {
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useNavigation, usePreventRemove } from '@react-navigation/native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api, getAuthIdentityKey, type Connector, type Session } from '@/lib/api';
+import { ApiError, api, getAuthIdentityKey, type Connector, type Session } from '@/lib/api';
 import { useAppTheme } from '@/theme';
 import { useAppAuth } from '@/providers/AuthProvider';
 import { useFavorites } from '@/hooks/useFavorites';
@@ -526,6 +526,14 @@ export default function ChargerStartScreen() {
       await queryClient.invalidateQueries({ queryKey: ['charger', id] });
     },
     onError: (err: Error) => {
+      // Don't leave raw "Unauthorized" dead-ending the modal. 401s are handled
+      // globally by _authExpiredHandler (clears session + routes to sign-in).
+      // Close the modal quietly so the redirect UX takes over.
+      if (err instanceof ApiError && err.status === 401) {
+        setShowReserveModal(false);
+        setReserveError('');
+        return;
+      }
       setReserveError(err.message || 'Reservation failed. Please try again.');
     },
   });

@@ -40,6 +40,10 @@ export const isEvcPlatformReadModelEnabled = process.env.EXPO_PUBLIC_EVC_PLATFOR
 let _bearerToken: string | null = null;
 let _guestMode = false;
 let _authRefreshHandler: null | (() => Promise<boolean>) = null;
+// Fires once when a protected request 401s and no refresh path can recover.
+// AuthProvider wires this to: clear session, navigate to sign-in, surface
+// "Session expired" banner. Prevents dead-end "Unauthorized" UX in modals.
+let _authExpiredHandler: null | (() => void) = null;
 
 export function setBearerToken(token: string | null) {
   _bearerToken = token;
@@ -47,6 +51,10 @@ export function setBearerToken(token: string | null) {
 
 export function setAuthRefreshHandler(handler: null | (() => Promise<boolean>)) {
   _authRefreshHandler = handler;
+}
+
+export function setAuthExpiredHandler(handler: null | (() => void)) {
+  _authExpiredHandler = handler;
 }
 
 export function setGuestMode(guest: boolean) {
@@ -122,6 +130,15 @@ async function request<T>(
       } catch {
         // fall through to regular error handling
       }
+    }
+
+    // On unrecoverable 401 for a signed-in user: trigger the expired-session
+    // handler so the app can clear state and route to sign-in. The error still
+    // throws so callers' onError paths can unwind (e.g. close modals), but they
+    // should NOT display the raw "Unauthorized" text — the expired handler
+    // surfaces the "Session expired, please sign in again" UX globally.
+    if (res.status === 401 && !_guestMode && _authExpiredHandler) {
+      try { _authExpiredHandler(); } catch { /* never block error propagation */ }
     }
 
     const body = await res.json().catch(() => ({ error: res.statusText }));
