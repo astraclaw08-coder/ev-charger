@@ -101,6 +101,20 @@
 
 ---
 
+## Pending Verification
+
+### Live-session TOU billing fix (commit `0a5c23f`, deployed 2026-04-20)
+- [x] API `GET /sessions/:id` — ACTIVE sessions pass `stoppedAt = now` into `computeSessionAmounts` → TOU segmentation works live
+- [x] Mobile `LiveSessionView` — Cost bound to `billingBreakdown.totals.grossUsd`, no more client-side `kwh × ratePerKwh`
+- [x] `AppState` + `useFocusEffect` refetch wired in `app/session/[id].tsx`
+- [x] Direct-function verification: session 43a2b830 real data → old path $33.25 flat, new path $16.87 TOU-correct, completed path unchanged
+- [ ] **Not yet proven live**: foreground/focus refetch behavior on RC app during a real active session. The code path is in place and compiles clean, but requires a live ACTIVE session on a TOU site to confirm:
+  - Backgrounding the app for 5+ min then foregrounding → kWh snaps to current within 1-2 s (AppState listener)
+  - Tab-switching away and back → same (useFocusEffect)
+  - Cost updates match TOU window rollover when session crosses a boundary
+  - Final receipt `grossAmountUsd` == live-card cost at t=stop (within $0.01 rounding)
+- Next verification opportunity: next active session on 1A32 or any TOU-priced site
+
 ---
 
 ## Task 155: AI Diagnostics Agent — Proactive & Corrective Charger Maintenance
