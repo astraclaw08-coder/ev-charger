@@ -1149,17 +1149,17 @@ export default function ChargerStartScreen() {
                 the modal and is gated by grace-period there. */}
             {!activeSession && isMyReservation && connectorReservation ? (
               <TouchableOpacity
-                style={[styles.reservationBanner, styles.reservationBannerPressable, { backgroundColor: isDark ? '#1e1b4b' : '#ede9fe' }]}
+                style={[styles.reservationBanner, styles.reservationBannerPressable, { backgroundColor: isDark ? '#475569' : '#000000' }]}
                 onPress={() => {
                   setReservationDetailsError('');
                   setShowReservationDetails(true);
                 }}
                 activeOpacity={0.7}
               >
-                <Text style={[styles.reservationBannerText, { color: isDark ? '#c4b5fd' : '#5b21b6', flex: 1 }]}>
+                <Text style={[styles.reservationBannerText, { color: '#ffffff', flex: 1 }]}>
                   Reserved until {formatClockTime(connectorReservation.holdExpiresAt)}
                 </Text>
-                <Text style={{ color: isDark ? '#c4b5fd' : '#5b21b6', fontSize: 18, fontWeight: '600', marginLeft: 8 }}>›</Text>
+                <Text style={{ color: '#ffffff', fontSize: 18, fontWeight: '600', marginLeft: 8 }}>›</Text>
               </TouchableOpacity>
             ) : null}
 
@@ -1337,9 +1337,18 @@ export default function ChargerStartScreen() {
             if (!r) return null;
             const hasFee = (r.feeAmountCents ?? 0) > 0;
             const feeStr = hasFee ? `$${(r.feeAmountCents! / 100).toFixed(2)}` : 'None';
-            const withinGrace = r.feeCancelGraceExpiresAt
-              ? Date.now() < new Date(r.feeCancelGraceExpiresAt).getTime()
-              : false;
+            // Cancel button visibility:
+            //   - No fee (free reservation) → always allow cancel. There's no
+            //     refund to forfeit, so gating by grace window would trap the
+            //     user with no way to release the hold.
+            //   - Fee > 0 → only within the server-computed grace window
+            //     (feeCancelGraceExpiresAt). Outside that window, cancel is
+            //     hidden entirely per spec (details-only modal).
+            const withinGrace = hasFee
+              ? (r.feeCancelGraceExpiresAt
+                  ? Date.now() < new Date(r.feeCancelGraceExpiresAt).getTime()
+                  : false)
+              : true;
             const canClose = !cancelReservationMutation.isPending;
             // `charger.ocppId` is on the outer charger query result, not on Connector.
             const chargerLabel = charger?.ocppId ?? '—';
@@ -1392,12 +1401,18 @@ export default function ChargerStartScreen() {
                     </Text>
                   ) : null}
 
-                  {/* Cancel CTA — only when within the refund grace window */}
+                  {/* Cancel CTA.
+                      Palette matches the rest of the Reserve flow (black in
+                      light / slate in dark, white text) rather than a red
+                      danger tint — this button is the primary action inside
+                      the modal and follows the established scheme.
+                      Subline "Free cancellation until [time]" only shown when
+                      there IS a fee to protect; hidden when fee is None. */}
                   {withinGrace ? (
                     <View style={{ paddingHorizontal: 20, paddingBottom: 24 }}>
                       <TouchableOpacity
                         style={[styles.reservationDetailsCancelBtn, {
-                          backgroundColor: isDark ? '#b91c1c' : '#dc2626',
+                          backgroundColor: isDark ? '#475569' : '#000000',
                           opacity: cancelReservationMutation.isPending ? 0.6 : 1,
                         }]}
                         onPress={() => {
@@ -1410,9 +1425,11 @@ export default function ChargerStartScreen() {
                           {cancelReservationMutation.isPending ? 'Cancelling…' : 'Cancel Reservation'}
                         </Text>
                       </TouchableOpacity>
-                      <Text style={{ color: isDark ? '#94a3b8' : '#64748b', fontSize: 12, textAlign: 'center', marginTop: 8 }}>
-                        Free cancellation until {formatClockTime(r.feeCancelGraceExpiresAt)}
-                      </Text>
+                      {hasFee && r.feeCancelGraceExpiresAt ? (
+                        <Text style={{ color: isDark ? '#94a3b8' : '#64748b', fontSize: 12, textAlign: 'center', marginTop: 8 }}>
+                          Free cancellation until {formatClockTime(r.feeCancelGraceExpiresAt)}
+                        </Text>
+                      ) : null}
                     </View>
                   ) : (
                     <View style={{ paddingBottom: 20 }} />
