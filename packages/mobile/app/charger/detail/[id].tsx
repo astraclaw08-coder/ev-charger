@@ -1134,7 +1134,7 @@ export default function ChargerStartScreen() {
               <View style={{ marginTop: 14, alignItems: 'center', gap: 6 }}>
                 <TouchableOpacity
                   style={[styles.reserveBtn, {
-                    backgroundColor: isDark ? '#334155' : '#e2e8f0',
+                    backgroundColor: isDark ? '#475569' : '#000000',
                     alignSelf: 'stretch',
                     opacity: (reservationFeeUsd > 0 && !hasPaymentMethod) ? 0.45 : 1,
                   }]}
@@ -1144,7 +1144,7 @@ export default function ChargerStartScreen() {
                   }}
                   disabled={reservationFeeUsd > 0 && !hasPaymentMethod}
                 >
-                  <Text style={[styles.reserveBtnText, { color: isDark ? '#e2e8f0' : '#334155' }]}>Reserve</Text>
+                  <Text style={[styles.reserveBtnText, { color: '#ffffff' }]}>Reserve</Text>
                 </TouchableOpacity>
                 <Text style={{ color: isDark ? '#94a3b8' : '#64748b', fontSize: 12, textAlign: 'center' }}>
                   {reservationFeeUsd > 0 && !hasPaymentMethod
@@ -1255,11 +1255,12 @@ export default function ChargerStartScreen() {
                 </Text>
               ) : null}
 
-              {/* Confirm button */}
+              {/* Confirm button — primary CTA, matches Hold duration button palette
+                  (black bg / white text in light, slate bg / white text in dark). */}
               <View style={{ paddingHorizontal: 20, paddingBottom: 24 }}>
                 <TouchableOpacity
                   style={[styles.reserveBtn, {
-                    backgroundColor: isDark ? '#334155' : '#e2e8f0',
+                    backgroundColor: isDark ? '#475569' : '#000000',
                     opacity: reserveMutation.isPending ? 0.6 : 1,
                   }]}
                   onPress={() => {
@@ -1269,7 +1270,7 @@ export default function ChargerStartScreen() {
                   }}
                   disabled={reserveMutation.isPending}
                 >
-                  <Text style={[styles.reserveBtnText, { color: isDark ? '#e2e8f0' : '#334155' }]}>
+                  <Text style={[styles.reserveBtnText, { color: '#ffffff' }]}>
                     {reserveMutation.isPending
                       ? 'Reserving…'
                       : reservationFeeUsd > 0
