@@ -2,7 +2,7 @@
  * Live session screen - polls for kWh + cost, shows Stop button.
  * After stop: shows session summary (kWh, duration, cost).
  */
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -18,6 +18,7 @@ import {
   Image,
 } from 'react-native';
 import { useLocalSearchParams, Stack } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, isDevMode, type Session } from '@/lib/api';
@@ -541,8 +542,19 @@ function LiveSessionView({
   const { isDark } = useAppTheme();
   const [showStopModal, setShowStopModal] = useState(false);
   const kwh = getLiveKwh(session);
+  // Bind live cost to the API's driver-facing gross amount (energy + idle +
+  // activation). The API now computes this TOU-correctly for ACTIVE sessions
+  // by treating "now" as the interim stop time. Fall back to costEstimateCents
+  // if the breakdown is missing (pre-fix server or computeSessionAmounts bail
+  // path), and only as last resort to flat math.
   const liveRate = session.ratePerKwh ?? RATE_PER_KWH;
-  const estimatedCost = kwh * liveRate;
+  const breakdownGrossUsd = session.billingBreakdown?.totals?.grossUsd;
+  const estimatedCost =
+    typeof breakdownGrossUsd === 'number'
+      ? breakdownGrossUsd
+      : session.costEstimateCents != null
+        ? session.costEstimateCents / 100
+        : kwh * liveRate;
   const duration = useLiveDuration(session.startedAt, true);
   const livePowerKw = useLivePowerKw(session);
 
@@ -681,6 +693,15 @@ export default function SessionScreen() {
     });
     return () => sub.remove();
   }, [queryClient, refetch]);
+
+  // Refetch whenever this screen regains navigation focus. Handles tab
+  // switches / back navigation where the screen stays mounted but the
+  // 1.5s polling interval may have paused (iOS JS-thread suspension).
+  useFocusEffect(
+    useCallback(() => {
+      void refetch();
+    }, [refetch]),
+  );
 
   useEffect(() => {
     if (!session) return;
