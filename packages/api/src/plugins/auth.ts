@@ -3,6 +3,7 @@ import { prisma } from '@ev-charger/shared';
 import { parsePortalAccessClaims, type PortalAccessClaimsV1 } from '../lib/portalAccessClaims';
 import { isBlocked, recordAuthFailure, recordAuthSuccess } from '../lib/authProtection';
 import { introspectAccessToken, keycloakPasswordAuthEnabled } from '../lib/keycloakOidc';
+import { findUserBySessionToken } from '../lib/authSession';
 
 // Attach to request so route handlers can access the authenticated user
 declare module 'fastify' {
@@ -83,6 +84,29 @@ async function getUserFromRequest(req: FastifyRequest): Promise<{
   if (appEnv === 'development' && devUserId) {
     const user = await prisma.user.findUnique({ where: { id: devUserId } });
     return { user, sub: null, failureReason: user ? null : 'no-user' };
+  }
+
+  // The Bearer token can be either:
+  //   (a) a Keycloak JWT (3 dot-separated base64 segments) — issued by
+  //       password login / refresh.
+  //   (b) an opaque random string (base64url, no dots) — issued by OTP
+  //       verify and persisted in the AuthSession table.
+  // We dispatch on token shape so opaque OTP tokens don't hit Keycloak's
+  // introspection endpoint (which would always return active=false),
+  // and Keycloak JWTs don't incur an unnecessary DB lookup.
+  const bearer = bearerToken(req);
+  if (!bearer) {
+    return { user: null, sub: null, failureReason: 'no-token' };
+  }
+
+  const looksLikeJwt = bearer.split('.').length === 3;
+  if (!looksLikeJwt) {
+    // Opaque AuthSession token → OTP sign-in path.
+    const user = await findUserBySessionToken(bearer);
+    if (!user) {
+      return { user: null, sub: null, failureReason: 'no-user' };
+    }
+    return { user, sub: null, failureReason: null };
   }
 
   if (!keycloakPasswordAuthEnabled()) {
