@@ -66,6 +66,61 @@ function connectorTone(status: Connector['status']): { bg: string; text: string 
   return { bg: '#e5e7eb', text: '#374151' };
 }
 
+/** Format an ISO string as a local wall-clock time, e.g. "8:35 PM". */
+function formatClockTime(iso: string | null | undefined): string {
+  if (!iso) return '';
+  try {
+    return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  } catch {
+    return '';
+  }
+}
+
+/** Format an ISO string as "Apr 20 at 2:35 PM" in local time. */
+function formatDateAtTime(iso: string | null | undefined): string {
+  if (!iso) return '';
+  try {
+    const d = new Date(iso);
+    const date = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    return `${date} at ${time}`;
+  } catch {
+    return '';
+  }
+}
+
+/** Map raw feeStatus enum values to driver-facing labels. */
+function friendlyFeeStatus(status: string | null | undefined): string {
+  if (!status) return '';
+  const s = String(status).toUpperCase();
+  if (s === 'PENDING' || s === 'AUTHORIZED' || s === 'PREAUTH' || s === 'REQUIRES_CAPTURE') return 'Pending capture';
+  if (s === 'CAPTURED' || s === 'SUCCEEDED' || s === 'CHARGED') return 'Charged';
+  if (s === 'REFUNDED') return 'Refunded';
+  if (s === 'CANCELED' || s === 'CANCELLED' || s === 'VOIDED') return 'Cancelled';
+  if (s === 'FAILED') return 'Payment failed';
+  // Unknown — render the raw value with friendly capitalization as a fallback.
+  return s.charAt(0) + s.slice(1).toLowerCase().replace(/_/g, ' ');
+}
+
+/** Single label/value row inside the Reservation Details modal. */
+function ReservationDetailRow({ label, value, isDark }: { label: string; value: string; isDark: boolean }) {
+  return (
+    <View style={{
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingVertical: 10,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: isDark ? '#1e293b' : '#e2e8f0',
+    }}>
+      <Text style={{ color: isDark ? '#94a3b8' : '#64748b', fontSize: 13, fontWeight: '500' }}>{label}</Text>
+      <Text style={{ color: isDark ? '#f1f5f9' : '#0f172a', fontSize: 14, fontWeight: '600', flex: 1, textAlign: 'right', marginLeft: 12 }} numberOfLines={1}>
+        {value}
+      </Text>
+    </View>
+  );
+}
+
 function getLiveKwh(session: Session): number {
   if (session.kwhDelivered != null) return session.kwhDelivered;
   if (session.meterStop != null && session.meterStart != null) {
@@ -496,6 +551,8 @@ export default function ChargerStartScreen() {
   const [reserveHoldMin, setReserveHoldMin] = useState(30);
   const [showReserveModal, setShowReserveModal] = useState(false);
   const [reserveError, setReserveError] = useState('');
+  const [showReservationDetails, setShowReservationDetails] = useState(false);
+  const [reservationDetailsError, setReservationDetailsError] = useState('');
   const activationPollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activationModalDismissedRef = useRef(false);
   const prevActiveSessionRef = useRef<{ id: string; connectorCharger: string } | null>(null);
@@ -541,14 +598,26 @@ export default function ChargerStartScreen() {
   const cancelReservationMutation = useMutation({
     mutationFn: (reservationId: string) => api.reservations.cancel(reservationId),
     onSuccess: async () => {
+      setShowReservationDetails(false);
+      setReservationDetailsError('');
       await refetchReservation();
       await queryClient.invalidateQueries({ queryKey: ['charger', id] });
     },
-    onError: (err: Error) => Alert.alert('Cancel Failed', err.message),
+    onError: (err: Error) => {
+      // If the details modal is open, route the error into its inline error
+      // slot so the user can retry without losing context. Otherwise fall back
+      // to an alert (preserves existing behavior for any legacy call sites).
+      if (showReservationDetails) {
+        setReservationDetailsError(err.message || 'Could not cancel reservation. Try again.');
+      } else {
+        Alert.alert('Cancel Failed', err.message);
+      }
+    },
   });
 
-  // Countdown for reservation expiry
-  const [reserveCountdown, setReserveCountdown] = useState('');
+  // (Previously had a live countdown for the own-reservation banner; replaced
+  // by a static "Reserved until [time]" pill + details modal — no countdown
+  // needed. The modal's "Free cancellation until …" is also a static time.)
 
   usePreventRemove(flowLocked, () => {});
 
@@ -599,27 +668,6 @@ export default function ChargerStartScreen() {
   const connectorReservation = selectedConnector?.activeReservation ?? null;
   const isMyReservation = connectorReservation != null && connectorReservation.userId === currentUserId;
   const isOtherReservation = connectorReservation != null && connectorReservation.userId !== currentUserId;
-
-  useEffect(() => {
-    if (!isMyReservation || !connectorReservation) {
-      setReserveCountdown('');
-      return;
-    }
-    const tick = () => {
-      const remain = Math.max(0, new Date(connectorReservation.holdExpiresAt).getTime() - Date.now());
-      if (remain <= 0) {
-        setReserveCountdown('Expired');
-        return;
-      }
-      const totalSec = Math.ceil(remain / 1000);
-      const mm = String(Math.floor(totalSec / 60)).padStart(2, '0');
-      const ss = String(totalSec % 60).padStart(2, '0');
-      setReserveCountdown(`${mm}:${ss}`);
-    };
-    tick();
-    const timer = setInterval(tick, 1000);
-    return () => clearInterval(timer);
-  }, [isMyReservation, connectorReservation?.holdExpiresAt]);
 
   // Reset activation UI when connector returns to AVAILABLE
   // (covers the activation-timeout / no EV connected scenario)
@@ -1093,40 +1141,23 @@ export default function ChargerStartScreen() {
               </View>
             ) : null}
 
-            {/* Reservation: my reservation countdown + cancel */}
+            {/* Reservation: my reservation — tappable pill that opens details modal.
+                Replaces the previous inline countdown+cancel. Cancel moved into
+                the modal and is gated by grace-period there. */}
             {!activeSession && isMyReservation && connectorReservation ? (
-              <View style={[styles.reservationBanner, { backgroundColor: isDark ? '#1e1b4b' : '#ede9fe' }]}>
-                <Text style={{ color: isDark ? '#e9d5ff' : '#5b21b6', fontSize: 16, fontWeight: '800', textAlign: 'center' }}>
-                  {reserveCountdown || '…'}
+              <TouchableOpacity
+                style={[styles.reservationBanner, styles.reservationBannerPressable, { backgroundColor: isDark ? '#1e1b4b' : '#ede9fe' }]}
+                onPress={() => {
+                  setReservationDetailsError('');
+                  setShowReservationDetails(true);
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.reservationBannerText, { color: isDark ? '#c4b5fd' : '#5b21b6', flex: 1 }]}>
+                  Reserved until {formatClockTime(connectorReservation.holdExpiresAt)}
                 </Text>
-                <Text style={{ color: isDark ? '#a78bfa' : '#7c3aed', fontSize: 12, fontWeight: '600', textAlign: 'center' }}>
-                  Your reservation
-                </Text>
-                <TouchableOpacity
-                  style={[styles.reservationCancelBtn, { backgroundColor: isDark ? '#312e81' : '#ddd6fe' }]}
-                  onPress={() => {
-                    const hasFee = connectorReservation.feeAmountCents && connectorReservation.feeAmountCents > 0;
-                    const withinGrace = connectorReservation.feeCancelGraceExpiresAt
-                      ? new Date() < new Date(connectorReservation.feeCancelGraceExpiresAt)
-                      : false;
-                    const feeStr = hasFee ? `$${(connectorReservation.feeAmountCents! / 100).toFixed(2)}` : '';
-                    const msg = hasFee
-                      ? withinGrace
-                        ? `Your ${feeStr} reservation fee will be fully refunded.`
-                        : `Your ${feeStr} reservation fee is non-refundable.`
-                      : 'This will release your hold on this connector.';
-                    Alert.alert('Cancel reservation?', msg, [
-                      { text: 'Keep', style: 'cancel' },
-                      { text: 'Cancel Reservation', style: 'destructive', onPress: () => cancelReservationMutation.mutate(connectorReservation.id) },
-                    ]);
-                  }}
-                  disabled={cancelReservationMutation.isPending}
-                >
-                  <Text style={[styles.reservationCancelText, { color: isDark ? '#c4b5fd' : '#5b21b6' }]}>
-                    {cancelReservationMutation.isPending ? 'Cancelling…' : 'Cancel Reservation'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
+                <Text style={{ color: isDark ? '#c4b5fd' : '#5b21b6', fontSize: 18, fontWeight: '600', marginLeft: 8 }}>›</Text>
+              </TouchableOpacity>
             ) : null}
 
             {/* Reserve button: show when connector is available, no session, no existing reservation, site supports it, not guest */}
@@ -1281,6 +1312,112 @@ export default function ChargerStartScreen() {
               </View>
             </Pressable>
           </Pressable>
+        </Modal>
+
+        {/* ── Reservation Details Modal ── */}
+        <Modal
+          visible={showReservationDetails && !!connectorReservation}
+          transparent
+          animationType="fade"
+          onRequestClose={() => {
+            // Block dismissal while a cancel is mid-flight (matches Reserve modal behavior).
+            if (cancelReservationMutation.isPending) return;
+            setShowReservationDetails(false);
+            setReservationDetailsError('');
+          }}
+        >
+          {(() => {
+            // Render only when we still have reservation data. The `visible`
+            // flag guards mounting, but during a success cancel the reservation
+            // briefly becomes null before the modal closes — guard here too.
+            const r = connectorReservation;
+            if (!r) return null;
+            const hasFee = (r.feeAmountCents ?? 0) > 0;
+            const feeStr = hasFee ? `$${(r.feeAmountCents! / 100).toFixed(2)}` : 'None';
+            const withinGrace = r.feeCancelGraceExpiresAt
+              ? Date.now() < new Date(r.feeCancelGraceExpiresAt).getTime()
+              : false;
+            const canClose = !cancelReservationMutation.isPending;
+            // `charger.ocppId` is on the outer charger query result, not on Connector.
+            const chargerLabel = charger?.ocppId ?? '—';
+            const connectorLabel = selectedConnector?.connectorId != null ? `Connector ${selectedConnector.connectorId}` : '—';
+            return (
+              <Pressable
+                style={styles.modalBackdrop}
+                onPress={() => {
+                  if (!canClose) return;
+                  setShowReservationDetails(false);
+                  setReservationDetailsError('');
+                }}
+              >
+                <Pressable
+                  style={[styles.reserveModalCard, { backgroundColor: isDark ? '#0f172a' : '#ffffff' }]}
+                  onPress={() => {}}
+                >
+                  {/* Header */}
+                  <View style={styles.reserveModalHeader}>
+                    <Text style={[styles.reserveModalTitle, { color: isDark ? '#f1f5f9' : '#0f172a' }]}>Your Reservation</Text>
+                    <TouchableOpacity
+                      onPress={() => {
+                        if (!canClose) return;
+                        setShowReservationDetails(false);
+                        setReservationDetailsError('');
+                      }}
+                      disabled={!canClose}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Text style={{ color: isDark ? '#94a3b8' : '#64748b', fontSize: 22, fontWeight: '600', opacity: canClose ? 1 : 0.4 }}>×</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* Detail rows */}
+                  <View style={{ paddingHorizontal: 20, paddingTop: 4, paddingBottom: 16 }}>
+                    <ReservationDetailRow label="Charger" value={chargerLabel} isDark={isDark} />
+                    <ReservationDetailRow label="Connector" value={connectorLabel} isDark={isDark} />
+                    <ReservationDetailRow label="Reserved at" value={formatDateAtTime(r.holdStartsAt)} isDark={isDark} />
+                    <ReservationDetailRow label="Reserved until" value={formatDateAtTime(r.holdExpiresAt)} isDark={isDark} />
+                    <ReservationDetailRow label="Fee" value={feeStr} isDark={isDark} />
+                    {hasFee && r.feeStatus ? (
+                      <ReservationDetailRow label="Fee status" value={friendlyFeeStatus(r.feeStatus)} isDark={isDark} />
+                    ) : null}
+                  </View>
+
+                  {/* Inline error (cancel mutation failures stay inside the modal) */}
+                  {reservationDetailsError ? (
+                    <Text style={{ color: isDark ? '#fca5a5' : '#b91c1c', fontSize: 13, paddingHorizontal: 20, marginBottom: 12 }}>
+                      {reservationDetailsError}
+                    </Text>
+                  ) : null}
+
+                  {/* Cancel CTA — only when within the refund grace window */}
+                  {withinGrace ? (
+                    <View style={{ paddingHorizontal: 20, paddingBottom: 24 }}>
+                      <TouchableOpacity
+                        style={[styles.reservationDetailsCancelBtn, {
+                          backgroundColor: isDark ? '#b91c1c' : '#dc2626',
+                          opacity: cancelReservationMutation.isPending ? 0.6 : 1,
+                        }]}
+                        onPress={() => {
+                          setReservationDetailsError('');
+                          cancelReservationMutation.mutate(r.id);
+                        }}
+                        disabled={cancelReservationMutation.isPending}
+                      >
+                        <Text style={{ color: '#ffffff', fontSize: 16, fontWeight: '700' }}>
+                          {cancelReservationMutation.isPending ? 'Cancelling…' : 'Cancel Reservation'}
+                        </Text>
+                      </TouchableOpacity>
+                      <Text style={{ color: isDark ? '#94a3b8' : '#64748b', fontSize: 12, textAlign: 'center', marginTop: 8 }}>
+                        Free cancellation until {formatClockTime(r.feeCancelGraceExpiresAt)}
+                      </Text>
+                    </View>
+                  ) : (
+                    <View style={{ paddingBottom: 20 }} />
+                  )}
+                </Pressable>
+              </Pressable>
+            );
+          })()}
         </Modal>
 
         <Modal
@@ -1661,6 +1798,23 @@ const styles = StyleSheet.create({
   reservationCancelText: {
     fontSize: 13,
     fontWeight: '700',
+  },
+  // Tappable my-reservation pill — overrides the centered column layout of
+  // reservationBanner so the "Reserved until …" text + chevron sit in a row.
+  reservationBannerPressable: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    gap: 0,
+  },
+  // Red-tinted CTA used inside the Reservation Details modal when within grace.
+  reservationDetailsCancelBtn: {
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   holdPickerRow: {
     flexDirection: 'row',
