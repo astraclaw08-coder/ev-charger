@@ -61,11 +61,7 @@
       "key": "charger_cp_00008",
       "label": "Charger CP-00008 heartbeat",
       "kind": "charger-heartbeat",
-      "url": "https://api-production-26cf.up.railway.app/chargers/1A32-1-2010-00008/status",
-      "auth": {
-        "type": "bearer",
-        "tokenEnv": "PROD_HEALTH_OPERATOR_BEARER_TOKEN"
-      },
+      "url": "https://api-production-26cf.up.railway.app/chargers/1A32-1-2010-00008",
       "expectStatus": 200,
       "heartbeatField": "lastHeartbeat",
       "maxAgeMinutes": 20,

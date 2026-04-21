@@ -23,9 +23,9 @@ Replace overlapping agentic watchdogs with one low-cost monitor that:
 
 Charger health is sourced from the existing operator route:
 
-- path: `/chargers/:id/status`
-- prod URL used by monitor: `/chargers/1A32-1-2010-00008/status`
-- auth: `Authorization: Bearer $PROD_HEALTH_OPERATOR_BEARER_TOKEN`
+- path: `/chargers/:id`
+- prod URL used by monitor: `/chargers/1A32-1-2010-00008`
+- auth: none
 - freshness field: `lastHeartbeat`
 - freshness threshold: 20 minutes
 - identity guard: response must include `ocppId = 1A32-1-2010-00008`
@@ -36,7 +36,6 @@ This avoids runtime discovery and uses an existing prod API surface.
 
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_CHAT_ID`
-- `PROD_HEALTH_OPERATOR_BEARER_TOKEN`
 - `PROD_HEALTHCHECKS_PING_URL`
 
 Optional:

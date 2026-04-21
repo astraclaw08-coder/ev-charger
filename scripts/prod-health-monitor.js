@@ -168,8 +168,7 @@ function loadConfig() {
         key: 'charger_cp_00008',
         label: 'Charger CP-00008 heartbeat',
         kind: 'charger-heartbeat',
-        url: 'https://api-production-26cf.up.railway.app/chargers/1A32-1-2010-00008/status',
-        auth: { type: 'bearer', tokenEnv: 'PROD_HEALTH_OPERATOR_BEARER_TOKEN' },
+        url: 'https://api-production-26cf.up.railway.app/chargers/1A32-1-2010-00008',
         expectStatus: 200,
         heartbeatField: 'lastHeartbeat',
         maxAgeMinutes: fileConfig.chargerOfflineMinutes || 20,
@@ -413,6 +412,7 @@ async function pingDeadman(config, suffix = '') {
   if (!config.deadman.enabled) return;
   const baseUrl = process.env[config.deadman.urlEnv]?.trim();
   if (!baseUrl) return;
+  if (baseUrl.includes('example.com') || baseUrl.includes('placeholder')) return;
   const url = suffix ? `${baseUrl.replace(/\/$/, '')}${suffix}` : baseUrl;
   await request(url, { method: 'GET', timeoutMs: 8000 });
 }
