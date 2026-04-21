@@ -4,283 +4,491 @@ const fs = require('fs');
 const path = require('path');
 const http = require('http');
 const https = require('https');
-const { execFile } = require('child_process');
+const os = require('os');
+const crypto = require('crypto');
+const { execFileSync } = require('child_process');
 
 const ROOT = path.resolve(__dirname, '..');
-const RUNTIME_DIR = path.join(ROOT, '.runtime');
-const LOG_DIR = path.join(ROOT, 'logs');
-const STATE_FILE = path.join(RUNTIME_DIR, 'prod-health-monitor-state.json');
-const LOG_FILE = path.join(LOG_DIR, 'prod-health-monitor.log');
+const STATE_DIR = path.join(ROOT, 'state');
+const STATE_FILE = path.join(STATE_DIR, 'prod-health-monitor.json');
+const CONFIG_FILE = path.join(STATE_DIR, 'prod-health-monitor.config.json');
+const LOCK_FILE = path.join(STATE_DIR, 'prod-health-monitor.lock');
 
-const HEALTH_INTERVAL_MS = Number(process.env.WATCHDOG_INTERVAL_MS || 10000);
-const HEALTH_TIMEOUT_MS = Number(process.env.WATCHDOG_HTTP_TIMEOUT_MS || 3000);
-const RESTART_WINDOW_MS = Number(process.env.WATCHDOG_RESTART_WINDOW_MS || 10 * 60 * 1000);
-const RESTART_MAX_IN_WINDOW = Number(process.env.WATCHDOG_RESTART_MAX || 4);
-const RESTART_COOLDOWN_MS = Number(process.env.WATCHDOG_RESTART_COOLDOWN_MS || 30 * 1000);
-const ALERT_COMMAND = process.env.WATCHDOG_ALERT_COMMAND || '';
-const ALERT_WEBHOOK_URL = process.env.WATCHDOG_ALERT_WEBHOOK_URL || '';
-const DRY_RUN = /^(1|true|yes)$/i.test(process.env.WATCHDOG_DRY_RUN || '');
+const NOW = () => Date.now();
+const nowIso = () => new Date().toISOString();
+const HOST = os.hostname();
+const PID = process.pid;
 
-function parseExpect(envValue, fallback) {
-  if (!envValue || !envValue.trim()) return fallback;
-  return envValue.split(',').map((s) => s.trim()).filter(Boolean);
+function fail(message, code = 1) {
+  console.error(message);
+  process.exit(code);
 }
 
-const SERVICES = {
-  api: {
-    systemdUnit: process.env.WATCHDOG_API_UNIT || 'ev-api.service',
-    probes: [{
-      type: 'http',
-      url: process.env.WATCHDOG_API_HEALTH_URL || 'http://127.0.0.1:3001/health',
-      expect: parseExpect(process.env.WATCHDOG_API_EXPECT, ['"status":"ok"', '"db":"ok"']),
-    }],
-  },
-  ocpp: {
-    systemdUnit: process.env.WATCHDOG_OCPP_UNIT || 'ev-ocpp.service',
-    probes: [{
-      type: 'http',
-      url: process.env.WATCHDOG_OCPP_HEALTH_URL || 'http://127.0.0.1:9000/health',
-      expect: parseExpect(process.env.WATCHDOG_OCPP_EXPECT, ['"status":"ok"']),
-    }],
-  },
-};
-
-if ((process.env.WATCHDOG_ENABLE_PORTAL || '').toLowerCase() === 'true') {
-  SERVICES.portal = {
-    systemdUnit: process.env.WATCHDOG_PORTAL_UNIT || 'ev-portal.service',
-    probes: [{ type: 'http', url: process.env.WATCHDOG_PORTAL_HEALTH_URL || 'http://127.0.0.1:4175/', expect: [] }],
-  };
-}
-
-function ensureDirs() {
-  fs.mkdirSync(RUNTIME_DIR, { recursive: true });
-  fs.mkdirSync(LOG_DIR, { recursive: true });
-}
-
-function nowIso() {
-  return new Date().toISOString();
-}
-
-function log(msg) {
-  const line = `[${nowIso()}] ${msg}`;
-  fs.appendFileSync(LOG_FILE, `${line}\n`);
-  console.log(line);
-}
-
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function readState() {
+function readJson(file, fallback = null) {
   try {
-    return JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+    return JSON.parse(fs.readFileSync(file, 'utf8'));
   } catch {
-    return { services: {} };
+    return fallback;
   }
 }
 
-function writeState(state) {
-  fs.writeFileSync(STATE_FILE, JSON.stringify({ ...state, ts: nowIso() }, null, 2));
+function writeJson(file, value) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`);
 }
 
-function httpGet(url, timeoutMs) {
-  const client = url.startsWith('https://') ? https : http;
-  return new Promise((resolve, reject) => {
-    const req = client.get(url, (res) => {
-      let body = '';
-      res.on('data', (chunk) => { body += chunk.toString('utf8'); });
-      res.on('end', () => resolve({ statusCode: res.statusCode || 0, body }));
-    });
-    req.on('error', reject);
-    req.setTimeout(timeoutMs, () => {
-      req.destroy(new Error(`timeout ${timeoutMs}ms`));
-    });
-  });
+function envRequired(name) {
+  const value = process.env[name]?.trim();
+  if (!value) throw new Error(`Missing required env var: ${name}`);
+  return value;
 }
 
-async function probeService(name, service) {
-  for (const probe of service.probes) {
-    try {
-      if (probe.type !== 'http') return { ok: false, detail: `unsupported probe type: ${probe.type}` };
-      const res = await httpGet(probe.url, HEALTH_TIMEOUT_MS);
-      if (res.statusCode < 200 || res.statusCode >= 300) {
-        return { ok: false, detail: `http ${res.statusCode} from ${probe.url}` };
-      }
-      for (const token of probe.expect || []) {
-        if (!res.body.includes(token)) {
-          return { ok: false, detail: `missing token ${token} from ${probe.url}` };
-        }
-      }
-    } catch (error) {
-      return { ok: false, detail: `${probe.url}: ${error.message}` };
-    }
-  }
-  return { ok: true, detail: 'ok' };
+function envOptional(name, fallback = '') {
+  const value = process.env[name];
+  return value == null || value === '' ? fallback : value;
 }
 
-function runExecFile(command, args) {
-  return new Promise((resolve, reject) => {
-    execFile(command, args, { timeout: 15000 }, (error, stdout, stderr) => {
-      if (error) {
-        reject(new Error(`${command} ${args.join(' ')} failed: ${stderr || error.message}`));
-        return;
-      }
-      resolve((stdout || '').trim());
-    });
-  });
+function envBool(name, fallback = false) {
+  const value = process.env[name];
+  if (value == null || value === '') return fallback;
+  return /^(1|true|yes|on)$/i.test(value);
 }
 
-async function restartUnit(serviceName, unitName, reason) {
-  if (DRY_RUN) {
-    log(`[dry-run] restart ${serviceName} (${unitName}) reason=${reason}`);
-    return;
-  }
-  await runExecFile('systemctl', ['restart', unitName]);
-  log(`restarted ${serviceName} (${unitName}) reason=${reason}`);
+function envInt(name, fallback) {
+  const raw = process.env[name];
+  if (raw == null || raw === '') return fallback;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) throw new Error(`Invalid numeric env var ${name}=${raw}`);
+  return n;
 }
 
-async function postWebhook(event) {
-  if (!ALERT_WEBHOOK_URL) return;
+function authHeaders(auth) {
+  if (!auth || auth.type === 'none') return {};
+  if (auth.type === 'bearer') return { Authorization: `Bearer ${auth.token}` };
+  if (auth.type === 'internal-token') return { 'X-Internal-Token': auth.token };
+  throw new Error(`Unsupported auth type: ${auth.type}`);
+}
 
-  const payload = JSON.stringify(event);
-  const url = new URL(ALERT_WEBHOOK_URL);
+function request(urlString, options = {}) {
+  const url = new URL(urlString);
   const client = url.protocol === 'https:' ? https : http;
+  const timeoutMs = options.timeoutMs ?? 8000;
+  const headers = options.headers ?? {};
 
-  await new Promise((resolve, reject) => {
+  return new Promise((resolve, reject) => {
     const req = client.request({
-      method: 'POST',
+      protocol: url.protocol,
       hostname: url.hostname,
       port: url.port || (url.protocol === 'https:' ? 443 : 80),
       path: `${url.pathname}${url.search}`,
-      headers: {
-        'content-type': 'application/json',
-        'content-length': Buffer.byteLength(payload),
-      },
-      timeout: 5000,
+      method: options.method || 'GET',
+      headers,
+      timeout: timeoutMs,
     }, (res) => {
-      if ((res.statusCode || 500) >= 400) {
-        reject(new Error(`webhook status=${res.statusCode}`));
-        return;
-      }
-      resolve();
+      let body = '';
+      res.setEncoding('utf8');
+      res.on('data', (chunk) => { body += chunk; });
+      res.on('end', () => resolve({ status: res.statusCode || 0, headers: res.headers, body }));
     });
-
     req.on('error', reject);
-    req.on('timeout', () => req.destroy(new Error('webhook timeout')));
-    req.write(payload);
+    req.on('timeout', () => req.destroy(new Error(`timeout after ${timeoutMs}ms`)));
+    if (options.body) req.write(options.body);
     req.end();
   });
 }
 
-async function runAlert(event) {
-  const message = `${event.kind}: ${event.service} - ${event.detail}`;
+function truncate(text, max = 300) {
+  if (text == null) return '';
+  const s = String(text).replace(/\s+/g, ' ').trim();
+  return s.length > max ? `${s.slice(0, max - 1)}…` : s;
+}
 
-  if (ALERT_COMMAND) {
-    try {
-      const args = [message, event.severity || 'warn'];
-      if (DRY_RUN) {
-        log(`[dry-run] alert command: ${ALERT_COMMAND} ${args.join(' ')}`);
-      } else {
-        const [cmd, ...baseArgs] = ALERT_COMMAND.split(' ');
-        await runExecFile(cmd, [...baseArgs, ...args]);
-      }
-    } catch (error) {
-      log(`alert command failed: ${error.message}`);
+function sha1(input) {
+  return crypto.createHash('sha1').update(input).digest('hex');
+}
+
+function loadConfig() {
+  const fileConfig = readJson(CONFIG_FILE, {});
+
+  const config = {
+    monitorName: envOptional('PROD_HEALTH_MONITOR_NAME', fileConfig.monitorName || 'prod_health_monitor'),
+    intervalMinutes: envInt('PROD_HEALTH_INTERVAL_MINUTES', fileConfig.intervalMinutes || 15),
+    timeoutMs: envInt('PROD_HEALTH_TIMEOUT_MS', fileConfig.timeoutMs || 8000),
+    failureThreshold: envInt('PROD_HEALTH_FAILURE_THRESHOLD', fileConfig.failureThreshold || 2),
+    recoveryThreshold: envInt('PROD_HEALTH_RECOVERY_THRESHOLD', fileConfig.recoveryThreshold || 1),
+    alertCooldownMinutes: envInt('PROD_HEALTH_ALERT_COOLDOWN_MINUTES', fileConfig.alertCooldownMinutes || 120),
+    chargerOfflineMinutes: envInt('PROD_HEALTH_CHARGER_OFFLINE_MINUTES', fileConfig.chargerOfflineMinutes || 20),
+    lockStaleMinutes: envInt('PROD_HEALTH_LOCK_STALE_MINUTES', fileConfig.lockStaleMinutes || 30),
+    startupStrict: envBool('PROD_HEALTH_STARTUP_STRICT', fileConfig.startupStrict ?? true),
+    telegram: {
+      botTokenEnv: envOptional('PROD_HEALTH_TELEGRAM_BOT_TOKEN_ENV', fileConfig.telegram?.botTokenEnv || 'TELEGRAM_BOT_TOKEN'),
+      chatIdEnv: envOptional('PROD_HEALTH_TELEGRAM_CHAT_ID_ENV', fileConfig.telegram?.chatIdEnv || 'TELEGRAM_CHAT_ID'),
+      apiBase: envOptional('TELEGRAM_API_BASE', fileConfig.telegram?.apiBase || 'https://api.telegram.org'),
+    },
+    deadman: {
+      urlEnv: envOptional('PROD_HEALTH_DEADMAN_URL_ENV', fileConfig.deadman?.urlEnv || 'PROD_HEALTHCHECKS_PING_URL'),
+      graceUrlEnv: envOptional('PROD_HEALTH_DEADMAN_GRACE_URL_ENV', fileConfig.deadman?.graceUrlEnv || ''),
+      enabled: envBool('PROD_HEALTH_DEADMAN_ENABLED', fileConfig.deadman?.enabled ?? true),
+    },
+    llm: {
+      escalationModel: envOptional('PROD_HEALTH_ESCALATION_MODEL', fileConfig.llm?.escalationModel || 'openai-codex/gpt-5.4'),
+    },
+    checks: fileConfig.checks || [
+      {
+        key: 'ocpp_fresh',
+        label: 'OCPP fresh',
+        kind: 'http-json',
+        url: 'https://ocpp-server-fresh-production.up.railway.app/health',
+        expectStatus: 200,
+        expectJson: { status: 'ok' },
+      },
+      {
+        key: 'api',
+        label: 'API',
+        kind: 'http-json',
+        url: 'https://api-production-26cf.up.railway.app/health',
+        expectStatus: 200,
+        expectJson: { status: 'ok', db: 'ok' },
+      },
+      {
+        key: 'portal',
+        label: 'Portal',
+        kind: 'http-status',
+        url: 'https://portal.lumeopower.com',
+        expectStatus: 200,
+      },
+      {
+        key: 'keycloak_oidc',
+        label: 'Keycloak OIDC',
+        kind: 'http-status',
+        url: 'https://keycloak-live-production.up.railway.app/realms/ev-charger-prod/.well-known/openid-configuration',
+        expectStatus: 200,
+      },
+      {
+        key: 'charger_cp_00008',
+        label: 'Charger CP-00008 heartbeat',
+        kind: 'charger-heartbeat',
+        url: 'https://api-production-26cf.up.railway.app/chargers/1A32-1-2010-00008/status',
+        auth: { type: 'bearer', tokenEnv: 'PROD_HEALTH_OPERATOR_BEARER_TOKEN' },
+        expectStatus: 200,
+        heartbeatField: 'lastHeartbeat',
+        maxAgeMinutes: fileConfig.chargerOfflineMinutes || 20,
+        expectJson: { ocppId: '1A32-1-2010-00008' },
+      },
+    ],
+  };
+
+  if (!config.telegram.botTokenEnv || !config.telegram.chatIdEnv) {
+    throw new Error('Telegram env names must be configured');
+  }
+  return config;
+}
+
+function validateStartup(config) {
+  const missing = [];
+
+  const tgToken = process.env[config.telegram.botTokenEnv]?.trim();
+  const tgChat = process.env[config.telegram.chatIdEnv]?.trim();
+  if (!tgToken) missing.push(config.telegram.botTokenEnv);
+  if (!tgChat) missing.push(config.telegram.chatIdEnv);
+
+  if (config.deadman.enabled) {
+    const pingUrl = process.env[config.deadman.urlEnv]?.trim();
+    if (!pingUrl) missing.push(config.deadman.urlEnv);
+  }
+
+  for (const check of config.checks) {
+    if (check.auth?.tokenEnv && !process.env[check.auth.tokenEnv]?.trim()) {
+      missing.push(check.auth.tokenEnv);
     }
   }
+
+  if (missing.length > 0) {
+    const message = `prod-health-monitor startup validation failed, missing env vars: ${Array.from(new Set(missing)).join(', ')}`;
+    if (config.startupStrict) throw new Error(message);
+    console.warn(message);
+  }
+}
+
+function acquireLock(config) {
+  fs.mkdirSync(STATE_DIR, { recursive: true });
+  const staleMs = config.lockStaleMinutes * 60 * 1000;
+  const payload = { pid: PID, host: HOST, acquiredAt: nowIso() };
 
   try {
-    await postWebhook(event);
+    const fd = fs.openSync(LOCK_FILE, 'wx');
+    fs.writeFileSync(fd, JSON.stringify(payload, null, 2));
+    fs.closeSync(fd);
+    return;
   } catch (error) {
-    log(`alert webhook failed: ${error.message}`);
+    if (error.code !== 'EEXIST') throw error;
   }
+
+  const existing = readJson(LOCK_FILE, {});
+  const acquiredAtMs = existing?.acquiredAt ? new Date(existing.acquiredAt).getTime() : 0;
+  const stale = !acquiredAtMs || (NOW() - acquiredAtMs) > staleMs;
+  if (!stale) {
+    fail(`prod-health-monitor lock active, pid=${existing?.pid ?? 'unknown'} host=${existing?.host ?? 'unknown'} acquiredAt=${existing?.acquiredAt ?? 'unknown'}`);
+  }
+
+  fs.rmSync(LOCK_FILE, { force: true });
+  const fd = fs.openSync(LOCK_FILE, 'wx');
+  fs.writeFileSync(fd, JSON.stringify({ ...payload, replacedStaleLockFrom: existing }, null, 2));
+  fs.closeSync(fd);
 }
 
-function cleanupOldRestartTimestamps(serviceState, nowMs) {
-  serviceState.restartTimestamps = (serviceState.restartTimestamps || []).filter((t) => nowMs - t <= RESTART_WINDOW_MS);
+function releaseLock() {
+  fs.rmSync(LOCK_FILE, { force: true });
 }
 
-async function monitorLoop() {
-  ensureDirs();
-  log('prod-health-monitor started');
-  log(`config interval=${HEALTH_INTERVAL_MS}ms timeout=${HEALTH_TIMEOUT_MS}ms restartWindow=${RESTART_WINDOW_MS}ms restartMax=${RESTART_MAX_IN_WINDOW}`);
+function resolveAuth(check) {
+  if (!check.auth) return { type: 'none' };
+  const token = process.env[check.auth.tokenEnv]?.trim();
+  if (!token) throw new Error(`Missing auth token env ${check.auth.tokenEnv} for check ${check.key}`);
+  return { type: check.auth.type, token };
+}
 
-  const state = readState();
-  state.services = state.services || {};
+function expectJsonSubset(actual, expected) {
+  for (const [key, value] of Object.entries(expected || {})) {
+    if (actual == null || actual[key] !== value) return `expected ${key}=${JSON.stringify(value)}, got ${JSON.stringify(actual?.[key])}`;
+  }
+  return null;
+}
 
-  while (true) {
-    const nowMs = Date.now();
+async function runCheck(check, config) {
+  const base = { key: check.key, label: check.label, checkedAt: nowIso() };
+  const auth = resolveAuth(check);
+  const headers = authHeaders(auth);
+  const response = await request(check.url, { timeoutMs: config.timeoutMs, headers });
 
-    for (const [serviceName, service] of Object.entries(SERVICES)) {
-      const serviceState = state.services[serviceName] || { restartTimestamps: [], status: 'unknown', lastError: null };
-      cleanupOldRestartTimestamps(serviceState, nowMs);
+  if (response.status !== (check.expectStatus || 200)) {
+    return { ...base, ok: false, status: response.status, detail: `HTTP ${response.status} from ${check.url}`, bodySnippet: truncate(response.body) };
+  }
 
-      const probe = await probeService(serviceName, service);
-      serviceState.status = probe.ok ? 'ok' : 'fail';
-      serviceState.lastCheckedAt = nowIso();
-      serviceState.lastError = probe.ok ? null : probe.detail;
+  if (check.kind === 'http-status') {
+    return { ...base, ok: true, status: response.status, detail: `HTTP ${response.status}` };
+  }
 
-      if (probe.ok) {
-        state.services[serviceName] = serviceState;
-        continue;
-      }
+  let json;
+  try {
+    json = JSON.parse(response.body || '{}');
+  } catch {
+    return { ...base, ok: false, status: response.status, detail: `invalid JSON from ${check.url}`, bodySnippet: truncate(response.body) };
+  }
 
-      const tooManyRestarts = serviceState.restartTimestamps.length >= RESTART_MAX_IN_WINDOW;
-      const inCooldown = serviceState.lastRestartAtMs && (nowMs - serviceState.lastRestartAtMs) < RESTART_COOLDOWN_MS;
+  const subsetError = expectJsonSubset(json, check.expectJson);
+  if (subsetError) {
+    return { ...base, ok: false, status: response.status, detail: subsetError, bodySnippet: truncate(response.body) };
+  }
 
-      if (tooManyRestarts) {
-        const event = {
-          kind: 'restart-loop-detected',
-          severity: 'critical',
-          service: serviceName,
-          detail: `probe failed and restart threshold reached (${serviceState.restartTimestamps.length}/${RESTART_MAX_IN_WINDOW}) in ${Math.round(RESTART_WINDOW_MS / 1000)}s`,
-          ts: nowIso(),
-        };
-        log(`${serviceName}: ${event.detail}`);
-        await runAlert(event);
-        state.services[serviceName] = serviceState;
-        continue;
-      }
+  if (check.kind === 'charger-heartbeat') {
+    const heartbeatRaw = json[check.heartbeatField];
+    if (!heartbeatRaw) {
+      return { ...base, ok: false, status: response.status, detail: `missing ${check.heartbeatField} in charger status`, bodySnippet: truncate(response.body) };
+    }
+    const heartbeatMs = new Date(heartbeatRaw).getTime();
+    if (!Number.isFinite(heartbeatMs)) {
+      return { ...base, ok: false, status: response.status, detail: `invalid ${check.heartbeatField} value ${JSON.stringify(heartbeatRaw)}` };
+    }
+    const ageMinutes = Math.floor((NOW() - heartbeatMs) / 60000);
+    const maxAge = check.maxAgeMinutes || config.chargerOfflineMinutes;
+    if (ageMinutes > maxAge) {
+      return {
+        ...base,
+        ok: false,
+        status: response.status,
+        detail: `lastHeartbeat stale: ${ageMinutes}m old, threshold ${maxAge}m`,
+        heartbeatAt: heartbeatRaw,
+      };
+    }
+    return {
+      ...base,
+      ok: true,
+      status: response.status,
+      detail: `lastHeartbeat ${ageMinutes}m old`,
+      heartbeatAt: heartbeatRaw,
+    };
+  }
 
-      if (inCooldown) {
-        log(`${serviceName}: health failed but in cooldown (${probe.detail})`);
-        state.services[serviceName] = serviceState;
-        continue;
-      }
+  return { ...base, ok: true, status: response.status, detail: 'ok' };
+}
 
+function initialState(config) {
+  return {
+    monitorName: config.monitorName,
+    createdAt: nowIso(),
+    checks: {},
+    lastRunAt: null,
+    lastSuccessAt: null,
+    lastSummary: null,
+    lastDeadmanPingAt: null,
+  };
+}
+
+function updateTransition(existing, result, config) {
+  const state = existing || {
+    status: 'unknown',
+    consecutiveFailures: 0,
+    consecutiveSuccesses: 0,
+    lastAlertAt: null,
+    lastAlertFingerprint: null,
+    lastStatusChangeAt: null,
+    openIncidentStartedAt: null,
+  };
+
+  if (result.ok) {
+    state.consecutiveSuccesses += 1;
+    state.consecutiveFailures = 0;
+    state.lastSuccessAt = result.checkedAt;
+    if (state.status !== 'healthy' && state.consecutiveSuccesses >= config.recoveryThreshold) {
+      state.status = 'healthy';
+      state.lastStatusChangeAt = result.checkedAt;
+    }
+    if (state.status === 'healthy') state.openIncidentStartedAt = null;
+  } else {
+    state.consecutiveFailures += 1;
+    state.consecutiveSuccesses = 0;
+    state.lastFailureAt = result.checkedAt;
+    if (state.status !== 'failing' && state.consecutiveFailures >= config.failureThreshold) {
+      state.status = 'failing';
+      state.lastStatusChangeAt = result.checkedAt;
+      state.openIncidentStartedAt = state.openIncidentStartedAt || result.checkedAt;
+    }
+  }
+
+  state.lastResult = result;
+  return state;
+}
+
+function severityFor(result) {
+  return result.key.startsWith('charger_') ? 'critical' : 'warn';
+}
+
+function shouldSendAlert(checkState, fingerprint, config) {
+  const cooldownMs = config.alertCooldownMinutes * 60 * 1000;
+  const lastAlertMs = checkState.lastAlertAt ? new Date(checkState.lastAlertAt).getTime() : 0;
+  if (!lastAlertMs) return true;
+  if (checkState.lastAlertFingerprint !== fingerprint) return true;
+  return (NOW() - lastAlertMs) >= cooldownMs;
+}
+
+async function sendTelegram(config, text) {
+  const token = envRequired(config.telegram.botTokenEnv);
+  const chatId = envRequired(config.telegram.chatIdEnv);
+  const apiBase = config.telegram.apiBase.replace(/\/$/, '');
+  const body = new URLSearchParams({
+    chat_id: chatId,
+    text,
+    disable_web_page_preview: 'true',
+  }).toString();
+
+  const url = `${apiBase}/bot${token}/sendMessage`;
+  await request(url, {
+    method: 'POST',
+    timeoutMs: 8000,
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Content-Length': String(Buffer.byteLength(body)) },
+    body,
+  });
+}
+
+function buildDownMessage(config, failing, allResults) {
+  const lines = [
+    `🚨 ${config.monitorName}: prod issue detected`,
+    ...failing.map((r) => `- ${r.label}: ${r.detail}`),
+  ];
+  const healthy = allResults.filter((r) => r.ok).map((r) => `${r.label}: ok`);
+  if (healthy.length) lines.push('', 'Healthy:', ...healthy.map((s) => `- ${s}`));
+  lines.push('', `Escalation model if needed: ${config.llm.escalationModel}`);
+  return lines.join('\n');
+}
+
+function buildRecoveryMessage(config, recovered) {
+  return [
+    `✅ ${config.monitorName}: recovery detected`,
+    ...recovered.map((r) => `- ${r.label}: recovered (${r.detail})`),
+  ].join('\n');
+}
+
+async function pingDeadman(config, suffix = '') {
+  if (!config.deadman.enabled) return;
+  const baseUrl = process.env[config.deadman.urlEnv]?.trim();
+  if (!baseUrl) return;
+  const url = suffix ? `${baseUrl.replace(/\/$/, '')}${suffix}` : baseUrl;
+  await request(url, { method: 'GET', timeoutMs: 8000 });
+}
+
+async function main() {
+  const config = loadConfig();
+  validateStartup(config);
+  acquireLock(config);
+
+  const state = readJson(STATE_FILE, initialState(config)) || initialState(config);
+  const results = [];
+  const alerts = [];
+  const recoveries = [];
+
+  try {
+    for (const check of config.checks) {
+      let result;
       try {
-        await restartUnit(serviceName, service.systemdUnit, probe.detail);
-        serviceState.lastRestartAtMs = nowMs;
-        serviceState.restartTimestamps.push(nowMs);
-        const event = {
-          kind: 'service-restarted',
-          severity: 'warn',
-          service: serviceName,
-          detail: `health probe failed: ${probe.detail}; restarted unit ${service.systemdUnit}`,
-          ts: nowIso(),
-        };
-        await runAlert(event);
+        result = await runCheck(check, config);
       } catch (error) {
-        const event = {
-          kind: 'restart-failed',
-          severity: 'critical',
-          service: serviceName,
-          detail: error.message,
-          ts: nowIso(),
-        };
-        log(`${serviceName}: ${error.message}`);
-        await runAlert(event);
+        result = { key: check.key, label: check.label, checkedAt: nowIso(), ok: false, detail: error.message };
       }
 
-      state.services[serviceName] = serviceState;
+      results.push(result);
+      const updated = updateTransition(state.checks[check.key], result, config);
+      state.checks[check.key] = updated;
+
+      const fingerprint = sha1(`${result.key}|${updated.status}|${result.detail}`);
+        const previousResultOk = state.checks[check.key]?.lastResult?.ok;
+      if (!result.ok && updated.status === 'failing' && shouldSendAlert(updated, fingerprint, config)) {
+        updated.lastAlertAt = result.checkedAt;
+        updated.lastAlertFingerprint = fingerprint;
+        alerts.push({ result, severity: severityFor(result) });
+      }
+
+      if (result.ok && previousResultOk === false && updated.status === 'healthy') {
+        recoveries.push(result);
+      }
     }
 
-    writeState(state);
-    await sleep(HEALTH_INTERVAL_MS);
+    if (alerts.length) {
+      const message = buildDownMessage(config, alerts.map((a) => a.result), results);
+      await sendTelegram(config, message);
+    } else if (recoveries.length) {
+      const message = buildRecoveryMessage(config, recoveries);
+      await sendTelegram(config, message);
+    }
+
+    await pingDeadman(config);
+    state.lastDeadmanPingAt = nowIso();
+    state.lastRunAt = nowIso();
+    state.lastSuccessAt = nowIso();
+    state.lastSummary = {
+      failing: results.filter((r) => !r.ok).map((r) => ({ key: r.key, detail: r.detail })),
+      healthyCount: results.filter((r) => r.ok).length,
+      total: results.length,
+    };
+    writeJson(STATE_FILE, state);
+
+    const failed = results.filter((r) => !r.ok);
+    if (failed.length) {
+      console.log(JSON.stringify({ ok: false, failing: failed, checkedAt: nowIso() }, null, 2));
+      process.exitCode = 1;
+      return;
+    }
+
+    console.log(JSON.stringify({ ok: true, checkedAt: nowIso(), total: results.length }, null, 2));
+  } catch (error) {
+    try {
+      const graceSuffix = process.env[config.deadman.graceUrlEnv]?.trim() || '/fail';
+      await pingDeadman(config, graceSuffix);
+    } catch {}
+    throw error;
+  } finally {
+    releaseLock();
   }
 }
 
-monitorLoop().catch((error) => {
-  log(`fatal: ${error.message}`);
-  process.exit(1);
-});
+main().catch((error) => fail(`prod-health-monitor failed: ${error.stack || error.message}`));
