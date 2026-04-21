@@ -1723,12 +1723,20 @@ function SiteKpiTile({ label, value, live }: { label: string; value: string; liv
 }
 
 function ChargerListRow({ charger, uptime, onUnassign }: { charger: SiteDetailType['chargers'][number]; uptime?: ChargerUptime; onUnassign?: () => void }) {
+  // Whole row is a Link → any click on empty row-space navigates to the
+  // charger detail page. Inner ocppId label and the "View Detail →" CTA
+  // are spans (not nested anchors) so the HTML stays valid. The Unassign
+  // button stops propagation + prevents default so clicking it cancels
+  // the row navigation.
   return (
-    <div className="grid gap-3 px-4 py-3 md:grid-cols-[1.6fr_1fr_1.8fr_0.8fr] md:items-center">
+    <Link
+      to={`/chargers/${shortId(charger.id)}`}
+      className="grid gap-3 px-4 py-3 md:grid-cols-[1.6fr_1fr_1.8fr_0.8fr] md:items-center transition-colors hover:bg-gray-50 dark:hover:bg-slate-800/40 focus-visible:outline-none focus-visible:bg-gray-50 dark:focus-visible:bg-slate-800/40"
+    >
       <div>
-        <Link to={`/chargers/${shortId(charger.id)}`} className="text-sm font-semibold text-gray-900 dark:text-slate-100 hover:text-brand-700 hover:underline">
+        <span className="text-sm font-semibold text-gray-900 dark:text-slate-100 group-hover:text-brand-700">
           {charger.ocppId}
-        </Link>
+        </span>
         <p className="text-xs text-gray-500 dark:text-slate-400">{charger.vendor} {charger.model} · S/N {charger.serialNumber}</p>
         {charger.lastHeartbeat && (
           <p className="text-xs text-gray-400 dark:text-slate-500">Heartbeat: {formatDate(charger.lastHeartbeat)}</p>
@@ -1756,27 +1764,38 @@ function ChargerListRow({ charger, uptime, onUnassign }: { charger: SiteDetailTy
       <div className="flex items-center justify-end gap-2">
         {onUnassign && (
           <button
-            onClick={onUnassign}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onUnassign();
+            }}
             title="Unassign charger from this site"
             className="inline-block rounded-md border border-red-300 dark:border-red-700/50 px-3 py-1.5 text-xs font-medium text-red-600 dark:text-red-400 bg-white dark:bg-slate-800/60 hover:bg-red-50 dark:hover:bg-red-900/20"
           >
             Unassign
           </button>
         )}
-        <Link to={`/chargers/${shortId(charger.id)}`} className="inline-block rounded-md border border-gray-300 dark:border-slate-700 px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-slate-400 bg-white dark:bg-slate-800/60 hover:bg-gray-50 dark:hover:bg-slate-700">View Detail →</Link>
+        <span className="inline-block whitespace-nowrap rounded-md border border-gray-300 dark:border-slate-700 px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-slate-400 bg-white dark:bg-slate-800/60">
+          View Detail →
+        </span>
       </div>
-    </div>
+    </Link>
   );
 }
 
 function ChargerCard({ charger, uptime, onUnassign }: { charger: SiteDetailType['chargers'][number]; uptime?: ChargerUptime; onUnassign?: () => void }) {
+  // Whole card is a Link; same rationale as ChargerListRow above. Unassign
+  // button stops propagation + prevents default.
   return (
-    <div className="rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 shadow-sm">
+    <Link
+      to={`/chargers/${shortId(charger.id)}`}
+      className="block rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 shadow-sm transition-colors hover:bg-gray-50 dark:hover:bg-slate-800/40 focus-visible:outline-none focus-visible:bg-gray-50 dark:focus-visible:bg-slate-800/40"
+    >
       <div className="flex items-start justify-between">
         <div>
-          <Link to={`/chargers/${shortId(charger.id)}`} className="font-semibold text-gray-900 dark:text-slate-100 hover:text-brand-700 hover:underline">
+          <span className="font-semibold text-gray-900 dark:text-slate-100">
             {charger.ocppId}
-          </Link>
+          </span>
           <p className="text-xs text-gray-500 dark:text-slate-400">{charger.vendor} {charger.model}</p>
         </div>
         <StatusBadge status={charger.status} type="charger" />
@@ -1809,16 +1828,22 @@ function ChargerCard({ charger, uptime, onUnassign }: { charger: SiteDetailType[
       <div className="mt-3 flex gap-2">
         {onUnassign && (
           <button
-            onClick={onUnassign}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onUnassign();
+            }}
             title="Unassign charger from this site"
             className="flex-1 rounded-md border border-red-300 dark:border-red-700/50 px-3 py-1.5 text-center text-xs font-medium text-red-600 dark:text-red-400 bg-white dark:bg-slate-800/60 hover:bg-red-50 dark:hover:bg-red-900/20"
           >
             Unassign
           </button>
         )}
-        <Link to={`/chargers/${shortId(charger.id)}`} className="flex-1 rounded-md border border-gray-300 dark:border-slate-700 px-3 py-1.5 text-center text-xs font-medium text-gray-600 dark:text-slate-400 bg-white dark:bg-slate-800/60 hover:bg-gray-50 dark:hover:bg-slate-700">View Detail →</Link>
+        <span className="flex-1 whitespace-nowrap rounded-md border border-gray-300 dark:border-slate-700 px-3 py-1.5 text-center text-xs font-medium text-gray-600 dark:text-slate-400 bg-white dark:bg-slate-800/60">
+          View Detail →
+        </span>
       </div>
-    </div>
+    </Link>
   );
 }
 
