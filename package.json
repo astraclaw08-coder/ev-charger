@@ -27,6 +27,8 @@
     "watchdog:restart": "node scripts/dev-supervisor.js restart",
     "watchdog:prod": "node scripts/prod-health-monitor.js",
     "watchdog:prod:dry-run": "WATCHDOG_DRY_RUN=true node scripts/prod-health-monitor.js",
+    "deploy:mark-maintenance": "npx tsx packages/api/scripts/mark-deploy-maintenance.ts",
+    "deploy:ocpp": "npm run deploy:mark-maintenance -- --reason \"ocpp $(git rev-parse --short HEAD)\" && cd packages/ocpp-server && railway up --service ocpp-server-fresh",
     "gitflow:verify": "node scripts/verify-branch-policy.cjs",
     "gitflow:harden": "bash scripts/harden-branch-protections.sh",
     "security:secrets": "bash scripts/security-scan-secrets.sh"

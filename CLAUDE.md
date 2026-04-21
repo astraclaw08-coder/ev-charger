@@ -97,7 +97,13 @@ User (Driver) → has many Sessions, Favorites
 ### Deploy
 21. **Vercel does NOT auto-deploy.** After `main` merge: `cd packages/portal && vercel --prod --yes`.
 22. **Check endpoints post-deploy:** API `/health`, OCPP `/health`, OCPP `/status`.
-23. **Prod portal changes require PR.** No direct deploys from dev branch.
+23. **OCPP prod deploys must use the wrapper:** run `npm run deploy:ocpp`, not raw `railway up --service ocpp-server-fresh`.
+    - Wrapper inserts a `SCHEDULED_MAINTENANCE` `UptimeEvent` for every currently-ONLINE charger, so the WebSocket disconnect window is excluded from uptime calculations as scheduled maintenance under current platform policy.
+    - **Scope of use:** short planned OCPP server restarts only. Do not use for rollbacks of unknown scope or any operation where reconnect within minutes is not expected.
+    - **Prod DB prerequisite:** requires `DATABASE_URL` pointing at prod Railway Postgres. The script fail-fasts (exit 1) if the var is missing or the connection fails — `&&` chain prevents `railway up` from starting. Shell deploys often don't have prod creds loaded; configure via `~/.env` or a sourced `.envrc` first.
+    - **Post-deploy verification:** verify each marked charger reconnects within ~5 minutes (check `/status` or query `UptimeEvent` for the closing `ONLINE` row from BootNotification). If any charger has not reconnected, investigate immediately because the still-open maintenance segment may over-exclude downtime beyond the intended deploy window.
+    - Idempotency: re-runs on a charger already in `SCHEDULED_MAINTENANCE` are skipped deterministically — no time-threshold.
+24. **Prod portal changes require PR.** No direct deploys from dev branch.
 
 ### Auth (Keycloak)
 24. **Dev realm `ev-charger` / Prod realm `ev-charger-prod`.** Same env var names, different values.
