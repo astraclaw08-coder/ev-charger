@@ -49,7 +49,8 @@ export async function handleStartTransaction(
   console.log(`[StartTransaction] chargerId=${chargerId} connector=${connectorId} idTag=${idTag} meterStart=${meterStart} reservationId=${ocppReservationId ?? 'none'}`);
 
   // Resolve user and connector
-  const [user, connector] = await Promise.all([
+  // eslint-disable-next-line prefer-const
+  let [user, connector] = await Promise.all([
     prisma.user.findUnique({ where: { idTag } }),
     prisma.connector.findUnique({
       where: { chargerId_connectorId: { chargerId, connectorId } },
@@ -71,6 +72,40 @@ export async function handleStartTransaction(
       },
     }),
   ]);
+
+  // ── Fleet allowlist (TASK-0208 F5c — TEMPORARY, env-flag gated) ──────────
+  // Single-tag allowlist that bypasses the User.idTag lookup for one specific
+  // fleet idTag and attributes the session to a pre-seeded synthetic User.
+  // Strictly a lifecycle-verification shim — NOT the production architecture.
+  //
+  // Preconditions to activate (all required):
+  //   - FLEET_MODE_ENABLED=true
+  //   - FLEET_ALLOW_TAG=<exact idTag to accept>
+  //   - FLEET_SYSTEM_USER_ID=<uuid of synthetic User in DB>
+  //
+  // Revert: unset FLEET_MODE_ENABLED (or any of the three vars) and restart.
+  // Remove this block once FleetIdTag / FleetChargerPolicy schema lands.
+  // See: tasks/task-0208-f5-server-gate-firmware-check.md (F5c).
+  if (
+    !user &&
+    process.env.FLEET_MODE_ENABLED === 'true' &&
+    process.env.FLEET_ALLOW_TAG &&
+    process.env.FLEET_SYSTEM_USER_ID &&
+    idTag === process.env.FLEET_ALLOW_TAG
+  ) {
+    user = await prisma.user.findUnique({
+      where: { id: process.env.FLEET_SYSTEM_USER_ID },
+    });
+    if (user) {
+      console.log(
+        `[StartTransaction] [FLEET-F5C] idTag=${idTag} accepted via fleet allowlist; attributed to user=${user.id}`,
+      );
+    } else {
+      console.error(
+        `[StartTransaction] [FLEET-F5C] FLEET_SYSTEM_USER_ID=${process.env.FLEET_SYSTEM_USER_ID} not found in User table — falling through to reject`,
+      );
+    }
+  }
 
   if (!user) {
     console.warn(`[StartTransaction] Unknown idTag=${idTag}, rejecting`);
