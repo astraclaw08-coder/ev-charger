@@ -26,7 +26,7 @@
     "watchdog:restart-failed": "node scripts/dev-supervisor.js restart-failed",
     "watchdog:restart": "node scripts/dev-supervisor.js restart",
     "watchdog:prod": "node scripts/prod-health-monitor.js",
-    "watchdog:prod:dry-run": "WATCHDOG_DRY_RUN=true node scripts/prod-health-monitor.js",
+    "watchdog:prod:dry-run": "PROD_HEALTH_STARTUP_STRICT=false node scripts/prod-health-monitor.js",
     "gitflow:verify": "node scripts/verify-branch-policy.cjs",
     "gitflow:harden": "bash scripts/harden-branch-protections.sh",
     "security:secrets": "bash scripts/security-scan-secrets.sh"

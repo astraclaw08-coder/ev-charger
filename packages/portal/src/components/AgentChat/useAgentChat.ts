@@ -3,48 +3,59 @@ import { useToken } from '../../auth/TokenContext';
 import type { ChatMessage, SSEEvent, ToolChip } from './types';
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
-const STORAGE_KEY = 'lumeo.agent-chat.messages';
+const DEFAULT_STORAGE_KEY = 'lumeo.agent-chat.messages';
 
-function loadMessages(): ChatMessage[] {
+let storageWarningShown = false;
+
+function loadMessages(key: string): ChatMessage[] {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(key);
     if (raw) return JSON.parse(raw) as ChatMessage[];
   } catch { /* ignore corrupt data */ }
   return [];
 }
 
-function saveMessages(msgs: ChatMessage[]) {
+function saveMessages(key: string, msgs: ChatMessage[]) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(msgs));
-  } catch { /* storage full — silent */ }
+    localStorage.setItem(key, JSON.stringify(msgs));
+  } catch {
+    // Storage full — show one-time warning
+    if (!storageWarningShown) {
+      storageWarningShown = true;
+      console.warn('[Lumeo AI] localStorage full — conversation may not persist');
+    }
+  }
 }
 
 function uid(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-export function useAgentChat() {
-  const [messages, setMessages] = useState<ChatMessage[]>(loadMessages);
+export function useAgentChat(storageKey: string = DEFAULT_STORAGE_KEY) {
+  const [messages, setMessages] = useState<ChatMessage[]>(() => loadMessages(storageKey));
   const [isStreaming, setIsStreaming] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
   const getToken = useToken();
+  const storageKeyRef = useRef(storageKey);
+  storageKeyRef.current = storageKey;
 
   // Persist whenever messages change
   const updateMessages = useCallback((updater: (prev: ChatMessage[]) => ChatMessage[]) => {
     setMessages((prev) => {
       const next = updater(prev);
-      saveMessages(next);
+      saveMessages(storageKeyRef.current, next);
       return next;
     });
   }, []);
 
-  const sendMessage = useCallback(async (text: string) => {
+  const sendMessage = useCallback(async (text: string, meta?: ChatMessage['meta']): Promise<void> => {
     const userMsg: ChatMessage = {
       id: uid(),
       role: 'user',
       content: text.trim(),
       timestamp: Date.now(),
+      ...(meta ? { meta } : {}),
     };
 
     const assistantMsg: ChatMessage = {

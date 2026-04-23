@@ -163,10 +163,27 @@
 **Done when:** Nightly report generates for test site with real telemetry data; viewable in portal.
 
 ### Subtask 155.6: Portal UI — Diagnostics Chat + Health Dashboard
-- [ ] New portal page: `/diagnostics` — chat interface for conversational charger diagnostics
+
+#### 155.6a: Tabbed AI Diagnostic Chat in Operations ✅ COMPLETE (2026-04-09)
+> Narrowed scope: leverage existing Lumeo AI chat + 25 agent tools (no new backend)
+
+- [x] `AgentChatContext` — shared React context for chat open/tab state, replaces self-contained isOpen
+- [x] Tab bar in `AgentChatPanel` — General tab (always) + up to 3 closeable Diagnostic tabs
+- [x] Independent message history per tab (separate localStorage keys, `lumeo.agent-chat.diag.${chargerId}`)
+- [x] Tab metadata persistence (`lumeo.agent-chat.tabs`) survives page refresh
+- [x] `TabSession` remount pattern (`key={activeTab.id}`) — clean lifecycle, no cross-tab async leaks
+- [x] `seedState`/`seedVersion` state machine for idempotent auto-send of diagnostic prompts
+- [x] `diagnostic-seed` message meta — renders as system event row, not user bubble
+- [x] "✦ AI Diagnose" button on every charger card in NetworkOps health grid
+- [x] One active stream globally — tab switch aborts previous, partial response preserved
+- [x] Close preserves transcript, clear resets seedState to idle
+- [x] Deployed to production: `portal.lumeopower.com` (Vercel, commit `e2b0f28`)
+
+**Files:** `AgentChatContext.tsx` (new), `AgentChatPanel.tsx`, `useAgentChat.ts`, `types.ts`, `Layout.tsx`, `NetworkOps.tsx`
+
+#### 155.6b: Remaining (not yet started)
+- [ ] New portal page: `/diagnostics` — dedicated chat interface for conversational charger diagnostics
 - [ ] Conversation sidebar: list past conversations, create new, delete
-- [ ] Chat area: message bubbles, streaming response display, charger context cards
-- [ ] Charger selector: pick which charger(s) to diagnose (pre-fills context)
 - [ ] Health dashboard widget on site detail page: latest health report summary, trend sparklines, alert badges
 - [ ] Health reports page: `/sites/:id/health-reports` — full report history with drill-down
 
@@ -216,6 +233,92 @@
 - [ ] Migration
 
 **Done when:** Both apps require consent before use, link to hosted policy pages, support re-consent on updates, and users can request account deletion.
+
+---
+
+## Task 157: Astra Handshake Protocol — Claude Code ↔ Astra Task Contract System
+
+> Goal: Formalize the Claude Code ↔ Astra/OpenClaw task agreement workflow so that every non-trivial task has a structured, machine-readable contract with explicit plan approval and final signoff gates. No task is treated as complete without Astra signoff.
+
+### Problem Statement
+Currently plan state lives in chat context (which compacts), plan files (which get overwritten per-task), and agent memory (which resets per session). There is no durable, machine-readable record that both Claude Code and Astra can inspect independently. Review feedback is scattered across chat rounds with no structured trail.
+
+### Architecture Decisions
+- **File-on-disk, not a service** — JSON contracts in git, no custom CLI tools, no web UI, no database
+- **Two gates only** — plan review + final signoff. More gates create friction without proportional value.
+- **JSON contract is source of truth** — machine-parseable (Astra can programmatically read), diff-friendly in git, forces structured thinking
+- **Minimal v1** — prove it on 2-3 real tasks before iterating. Resist over-engineering the workflow system.
+
+### Subtask 157.1: Template + Protocol Documentation
+- [ ] Create `state/task-handshake/templates/task-contract.json` — canonical template with fields:
+  - `taskId`, `title`, `status` (enum: `draft`, `plan_review_required`, `plan_approved`, `changes_requested`, `in_progress`, `final_review_required`, `approved`, `closed`)
+  - `goal` — what and why
+  - `acceptanceCriteria` — concrete, testable conditions
+  - `scope` — in-scope and out-of-scope
+  - `implementationPlan` — sequenced steps
+  - `filesExpectedToChange` — declared at plan time, not just completion
+  - `risks` — known risks and mitigations
+  - `openQuestions` — unresolved items needing input
+  - `blockers` — explicit field, not buried in openQuestions
+  - `proofOfWork` — initial evidence (test results, build output, etc.)
+  - `reviewHistory` — array of `{ reviewer, decision, notes, timestamp }` to preserve review trail across sessions
+  - `changedFiles` — filled at completion
+  - `verification` — filled at completion
+  - `completionEvidence` — filled at completion
+  - `createdAt`, `updatedAt`
+- [ ] Create `state/task-handshake/README.md` — protocol documentation covering:
+  - purpose and motivation
+  - contract lifecycle (draft → plan_review → approved/changes_requested → in_progress → final_review → approved → closed)
+  - field definitions and examples
+  - ground rules (no freeform chat as only record, no silent scope expansion, no done without QC evidence)
+
+### Subtask 157.2: Claude Code Integration Prompt
+- [ ] Create `state/task-handshake/prompts/claude-code-task-intro.md` — injected at session start, instructs Claude Code to:
+  - read the contract on task start
+  - refuse to implement if `status !== 'plan_approved'`
+  - create/update per-task contract files at `state/task-handshake/tasks/<task-id>.json`
+  - set status to `plan_review_required` before implementation
+  - set status to `final_review_required` before closing
+  - notify Astra via OpenClaw gateway message as active notification
+- [ ] Add the prompt path to `.claude/` project config or CLAUDE.md so it loads automatically
+
+### Subtask 157.3: Astra/OpenClaw Integration
+- [ ] Astra notification mechanism: OpenClaw gateway message (`openclaw agent --to main --message "Plan ready for review: TASK-XXXX"`) as active notification, JSON status as durable record
+- [ ] Astra review workflow: read contract JSON, validate plan, write `reviewHistory` entry, set status to `plan_approved` or `changes_requested`
+- [ ] Astra final signoff: read contract, verify completion evidence, write signoff entry, set status to `approved`
+- [ ] Optional: OpenClaw cron or hook to detect `plan_review_required` / `final_review_required` status changes and auto-notify
+
+### Subtask 157.4: Validate on First Real Task
+- [ ] Use the protocol on the next non-trivial task end-to-end
+- [ ] Retrospective: did it add value? what was friction? what needs adjustment?
+
+### Design Notes from Assessment
+
+**Concern: Who actually blocks?**
+Claude Code has no built-in "wait" between sessions. The enforcement is: Claude Code reads the contract on task start and refuses to implement if `status !== 'plan_approved'`. This works only if the prompt is injected reliably. Astra needs a way to detect status changes — either via OpenClaw cron polling or active notification via gateway message. If the user is the sole relay between agents, this is just structured chat with extra steps. The value comes when Astra can autonomously review and write back decisions.
+
+**Concern: Duplication with existing systems**
+Claude Code already has plan mode (`~/.claude/plans/*.md`) and there's `tasks/todo.md` as the project tracker. Three places tracking overlapping state is a recipe for drift. Recommendation: the task contract should **replace** the Claude Code plan file for handshake-governed tasks, or reference it by path. `tasks/todo.md` stays as the high-level project tracker; the contract is the per-task detail.
+
+**Concern: Scope creep on the protocol itself**
+This is meta-tooling. Implementation must stay minimal: one JSON template, one README, one prompt file. No custom CLI, no web UI. File-on-disk is the right primitive. Prove it works on 2-3 tasks before adding sophistication.
+
+**Concern: Notification reliability**
+Recommend belt-and-suspenders: OpenClaw gateway message as active push + JSON status as durable pull. Astra can check either.
+
+**Concern: Review trail persistence**
+The `reviewHistory` array is critical — it solves the exact problem of review feedback being lost to chat compaction. Each entry should capture reviewer identity, decision, notes, and timestamp so either agent can reconstruct what happened across sessions.
+
+### Files to Create/Modify
+| File | Change |
+|------|--------|
+| `state/task-handshake/templates/task-contract.json` | **NEW** — canonical contract template |
+| `state/task-handshake/README.md` | **NEW** — protocol documentation |
+| `state/task-handshake/prompts/claude-code-task-intro.md` | **NEW** — Claude Code session prompt |
+| `state/task-handshake/tasks/` | **NEW** — directory for per-task contracts |
+| `.claude/` or `CLAUDE.md` | Reference handshake prompt for auto-loading |
+
+**Done when:** Claude Code can create a task contract, set it to `plan_review_required`, Astra can read and approve it, Claude Code respects the gate and only implements after approval, and the full cycle completes on one real task.
 
 ---
 

@@ -6,6 +6,7 @@ import { usePortalTheme } from '../theme/ThemeContext';
 import { createApiClient } from '../api/client';
 import { useToken } from '../auth/TokenContext';
 import AgentChatPanel from './AgentChat/AgentChatPanel';
+import { AgentChatProvider } from './AgentChat/AgentChatContext';
 
 type IconProps = { className?: string };
 
@@ -327,6 +328,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   }, [getToken]);
 
   return (
+  <AgentChatProvider>
     <div className="flex min-h-screen flex-col lg:flex-row bg-gray-50 dark:bg-slate-950 overflow-x-hidden">
       {/* Mobile hamburger header */}
       <div className="fixed top-0 left-0 right-0 z-40 flex h-14 items-center justify-between border-b border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-4 lg:hidden">
@@ -388,5 +390,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       </main>
       <AgentChatPanel />
     </div>
+  </AgentChatProvider>
   );
 }

@@ -381,6 +381,10 @@ model User {
   homeZipCode     String?
   paymentProfile  String?   // Display label (e.g. "Card •••• 4242") — NOT a Stripe customer ID
   stripeCustomerId String?  // Canonical Stripe customer ID (cus_xxx)
+  vehicleName     String?   // Custom nickname (e.g. "My Daily Driver")
+  vehicleMake     String?   // e.g. "Tesla"
+  vehicleModel    String?   // e.g. "Model 3"
+  vehicleYear     String?   // e.g. "2023"
   idTag           String    @unique // OCPP idTag for this driver (max 20 chars)
   sessions        Session[]
   payments        Payment[]
@@ -472,6 +476,9 @@ model SessionBillingSnapshot {
   // default — pricing policy TBD).
   preDeliveryGatedMinutes Float?
   gatedPricingMode        String?   // 'free' | 'flat' | 'tou' — for future use
+
+  // ── Receipt delivery ────────────────────────────────────────────────────
+  receiptSentAt        DateTime?                 // set when receipt email sent successfully
 
   snapshotVersion      String    @default("v1")
   capturedAt           DateTime  @default(now())

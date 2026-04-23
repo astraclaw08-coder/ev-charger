@@ -62,6 +62,37 @@ async function triggerBillingHook(sessionId: string, kwhDelivered: number, rateP
   }
 }
 
+/**
+ * Fire-and-forget POST to API internal receipt endpoint.
+ * Uses native fetch — no additional dependencies required.
+ */
+function triggerReceiptEmail(sessionId: string): void {
+  const apiUrl = process.env.API_INTERNAL_URL || 'http://localhost:3001';
+  const internalToken = process.env.INTERNAL_API_TOKEN;
+
+  if (!internalToken) {
+    console.log(`[Receipt] skipped: INTERNAL_API_TOKEN not configured sessionId=${sessionId}`);
+    return;
+  }
+
+  fetch(`${apiUrl}/internal/sessions/${sessionId}/send-receipt`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Internal-Token': internalToken,
+    },
+  })
+    .then(async (res) => {
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        console.error(`[Receipt] API responded ${res.status} sessionId=${sessionId}: ${text}`);
+      }
+    })
+    .catch((err) => {
+      console.error(`[Receipt] failed to reach API sessionId=${sessionId}:`, err.message || err);
+    });
+}
+
 export async function handleStopTransaction(
   _client: any,
   chargerId: string,
@@ -176,10 +207,17 @@ export async function handleStopTransaction(
   }
 
   // Capture immutable billing snapshot — non-blocking, failure must not fail StopTransaction
+  let snapshotCaptured = false;
   try {
     await captureSessionBillingSnapshot(session.id);
+    snapshotCaptured = true;
   } catch (snapErr) {
     console.error('[BillingSnapshot] Failed to capture snapshot on StopTransaction:', snapErr);
+  }
+
+  // Trigger receipt email via API — fire-and-forget, never blocks session completion
+  if (snapshotCaptured) {
+    triggerReceiptEmail(session.id);
   }
 
   const response: StopTransactionResponse = {};
