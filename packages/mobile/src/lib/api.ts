@@ -135,6 +135,9 @@ export interface ConnectorActiveReservation {
   status: string;
   holdStartsAt: string;
   holdExpiresAt: string;
+  feeAmountCents?: number | null;
+  feeStatus?: string | null;
+  feeCancelGraceExpiresAt?: string | null;
 }
 
 export interface Connector {
@@ -167,6 +170,8 @@ export interface Charger {
     touWindows?: unknown;
     reservationEnabled?: boolean;
     reservationMaxDurationMin?: number;
+    reservationFeeUsd?: number;
+    reservationCancelGraceMin?: number;
   };
   connectors: Connector[];
 }
@@ -622,7 +627,7 @@ export const api = {
       );
     },
     getActive() {
-      return request<{ id: string; reservationId: number; userId: string; connectorId: string; status: string; holdStartsAt: string; holdExpiresAt: string } | null>(
+      return request<{ reservation: { id: string; reservationId: number; userId: string; connectorRefId: string; status: string; holdStartsAt: string; holdExpiresAt: string; connector?: any; site?: any } | null }>(
         '/reservations/active',
       );
     },
