@@ -433,57 +433,6 @@ export default function ChargerStartScreen() {
 
   const isFlowing = Boolean(activeSession && activeConnectorStatus === 'CHARGING');
 
-  // ── Auto-navigate to receipt when session ends ───────────────────────
-  // Two paths lead here:
-  //   1. Plug-out detected (fast path) — pluggedOut flips true while
-  //      rawActiveSession is still ACTIVE. Navigate immediately; the
-  //      session screen handles the ACTIVE→COMPLETED transition itself.
-  //   2. Session status goes COMPLETED (fallback) — rawActiveSession
-  //      goes null. Covers manual stops or chargers that don't produce
-  //      a PLUG_OUT transition.
-
-  // Track the active session for fallback detection.
-  useEffect(() => {
-    if (rawActiveSession && rawActiveSession.connector.charger.id === id) {
-      prevActiveSessionRef.current = {
-        id: rawActiveSession.id,
-        connectorCharger: rawActiveSession.connector.charger.id,
-      };
-      hasEverHadActiveSession.current = true;
-    }
-  }, [rawActiveSession, id]);
-
-  // Fast path: plug-out detected — navigate immediately.
-  useEffect(() => {
-    if (!pluggedOut || !rawActiveSession) return;
-    if (rawActiveSession.connector.charger.id !== id) return;
-
-    // Reset refs to prevent the fallback from double-navigating.
-    prevActiveSessionRef.current = null;
-    hasEverHadActiveSession.current = false;
-
-    router.push(`/session/${rawActiveSession.id}` as any);
-  }, [pluggedOut, rawActiveSession, id, router]);
-
-  // Fallback: session status changed to COMPLETED (rawActiveSession → null).
-  useEffect(() => {
-    if (rawActiveSession) return;
-
-    const prev = prevActiveSessionRef.current;
-    if (!prev || !hasEverHadActiveSession.current) return;
-    if (prev.connectorCharger !== id) return;
-
-    prevActiveSessionRef.current = null;
-    hasEverHadActiveSession.current = false;
-
-    // Small delay lets the API settle so the session screen shows
-    // the receipt immediately rather than briefly flashing ACTIVE.
-    const timer = setTimeout(() => {
-      router.push(`/session/${prev.id}` as any);
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [rawActiveSession, id, router]);
-
   const [starting, setStarting] = useState<number | null>(null);
   const [selectedConnectorId, setSelectedConnectorId] = useState<number | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
@@ -499,8 +448,6 @@ export default function ChargerStartScreen() {
   const [reserveError, setReserveError] = useState('');
   const activationPollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activationModalDismissedRef = useRef(false);
-  const prevActiveSessionRef = useRef<{ id: string; connectorCharger: string } | null>(null);
-  const hasEverHadActiveSession = useRef(false);
   const flowLocked = sliderInteracting || starting != null || showActivationModal || awaitingPlugIn;
 
   // Reservation state
