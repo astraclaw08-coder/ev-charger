@@ -11,35 +11,6 @@ function randomFiveDigitTransactionId(): number {
   return Math.floor(Math.random() * (TX_ID_MAX - TX_ID_MIN + 1)) + TX_ID_MIN;
 }
 
-// ── F5C FLEET ALLOWLIST — startup banner ─────────────────────────────────
-// Runs once per process on module load. Makes it impossible to miss in logs
-// that the temporary F5c shim is live. If any of the three env vars is set
-// without the others, warns loudly — partial config is a bug, not a half-on
-// state. Remove this block when the real FleetIdTag schema lands.
-(function announceFleetF5cShim() {
-  const enabled = process.env.FLEET_MODE_ENABLED === 'true';
-  const tag = process.env.FLEET_ALLOW_TAG;
-  const userId = process.env.FLEET_SYSTEM_USER_ID;
-  const anySet = enabled || !!tag || !!userId;
-  if (!anySet) return;
-  const allSet = enabled && !!tag && !!userId;
-  const banner = '============================================================';
-  console.warn(banner);
-  if (allSet) {
-    console.warn('[FLEET-F5C] TEMPORARY ALLOWLIST SHIM ACTIVE (StartTransaction ONLY)');
-    console.warn(`[FLEET-F5C]   FLEET_ALLOW_TAG=${tag}`);
-    console.warn(`[FLEET-F5C]   FLEET_SYSTEM_USER_ID=${userId}`);
-    console.warn('[FLEET-F5C] Revert: unset FLEET_MODE_ENABLED and restart.');
-  } else {
-    console.warn('[FLEET-F5C] WARNING: partial shim config detected — shim will NOT activate.');
-    console.warn(`[FLEET-F5C]   FLEET_MODE_ENABLED=${process.env.FLEET_MODE_ENABLED ?? '(unset)'}`);
-    console.warn(`[FLEET-F5C]   FLEET_ALLOW_TAG=${tag ?? '(unset)'}`);
-    console.warn(`[FLEET-F5C]   FLEET_SYSTEM_USER_ID=${userId ?? '(unset)'}`);
-    console.warn('[FLEET-F5C] All three must be set, or unset all three to fully disable.');
-  }
-  console.warn(banner);
-})();
-
 /**
  * ── Reservation enforcement mapping (TASK-0199, Astra constraint #1) ──────
  *
@@ -78,8 +49,7 @@ export async function handleStartTransaction(
   console.log(`[StartTransaction] chargerId=${chargerId} connector=${connectorId} idTag=${idTag} meterStart=${meterStart} reservationId=${ocppReservationId ?? 'none'}`);
 
   // Resolve user and connector
-  // eslint-disable-next-line prefer-const
-  let [user, connector] = await Promise.all([
+  const [user, connector] = await Promise.all([
     prisma.user.findUnique({ where: { idTag } }),
     prisma.connector.findUnique({
       where: { chargerId_connectorId: { chargerId, connectorId } },
@@ -101,49 +71,6 @@ export async function handleStartTransaction(
       },
     }),
   ]);
-
-  // ── Fleet allowlist (TASK-0208 F5c — TEMPORARY, env-flag gated) ──────────
-  // Single-tag allowlist that bypasses the User.idTag lookup for one specific
-  // fleet idTag and attributes the session to a pre-seeded synthetic User.
-  // Strictly a lifecycle-verification shim — NOT the production architecture.
-  //
-  // Preconditions to activate (all required):
-  //   - FLEET_MODE_ENABLED=true
-  //   - FLEET_ALLOW_TAG=<exact idTag to accept>
-  //   - FLEET_SYSTEM_USER_ID=<uuid of synthetic User in DB>
-  //
-  // Revert: unset FLEET_MODE_ENABLED (or any of the three vars) and restart.
-  // Remove this block once FleetIdTag / FleetChargerPolicy schema lands.
-  // See: tasks/task-0208-f5-server-gate-firmware-check.md (F5c).
-  const fleetShimEnabled =
-    process.env.FLEET_MODE_ENABLED === 'true' &&
-    !!process.env.FLEET_ALLOW_TAG &&
-    !!process.env.FLEET_SYSTEM_USER_ID;
-  if (!user && fleetShimEnabled && idTag === process.env.FLEET_ALLOW_TAG) {
-    user = await prisma.user.findUnique({
-      where: { id: process.env.FLEET_SYSTEM_USER_ID as string },
-    });
-    if (user) {
-      console.warn(
-        `[FLEET-F5C] >>> SHIM HIT <<< chargerId=${chargerId} connector=${connectorId} idTag=${idTag} attributed to user=${user.id} (temporary allowlist, StartTransaction-only)`,
-      );
-    } else {
-      console.error(
-        `[FLEET-F5C] MISCONFIG: FLEET_SYSTEM_USER_ID=${process.env.FLEET_SYSTEM_USER_ID} not found in User table — falling through to reject`,
-      );
-    }
-  } else if (
-    !user &&
-    fleetShimEnabled &&
-    idTag.startsWith('F-') &&
-    idTag !== process.env.FLEET_ALLOW_TAG
-  ) {
-    // Visibility: if another fleet-shaped tag shows up while shim is on,
-    // surface it loudly — it'll still be rejected, but we want to know.
-    console.warn(
-      `[FLEET-F5C] ignored fleet-shaped idTag=${idTag} (not in allowlist ${process.env.FLEET_ALLOW_TAG}); continuing to reject`,
-    );
-  }
 
   if (!user) {
     console.warn(`[StartTransaction] Unknown idTag=${idTag}, rejecting`);
