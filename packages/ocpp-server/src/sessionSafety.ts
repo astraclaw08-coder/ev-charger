@@ -14,6 +14,14 @@ import { remoteStopTransaction } from './remote';
 
 const CHECK_INTERVAL_MS = 60_000; // Check every 60 seconds
 
+// TASK-0208 Phase 1 — flag-guarded carve-out for Hybrid-B fleet sessions.
+// When the flag is ON, the safety loop SKIPS duration/idle/cost enforcement for
+// any session whose row has a non-null `fleetPolicyId`. Cost-cap and runaway
+// protection for fleet sessions will be reintroduced in Phase 2 once we
+// understand the "gated at 0 A" vs "genuinely idle" signals in production.
+// Default OFF — no prod behavior change on deploy.
+const FLEET_GATED_ENABLED = process.env.FLEET_GATED_SESSIONS_ENABLED === 'true';
+
 // Track last known meterStop per session to detect idle (no energy flow)
 const lastKnownMeter = new Map<string, { wh: number; since: Date }>();
 
@@ -41,6 +49,7 @@ async function checkSessionLimits(): Promise<void> {
       kwhDelivered: true,
       ratePerKwh: true,
       updatedAt: true,
+      fleetPolicyId: true,
       connector: {
         select: {
           charger: {
@@ -79,6 +88,16 @@ async function checkSessionLimits(): Promise<void> {
     const site = session.connector.charger.site;
     if (!site) continue;
     if (!session.transactionId) continue;
+
+    // Hybrid-B carve-out: fleet-gated sessions legitimately sit at 0 A for
+    // hours between plug-in and the delivery window. The idle-energy and
+    // wall-clock duration checks would misclassify that as a runaway session
+    // and tear down the preauthorized charge. Skip them; Phase-2 will add a
+    // fleet-aware equivalent keyed on firstEnergyAt/lastEnergyAt instead.
+    if (FLEET_GATED_ENABLED && (session as any).fleetPolicyId) {
+      lastKnownMeter.delete(session.id);
+      continue;
+    }
 
     const hasAnyLimit = site.maxChargeDurationMin || site.maxIdleDurationMin || site.maxSessionCostUsd;
     if (!hasAnyLimit) continue;

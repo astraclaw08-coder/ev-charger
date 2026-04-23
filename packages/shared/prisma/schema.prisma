@@ -80,6 +80,18 @@ enum SmartChargingScope {
   SITE
 }
 
+/// Hybrid-B fleet charging policy. A FleetPolicy declares an allowed delivery
+/// window + max current for a set of drivers (matched by idTag prefix) at a site.
+/// Behavior (Phase ≥2): server always Accepts StartTransaction for matched idTags,
+/// then modulates current via SetChargingProfile — full maxAmps inside window,
+/// 0 A outside. Phase 1 only scaffolds the schema + window math; no runtime
+/// behavior change until FLEET_GATED_SESSIONS_ENABLED feature flag is turned on.
+enum FleetPolicyStatus {
+  DRAFT     // schema row created, not yet active
+  ENABLED   // active — scheduler will modulate current for matching sessions
+  DISABLED  // temporarily paused (server falls back to legacy allow/deny)
+}
+
 // ─── Models ───────────────────────────────────────────────────────────────────
 
 model Site {
@@ -119,12 +131,39 @@ model Site {
   rebateIntervals  RebateInterval15m[]
   siteDailyFacts   SiteDailyFact[]
   reservations     Reservation[]
+  fleetPolicies    FleetPolicy[]
   createdAt        DateTime            @default(now())
   updatedAt        DateTime            @updatedAt
 
   @@index([operatorId])
   @@index([organizationId])
   @@index([portfolioId])
+}
+
+/// Per-site fleet charging policy (Hybrid-B, TASK-0208).
+/// Matches drivers by idTagPrefix; inside the weekly window the server allows
+/// up to maxAmps, outside the window it drops current to 0 A via TxProfile.
+/// Windows use the same {day, start HH:mm, end HH:mm} shape as TouWindow, in
+/// the site's local timezone. JSON shape: { windows: FleetWindow[] }.
+model FleetPolicy {
+  id              String            @id @default(uuid())
+  siteId          String
+  site            Site              @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  name            String
+  status          FleetPolicyStatus @default(DRAFT)
+  idTagPrefix     String            // e.g. "FLEET-" — matched at Authorize/StartTransaction
+  maxAmps         Int               @default(32)
+  ocppStackLevel  Int               @default(90) // above CHARGER=50 + priority; below emergency=99
+  windowsJson     Json              // { windows: [{ day, start, end }] } — see FleetWindow type
+  notes           String?
+  createdByOperatorId String?
+  updatedByOperatorId String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@unique([siteId, idTagPrefix])
+  @@index([siteId, status])
+  @@index([status])
 }
 
 model Charger {
@@ -298,6 +337,13 @@ model Session {
   ratePerKwh      Float? // price locked at session start (USD)
   status          SessionStatus       @default(ACTIVE)
   payment         Payment?
+  // ── Hybrid-B fleet gating timeline (TASK-0208, Phase 1 scaffold) ─────────
+  // Distinguishes "plugged but gated at 0 A" from "delivering energy" from "idle post-charge".
+  // Populated only for fleet-gated sessions; null for legacy sessions.
+  plugInAt        DateTime?           // first Preparing/SuspendedEV after plug-in
+  firstEnergyAt   DateTime?           // first MeterValues sample with non-zero power
+  lastEnergyAt    DateTime?           // last MeterValues sample with non-zero power
+  fleetPolicyId   String?             // set when session matched a FleetPolicy at Authorize
   sessionFact     SessionFact?
   billingSnapshot SessionBillingSnapshot?
   rebateIntervals RebateInterval15m[]
@@ -404,6 +450,13 @@ model SessionBillingSnapshot {
 
   // ── Receipt delivery ────────────────────────────────────────────────────
   receiptSentAt        DateTime?                 // set when receipt email sent successfully
+
+  // ── Hybrid-B fleet receipts (TASK-0208, Phase 1 scaffold) ──────────────
+  // Captures how much wall-clock time the vehicle was plugged in but held at
+  // 0 A waiting for the allowed window (driver pays $0 for this interval by
+  // default — pricing policy TBD).
+  preDeliveryGatedMinutes Float?
+  gatedPricingMode        String?   // 'free' | 'flat' | 'tou' — for future use
 
   snapshotVersion      String    @default("v1")
   capturedAt           DateTime  @default(now())
