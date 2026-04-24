@@ -14,6 +14,7 @@ import { PageHeader, TabBar, useChartTheme } from '../components/ui';
 import { PageSkeleton } from '../components/ui/LoadingState';
 import { ErrorState } from '../components/ui';
 import SiteLoadManagement from '../components/loadManagement/SiteLoadManagement';
+import SiteFleetPolicies from '../components/fleetPolicies/SiteFleetPolicies';
 
 type RangePreset = '7d' | '30d' | '60d';
 
@@ -633,6 +634,7 @@ export default function SiteDetail() {
           { id: 'chargers', label: `Chargers (${site.chargers.length})` },
           { id: 'pricing', label: 'Pricing' },
           { id: 'load-management', label: 'Load Management' },
+          { id: 'fleet-policies', label: 'Fleet Policies' },
           { id: 'analytics', label: 'Analytics' },
           { id: 'settings', label: 'Settings' },
         ]}
@@ -1125,6 +1127,9 @@ export default function SiteDetail() {
 
       {/* ── Load Management Tab ── */}
       {activeTab === 'load-management' && <SiteLoadManagement siteId={site.id} />}
+
+      {/* ── Fleet Policies Tab (TASK-0208 Phase 2.5 PR-B) ── */}
+      {activeTab === 'fleet-policies' && <SiteFleetPolicies siteId={site.id} />}
 
       {/* ── Analytics Tab ── */}
       {activeTab === 'analytics' && (() => {
