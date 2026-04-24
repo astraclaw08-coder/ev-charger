@@ -1,6 +1,14 @@
 import { prisma, splitTouDuration, captureSessionBillingSnapshot } from '@ev-charger/shared';
 import { enqueueOcppEvent } from '../outbox';
 import type { StopTransactionRequest, StopTransactionResponse } from '@ev-charger/shared';
+import { clearPriorEnergy } from '../fleet/priorEnergyState';
+import { computePreDeliveryGatedMinutes } from '../fleet/preDeliveryGatedMinutes';
+import { onSessionEnd as fleetSchedulerOnSessionEnd } from '../fleet/fleetScheduler';
+
+// Flag read at call-time so tests and runtime env changes are honored.
+function fleetFlagEnabled(): boolean {
+  return process.env.FLEET_GATED_SESSIONS_ENABLED === 'true';
+}
 
 
 function extractTransactionContextWh(
@@ -192,6 +200,65 @@ export async function handleStopTransaction(
     snapshotCaptured = true;
   } catch (snapErr) {
     console.error('[BillingSnapshot] Failed to capture snapshot on StopTransaction:', snapErr);
+  }
+
+  // ── Fleet-observation snapshot fields (TASK-0208 Phase 2 PR-c) ────────
+  // Observation-only: if this session carried a fleet policy, stash the
+  // pre-delivery gated minutes and mark the snapshot as fleet-gated. Both
+  // columns already exist on SessionBillingSnapshot (Phase 1 additive
+  // migration). Any failure here is non-fatal — we must not roll back
+  // StopTransaction for an observation write.
+  //
+  // `gatedPricingMode` is the literal string `'gated'` when the session
+  // was fleet-linked, else left null. It does NOT mirror site.pricingMode.
+  // The final vocabulary (`'gated-free' | 'gated-flat' | 'gated-tou'` etc.)
+  // is still open — see tasks/task-0208-phase2-design-note.md Q2. Until
+  // that's resolved, `'gated'` is the minimal marker value.
+  if (snapshotCaptured && fleetFlagEnabled() && session.fleetPolicyId && session.plugInAt) {
+    try {
+      // Re-read session to pick up firstEnergyAt written by MeterValues.
+      const fresh = await prisma.session.findUnique({
+        where: { id: session.id },
+        select: { firstEnergyAt: true },
+      });
+      const firstEnergyAt = fresh?.firstEnergyAt ?? null;
+      const preDeliveryGatedMinutes = computePreDeliveryGatedMinutes(session.plugInAt, firstEnergyAt);
+      const gatedPricingMode: string = 'gated';
+
+      await prisma.sessionBillingSnapshot.update({
+        where: { sessionId: session.id },
+        data: {
+          ...(preDeliveryGatedMinutes != null ? { preDeliveryGatedMinutes } : {}),
+          gatedPricingMode,
+        },
+      });
+      console.log(
+        `[StopTransaction] fleet observation written sessionId=${session.id} policy=${session.fleetPolicyId} preDeliveryGatedMinutes=${preDeliveryGatedMinutes?.toFixed(2) ?? 'n/a'} gatedPricingMode=${gatedPricingMode}`,
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(
+        `[StopTransaction] fleet observation snapshot update failed (non-fatal): sessionId=${session.id} err=${msg}`,
+      );
+    }
+  }
+
+  // Always clear any in-memory prior-energy state for this session —
+  // idempotent, safe whether flag is on/off or entry was ever written.
+  clearPriorEnergy(session.id);
+
+  // Fleet scheduler cleanup (TASK-0208 Phase 2 PR-d). Flag-gated and
+  // non-fatal. Clears the per-charger edge timer; the next reconcile tick
+  // will re-evaluate remaining fleet sessions on this charger.
+  if (fleetFlagEnabled() && session.fleetPolicyId) {
+    try {
+      fleetSchedulerOnSessionEnd(chargerId);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(
+        `[StopTransaction] fleet scheduler onSessionEnd failed (non-fatal): sessionId=${session.id} chargerId=${chargerId} fleetPolicyId=${session.fleetPolicyId} err=${msg}`,
+      );
+    }
   }
 
   // Trigger receipt email via API — fire-and-forget, never blocks session completion

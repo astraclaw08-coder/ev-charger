@@ -3,6 +3,11 @@ import { recordUptimeEvent } from '../uptimeEvents';
 import { enqueueOcppEvent } from '../outbox';
 import { clientRegistry } from '../clientRegistry';
 import type { BootNotificationRequest, BootNotificationResponse } from '@ev-charger/shared';
+import { onBoot as fleetSchedulerOnBoot } from '../fleet/fleetScheduler';
+
+function fleetFlagEnabled(): boolean {
+  return process.env.FLEET_GATED_SESSIONS_ENABLED === 'true';
+}
 
 export async function handleBootNotification(
   _client: any,
@@ -62,6 +67,20 @@ export async function handleBootNotification(
     where: { chargerId },
     data: { status: 'PENDING_OFFLINE' },
   });
+
+  // ── Fleet re-apply on boot (TASK-0208 Phase 2 PR-d) ───────────────────
+  // Hard rule #2: profiles live in charger RAM and are wiped on reboot.
+  // Re-assert the current gate state for any ACTIVE fleet session on this
+  // charger. Flag-gated + non-fatal. Fire-and-forget: BootNotification must
+  // respond promptly; scheduler work runs in the background.
+  if (fleetFlagEnabled()) {
+    fleetSchedulerOnBoot(chargerId).catch((err) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(
+        `[BootNotification] fleet scheduler onBoot failed (non-fatal): chargerId=${chargerId} err=${msg}`,
+      );
+    });
+  }
 
   return {
     currentTime: new Date().toISOString(),
