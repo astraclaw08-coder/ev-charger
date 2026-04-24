@@ -1,6 +1,7 @@
 import { prisma, resolveTouRateAt } from '@ev-charger/shared';
 import { enqueueOcppEvent } from '../outbox';
 import type { StartTransactionRequest, StartTransactionResponse } from '@ev-charger/shared';
+import { consumeFleetAuthorize } from '../fleet/authorizeCache';
 
 const DEFAULT_RATE_PER_KWH = 0.35; // USD fallback when site pricing is missing
 const TX_ID_MIN = 10000;
@@ -140,6 +141,13 @@ export async function handleStartTransaction(
     }
   }
 
+  // ── Fleet-policy linkage consume (TASK-0208 Phase 2) ─────────────────
+  // Flag-off, no-match, or expired → returns null; fall back to non-fleet.
+  // Consume-on-read: the entry is deleted whether or not the session row
+  // ends up being created (failures below produce at most one orphaned
+  // cache miss on a retry, which is safe — retry will simply be non-fleet).
+  const fleetLinkage = consumeFleetAuthorize({ chargerId, idTag });
+
   let session = null as Awaited<ReturnType<typeof prisma.session.create>> | null;
   let transactionId = 0;
 
@@ -165,6 +173,12 @@ export async function handleStartTransaction(
           meterStart,
           ratePerKwh: resolvedRate.pricePerKwhUsd,
           status: 'ACTIVE',
+          ...(fleetLinkage
+            ? {
+                fleetPolicyId: fleetLinkage.fleetPolicyId,
+                plugInAt: fleetLinkage.plugInAt,
+              }
+            : {}),
         },
       });
       break;
