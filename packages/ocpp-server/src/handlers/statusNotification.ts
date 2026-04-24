@@ -2,6 +2,7 @@ import { prisma, splitTouDuration, captureSessionBillingSnapshot } from '@ev-cha
 import { recordUptimeEvent, toUptimeEvent } from '../uptimeEvents';
 import { enqueueOcppEvent } from '../outbox';
 import type { StatusNotificationRequest, ChargerStatus, ConnectorStatus } from '@ev-charger/shared';
+import { clearPriorEnergy } from '../fleet/priorEnergyState';
 
 // Map OCPP ChargePointStatus to Prisma ConnectorStatus
 function toConnectorStatus(ocppStatus: string): ConnectorStatus {
@@ -190,6 +191,9 @@ export async function handleStatusNotification(
     } catch (snapErr) {
       console.error(`[StatusNotification] Failed to capture billing snapshot for auto-closed session ${orphanSessionIdToSnapshot}:`, snapErr);
     }
+    // Clear any in-memory fleet prior-energy state for the closed session
+    // (TASK-0208 Phase 2 PR-c). Idempotent delete — safe if absent.
+    clearPriorEnergy(orphanSessionIdToSnapshot);
   }
 
   if (connectorId === 0) {
