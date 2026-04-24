@@ -3,6 +3,7 @@ import { enqueueOcppEvent } from '../outbox';
 import type { StopTransactionRequest, StopTransactionResponse } from '@ev-charger/shared';
 import { clearPriorEnergy } from '../fleet/priorEnergyState';
 import { computePreDeliveryGatedMinutes } from '../fleet/preDeliveryGatedMinutes';
+import { onSessionEnd as fleetSchedulerOnSessionEnd } from '../fleet/fleetScheduler';
 
 // Flag read at call-time so tests and runtime env changes are honored.
 function fleetFlagEnabled(): boolean {
@@ -245,6 +246,20 @@ export async function handleStopTransaction(
   // Always clear any in-memory prior-energy state for this session —
   // idempotent, safe whether flag is on/off or entry was ever written.
   clearPriorEnergy(session.id);
+
+  // Fleet scheduler cleanup (TASK-0208 Phase 2 PR-d). Flag-gated and
+  // non-fatal. Clears the per-charger edge timer; the next reconcile tick
+  // will re-evaluate remaining fleet sessions on this charger.
+  if (fleetFlagEnabled() && session.fleetPolicyId) {
+    try {
+      fleetSchedulerOnSessionEnd(chargerId);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(
+        `[StopTransaction] fleet scheduler onSessionEnd failed (non-fatal): sessionId=${session.id} chargerId=${chargerId} fleetPolicyId=${session.fleetPolicyId} err=${msg}`,
+      );
+    }
+  }
 
   // Trigger receipt email via API — fire-and-forget, never blocks session completion
   if (snapshotCaptured) {

@@ -3,6 +3,11 @@ import { recordUptimeEvent, toUptimeEvent } from '../uptimeEvents';
 import { enqueueOcppEvent } from '../outbox';
 import type { StatusNotificationRequest, ChargerStatus, ConnectorStatus } from '@ev-charger/shared';
 import { clearPriorEnergy } from '../fleet/priorEnergyState';
+import { onSessionEnd as fleetSchedulerOnSessionEnd } from '../fleet/fleetScheduler';
+
+function fleetFlagEnabled(): boolean {
+  return process.env.FLEET_GATED_SESSIONS_ENABLED === 'true';
+}
 
 // Map OCPP ChargePointStatus to Prisma ConnectorStatus
 function toConnectorStatus(ocppStatus: string): ConnectorStatus {
@@ -194,6 +199,20 @@ export async function handleStatusNotification(
     // Clear any in-memory fleet prior-energy state for the closed session
     // (TASK-0208 Phase 2 PR-c). Idempotent delete — safe if absent.
     clearPriorEnergy(orphanSessionIdToSnapshot);
+
+    // Clear fleet scheduler edge timer for this charger (PR-d). Flag-gated
+    // and non-fatal. Next reconcile will re-evaluate remaining fleet
+    // sessions (if any) for this charger.
+    if (fleetFlagEnabled()) {
+      try {
+        fleetSchedulerOnSessionEnd(chargerId);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.warn(
+          `[StatusNotification] fleet scheduler onSessionEnd failed (non-fatal): sessionId=${orphanSessionIdToSnapshot} chargerId=${chargerId} err=${msg}`,
+        );
+      }
+    }
   }
 
   if (connectorId === 0) {
