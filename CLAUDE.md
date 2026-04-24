@@ -97,6 +97,11 @@ User (Driver) → has many Sessions, Favorites
 20. **Dev realm `ev-charger` / Prod realm `ev-charger-prod`.** Same env var names, different values.
 21. **`assertKeycloakConfig()` validates on startup.** No legacy Clerk aliases.
 
+### Fleet Policies (TASK-0208)
+24. **Fleet policies must be DISABLED before editing.** API returns 409 `POLICY_ENABLED_IMMUTABLE`. See `docs/fleet-policies.md`.
+25. **Per-site idTag-prefix collisions are rejected.** Substring overlap between ENABLED/DRAFT siblings (e.g. `FLEET-` vs `FLEET-ACME-`) is ambiguous at runtime and fails validation with `PREFIX_COLLISION`. DISABLED rows are ignored.
+26. **Prod flag `FLEET_GATED_SESSIONS_ENABLED` stays OFF until explicit flip.** CRUD API + UI ship independent of the flag.
+
 ### General
 22. **Verify full chain with curl before telling user to retry.**
 23. **QC gate mandatory:** build check, runtime UI verify, API/data verify, acceptance criteria, regression spot-check.
