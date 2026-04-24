@@ -1220,8 +1220,8 @@ export default function SiteDetail() {
                       <stop offset="100%" stopColor="#3b82f6" stopOpacity={0.02} />
                     </linearGradient>
                   </defs>
-                  <XAxis dataKey="label" hide />
-                  <YAxis hide />
+                  <XAxis dataKey="label" hide tick={false} />
+                  <YAxis hide tick={false} />
                   <Tooltip contentStyle={{ ...chartColors.tooltip, fontSize: 12, borderRadius: 8, padding: '6px 10px' }} formatter={(v: number) => [`${v.toFixed(1)} kWh`, 'Energy']} labelFormatter={(l) => l} />
                   <Area type="monotone" dataKey="kwhDelivered" stroke="#3b82f6" strokeWidth={2} fill="url(#kwhGrad)" />
                 </AreaChart>
@@ -1251,8 +1251,8 @@ export default function SiteDetail() {
                       <stop offset="100%" stopColor="#10b981" stopOpacity={0.02} />
                     </linearGradient>
                   </defs>
-                  <XAxis dataKey="label" hide />
-                  <YAxis hide />
+                  <XAxis dataKey="label" hide tick={false} />
+                  <YAxis hide tick={false} />
                   <Tooltip contentStyle={{ ...chartColors.tooltip, fontSize: 12, borderRadius: 8, padding: '6px 10px' }} formatter={(v: number) => [`$${v.toFixed(2)}`, 'Revenue']} labelFormatter={(l) => l} />
                   <Area type="monotone" dataKey="revenueUsd" stroke="#10b981" strokeWidth={2} fill="url(#revGrad)" />
                 </AreaChart>
@@ -1276,8 +1276,8 @@ export default function SiteDetail() {
             <div className="h-28">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={trend} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
-                  <XAxis dataKey="label" hide />
-                  <YAxis hide />
+                  <XAxis dataKey="label" hide tick={false} />
+                  <YAxis hide tick={false} />
                   <Tooltip contentStyle={{ ...chartColors.tooltip, fontSize: 12, borderRadius: 8, padding: '6px 10px' }} formatter={(v: number) => [v, 'Sessions']} labelFormatter={(l) => l} cursor={{ fill: 'transparent' }} />
                   <Bar dataKey="sessions" fill="#f59e0b" opacity={0.8} radius={[3, 3, 0, 0]} />
                 </BarChart>
