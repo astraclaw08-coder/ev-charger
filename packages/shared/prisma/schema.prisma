@@ -280,6 +280,7 @@ model SmartChargingState {
   ocppStackLevel        Int?
   compositeScheduleVerified   Boolean   @default(false)
   compositeScheduleVerifiedAt DateTime?
+  profileFingerprint String?  // SHA-256 hash of profile definition; detects server-side changes
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
 
