@@ -347,11 +347,10 @@ export default function FleetAnalytics() {
         </div>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <KpiTile label="Total kWh" value={summary.kwhDelivered.toFixed(1)} />
         <KpiTile label="Total Revenue" value={`$${summary.revenueUsd.toFixed(2)}`} />
         <KpiTile label="Total Sites" value={summary.totalSites.toString()} />
-        <KpiTile label="Total Chargers" value={summary.totalChargers.toString()} />
         <KpiTile label="Total Connectors" value={summary.totalConnectors.toString()} />
         <KpiTile label="Utilization" value={`${summary.utilizationRatePct.toFixed(2)}%`} />
         <KpiTile label="Uptime" value={`${summary.uptimePct.toFixed(2)}%`} />

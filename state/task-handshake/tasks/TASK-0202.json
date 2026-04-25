@@ -1,0 +1,114 @@
+{
+  "schemaVersion": "1.0",
+  "taskId": "TASK-0202",
+  "title": "Private billing rates via access code and driver user group",
+  "status": "draft",
+  "lastUpdatedBy": "astra",
+  "goal": "Enable private billing rates that are only available to eligible drivers, with eligibility determined by access code assignment and/or driver user-group membership, so pricing can be segmented without exposing those rates publicly.",
+  "acceptanceCriteria": [
+    "Portal admin can create a private billing rate/profile that is not exposed to general drivers by default",
+    "Portal admin can grant access to a private rate by driver user-group membership",
+    "Portal admin can grant access to a private rate by access code",
+    "A clear deterministic precedence model exists when a driver qualifies for multiple private/public billing profiles",
+    "Eligible drivers receive the correct private rate during reservation/session pricing resolution",
+    "Ineligible drivers cannot see or receive the private rate",
+    "Access code usage is validated and auditable",
+    "Effective billing profile/rate is snapshotted at session start so historical sessions do not change when rules are edited later",
+    "Existing public/default billing behavior remains unchanged for drivers without private access"
+  ],
+  "scope": {
+    "inScope": [
+      "Define private billing rate/profile eligibility model",
+      "Use driver user-group membership as one eligibility source",
+      "Use access code as another eligibility source",
+      "Add portal admin management for private rates and eligibility assignment",
+      "Integrate private-rate resolution into session/reservation pricing selection",
+      "Add auditability for access-code use and resolved rate selection",
+      "Ensure private rates are hidden from non-eligible drivers in relevant user-facing surfaces"
+    ],
+    "outOfScope": [
+      "A full coupon/promo engine with arbitrary campaign logic",
+      "One-time discount vouchers beyond access-code eligibility for a private rate",
+      "Complex stacking of multiple private pricing modifiers in v1",
+      "Retrospective repricing of historical sessions",
+      "General access control / permissions beyond pricing eligibility"
+    ]
+  },
+  "decisions": [
+    {
+      "decision": "Treat private rate access as an eligibility layer on top of billing-profile resolution",
+      "rationale": "This keeps the feature aligned with existing/default pricing instead of introducing a separate disconnected pricing engine.",
+      "by": "astra",
+      "timestamp": "2026-04-11T00:54:00Z"
+    },
+    {
+      "decision": "Require deterministic precedence between access-code-derived access, user-group-derived access, and default/public rates",
+      "rationale": "Without explicit precedence, drivers qualifying through multiple paths will get surprising or unstable pricing outcomes.",
+      "by": "astra",
+      "timestamp": "2026-04-11T00:54:00Z"
+    },
+    {
+      "decision": "Snapshot effective private/public billing selection at session start",
+      "rationale": "Billing history must remain stable even if access codes, group memberships, or private-rate configs change later.",
+      "by": "astra",
+      "timestamp": "2026-04-11T00:54:00Z"
+    }
+  ],
+  "assumptions": [
+    "Billing profiles or an equivalent pricing abstraction either already exist or can be extended to support private/public designation",
+    "Driver user groups will exist or be introduced as part of TASK-0201-related work",
+    "Access code entry/association can be integrated into the relevant driver/admin flow without breaking current activation UX",
+    "Reservation pricing and session-start pricing share enough of the billing-resolution path to make private-rate resolution consistent"
+  ],
+  "implementationPlan": [
+    "1. Confirm the pricing abstraction to extend: billing profile, tariff profile, or equivalent",
+    "2. Define eligibility model: private rate linked to user groups, access codes, or both",
+    "3. Define exact precedence for default/public rate vs group-based private rate vs access-code-based private rate",
+    "4. Add schema for private-rate metadata and access-code entities/usages if needed",
+    "5. Add portal admin CRUD for private rates and their eligibility mappings",
+    "6. Integrate driver-facing/private-rate visibility rules so non-eligible drivers cannot see private pricing",
+    "7. Integrate pricing resolution into reservation/start-session path and snapshot result at session start",
+    "8. Add audit logs or read models for why a private rate was applied",
+    "9. Run QC: typecheck, eligibility proof, ineligible-proof, snapshot proof, regression proof for public pricing"
+  ],
+  "filesExpectedToChange": [
+    "packages/shared/prisma/schema.prisma",
+    "packages/shared/prisma/migrations/YYYYMMDD_add_private_billing_rates/migration.sql",
+    "packages/api/src/routes/services related to pricing, sessions, reservations, and admin config",
+    "packages/api/src/services/sessionService.ts and billing snapshot logic",
+    "packages/portal/src/pages for pricing/admin management",
+    "packages/portal/src/api/client.ts",
+    "packages/mobile and/or driver-facing API responses if private-rate visibility affects surfaced pricing"
+  ],
+  "risks": [
+    "If precedence is unclear, drivers may receive the wrong rate when they match multiple eligibility paths",
+    "If private rates leak into general availability/read models, non-eligible drivers may see restricted pricing",
+    "If access code usage is not audited, support and billing disputes will be hard to resolve",
+    "If private-rate selection is not snapshotted, historical session pricing can drift after config changes",
+    "This feature depends conceptually on user-group billing work; implementing it first may create rework if TASK-0201 changes the billing model"
+  ],
+  "openQuestions": [
+    "Should access codes attach to a driver account persistently, one session at a time, or a fixed expiry window?",
+    "If both group and access code qualify a driver for different private rates, which wins?",
+    "Should private rates be site-specific, organization-wide, or both?",
+    "At what point does a driver enter an access code: profile, reservation modal, session start, or admin assignment?",
+    "Should private rates affect reservation fees, activation fees, energy rates, idle fees, or all billing components?"
+  ],
+  "blockers": [],
+  "planReview": null,
+  "finalReview": null,
+  "proofOfWork": [
+    {
+      "by": "astra",
+      "summary": "Created task contract for private-rate pricing with explicit dependency on deterministic billing-profile resolution, access-code auditability, and snapshot integrity.",
+      "artifact": "Task spec defines eligibility sources (access code and user group), precedence requirement, visibility constraints, and session snapshot requirement.",
+      "timestamp": "2026-04-11T00:54:00Z"
+    }
+  ],
+  "reviewHistory": [],
+  "changedFiles": [],
+  "verification": [],
+  "completionEvidence": [],
+  "createdAt": "2026-04-11T00:54:00Z",
+  "updatedAt": "2026-04-11T00:54:00Z"
+}

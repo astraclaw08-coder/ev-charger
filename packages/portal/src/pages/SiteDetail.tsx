@@ -388,7 +388,9 @@ export default function SiteDetail() {
   const [reservationSettings, setReservationSettings] = useState<{
     reservationEnabled: boolean;
     reservationMaxDurationMin: string;
-  }>({ reservationEnabled: false, reservationMaxDurationMin: '' });
+    reservationFeeUsd: string;
+    reservationCancelGraceMin: string;
+  }>({ reservationEnabled: false, reservationMaxDurationMin: '', reservationFeeUsd: '', reservationCancelGraceMin: '' });
   const [savedReservationSettings, setSavedReservationSettings] = useState<typeof reservationSettings | null>(null);
   const [reservationMsg, setReservationMsg] = useState('');
 
@@ -428,6 +430,8 @@ export default function SiteDetail() {
       const loadedReservation = {
         reservationEnabled: data.reservationEnabled ?? false,
         reservationMaxDurationMin: data.reservationMaxDurationMin != null ? String(data.reservationMaxDurationMin) : '',
+        reservationFeeUsd: data.reservationFeeUsd != null ? String(data.reservationFeeUsd) : '',
+        reservationCancelGraceMin: data.reservationCancelGraceMin != null ? String(data.reservationCancelGraceMin) : '',
       };
       setReservationSettings(loadedReservation);
       setSavedReservationSettings(loadedReservation);
@@ -784,17 +788,44 @@ export default function SiteDetail() {
               <option value="tou">Time-of-Use (TOU)</option>
             </select>
           </label>
-          {/* Flat-rate fields — grayed out when TOU is active since TOU tiers take over */}
-          <label className={`text-sm transition-opacity ${tariff.mode === 'tou' ? 'opacity-35 pointer-events-none' : 'text-gray-700 dark:text-slate-300'}`}>
-            Price per kWh (USD)
-            <input type="number" step="0.01" className="mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5 bg-white dark:bg-slate-900" value={tariff.pricePerKwhUsd} onChange={(e) => setTariff({ ...tariff, pricePerKwhUsd: Number(e.target.value) })} disabled={tariff.mode === 'tou'} />
-            {tariff.mode === 'tou' && <span className="mt-0.5 block text-[10px] text-gray-400 dark:text-slate-500 italic">Set per tier below</span>}
-          </label>
-          <label className={`text-sm transition-opacity ${tariff.mode === 'tou' ? 'opacity-35 pointer-events-none' : 'text-gray-700 dark:text-slate-300'}`}>
-            Idle fee per min (USD)
-            <input type="number" step="0.01" className="mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5 bg-white dark:bg-slate-900" value={tariff.idleFeePerMinUsd} onChange={(e) => setTariff({ ...tariff, idleFeePerMinUsd: Number(e.target.value) })} disabled={tariff.mode === 'tou'} />
-            {tariff.mode === 'tou' && <span className="mt-0.5 block text-[10px] text-gray-400 dark:text-slate-500 italic">Set per tier below</span>}
-          </label>
+          {/* Flat-rate fields.
+              Behavior when pricingMode='tou':
+              - Full 7-day TOU coverage: flat fields are truly unused → keep grayed/disabled.
+              - Partial coverage (some days not scheduled): flat fields ARE the fallback rate
+                for uncovered days per the billing engine (resolveTouRateAt). Keep them
+                ACTIVE so the operator can adjust — and spell out where this rate applies. */}
+          {(() => {
+            const uncoveredDayNames = tariff.mode === 'tou'
+              ? DAY_NAMES.filter((_, i) => !(tariff.profiles[0]?.days.includes(i) ?? false))
+              : [];
+            const touFullCoverage = tariff.mode === 'tou' && uncoveredDayNames.length === 0 && (tariff.profiles[0]?.days.length ?? 0) > 0;
+            const flatIsFallback = tariff.mode === 'tou' && uncoveredDayNames.length > 0;
+            const labelOpacityClass = touFullCoverage
+              ? 'opacity-35 pointer-events-none'
+              : 'text-gray-700 dark:text-slate-300';
+            const helperText = touFullCoverage
+              ? 'Unused — all 7 days scheduled below'
+              : flatIsFallback
+                ? `Fallback for uncovered day${uncoveredDayNames.length === 1 ? '' : 's'}: ${uncoveredDayNames.join(', ')}`
+                : null;
+            const helperClass = touFullCoverage
+              ? 'text-gray-400 dark:text-slate-500 italic'
+              : 'text-amber-600 dark:text-amber-400 font-medium';
+            return (
+              <>
+                <label className={`text-sm transition-opacity ${labelOpacityClass}`}>
+                  Price per kWh (USD)
+                  <input type="number" step="0.01" className="mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5 bg-white dark:bg-slate-900" value={tariff.pricePerKwhUsd} onChange={(e) => setTariff({ ...tariff, pricePerKwhUsd: Number(e.target.value) })} disabled={touFullCoverage} />
+                  {helperText && <span className={`mt-0.5 block text-[10px] ${helperClass}`}>{helperText}</span>}
+                </label>
+                <label className={`text-sm transition-opacity ${labelOpacityClass}`}>
+                  Idle fee per min (USD)
+                  <input type="number" step="0.01" className="mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5 bg-white dark:bg-slate-900" value={tariff.idleFeePerMinUsd} onChange={(e) => setTariff({ ...tariff, idleFeePerMinUsd: Number(e.target.value) })} disabled={touFullCoverage} />
+                  {helperText && <span className={`mt-0.5 block text-[10px] ${helperClass}`}>{helperText}</span>}
+                </label>
+              </>
+            );
+          })()}
           <label className="text-sm text-gray-700 dark:text-slate-300">Activation fee (USD)
             <input type="number" step="0.01" className="mt-1 w-full rounded-md border border-gray-300 dark:border-slate-600 px-2 py-1.5" value={tariff.activationFeeUsd} onChange={(e) => setTariff({ ...tariff, activationFeeUsd: Number(e.target.value) })} />
           </label>
@@ -856,8 +887,24 @@ export default function SiteDetail() {
                 </div>
               )}
 
-              {tariff.profiles.slice(0, 1).map((profile, pi) => (
+              {tariff.profiles.slice(0, 1).map((profile, pi) => {
+                const uncoveredDayNames = DAY_NAMES.filter((_, i) => !profile.days.includes(i));
+                return (
                 <div key={profile.id} className="rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+                  {/* Fallback-rate callout: only shown when coverage is partial.
+                      The billing engine (resolveTouRateAt) falls back to the site-level
+                      flat pricePerKwhUsd / idleFeePerMinUsd on any day not listed here. */}
+                  {uncoveredDayNames.length > 0 && profile.days.length > 0 && (
+                    <div className="mb-3 flex items-start gap-2 rounded-md border border-amber-200 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 text-xs text-amber-900 dark:text-amber-200">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mt-0.5 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2h-.001l.001-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                      </svg>
+                      <span>
+                        <strong>{uncoveredDayNames.join(', ')}</strong> {uncoveredDayNames.length === 1 ? 'is' : 'are'} not covered by this schedule. Sessions on {uncoveredDayNames.length === 1 ? 'that day' : 'those days'} bill at the flat rate above (<span className="font-semibold">${tariff.pricePerKwhUsd}/kWh · ${tariff.idleFeePerMinUsd}/min idle</span>).
+                      </span>
+                    </div>
+                  )}
+
                   {/* Day selector */}
                   <div className="mb-4 flex flex-wrap items-center gap-2">
                     <span className="text-xs font-medium text-gray-500 dark:text-slate-400">Active days:</span>
@@ -1043,7 +1090,8 @@ export default function SiteDetail() {
                     })()}
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
 
             {/* Effective TOU schedule card removed per UX request; dynamic tier data stays in timeline bar labels. */}
@@ -1293,11 +1341,10 @@ export default function SiteDetail() {
 
       {/* ── Site Uptime ── */}
       {siteUptime && (
-        <div className="grid gap-3 sm:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-3">
           <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 text-center"><p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Uptime 24h</p><p className="mt-1 text-2xl font-bold text-gray-900 dark:text-slate-100">{siteUptime.uptimePercent24h.toFixed(1)}%</p></div>
           <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 text-center"><p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Uptime 7d</p><p className="mt-1 text-2xl font-bold text-gray-900 dark:text-slate-100">{siteUptime.uptimePercent7d.toFixed(1)}%</p></div>
           <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 text-center"><p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Uptime 30d</p><p className="mt-1 text-2xl font-bold text-gray-900 dark:text-slate-100">{siteUptime.uptimePercent30d.toFixed(1)}%</p></div>
-          <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 text-center"><p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Total Chargers</p><p className="mt-1 text-2xl font-bold text-gray-900 dark:text-slate-100">{site.chargers.length}</p></div>
         </div>
       )}
 
@@ -1551,9 +1598,43 @@ export default function SiteDetail() {
               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">min</span>
             </div>
           </label>
+          <label className="text-sm text-gray-700 dark:text-slate-300">
+            Reservation Fee
+            <div className="relative mt-1">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">$</span>
+              <input
+                type="number"
+                min="0"
+                step="0.25"
+                placeholder="0 (free)"
+                className="w-full rounded-md border border-gray-300 dark:border-slate-600 pl-7 pr-14 py-1.5 text-sm"
+                value={reservationSettings.reservationFeeUsd}
+                onChange={(e) => setReservationSettings({ ...reservationSettings, reservationFeeUsd: e.target.value })}
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">USD</span>
+            </div>
+          </label>
+          <label className="text-sm text-gray-700 dark:text-slate-300">
+            Cancel Grace Period
+            <div className="relative mt-1">
+              <input
+                type="number"
+                min="0"
+                step="1"
+                placeholder="5"
+                className="w-full rounded-md border border-gray-300 dark:border-slate-600 px-3 py-1.5 pr-14 text-sm"
+                value={reservationSettings.reservationCancelGraceMin}
+                onChange={(e) => setReservationSettings({ ...reservationSettings, reservationCancelGraceMin: e.target.value })}
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">min</span>
+            </div>
+            <span className="text-xs text-gray-400 dark:text-slate-500 mt-1 block">Driver gets full refund if cancelled within this window</span>
+          </label>
         </div>
         {(reservationSettings.reservationEnabled !== (savedReservationSettings?.reservationEnabled ?? false) ||
-          reservationSettings.reservationMaxDurationMin !== (savedReservationSettings?.reservationMaxDurationMin ?? '')) && (
+          reservationSettings.reservationMaxDurationMin !== (savedReservationSettings?.reservationMaxDurationMin ?? '') ||
+          reservationSettings.reservationFeeUsd !== (savedReservationSettings?.reservationFeeUsd ?? '') ||
+          reservationSettings.reservationCancelGraceMin !== (savedReservationSettings?.reservationCancelGraceMin ?? '')) && (
           <div className="mt-4 flex items-center gap-3">
             <button
               className="rounded-md bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
@@ -1569,6 +1650,8 @@ export default function SiteDetail() {
                     lng: site.lng,
                     reservationEnabled: reservationSettings.reservationEnabled,
                     reservationMaxDurationMin: reservationSettings.reservationMaxDurationMin ? parseInt(reservationSettings.reservationMaxDurationMin, 10) : null,
+                    reservationFeeUsd: reservationSettings.reservationFeeUsd ? parseFloat(reservationSettings.reservationFeeUsd) : 0,
+                    reservationCancelGraceMin: reservationSettings.reservationCancelGraceMin ? parseInt(reservationSettings.reservationCancelGraceMin, 10) : 5,
                   });
                   setSavedReservationSettings({ ...reservationSettings });
                   setReservationMsg('Reservation settings saved');
@@ -1592,7 +1675,9 @@ export default function SiteDetail() {
           </div>
         )}
         {reservationMsg && !(reservationSettings.reservationEnabled !== (savedReservationSettings?.reservationEnabled ?? false) ||
-          reservationSettings.reservationMaxDurationMin !== (savedReservationSettings?.reservationMaxDurationMin ?? '')) && (
+          reservationSettings.reservationMaxDurationMin !== (savedReservationSettings?.reservationMaxDurationMin ?? '') ||
+          reservationSettings.reservationFeeUsd !== (savedReservationSettings?.reservationFeeUsd ?? '') ||
+          reservationSettings.reservationCancelGraceMin !== (savedReservationSettings?.reservationCancelGraceMin ?? '')) && (
           <p className="mt-3 text-xs">{reservationMsg}</p>
         )}
       </div>

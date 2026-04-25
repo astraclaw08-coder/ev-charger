@@ -55,7 +55,9 @@ export default function ChargerMap({ lat, lng, siteName, chargers }: Props) {
     libraries,
   });
 
-  const available = chargers.filter((c) => c.status === 'AVAILABLE').length;
+  const available = chargers.filter((c) =>
+    c.status !== 'OFFLINE' && c.connectors?.some((cn) => cn.status === 'AVAILABLE'),
+  ).length;
 
   if (!apiKey) {
     return (

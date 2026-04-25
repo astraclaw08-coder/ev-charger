@@ -302,20 +302,20 @@ export default function Dashboard() {
       {fleetKpis && (
         <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
           <StatCard
-            label={`Revenue (${rangePreset})`}
-            value={`$${fleetKpis.totalRevenue.toFixed(2)}`}
-            icon={
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 2v20m5-17H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H7" />
-              </svg>
-            }
-          />
-          <StatCard
             label={`Energy (${rangePreset})`}
             value={`${fleetKpis.totalKwh.toFixed(1)} kWh`}
             icon={
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M13 2 3 14h9l-1 8 10-12h-9l1-8z" />
+              </svg>
+            }
+          />
+          <StatCard
+            label={`Revenue (${rangePreset})`}
+            value={`$${fleetKpis.totalRevenue.toFixed(2)}`}
+            icon={
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 2v20m5-17H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H7" />
               </svg>
             }
           />

@@ -134,6 +134,11 @@ export async function chargerRoutes(app: FastifyInstance) {
                 status: true,
                 holdStartsAt: true,
                 holdExpiresAt: true,
+                // Fee fields — mobile's ConnectorActiveReservation type declares
+                // these as optional and the Reservation Details modal needs
+                // them to render the Fee row, fee-status row, and the grace
+                // subline. Without this select they were silently undefined →
+                // modal showed "Fee: None" even on fee-bearing reservations.
                 feeAmountCents: true,
                 feeStatus: true,
                 feeCancelGraceExpiresAt: true,

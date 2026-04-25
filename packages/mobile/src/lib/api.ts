@@ -1,15 +1,30 @@
 import Constants from 'expo-constants';
+import * as Application from 'expo-application';
 import { Buffer } from 'buffer';
 
-const API_URL =
+// ── Runtime env detection ──────────────────────────────────────────
+// In dev-client builds, both Lumeo Dev and Lumeo RC load JS from the
+// same metro server, so EXPO_PUBLIC_* and Constants.expoConfig.extra
+// are identical.  Detect the actual app variant from the native bundle
+// identifier (differs per installed binary) and override accordingly.
+const _bundleId = Application.applicationId ?? '';
+const _runtimeEnv: 'dev' | 'rc' | 'prod' =
+  _bundleId === 'app.evcharger.app' ? 'prod' :
+  _bundleId === 'rc.evcharger.app'  ? 'rc'   : 'dev';
+
+const PROD_API = 'https://api-production-26cf.up.railway.app';
+
+const _configApiUrl =
   (Constants.expoConfig?.extra?.apiUrl as string | undefined) ||
   process.env.EXPO_PUBLIC_API_URL ||
   'http://127.0.0.1:3001';
 
-export const appEnv =
-  ((Constants.expoConfig?.extra?.appEnv as string | undefined) || process.env.APP_ENV || 'dev').toLowerCase();
-export const envLabel =
-  (Constants.expoConfig?.extra?.envLabel as string | undefined) || process.env.EXPO_PUBLIC_ENV_LABEL || 'DEV';
+// Override: RC/prod apps must never hit localhost, even if metro served dev config
+const API_URL =
+  _runtimeEnv === 'dev' ? _configApiUrl : PROD_API;
+
+export const appEnv = _runtimeEnv;
+export const envLabel = _runtimeEnv === 'prod' ? 'PROD' : _runtimeEnv === 'rc' ? 'RC' : 'DEV';
 export const apiBaseUrl = API_URL;
 
 const DEV_USER_ID = process.env.EXPO_PUBLIC_DEV_USER_ID || 'user-test-driver-001';
@@ -25,6 +40,10 @@ export const isEvcPlatformReadModelEnabled = process.env.EXPO_PUBLIC_EVC_PLATFOR
 let _bearerToken: string | null = null;
 let _guestMode = false;
 let _authRefreshHandler: null | (() => Promise<boolean>) = null;
+// Fires once when a protected request 401s and no refresh path can recover.
+// AuthProvider wires this to: clear session, navigate to sign-in, surface
+// "Session expired" banner. Prevents dead-end "Unauthorized" UX in modals.
+let _authExpiredHandler: null | (() => void) = null;
 
 export function setBearerToken(token: string | null) {
   _bearerToken = token;
@@ -32,6 +51,10 @@ export function setBearerToken(token: string | null) {
 
 export function setAuthRefreshHandler(handler: null | (() => Promise<boolean>)) {
   _authRefreshHandler = handler;
+}
+
+export function setAuthExpiredHandler(handler: null | (() => void)) {
+  _authExpiredHandler = handler;
 }
 
 export function setGuestMode(guest: boolean) {
@@ -107,6 +130,15 @@ async function request<T>(
       } catch {
         // fall through to regular error handling
       }
+    }
+
+    // On unrecoverable 401 for a signed-in user: trigger the expired-session
+    // handler so the app can clear state and route to sign-in. The error still
+    // throws so callers' onError paths can unwind (e.g. close modals), but they
+    // should NOT display the raw "Unauthorized" text — the expired handler
+    // surfaces the "Session expired, please sign in again" UX globally.
+    if (res.status === 401 && !_guestMode && _authExpiredHandler) {
+      try { _authExpiredHandler(); } catch { /* never block error propagation */ }
     }
 
     const body = await res.json().catch(() => ({ error: res.statusText }));

@@ -369,18 +369,20 @@ model User {
   homeCity        String?
   homeState       String?
   homeZipCode     String?
-  paymentProfile  String?
-  vehicleName     String?   // Custom nickname (e.g. "My Daily Driver")
+  paymentProfile    String?
+  stripeCustomerId       String?   @unique // Stripe customer ID for payment methods
+  defaultPaymentMethodId String?          // Stripe payment method ID used for charges
+  vehicleName       String?   // Custom nickname (e.g. "My Daily Driver")
   vehicleMake     String?   // e.g. "Tesla"
   vehicleModel    String?   // e.g. "Model 3"
   vehicleYear     String?   // e.g. "2023"
   idTag           String    @unique // OCPP idTag for this driver (max 20 chars)
   sessions        Session[]
   payments        Payment[]
+  reservations    Reservation[]
   favoriteChargers UserFavoriteCharger[]
   inAppNotificationDeliveries InAppNotificationDelivery[]
   authSessions    AuthSession[]
-  reservations    Reservation[]
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 }

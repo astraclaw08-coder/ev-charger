@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { useRouter } from 'expo-router';
-import { api, authMode, isDevMode, isKeycloakMode, setAuthRefreshHandler, setBearerToken, setGuestMode } from '@/lib/api';
+import { api, authMode, isDevMode, isKeycloakMode, setAuthExpiredHandler, setAuthRefreshHandler, setBearerToken, setGuestMode } from '@/lib/api';
 import { clearFavorites } from '@/lib/favorites';
 import {
   authenticateWithBiometrics,
@@ -159,7 +159,7 @@ function KeycloakAuthProvider({ children }: { children: React.ReactNode }) {
           // but the 401-retry handler will trigger silent re-auth
           if (parsed.otpPhone) {
             // Attempt silent OTP re-auth
-            const reauthed = await silentOtpReauth(parsed.otpPhone);
+            const reauthed = await preSeedOtpChallenge(parsed.otpPhone);
             if (reauthed) return;
           }
           // Couldn't re-auth — clear and redirect to sign-in
@@ -178,8 +178,14 @@ function KeycloakAuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  /** Attempt silent OTP re-auth: sends OTP, but requires user to enter code */
-  const silentOtpReauth = async (phone: string): Promise<boolean> => {
+  /**
+   * NOT silent — the name is misleading history. This function pre-seeds a
+   * fresh OTP challenge (sends the SMS and stores the challengeId) so that
+   * when the user lands on the sign-in screen after their session expired,
+   * they skip phone-number entry and go straight to code entry. No token
+   * is obtained here; the user must still type the code from their phone.
+   */
+  const preSeedOtpChallenge = async (phone: string): Promise<boolean> => {
     try {
       const result = await api.auth.otpSend(phone);
       // We can't auto-verify without the code — redirect to sign-in with context
@@ -250,15 +256,95 @@ function KeycloakAuthProvider({ children }: { children: React.ReactNode }) {
       // Try standard token refresh first (password sessions with refresh tokens)
       const next = await refreshSession(active);
       if (next?.accessToken) return true;
-      // No refresh token — for OTP sessions, redirect to sign-in with pending re-auth
+      // No refresh token — for OTP sessions, pre-seed a fresh OTP challenge so
+      // the user lands on the code-entry screen instead of phone-entry. Does
+      // NOT return a usable token (user must still enter the code).
       if (active.otpPhone) {
-        await silentOtpReauth(active.otpPhone);
-        // Can't complete silently — caller should redirect to sign-in
+        await preSeedOtpChallenge(active.otpPhone);
       }
       return false;
     });
 
     return () => setAuthRefreshHandler(null);
+  }, []);
+
+  // ── Session-expired handler ─────────────────────────────────────────────
+  // Fired by api.ts request() when a protected call 401s AND refresh returned
+  // false. Responsibility: clear invalid auth state, route to sign-in, and
+  // signal the banner. The guard against navigating while already on the
+  // sign-in screen prevents redirect loops if multiple in-flight requests
+  // all 401 at the same instant.
+  const expiredHandledRef = useRef(false);
+  useEffect(() => {
+    setAuthExpiredHandler(() => {
+      if (expiredHandledRef.current) return;
+      expiredHandledRef.current = true;
+      (async () => {
+        try {
+          // Pre-seed OTP challenge if applicable so sign-in screen can skip
+          // phone-entry. Fire-and-forget — don't block the redirect on it.
+          const active = sessionRef.current;
+          if (active?.otpPhone) {
+            void preSeedOtpChallenge(active.otpPhone);
+          }
+          await clearSession();
+        } finally {
+          // expo-router: use replace so user can't back-navigate into a dead
+          // protected screen. Pass a query param so sign-in can render the
+          // "Session expired" banner.
+          router.replace({ pathname: '/(auth)/sign-in', params: { expired: '1' } } as any);
+          // Allow a follow-up expiration to re-fire after the user signs in.
+          setTimeout(() => { expiredHandledRef.current = false; }, 2_000);
+        }
+      })();
+    });
+    return () => setAuthExpiredHandler(null);
+  }, [router]);
+
+  // ── Active-session keepalive ─────────────────────────────────────────────
+  // Proactively refresh the Keycloak access token while the app is in the
+  // foreground. Without this, the first 401 happens only at expiry — the
+  // user hits it mid-action (e.g. confirming a reservation) and the refresh
+  // race creates a visible failure. This refreshes 2 minutes before expiry
+  // if the app is active. Stops when the app backgrounds.
+  useEffect(() => {
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+    let appStateSub: { remove: () => void } | null = null;
+
+    const tryProactiveRefresh = async () => {
+      const active = sessionRef.current;
+      if (!active?.accessToken || !active.refreshToken) return; // OTP-only: no-op
+      const msRemaining = active.expiresAtMs - Date.now();
+      // Refresh if <2min left and we're not already refreshing.
+      if (msRemaining < 120_000 && !refreshingRef.current) {
+        await refreshSession(active);
+      }
+    };
+
+    const startKeepalive = () => {
+      if (intervalId) return;
+      // Fire once immediately on foreground so a just-resumed app doesn't
+      // wait up to 60s to refresh a token that's already almost expired.
+      void tryProactiveRefresh();
+      intervalId = setInterval(() => { void tryProactiveRefresh(); }, 60_000);
+    };
+
+    const stopKeepalive = () => {
+      if (intervalId) { clearInterval(intervalId); intervalId = null; }
+    };
+
+    // Start immediately if app is active
+    if (AppState.currentState === 'active') startKeepalive();
+
+    appStateSub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') startKeepalive();
+      else stopKeepalive();
+    });
+
+    return () => {
+      stopKeepalive();
+      appStateSub?.remove();
+    };
   }, []);
 
   const toggleBiometricRef = useRef<(() => Promise<void>) | undefined>(undefined);

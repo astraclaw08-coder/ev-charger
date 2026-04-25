@@ -176,10 +176,33 @@ export async function handleStopTransaction(
     });
 
     // Return connector to Available
+    const prevConnectorStatus = session.connector.status;
     await tx.connector.update({
       where: { id: session.connector.id },
       data: { status: 'AVAILABLE' },
     });
+
+    // Record PLUG_OUT transition so the API can synthesise lastPlugOutAt.
+    // Without this, the subsequent StatusNotification(Available) is often a
+    // no-op (prev === next) because we just set the connector to AVAILABLE
+    // above, so the transition record would never be written.
+    const PLUGGED_STATES = ['CHARGING', 'FINISHING', 'SUSPENDED_EV', 'SUSPENDED_EVSE'];
+    if (PLUGGED_STATES.includes(prevConnectorStatus)) {
+      const stopTs = new Date(timestamp);
+      const occurredAt = Number.isFinite(stopTs.getTime()) ? stopTs : new Date();
+      await tx.connectorStateTransition.create({
+        data: {
+          chargerId,
+          connectorRefId: session.connector.id,
+          connectorId: session.connector.connectorId,
+          fromStatus: prevConnectorStatus,
+          toStatus: 'AVAILABLE',
+          transitionType: 'PLUG_OUT',
+          occurredAt,
+          payloadTs: Number.isFinite(stopTs.getTime()) ? stopTs : null,
+        },
+      });
+    }
 
     await enqueueOcppEvent(tx, {
       chargerId,

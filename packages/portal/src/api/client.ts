@@ -148,6 +148,8 @@ export interface SiteDetail {
   maxSessionCostUsd?: number | null;
   reservationEnabled?: boolean;
   reservationMaxDurationMin?: number | null;
+  reservationFeeUsd?: number;
+  reservationCancelGraceMin?: number;
   createdAt: string;
   chargers: ChargerInfo[];
 }
@@ -939,6 +941,8 @@ export function createApiClient(token: string | null | undefined) {
         maxSessionCostUsd?: number | null;
         reservationEnabled?: boolean;
         reservationMaxDurationMin?: number | null;
+        reservationFeeUsd?: number;
+        reservationCancelGraceMin?: number;
       },
     ) =>
       request<SiteDetail>(`/sites/${id}`, token, {

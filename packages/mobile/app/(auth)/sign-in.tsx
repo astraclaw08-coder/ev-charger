@@ -13,7 +13,7 @@ import {
   Image,
   Linking,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { AntDesign, Ionicons } from '@expo/vector-icons';
 import { api, setBearerToken, setGuestMode } from '@/lib/api';
 import { useAppAuth } from '@/providers/AuthProvider';
@@ -86,6 +86,11 @@ function BrandHeader({ isDark }: { isDark: boolean }) {
 export default function SignInScreen() {
   const router = useRouter();
   const { isDark } = useAppTheme();
+  // ?expired=1 is set by AuthProvider's _authExpiredHandler when an in-flight
+  // protected call 401s mid-session. Used to render a one-shot banner above
+  // the sign-in form so the user understands why they landed here.
+  const params = useLocalSearchParams<{ expired?: string }>();
+  const sessionExpired = params?.expired === '1';
 
   const continueAsGuest = () => {
     setBearerToken(null);
@@ -98,6 +103,13 @@ export default function SignInScreen() {
       style={[styles.container, { backgroundColor: isDark ? '#0b1220' : 'transparent' }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
+      {sessionExpired && (
+        <View style={[styles.expiredBanner, { backgroundColor: isDark ? '#7c2d12' : '#fef3c7', borderColor: isDark ? '#b45309' : '#f59e0b' }]}>
+          <Text style={[styles.expiredBannerText, { color: isDark ? '#fed7aa' : '#78350f' }]}>
+            Session expired, please sign in again.
+          </Text>
+        </View>
+      )}
       <KeycloakSignInForm isDark={isDark} onContinueGuest={continueAsGuest} />
     </KeyboardAvoidingView>
   );
@@ -459,6 +471,19 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 6,
     letterSpacing: 0.2,
+  },
+  expiredBanner: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  expiredBannerText: {
+    fontSize: 13,
+    fontWeight: '600',
+    textAlign: 'center',
   },
   title: { fontSize: 28, fontWeight: '700', marginBottom: 12, textAlign: 'center' },
   brandTitle: { fontSize: 32, fontWeight: '800', letterSpacing: 0.4, marginBottom: 14 },

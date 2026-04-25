@@ -355,10 +355,17 @@ export async function sessionRoutes(app: FastifyInstance) {
       statusLogs.map((row: { chargerId: string; createdAt: Date; payload: unknown }) => ({ chargerId: row.chargerId, createdAt: row.createdAt, payload: row.payload })),
     );
 
+    // For ACTIVE sessions, pass a live "as of now" stoppedAt so that
+    // deriveChargingWindows() can produce a bounded span and TOU segmentation
+    // runs. Without this, ACTIVE sessions get no charging windows (sessionStop
+    // null → empty array), and cost falls back to flat math. The idle windows
+    // passed below are already live-computed by resolveSessionStatusTimings,
+    // which looks up to Date.now() + 2h worth of StatusNotification events.
+    const liveAsOf = new Date();
     const amounts = computeSessionAmounts({
       ...session,
       startedAt: session.startedAt,
-      stoppedAt: session.stoppedAt,
+      stoppedAt: session.status === 'ACTIVE' ? liveAsOf : session.stoppedAt,
       pricingMode: session.connector?.charger?.site?.pricingMode,
       pricePerKwhUsd: session.connector?.charger?.site?.pricePerKwhUsd,
       idleFeePerMinUsd: session.connector?.charger?.site?.idleFeePerMinUsd,

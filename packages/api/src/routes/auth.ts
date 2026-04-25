@@ -1,8 +1,10 @@
 import type { FastifyInstance } from 'fastify';
+import crypto from 'crypto';
 import { getKeycloakAdminClient } from '../lib/keycloakAdmin';
 import { keycloakPasswordAuthEnabled, passwordGrantLogin, refreshGrantLogin } from '../lib/keycloakOidc';
 import { isBlocked, recordAuthFailure, recordAuthSuccess } from '../lib/authProtection';
 import { issueOtpChallenge, verifyOtpChallenge } from '../lib/otpAuth';
+import { sendEmail } from '../lib/email';
 
 type PasswordLoginBody = {
   username: string;
@@ -126,7 +128,57 @@ export async function authRoutes(app: FastifyInstance) {
         ?? null;
 
       if (user?.id) {
-        await kc.executeActionsEmail(user.id, ['UPDATE_PASSWORD']);
+        // Generate a temporary password and set it on the Keycloak user.
+        // Keycloak's executeActionsEmail relies on SMTP which is blocked on Railway.
+        // Instead, we set a temp password (temporary=true forces change on next login)
+        // and send the reset email ourselves via the API's email transport (Resend/HTTP).
+        const tempPassword = crypto.randomBytes(6).toString('base64url'); // 8-char readable
+        await kc.setPassword(user.id, tempPassword, true);
+
+        const portalUrl = process.env.PORTAL_URL || 'https://portal.lumeopower.com';
+        const loginUrl = `${portalUrl}/login`;
+        const userEmail = user.email ?? '';
+
+        if (userEmail) {
+          await sendEmail({
+            to: userEmail,
+            subject: 'Lumeo Power — Password Reset',
+            text: [
+              'Hi,',
+              '',
+              'You requested a password reset for your Lumeo Power account.',
+              '',
+              `Your temporary password is: ${tempPassword}`,
+              '',
+              `Sign in at ${loginUrl} with this temporary password.`,
+              'You will be asked to set a new password on your first login.',
+              '',
+              'If you did not request this, you can safely ignore this email.',
+              '',
+              'Lumeo Power Team',
+            ].join('\n'),
+            html: `
+              <div style="font-family: -apple-system, sans-serif; max-width: 560px; margin: 0 auto; color: #374151;">
+                <h2 style="color: #111827;">Password Reset</h2>
+                <p>You requested a password reset for your Lumeo Power account.</p>
+                <p>Your temporary password is:</p>
+                <div style="background: #f3f4f6; border-radius: 8px; padding: 16px; text-align: center; margin: 16px 0;">
+                  <code style="font-size: 20px; font-weight: 700; letter-spacing: 2px; color: #111827;">${tempPassword}</code>
+                </div>
+                <p>
+                  <a href="${loginUrl}" style="display: inline-block; background: #4f46e5; color: #fff; padding: 10px 24px; border-radius: 6px; text-decoration: none; font-weight: 600;">
+                    Sign in to Lumeo
+                  </a>
+                </p>
+                <p style="font-size: 13px; color: #6b7280;">You will be asked to set a new password on your first login.</p>
+                <p style="font-size: 13px; color: #6b7280;">If you did not request this, you can safely ignore this email.</p>
+                <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;" />
+                <p style="color: #9ca3af; font-size: 13px;">Lumeo Power · <a href="${portalUrl}">lumeopower.com</a></p>
+              </div>
+            `,
+          });
+          req.log.info({ event: 'portal-password-reset-email-sent', identifier, ip: req.ip }, 'Password reset email sent via API');
+        }
       }
 
       req.log.info({ event: 'portal-password-reset-request', identifier, ip: req.ip }, 'Password reset requested');

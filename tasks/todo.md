@@ -101,6 +101,20 @@
 
 ---
 
+## Pending Verification
+
+### Live-session TOU billing fix (commit `0a5c23f`, deployed 2026-04-20)
+- [x] API `GET /sessions/:id` — ACTIVE sessions pass `stoppedAt = now` into `computeSessionAmounts` → TOU segmentation works live
+- [x] Mobile `LiveSessionView` — Cost bound to `billingBreakdown.totals.grossUsd`, no more client-side `kwh × ratePerKwh`
+- [x] `AppState` + `useFocusEffect` refetch wired in `app/session/[id].tsx`
+- [x] Direct-function verification: session 43a2b830 real data → old path $33.25 flat, new path $16.87 TOU-correct, completed path unchanged
+- [ ] **Not yet proven live**: foreground/focus refetch behavior on RC app during a real active session. The code path is in place and compiles clean, but requires a live ACTIVE session on a TOU site to confirm:
+  - Backgrounding the app for 5+ min then foregrounding → kWh snaps to current within 1-2 s (AppState listener)
+  - Tab-switching away and back → same (useFocusEffect)
+  - Cost updates match TOU window rollover when session crosses a boundary
+  - Final receipt `grossAmountUsd` == live-card cost at t=stop (within $0.01 rounding)
+- Next verification opportunity: next active session on 1A32 or any TOU-priced site
+
 ---
 
 ## Task 155: AI Diagnostics Agent — Proactive & Corrective Charger Maintenance
@@ -329,3 +343,271 @@ The `reviewHistory` array is critical — it solves the exact problem of review 
 - RFID card support
 - Fleet/corporate accounts
 - Revenue sharing between site hosts and operators
+
+---
+
+## Enterprise Gap Assessment (2026-04-10)
+
+### What the platform already has in some form
+- OCPP 1.6J core CSMS, remote commands, diagnostics hooks, firmware/trigger/config command paths
+- Driver mobile app + operator portal + white-label-friendly theming baseline
+- Smart charging/load management at site/group/charger scope
+- TOU pricing, activation/idle fees, software fee overlays
+- Keycloak auth, RBAC, audit log paths, consent/re-consent flows, privacy/terms pages
+- Organization/portfolio scoping foundations, analytics dashboards, CSV export, webhooks/settings surfaces
+- AI diagnostic chat foundation and charger health assessment primitives
+
+### What is still missing for true top-tier / enterprise parity
+- OCPP 2.0.1 and advanced security/device model
+- OCPI roaming, partner settlement, external network visibility
+- Enterprise billing engine (invoicing, taxes, subscriptions, split settlements, reconciliation)
+- Reservations/waitlists/route-planning stack
+- Deeper EMS/utility/DER integrations (meters, solar, storage, OpenADR)
+- Fleet orchestration (vehicle/SOC/departure-aware charging)
+- ISO 15118 Plug & Charge certificate lifecycle
+- HA/multi-region/DR architecture and compliance evidence tooling
+- Internationalization/localization and true multi-currency
+- Predictive maintenance/anomaly automation beyond current diagnostics
+
+---
+
+## Task 160: OCPP 2.0.1 Foundation + Security Profiles
+> Goal: add an enterprise-grade protocol roadmap beyond OCPP 1.6J, starting with dual-stack architecture and the highest-value 2.0.1 capabilities.
+
+### Subtask 160.1: Protocol architecture
+- [ ] Define dual-stack CSMS architecture for OCPP 1.6J + 2.0.1 coexistence
+- [ ] Add protocol capability registry per charger model/firmware
+- [ ] Design message normalization layer mapping 1.6J and 2.0.1 events into shared internal domain models
+
+### Subtask 160.2: OCPP 2.0.1 implementation slice
+- [ ] Implement 2.0.1 connection/bootstrap flow for a simulator-backed pilot charger
+- [ ] Support device model/component-variable inventory reads
+- [ ] Support transaction/event model mapping (`TransactionEvent`, availability, notify reports)
+- [ ] Add 2.0.1 security profile plan (mTLS/cert lifecycle requirements, signed firmware readiness)
+
+### Subtask 160.3: Portal/API support
+- [ ] Show per-charger protocol version/capabilities in portal
+- [ ] Add API surface for component-level monitoring and config management
+- [ ] Create simulator/QC harness for mixed 1.6J + 2.0.1 regression coverage
+
+**Done when:** one pilot charger/simulator can run on OCPP 2.0.1 with normalized telemetry and visible protocol capabilities.
+
+---
+
+## Task 161: OCPI Roaming + Partner Settlement Engine
+> Goal: make the platform interoperable with roaming hubs and partner CPO/eMSP networks.
+
+### Subtask 161.1: OCPI core
+- [ ] Design OCPI module architecture (`locations`, `tariffs`, `tokens`, `sessions`, `cdrs`, `commands`)
+- [ ] Implement credential exchange, role negotiation, version discovery, and partner config storage
+- [ ] Publish local locations/tariffs/session data through OCPI endpoints
+
+### Subtask 161.2: Remote access + partner sessions
+- [ ] Ingest partner locations/tariffs/tokens for out-of-network visibility
+- [ ] Support remote start/stop token-based roaming auth flows
+- [ ] Build CDR generation/export pipeline for roaming sessions
+
+### Subtask 161.3: Clearing/settlement
+- [ ] Add partner settlement ledger, payable/receivable tracking, and dispute statuses
+- [ ] Reconcile OCPI session/CDR totals against internal billing records
+- [ ] Add portal views for roaming revenue, partner balances, and exceptions
+
+**Done when:** a configured roaming partner can exchange locations/tokens/sessions/CDRs and settlement deltas are visible.
+
+---
+
+## Task 162: Enterprise Billing, Tax, Invoicing, and Settlement
+> Goal: upgrade billing from session charging into a configurable finance engine.
+
+### Subtask 162.1: Tariff and product engine
+- [ ] Add versioned tariff catalogs with effective dates, currencies, taxes, subscriptions, and promos
+- [ ] Support business models: public ad hoc, membership, fleet contract, host-owned, roaming, employee/workplace
+- [ ] Add guest pay, RFID balance/prepaid, invoice billing, and postpaid account modes
+
+### Subtask 162.2: Financial records
+- [ ] Add invoice, invoice line, tax jurisdiction, credit memo, payout, and reconciliation models
+- [ ] Implement tax calculation abstraction for US sales tax/VAT-ready treatment
+- [ ] Generate session-rated financial documents and settlement statements
+
+### Subtask 162.3: Revenue share + reconciliation
+- [ ] Automate split billing between CPO, site host, landlord, and software platform
+- [ ] Add payout run workflow with exception handling and audit trail
+- [ ] Build reconciliation jobs against Stripe payouts, refunds, disputes, and session records
+
+**Done when:** the platform can produce invoices/settlements with taxes, revenue-share, and reconciliation evidence.
+
+---
+
+## Task 163: Reservations, Waitlists, and Route Planning
+> Goal: close a major driver-experience gap for public-network scale.
+
+### Subtask 163.1: Reservation domain
+- [ ] Add reservation inventory, hold windows, expiry, penalties, and connector allocation rules
+- [ ] Implement OCPP reservation flows where supported and graceful fallback where unsupported
+- [ ] Add anti-hoarding, no-show, and overbooking policy controls
+
+### Subtask 163.2: Driver UX
+- [ ] Mobile/web flows for reserve, join waitlist, ETA updates, and cancellation
+- [ ] Push notifications for slot ready, expiry warning, charger unavailable, reroute suggestion
+- [ ] Surface reservation state in charger/site availability APIs
+
+### Subtask 163.3: Route planning
+- [ ] Add route-planning service integrating charger availability, connector compatibility, and pricing
+- [ ] Support trip stops, arrival SOC assumptions, and POI overlays
+- [ ] Add fallback reroute logic when a reserved charger faults or occupancy shifts
+
+**Done when:** drivers can reserve/waitlist and follow a route plan that reacts to live station conditions.
+
+---
+
+## Task 164: ISO 15118 Plug & Charge + Certificate Operations
+> Goal: prepare for seamless auth and future bidirectional charging standards.
+
+### Subtask 164.1: Certificate lifecycle
+- [ ] Design PKI integration for contract certificates, OEM provisioning assumptions, and revocation flow
+- [ ] Add secure certificate storage/rotation model and operator tooling
+- [ ] Implement audit trail for certificate issue/import/revoke events
+
+### Subtask 164.2: Authorization flow
+- [ ] Add Plug & Charge session authorization path and fallback to app/RFID when unavailable
+- [ ] Surface PnC capability per charger and per site in driver/operator apps
+- [ ] Add diagnostics for failed certificate or contract-chain validation
+
+### Subtask 164.3: Forward compatibility
+- [ ] Document V2G/V2H impacts on session, billing, and energy models
+- [ ] Extend internal energy-flow models to support bidirectional transactions
+- [ ] Define pilot-readiness checklist for OEM/charger interoperability testing
+
+**Done when:** the system has a working PnC architecture/spec and pilot-capable certificate operations path.
+
+---
+
+## Task 165: EMS, DER, and Utility Integration Layer
+> Goal: evolve smart charging into a true site energy orchestration platform.
+
+### Subtask 165.1: Energy data model
+- [ ] Add site meter, transformer, panel, solar, battery, and utility signal models
+- [ ] Ingest external meter/EMS telemetry with timestamp quality/source metadata
+- [ ] Build site energy state service combining charger load and external assets
+
+### Subtask 165.2: Control integrations
+- [ ] Integrate OpenADR or equivalent utility event ingestion for demand-response signals
+- [ ] Add APIs/adapters for BMS/EMS vendors and meter gateways
+- [ ] Implement peak-shaving and demand-charge mitigation control loops using site constraints
+
+### Subtask 165.3: UX + reporting
+- [ ] Portal views for site load, DER contribution, curtailment events, and avoided demand cost
+- [ ] Alerting for meter drift, telemetry loss, and unsafe site load conditions
+- [ ] Export utility/compliance reports for managed energy events
+
+**Done when:** a site can optimize charger power using external meter/utility/DER inputs, not charger telemetry alone.
+
+---
+
+## Task 166: Fleet Energy Orchestration and Vehicle-Aware Charging
+> Goal: support fleet depots and workplace/fleet operators with vehicle-priority controls.
+
+### Subtask 166.1: Fleet entities
+- [ ] Add fleet accounts, depots, vehicles, drivers, and vehicle-assignment relationships
+- [ ] Track target departure time, required energy, priority class, and SOC when available
+- [ ] Add telematics ingestion contract for OEM/fleet providers
+
+### Subtask 166.2: Scheduling engine
+- [ ] Build vehicle-aware scheduling using departure deadlines, site constraints, and tariff windows
+- [ ] Support priority override, guaranteed-minimum-charge policies, and missed-target alerts
+- [ ] Add depot queue orchestration for limited connector availability
+
+### Subtask 166.3: Fleet UX
+- [ ] Fleet dashboard for readiness, missed departures risk, and depot load forecast
+- [ ] Vehicle/session drill-down with scheduled vs actual energy delivery
+- [ ] Reporting for fleet cost, utilization, and SLA adherence
+
+**Done when:** fleet operators can optimize charging around departure commitments rather than only charger-centric limits.
+
+---
+
+## Task 167: Enterprise Reliability, HA, Multi-Region, and Disaster Recovery
+> Goal: harden the platform for large-network uptime and enterprise procurement requirements.
+
+### Subtask 167.1: Architecture hardening
+- [ ] Define control-plane/data-plane topology, stateless service boundaries, and queue/event dependencies
+- [ ] Design multi-region deployment strategy for API, OCPP ingress, and background jobs
+- [ ] Add cache/outbox/idempotency strategy for command delivery and failover recovery
+
+### Subtask 167.2: Backup/recovery
+- [ ] Implement documented backup schedules and restore verification for Postgres and object/config artifacts
+- [ ] Add disaster-recovery runbooks with RPO/RTO targets and failover drills
+- [ ] Add synthetic monitoring for charger command path and session critical flows
+
+### Subtask 167.3: SRE evidence
+- [ ] Build uptime/SLO dashboards, incident timeline capture, and status-page integration
+- [ ] Add chaos/failure-mode test plan for broker loss, DB failover, regional loss, and reconnect storms
+- [ ] Produce enterprise readiness doc for HA/DR posture
+
+**Done when:** the platform has explicit HA/DR architecture, tested restore paths, and measurable SLO evidence.
+
+---
+
+## Task 168: Compliance, Audit, Privacy, and Security Evidence Program
+> Goal: move from good security controls to enterprise-auditable compliance readiness.
+
+### Subtask 168.1: Security controls expansion
+- [ ] Add immutable audit-log retention/export strategy and privileged-action review workflows
+- [ ] Expand secrets rotation, key management, webhook signing, and certificate inventory controls
+- [ ] Add field-level data classification and retention policy enforcement jobs
+
+### Subtask 168.2: Compliance tooling
+- [ ] Build GDPR/CCPA data-subject request workflow (export, correction, deletion, legal hold exceptions)
+- [ ] Add SOC 2 / ISO 27001 evidence checklist mapped to technical controls and runbooks
+- [ ] Add consent/version evidence reporting for legal/compliance review
+
+### Subtask 168.3: OCPP/security posture
+- [ ] Formalize OCPP advanced security profile roadmap (1.6 hardening + 2.0.1 cert posture)
+- [ ] Add security posture dashboard for tenant/operator admins
+- [ ] Add periodic compliance export packages for audits and enterprise sales due diligence
+
+**Done when:** security and privacy claims are backed by durable evidence artifacts, exports, and workflows.
+
+---
+
+## Task 169: Globalization, White-Label, and Localization Platform
+> Goal: support global operators and reseller deployments cleanly.
+
+### Subtask 169.1: Internationalization
+- [ ] Add i18n framework for portal/mobile/email templates/system notifications
+- [ ] Externalize copy, currency formatting, tax labels, units, and locale-specific date/time handling
+- [ ] Add translation QA workflow and fallback language policy
+
+### Subtask 169.2: White-label control plane
+- [ ] Add tenant brand kit management for logos, colors, domains, app config, emails, and QR assets
+- [ ] Support per-tenant feature flags, policy text, support contacts, and app-store metadata
+- [ ] Add reseller/operator branding boundaries and preview tooling
+
+### Subtask 169.3: Multi-currency/global ops
+- [ ] Support currency conversion/reference FX rates for reporting while preserving settlement currency
+- [ ] Add country/region config for taxation, accessibility labels, connector taxonomy, and legal docs
+- [ ] Add locale-aware receipts/invoices and partner settlement outputs
+
+**Done when:** one codebase can serve multiple branded tenants across languages/currencies without manual forks.
+
+---
+
+## Task 170: Advanced Analytics, Predictive Maintenance, and Report Builder
+> Goal: upgrade current analytics into enterprise decision support.
+
+### Subtask 170.1: Data model and pipelines
+- [ ] Define canonical fact tables for sessions, uptime, alarms, pricing, settlements, and occupancy
+- [ ] Add scheduled materialization/warehouse-ready exports for large-scale analytics workloads
+- [ ] Track charger reliability cohorts, MTTR/MTBF, repeat faults, and utilization heatmaps
+
+### Subtask 170.2: Predictive insights
+- [ ] Add anomaly detection pipeline for fault bursts, session drop-offs, meter drift, and revenue leakage
+- [ ] Build recommendation engine for pricing, maintenance, and capacity planning actions
+- [ ] Add operator feedback loop to label recommendations as useful/ignored/false positive
+
+### Subtask 170.3: Report builder
+- [ ] Build saved-report definitions with filters, dimensions, measures, schedules, and delivery channels
+- [ ] Support CSV/XLSX/PDF export plus email/webhook delivery
+- [ ] Add finance, operations, sustainability, and SLA report templates
+
+**Done when:** operators can build/schedule custom reports and receive predictive insights with measurable signal quality.

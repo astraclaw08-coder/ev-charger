@@ -110,6 +110,39 @@ export async function remoteTriggerMessage(
 }
 
 /**
+ * Send ChangeConfiguration to a connected charger.
+ * Writes a single config key on the charger.
+ * Returns the charger's OCPP 1.6 status: Accepted | Rejected | RebootRequired | NotSupported.
+ */
+export async function remoteChangeConfiguration(
+  ocppId: string,
+  key: string,
+  value: string,
+): Promise<{ status: 'Accepted' | 'Rejected' | 'RebootRequired' | 'NotSupported' } | { error: string }> {
+  const client = clientRegistry.get(ocppId);
+  if (!client) {
+    console.warn(`[RemoteChangeConfiguration] Charger ${ocppId} is not connected`);
+    return { error: 'Charger not connected' };
+  }
+
+  try {
+    const payload = { key, value };
+    const result = await client.call('ChangeConfiguration', payload);
+    const chargerRow = await import('@ev-charger/shared').then((m) => m.prisma.charger.findUnique({ where: { ocppId }, select: { id: true } }));
+    if (chargerRow) {
+      await logOcppMessage(chargerRow.id, 'OUTBOUND', 'ChangeConfiguration', payload);
+      await logOcppMessage(chargerRow.id, 'INBOUND', 'ChangeConfigurationResponse', result ?? {});
+    }
+    console.log(`[RemoteChangeConfiguration] ${ocppId} key=${key} value=${value} -> ${result?.status ?? 'no response'}`);
+    return { status: (result?.status as 'Accepted' | 'Rejected' | 'RebootRequired' | 'NotSupported') ?? 'Rejected' };
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    console.error(`[RemoteChangeConfiguration] Error calling charger ${ocppId}:`, err);
+    return { error: `ChangeConfiguration failed: ${detail}` };
+  }
+}
+
+/**
  * Send GetConfiguration to a connected charger.
  */
 export async function remoteGetConfiguration(
@@ -146,6 +179,12 @@ export async function remoteClearChargingProfile(
   try {
     const result = await client.call('ClearChargingProfile', payload);
     console.log(`[RemoteClearChargingProfile] Charger ${ocppId} responded: ${result.status}`);
+    // Audit log for debugging smart charging issues
+    const chargerId = client?.session?.chargerId ?? '';
+    if (chargerId) {
+      await logOcppMessage(chargerId, 'OUTBOUND', 'ClearChargingProfile', payload);
+      await logOcppMessage(chargerId, 'INBOUND', 'ClearChargingProfileResponse', result ?? {});
+    }
     return result.status as 'Accepted' | 'Rejected' | 'Unknown';
   } catch (err) {
     console.error(`[RemoteClearChargingProfile] Error calling charger ${ocppId}:`, err);
@@ -166,6 +205,12 @@ export async function remoteSetChargingProfile(
   try {
     const result = await client.call('SetChargingProfile', profile);
     console.log(`[RemoteSetChargingProfile] Charger ${ocppId} responded: ${result.status}`);
+    // Audit log for debugging smart charging issues
+    const chargerId = client?.session?.chargerId ?? '';
+    if (chargerId) {
+      await logOcppMessage(chargerId, 'OUTBOUND', 'SetChargingProfile', profile);
+      await logOcppMessage(chargerId, 'INBOUND', 'SetChargingProfileResponse', result ?? {});
+    }
     return result.status as 'Accepted' | 'Rejected' | 'NotSupported';
   } catch (err) {
     console.error(`[RemoteSetChargingProfile] Error calling charger ${ocppId}:`, err);

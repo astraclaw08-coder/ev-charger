@@ -1,0 +1,119 @@
+{
+  "schemaVersion": "1.0",
+  "taskId": "TASK-0200",
+  "title": "Enable free vend mode for portal-initiated charging with tracked usage",
+  "status": "draft",
+  "lastUpdatedBy": "astra",
+  "goal": "Allow portal admins/operators to enable free vend mode for portal-initiated charging so drivers do not need app activation or payment to begin charging, while preserving standard OCPP 1.6J transaction flow and full session/usage tracking in the portal.",
+  "acceptanceCriteria": [
+    "A portal-configurable free vend setting exists at the chosen initial scope (recommended: site-level)",
+    "When free vend is enabled, portal-initiated charging can start without driver app activation or driver payment method",
+    "The implementation uses standard OCPP transaction flow (RemoteStartTransaction -> StartTransaction -> MeterValues -> StopTransaction) so usage is still tracked",
+    "OCPP server accepts the designated free-vend idTag only in the intended free-vend path without weakening normal driver auth globally",
+    "A Session record is still created and populated with transactionId, usage, duration, and charger/session timeline data",
+    "Free-vend sessions bill the driver $0 while preserving usage and operational reporting",
+    "Portal/reporting can distinguish free-vend sessions from normal paid sessions",
+    "Existing mobile/app-paid charging flows remain unchanged when free vend is disabled",
+    "Vendor-specific charger native free-vend config keys are treated as optional capability enhancements, not a requirement for the feature"
+  ],
+  "scope": {
+    "inScope": [
+      "Define free-vend product behavior for portal-initiated charging only",
+      "Add site or charger configuration field(s) for free vend enablement and designated free-vend idTag strategy",
+      "Update portal remote-start / automation flow to use free-vend mode when enabled",
+      "Update OCPP Authorize and StartTransaction handling to allow the configured free-vend idTag in a constrained, explicit way",
+      "Ensure session creation, meter tracking, and stop handling continue through the normal OCPP lifecycle",
+      "Add billing/session markers so free-vend sessions are zero-charge but still fully tracked",
+      "Expose enough metadata in portal/reporting to identify complimentary/free-vend sessions",
+      "Document optional follow-up support for charger-native vendor configuration keys via GetConfiguration/ChangeConfiguration when supported"
+    ],
+    "outOfScope": [
+      "A generic public no-auth charging mode for all session starts",
+      "Changing mobile driver flow to allow anonymous free charging",
+      "Vendor-by-vendor charger firmware support matrix completion in v1",
+      "Complex promotional pricing, coupons, or one-time free-session campaigns",
+      "Automatic site-wide retroactive rebilling of historical sessions",
+      "Replacing the normal OCPP StartTransaction/StopTransaction lifecycle with synthetic sessions"
+    ]
+  },
+  "decisions": [
+    {
+      "decision": "Use software-defined free vend as the primary implementation path",
+      "rationale": "OCPP 1.6J does not guarantee a universal charger-native free-vend flag across vendors. RemoteStartTransaction with an accepted idTag is the safest cross-vendor path while preserving StartTransaction-based tracking.",
+      "by": "astra",
+      "timestamp": "2026-04-11T00:52:00Z"
+    },
+    {
+      "decision": "Treat charger-native free-vend configuration keys as optional, vendor-specific follow-up",
+      "rationale": "Some chargers expose keys like FreeVendActive or FreeChargingIdTag, but these are not core-spec guarantees. The feature must not depend on them.",
+      "by": "astra",
+      "timestamp": "2026-04-11T00:52:00Z"
+    },
+    {
+      "decision": "Keep free vend scoped to portal-initiated automation in v1",
+      "rationale": "This avoids accidentally weakening the standard driver-initiated payment and authorization model while still solving the operator use case.",
+      "by": "astra",
+      "timestamp": "2026-04-11T00:52:00Z"
+    }
+  ],
+  "assumptions": [
+    "Target chargers support RemoteStartTransaction and normal StartTransaction/StopTransaction lifecycle",
+    "The existing portal remote-start path is the correct orchestration point for free-vend initiation",
+    "The billing model can be extended to mark sessions as complimentary/free-vend without losing usage accounting",
+    "A dedicated free-vend idTag or equivalent constrained identity can be introduced safely"
+  ],
+  "implementationPlan": [
+    "1. Confirm initial scope and data model: site-level freeVendEnabled plus free-vend idTag/config strategy",
+    "2. Inspect current billing/session model to determine where complimentary/free-vend marker should be stored and snapshotted",
+    "3. Add schema/API fields for free-vend configuration and session classification",
+    "4. Update portal settings UI and portal-initiated remote start flow to use free-vend mode when enabled",
+    "5. Update OCPP Authorize path to accept the designated free-vend idTag in a tightly scoped way",
+    "6. Update StartTransaction/session creation path so free-vend sessions are recorded normally and flagged appropriately",
+    "7. Update billing/reporting logic so free-vend sessions total $0 while preserving usage, energy, duration, and ops reporting",
+    "8. Add optional capability note or detection path for vendor-specific charger config keys, without making the feature depend on them",
+    "9. Run QC: typecheck, API/OCPP proof, billing proof, regression proof for normal paid flows"
+  ],
+  "filesExpectedToChange": [
+    "packages/shared/prisma/schema.prisma",
+    "packages/shared/prisma/migrations/YYYYMMDD_add_free_vend/migration.sql",
+    "packages/api/src/routes/sites.ts and/or packages/api/src/routes/chargers.ts",
+    "packages/api/src/routes/chargers.ts",
+    "packages/api/src/services/sessionService.ts",
+    "packages/api/src/lib/sessionBilling.ts or related billing integration points",
+    "packages/ocpp-server/src/handlers/authorize.ts",
+    "packages/ocpp-server/src/handlers/startTransaction.ts",
+    "packages/portal/src/pages/SiteDetail.tsx and/or packages/portal/src/pages/ChargerDetail.tsx",
+    "packages/portal/src/api/client.ts",
+    "docs and/or memory notes for free-vend behavior"
+  ],
+  "risks": [
+    "If auth bypass is implemented too broadly, free vend could unintentionally weaken normal charging authorization",
+    "If sessions are synthesized instead of relying on StartTransaction, usage tracking and billing integrity can break",
+    "Some charger firmware may have vendor-specific assumptions around idTag behavior or authorization timing",
+    "If billing logic is not explicitly updated, free-vend sessions may still accrue activation or energy charges",
+    "Portal automation and reporting can drift if free-vend classification is not snapshotted at session start"
+  ],
+  "openQuestions": [
+    "Should free vend be site-scoped first, or charger-scoped with optional site default?",
+    "What exact idTag strategy should be used: one global free-vend idTag, per-site idTag, or a managed pseudo-user model?",
+    "Should free-vend sessions count as revenue zero but still have notional tariff pricing captured for analytics?",
+    "Should portal manually initiated remote starts and automated starts share the same free-vend behavior contract?"
+  ],
+  "blockers": [],
+  "planReview": null,
+  "finalReview": null,
+  "proofOfWork": [
+    {
+      "by": "astra",
+      "summary": "Scoped free-vend task and mapped OCPP-standard-safe approach vs vendor-specific charger config keys before implementation.",
+      "artifact": "Repo scan: portal remote-start route, OCPP authorize/startTransaction handlers, billing/session touchpoints; external OCPP free-vend research summary captured in task contract.",
+      "timestamp": "2026-04-11T00:52:00Z"
+    }
+  ],
+  "reviewHistory": [],
+  "changedFiles": [],
+  "verification": [],
+  "completionEvidence": [],
+  "createdAt": "2026-04-11T00:52:00Z",
+  "updatedAt": "2026-04-11T00:52:00Z"
+}
