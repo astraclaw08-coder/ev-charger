@@ -673,6 +673,59 @@ export interface AdminReservationsResponse {
   offset: number;
 }
 
+// ── Fleet Policies (TASK-0208 Phase 2.5) ─────────────────────────────────
+export type FleetPolicyStatus = 'DRAFT' | 'ENABLED' | 'DISABLED';
+
+export interface FleetWindow {
+  day: number; // 0=Sun … 6=Sat
+  start: string; // HH:mm
+  end: string;   // HH:mm
+}
+
+export interface FleetPolicy {
+  id: string;
+  siteId: string;
+  name: string;
+  status: FleetPolicyStatus;
+  idTagPrefix: string;
+  maxAmps: number;
+  ocppStackLevel: number;
+  windowsJson: { windows: FleetWindow[] } | unknown;
+  notes: string | null;
+  createdByOperatorId: string | null;
+  updatedByOperatorId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FleetPolicyWriteBody {
+  name: string;
+  idTagPrefix: string;
+  maxAmps: number;
+  ocppStackLevel?: number;
+  windowsJson: { windows: FleetWindow[] };
+  notes?: string | null;
+}
+
+export interface FleetPolicyFieldError {
+  field: 'name' | 'idTagPrefix' | 'maxAmps' | 'ocppStackLevel' | 'windowsJson' | 'notes';
+  code: string;
+  message: string;
+  detail?: Record<string, unknown>;
+}
+
+export interface FleetPolicyPreview {
+  advisory: true;
+  policyId: string;
+  policyStatus: FleetPolicyStatus;
+  at: string;
+  timeZone: string | null;
+  active: boolean;
+  intendedMode: 'ALLOW' | 'GATE_ACTIVE';
+  matchedWindow: FleetWindow | null;
+  nextTransitionAt: string | null;
+}
+
 // ─── Client ──────────────────────────────────────────────────────────────────
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
@@ -750,7 +803,13 @@ async function request<T>(
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: res.statusText }));
-      throw new Error((err as { error?: string }).error ?? `HTTP ${res.status}`);
+      const msg = (err as { error?: string; message?: string }).message
+        ?? (err as { error?: string }).error
+        ?? `HTTP ${res.status}`;
+      const thrown = new Error(msg) as Error & { status?: number; payload?: unknown };
+      thrown.status = res.status;
+      thrown.payload = err;
+      throw thrown;
     }
 
     const data = await res.json() as T;
@@ -1264,5 +1323,36 @@ export function createApiClient(token: string | null | undefined) {
 
     cancelAdminReservation: (id: string) =>
       request<{ success: boolean }>(`/admin/reservations/${id}/cancel`, token, { method: 'POST' }),
+
+    // ── Fleet Policies (TASK-0208 Phase 2.5) ─────────────────────────────
+    listFleetPolicies: (siteId: string) =>
+      request<FleetPolicy[]>(`/sites/${siteId}/fleet-policies`, token),
+
+    createFleetPolicy: (siteId: string, body: FleetPolicyWriteBody) =>
+      request<FleetPolicy>(`/sites/${siteId}/fleet-policies`, token, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+
+    updateFleetPolicy: (id: string, body: Partial<FleetPolicyWriteBody>) =>
+      request<FleetPolicy>(`/fleet-policies/${id}`, token, {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      }),
+
+    enableFleetPolicy: (id: string) =>
+      request<FleetPolicy>(`/fleet-policies/${id}/enable`, token, { method: 'POST' }),
+
+    disableFleetPolicy: (id: string) =>
+      request<FleetPolicy>(`/fleet-policies/${id}/disable`, token, { method: 'POST' }),
+
+    deleteFleetPolicy: (id: string) =>
+      request<void>(`/fleet-policies/${id}`, token, { method: 'DELETE' }),
+
+    previewFleetPolicy: (id: string, at?: string) =>
+      request<FleetPolicyPreview>(`/fleet-policies/${id}/preview`, token, {
+        method: 'POST',
+        body: JSON.stringify(at ? { at } : {}),
+      }),
   };
 }

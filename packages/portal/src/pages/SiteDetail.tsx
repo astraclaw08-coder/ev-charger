@@ -14,6 +14,7 @@ import { PageHeader, TabBar, useChartTheme } from '../components/ui';
 import { PageSkeleton } from '../components/ui/LoadingState';
 import { ErrorState } from '../components/ui';
 import SiteLoadManagement from '../components/loadManagement/SiteLoadManagement';
+import SiteFleetPolicies from '../components/fleetPolicies/SiteFleetPolicies';
 
 type RangePreset = '7d' | '30d' | '60d';
 
@@ -637,6 +638,7 @@ export default function SiteDetail() {
           { id: 'chargers', label: `Chargers (${site.chargers.length})` },
           { id: 'pricing', label: 'Pricing' },
           { id: 'load-management', label: 'Load Management' },
+          { id: 'fleet-policies', label: 'Fleet Policies' },
           { id: 'analytics', label: 'Analytics' },
           { id: 'settings', label: 'Settings' },
         ]}
@@ -1174,6 +1176,9 @@ export default function SiteDetail() {
       {/* ── Load Management Tab ── */}
       {activeTab === 'load-management' && <SiteLoadManagement siteId={site.id} />}
 
+      {/* ── Fleet Policies Tab (TASK-0208 Phase 2.5 PR-B) ── */}
+      {activeTab === 'fleet-policies' && <SiteFleetPolicies siteId={site.id} />}
+
       {/* ── Analytics Tab ── */}
       {activeTab === 'analytics' && (() => {
         // Aggregate per-charger stats from session data
@@ -1263,8 +1268,8 @@ export default function SiteDetail() {
                       <stop offset="100%" stopColor="#3b82f6" stopOpacity={0.02} />
                     </linearGradient>
                   </defs>
-                  <XAxis dataKey="label" hide />
-                  <YAxis hide />
+                  <XAxis dataKey="label" hide tick={false} />
+                  <YAxis hide tick={false} />
                   <Tooltip contentStyle={{ ...chartColors.tooltip, fontSize: 12, borderRadius: 8, padding: '6px 10px' }} formatter={(v: number) => [`${v.toFixed(1)} kWh`, 'Energy']} labelFormatter={(l) => l} />
                   <Area type="monotone" dataKey="kwhDelivered" stroke="#3b82f6" strokeWidth={2} fill="url(#kwhGrad)" />
                 </AreaChart>
@@ -1294,8 +1299,8 @@ export default function SiteDetail() {
                       <stop offset="100%" stopColor="#10b981" stopOpacity={0.02} />
                     </linearGradient>
                   </defs>
-                  <XAxis dataKey="label" hide />
-                  <YAxis hide />
+                  <XAxis dataKey="label" hide tick={false} />
+                  <YAxis hide tick={false} />
                   <Tooltip contentStyle={{ ...chartColors.tooltip, fontSize: 12, borderRadius: 8, padding: '6px 10px' }} formatter={(v: number) => [`$${v.toFixed(2)}`, 'Revenue']} labelFormatter={(l) => l} />
                   <Area type="monotone" dataKey="revenueUsd" stroke="#10b981" strokeWidth={2} fill="url(#revGrad)" />
                 </AreaChart>
@@ -1319,8 +1324,8 @@ export default function SiteDetail() {
             <div className="h-28">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={trend} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
-                  <XAxis dataKey="label" hide />
-                  <YAxis hide />
+                  <XAxis dataKey="label" hide tick={false} />
+                  <YAxis hide tick={false} />
                   <Tooltip contentStyle={{ ...chartColors.tooltip, fontSize: 12, borderRadius: 8, padding: '6px 10px' }} formatter={(v: number) => [v, 'Sessions']} labelFormatter={(l) => l} cursor={{ fill: 'transparent' }} />
                   <Bar dataKey="sessions" fill="#f59e0b" opacity={0.8} radius={[3, 3, 0, 0]} />
                 </BarChart>

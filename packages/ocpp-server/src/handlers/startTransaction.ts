@@ -1,6 +1,12 @@
 import { prisma, resolveTouRateAt } from '@ev-charger/shared';
 import { enqueueOcppEvent } from '../outbox';
 import type { StartTransactionRequest, StartTransactionResponse } from '@ev-charger/shared';
+import { consumeFleetAuthorize } from '../fleet/authorizeCache';
+import { onSessionStart as fleetSchedulerOnSessionStart } from '../fleet/fleetScheduler';
+
+function fleetFlagEnabled(): boolean {
+  return process.env.FLEET_GATED_SESSIONS_ENABLED === 'true';
+}
 
 const DEFAULT_RATE_PER_KWH = 0.35; // USD fallback when site pricing is missing
 const TX_ID_MIN = 10000;
@@ -140,6 +146,13 @@ export async function handleStartTransaction(
     }
   }
 
+  // ── Fleet-policy linkage consume (TASK-0208 Phase 2) ─────────────────
+  // Flag-off, no-match, or expired → returns null; fall back to non-fleet.
+  // Consume-on-read: the entry is deleted whether or not the session row
+  // ends up being created (failures below produce at most one orphaned
+  // cache miss on a retry, which is safe — retry will simply be non-fleet).
+  const fleetLinkage = consumeFleetAuthorize({ chargerId, idTag });
+
   let session = null as Awaited<ReturnType<typeof prisma.session.create>> | null;
   let transactionId = 0;
 
@@ -165,6 +178,12 @@ export async function handleStartTransaction(
           meterStart,
           ratePerKwh: resolvedRate.pricePerKwhUsd,
           status: 'ACTIVE',
+          ...(fleetLinkage
+            ? {
+                fleetPolicyId: fleetLinkage.fleetPolicyId,
+                plugInAt: fleetLinkage.plugInAt,
+              }
+            : {}),
         },
       });
       break;
@@ -213,6 +232,19 @@ export async function handleStartTransaction(
   }
 
   console.log(`[StartTransaction] Session ${session.id} started, transactionId=${transactionId}`);
+
+  // ── Fleet scheduler kick (TASK-0208 Phase 2 PR-d) ──────────────────────
+  // Flag-gated and non-fatal: fleet enforcement must never block a session
+  // from being accepted. The scheduler itself is a no-op when the flag is
+  // off, but we still guard here to avoid any stray fetches.
+  if (fleetFlagEnabled() && fleetLinkage) {
+    fleetSchedulerOnSessionStart(chargerId).catch((err) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(
+        `[StartTransaction] fleet scheduler onSessionStart failed (non-fatal): sessionId=${session.id} chargerId=${chargerId} fleetPolicyId=${fleetLinkage.fleetPolicyId} err=${msg}`,
+      );
+    });
+  }
 
   return { idTagInfo: { status: 'Accepted' }, transactionId };
 }

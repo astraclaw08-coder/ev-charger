@@ -11,6 +11,7 @@ import { handleStopTransaction } from './handlers/stopTransaction';
 import { handleMeterValues } from './handlers/meterValues';
 import { logOcppMessage } from './ocppLogger';
 import { applySmartChargingForCharger } from './smartCharging';
+import { startFleetScheduler, reconcileAll as fleetReconcileAll } from './fleet/fleetScheduler';
 
 // ocpp-rpc ships as CommonJS without bundled TS types
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -323,6 +324,17 @@ export async function startServer(port: number): Promise<OcppServerHandle> {
 
   console.log(`[Server] OCPP 1.6J server listening on port ${port} (${host})`);
   console.log(`[Server] Chargers connect to: wss://HOST/${'{chargerIdentity}'}`);
+
+  // ── Fleet scheduler boot (TASK-0208 Phase 2 PR-d) ────────────────────
+  // Idempotent start. Self-gates on FLEET_GATED_SESSIONS_ENABLED — when
+  // the flag is off, ticks are no-ops. Fire an immediate reconcile so any
+  // ACTIVE fleet sessions that survived a server restart get their gate
+  // state re-asserted without waiting for the first scheduled tick.
+  startFleetScheduler();
+  fleetReconcileAll().catch((err) => {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`[FleetScheduler] initial reconcile failed (non-fatal): ${msg}`);
+  });
 
   return { rpcServer: server, httpServer };
 }

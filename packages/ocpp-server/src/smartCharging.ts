@@ -35,7 +35,7 @@ const STACK_LEVEL = Number.parseInt(process.env.SMART_CHARGING_STACK_LEVEL ?? '5
 const MIN_HEARTBEATS_AFTER_BOOT = Number.parseInt(process.env.SMART_CHARGING_MIN_HEARTBEATS_AFTER_BOOT ?? '1', 10) || 1;
 const MIN_SECONDS_AFTER_BOOT = Number.parseInt(process.env.SMART_CHARGING_MIN_SECONDS_AFTER_BOOT ?? '0', 10) || 0;
 
-async function connectionReadyForSmartCharging(chargerId: string, ocppId: string): Promise<{ ready: boolean; reason: string }> {
+export async function connectionReadyForSmartCharging(chargerId: string, ocppId: string): Promise<{ ready: boolean; reason: string }> {
   // If charger has an active WS connection in the registry, it's ready.
   // This handles reconnections that skip BootNotification (e.g. after server
   // redeploy where the charger reconnects without a full boot cycle).
