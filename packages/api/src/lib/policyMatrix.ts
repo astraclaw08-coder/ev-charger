@@ -33,7 +33,9 @@ export type PolicyKey =
   | 'portfolio.create'
   | 'portfolio.update'
   | 'portfolio.delete'
-  | 'portfolio.assign_cross_org';
+  | 'portfolio.assign_cross_org'
+  | 'fleet.policy.read'
+  | 'fleet.policy.write';
 
 export type PolicyContract = {
   description: string;
@@ -78,6 +80,9 @@ export const POLICY_MATRIX: Record<PolicyKey, PolicyContract> = {
   'portfolio.update': { description: 'Update portfolio', anyOf: ['site:write'], minScope: 'full', allowLegacyOperatorFallback: true, sensitive: true },
   'portfolio.delete': { description: 'Delete portfolio', anyOf: ['site:write'], minScope: 'full', allowLegacyOperatorFallback: true, sensitive: true },
   'portfolio.assign_cross_org': { description: 'Assign portfolio across orgs', anyOf: ['rbac:manage'], minScope: 'full', sensitive: true },
+  // ── Fleet policies (TASK-0208 Phase 2.5) ──
+  'fleet.policy.read': { description: 'Read fleet policies', anyOf: ['site:read'], minScope: 'read-only', allowLegacyOperatorFallback: true },
+  'fleet.policy.write': { description: 'Create/update/enable/disable/delete fleet policies', anyOf: ['site:write'], minScope: 'full', allowLegacyOperatorFallback: true, sensitive: true },
 };
 
 export type AuthorizationFailureCode =

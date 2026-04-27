@@ -1,0 +1,73 @@
+{
+  "monitorName": "prod_health_monitor",
+  "intervalMinutes": 15,
+  "timeoutMs": 8000,
+  "failureThreshold": 2,
+  "recoveryThreshold": 1,
+  "alertCooldownMinutes": 120,
+  "chargerOfflineMinutes": 20,
+  "lockStaleMinutes": 30,
+  "startupStrict": true,
+  "telegram": {
+    "botTokenEnv": "TELEGRAM_BOT_TOKEN",
+    "chatIdEnv": "TELEGRAM_CHAT_ID",
+    "apiBase": "https://api.telegram.org"
+  },
+  "deadman": {
+    "enabled": true,
+    "urlEnv": "PROD_HEALTHCHECKS_PING_URL",
+    "graceUrlEnv": "PROD_HEALTHCHECKS_FAIL_SUFFIX"
+  },
+  "llm": {
+    "escalationModel": "openai-codex/gpt-5.4"
+  },
+  "checks": [
+    {
+      "key": "ocpp_fresh",
+      "label": "OCPP fresh",
+      "kind": "http-json",
+      "url": "https://ocpp-server-fresh-production.up.railway.app/health",
+      "expectStatus": 200,
+      "expectJson": {
+        "status": "ok"
+      }
+    },
+    {
+      "key": "api",
+      "label": "API",
+      "kind": "http-json",
+      "url": "https://api-production-26cf.up.railway.app/health",
+      "expectStatus": 200,
+      "expectJson": {
+        "status": "ok",
+        "db": "ok"
+      }
+    },
+    {
+      "key": "portal",
+      "label": "Portal",
+      "kind": "http-status",
+      "url": "https://portal.lumeopower.com",
+      "expectStatus": 200
+    },
+    {
+      "key": "keycloak_oidc",
+      "label": "Keycloak OIDC",
+      "kind": "http-status",
+      "url": "https://keycloak-live-production.up.railway.app/realms/ev-charger-prod/.well-known/openid-configuration",
+      "expectStatus": 200
+    },
+    {
+      "key": "charger_cp_00008",
+      "label": "Charger CP-00008 heartbeat",
+      "kind": "charger-heartbeat",
+      "url": "https://api-production-26cf.up.railway.app/chargers/1A32-1-2010-00008",
+      "expectStatus": 200,
+      "heartbeatField": "lastHeartbeat",
+      "maxAgeMinutes": 20,
+      "expectJson": {
+        "ocppId": "1A32-1-2010-00008"
+      }
+    }
+  ]
+}

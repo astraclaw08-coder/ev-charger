@@ -11,6 +11,7 @@ import { adminSecurityRoutes } from './routes/adminSecurity';
 import { adminSettingsRoutes } from './routes/adminSettings';
 import { readModelRoutes } from './routes/readModels';
 import { smartChargingRoutes } from './routes/smartCharging';
+import { fleetPolicyRoutes } from './routes/fleetPolicies';
 import { favoriteRoutes } from './routes/favorites';
 import { qrRedirectRoutes } from './routes/qrRedirect';
 import { supportDriverRoutes } from './routes/supportDrivers';
@@ -83,6 +84,7 @@ export async function buildServer() {
   await app.register(adminSettingsRoutes);
   await app.register(readModelRoutes);
   await app.register(smartChargingRoutes);
+  await app.register(fleetPolicyRoutes);
   await app.register(supportDriverRoutes);
   await app.register(qrRedirectRoutes);
   await app.register(agentChatRoutes);

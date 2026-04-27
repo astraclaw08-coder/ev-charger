@@ -26,7 +26,7 @@
     "watchdog:restart-failed": "node scripts/dev-supervisor.js restart-failed",
     "watchdog:restart": "node scripts/dev-supervisor.js restart",
     "watchdog:prod": "node scripts/prod-health-monitor.js",
-    "watchdog:prod:dry-run": "WATCHDOG_DRY_RUN=true node scripts/prod-health-monitor.js",
+    "watchdog:prod:dry-run": "PROD_HEALTH_STARTUP_STRICT=false node scripts/prod-health-monitor.js",
     "deploy:mark-maintenance": "npx tsx packages/api/scripts/mark-deploy-maintenance.ts",
     "deploy:ocpp": "npm run deploy:mark-maintenance -- --reason \"ocpp $(git rev-parse --short HEAD)\" && cd packages/ocpp-server && railway up --service ocpp-server-fresh",
     "gitflow:verify": "node scripts/verify-branch-policy.cjs",
@@ -42,8 +42,11 @@
     "expo-local-authentication": "~55.0.9",
     "react-native-worklets": "^0.7.2",
     "expo": "~55.0.4",
-    "react": "19.2.0",
+    "react": "19.2.4",
     "react-native": "0.83.2"
+  },
+  "optionalDependencies": {
+    "@rollup/rollup-linux-x64-gnu": "4.60.2"
   },
   "version": "1.0.0"
 }
