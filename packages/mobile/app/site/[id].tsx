@@ -253,7 +253,7 @@ export default function SiteDetailScreen() {
             {sortedChargers.map((charger) => {
               const readyConnectorId = getFirstReadyConnectorId(charger);
               const isReady = readyConnectorId != null;
-              const statuses = charger.connectors.map((c) => c.status).join(' · ');
+              const statuses = (charger.connectors ?? []).map((c) => c.status).join(' · ');
               return (
                 <TouchableOpacity
                   key={charger.id}

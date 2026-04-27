@@ -24,7 +24,6 @@ type ChargerLike = {
     [k: string]: unknown;
   } | null;
   connectors?: Connector[];
-  [k: string]: unknown;
 };
 
 export type SiteAggregate = {
