@@ -92,14 +92,17 @@ jobs:
             --portal-version "$VITE_APP_VERSION" \
             --mobile-version "$EXPO_PUBLIC_APP_VERSION"
 
+      - name: Generate Prisma client
+        # packages/shared has no postinstall hook, so `npm ci` does not
+        # auto-generate the client. Both shared and api compile against
+        # the generated client types — without it, Prisma callback params
+        # (`tx`, `t`, `r`, …) collapse to `any`/`{}` and tsc fails with
+        # TS7006/TS2339.
+        run: npx prisma generate --schema=packages/shared/prisma/schema.prisma
+
       - name: Build shared + api
         run: |
           npm run build --workspace=packages/shared
-          # Generate Prisma client before tsc. packages/shared has no
-          # postinstall hook, so `npm ci` does not auto-generate the client.
-          # Without this step, Prisma callback params (`tx`, `t`, `r`, …)
-          # collapse to `any` and tsc fails with TS7006.
-          npx prisma generate --schema=packages/shared/prisma/schema.prisma
           npm run build --workspace=packages/api
 
       - name: Build portal
