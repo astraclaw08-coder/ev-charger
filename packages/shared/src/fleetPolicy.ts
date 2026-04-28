@@ -43,6 +43,17 @@ export type FleetPolicyInput = {
   ocppStackLevel?: number; // defaults to 90
   windowsJson: unknown;    // raw { windows: FleetWindow[] } or FleetWindow[]
   notes?: string | null;
+  // ─ TASK-0208 Phase 3 Slice A — Fleet-Auto activation fields ─
+  /** When true, fleet gating is "always allowed" 24/7 regardless of windowsJson. */
+  alwaysOn?: boolean;
+  /**
+   * idTag the OCPP server uses for server-initiated RemoteStartTransaction
+   * on plug-in (Slice C). Same character class as idTagPrefix. Optional in
+   * Slice A so legacy Hybrid-B inputs continue to validate; Slice B's API
+   * surface will require it for new/edited policies and enforce site-scoped
+   * uniqueness against ENABLED + DRAFT siblings.
+   */
+  autoStartIdTag?: string;
 };
 
 /** An existing policy at the same site, used for collision checks. */
@@ -50,10 +61,20 @@ export type SiblingPolicy = {
   id: string;
   idTagPrefix: string;
   status: FleetPolicyStatusLiteral;
+  /** Slice A: optional for backwards-compat with callers that don't yet read it. */
+  autoStartIdTag?: string | null;
 };
 
 export type FleetPolicyValidationError = {
-  field: 'name' | 'idTagPrefix' | 'maxAmps' | 'ocppStackLevel' | 'windowsJson' | 'notes';
+  field:
+    | 'name'
+    | 'idTagPrefix'
+    | 'maxAmps'
+    | 'ocppStackLevel'
+    | 'windowsJson'
+    | 'notes'
+    | 'alwaysOn'
+    | 'autoStartIdTag';
   code:
     | 'REQUIRED'
     | 'TOO_LONG'
@@ -61,7 +82,8 @@ export type FleetPolicyValidationError = {
     | 'OUT_OF_RANGE'
     | 'MALFORMED'
     | 'EMPTY_WINDOWS'
-    | 'PREFIX_COLLISION';
+    | 'PREFIX_COLLISION'
+    | 'AUTOSTART_COLLISION';
   message: string;
   detail?: Record<string, unknown>;
 };
@@ -78,6 +100,8 @@ export type NormalizedFleetPolicy = {
   windows: FleetWindow[];
   windowsJson: { windows: FleetWindow[] };
   notes: string | null;
+  alwaysOn: boolean;
+  autoStartIdTag: string | null;
 };
 
 // ─── Constants ──────────────────────────────────────────────────────────────
@@ -98,6 +122,11 @@ export const FLEET_POLICY_NOTES_MAX_LEN = 2000;
 
 // 2–32 chars, uppercase alnum/underscore/hyphen, must start with alnum.
 export const FLEET_POLICY_PREFIX_RE = /^[A-Z0-9][A-Z0-9_-]{1,31}$/;
+
+// autoStartIdTag (Phase 3 Slice A) — same character class as idTagPrefix
+// because the OCPP idTag wire format is the same string-of-chars space.
+// Length floor is the same (2 chars) so the value is meaningful for audit.
+export const FLEET_POLICY_AUTO_START_ID_TAG_RE = FLEET_POLICY_PREFIX_RE;
 
 // ─── Public validator ──────────────────────────────────────────────────────
 
@@ -209,6 +238,69 @@ export function validateFleetPolicyInput(
     });
   }
 
+  // alwaysOn (optional, defaults to false). Strict boolean only — no truthy
+  // coercion. Slice A keeps the runtime engine unchanged; Slice C will read
+  // this flag to short-circuit window evaluation.
+  const alwaysOn =
+    input.alwaysOn === undefined ? false : input.alwaysOn === true;
+  if (input.alwaysOn !== undefined && typeof input.alwaysOn !== 'boolean') {
+    errors.push({
+      field: 'alwaysOn',
+      code: 'INVALID_FORMAT',
+      message: 'alwaysOn must be a boolean',
+      detail: { got: typeof input.alwaysOn },
+    });
+  }
+
+  // autoStartIdTag (Phase 3 Slice A — optional in this slice; Slice B
+  // requires it on the API for new/edited policies). When supplied, validate
+  // format. Site-scoped uniqueness is enforced separately via
+  // findAutoStartIdTagCollision() so callers that haven't loaded siblings
+  // yet still get format feedback.
+  const rawAutoStart = input.autoStartIdTag;
+  let autoStartIdTag: string | null = null;
+  if (rawAutoStart !== undefined && rawAutoStart !== null) {
+    const trimmed = String(rawAutoStart).trim();
+    if (trimmed.length === 0) {
+      // Treat empty string as "not provided" rather than an error in Slice A;
+      // Slice B's API REQUIRED check will surface explicit-empty separately.
+      autoStartIdTag = null;
+    } else if (!FLEET_POLICY_AUTO_START_ID_TAG_RE.test(trimmed)) {
+      errors.push({
+        field: 'autoStartIdTag',
+        code: 'INVALID_FORMAT',
+        message:
+          'autoStartIdTag must be 2–32 chars, uppercase letters/digits/underscore/hyphen, starting with letter or digit',
+        detail: { pattern: FLEET_POLICY_AUTO_START_ID_TAG_RE.source },
+      });
+      autoStartIdTag = trimmed;
+    } else {
+      autoStartIdTag = trimmed;
+      // Site-scoped autoStartIdTag collision: any non-DISABLED sibling with
+      // the same value is an exact conflict (no prefix-substring rule here —
+      // autoStartIdTag is the literal OCPP idTag the server will send, so
+      // exact-match is the only ambiguity at runtime).
+      const colliding = findAutoStartIdTagCollision(
+        autoStartIdTag,
+        context.siblingPolicies,
+        context.selfId,
+      );
+      if (colliding) {
+        errors.push({
+          field: 'autoStartIdTag',
+          code: 'AUTOSTART_COLLISION',
+          message:
+            `autoStartIdTag "${autoStartIdTag}" is already in use by policy ` +
+            `${colliding.id} (status ${colliding.status}) at the same site`,
+          detail: {
+            conflictingPolicyId: colliding.id,
+            conflictingStatus: colliding.status,
+          },
+        });
+      }
+    }
+  }
+
   // Prefix-collision check — only meaningful when prefix itself is well-formed.
   if (prefix.length > 0 && FLEET_POLICY_PREFIX_RE.test(prefix)) {
     const colliding = findPrefixCollision(prefix, context.siblingPolicies, context.selfId);
@@ -243,6 +335,8 @@ export function validateFleetPolicyInput(
       windows: normalizedWindows,
       windowsJson: { windows: normalizedWindows },
       notes,
+      alwaysOn,
+      autoStartIdTag,
     },
   };
 }
@@ -269,6 +363,35 @@ function findPrefixCollision(
     if (selfId && sib.id === selfId) continue;
     if (sib.status === 'DISABLED') continue;
     if (prefixesCollide(prefix, sib.idTagPrefix)) return sib;
+  }
+  return null;
+}
+
+/**
+ * Site-scoped autoStartIdTag collision check (Phase 3 Slice A).
+ *
+ * Unlike idTagPrefix (which collides on substring overlap because runtime
+ * matching is `idTag.startsWith(prefix)`), autoStartIdTag is the literal
+ * idTag the OCPP server uses for server-initiated RemoteStartTransaction.
+ * Two policies sharing the same autoStartIdTag at one site is operator
+ * confusion at best and ambiguous attachment at worst — reject exact dupes.
+ *
+ * DISABLED siblings are ignored; same-policy (selfId) is skipped.
+ *
+ * Slice A: callers may omit `autoStartIdTag` on sibling rows (older code
+ * paths). Those siblings are skipped silently — they cannot collide because
+ * they don't carry a value to compare against.
+ */
+export function findAutoStartIdTagCollision(
+  autoStartIdTag: string,
+  siblings: SiblingPolicy[],
+  selfId?: string,
+): SiblingPolicy | null {
+  for (const sib of siblings) {
+    if (selfId && sib.id === selfId) continue;
+    if (sib.status === 'DISABLED') continue;
+    if (!sib.autoStartIdTag) continue;
+    if (sib.autoStartIdTag === autoStartIdTag) return sib;
   }
   return null;
 }

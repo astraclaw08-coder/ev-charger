@@ -5,6 +5,7 @@
 import {
   validateFleetPolicyInput,
   prefixesCollide,
+  findAutoStartIdTagCollision,
   FLEET_POLICY_MIN_AMPS,
   FLEET_POLICY_MAX_AMPS,
   type SiblingPolicy,
@@ -221,6 +222,113 @@ console.log('\nTest 9: multiple errors returned at once');
     assert(fields.has('maxAmps'), 'maxAmps error present');
     assert(fields.has('windowsJson'), 'windows error present');
   }
+}
+
+// ─── Test 10: alwaysOn defaults + strict-boolean rejection (Phase 3 Slice A)
+console.log('\nTest 10: alwaysOn handling');
+{
+  const rDefault = validateFleetPolicyInput(BASE_INPUT, { siblingPolicies: NO_SIBLINGS });
+  assert(rDefault.ok === true, 'absent alwaysOn accepted');
+  if (rDefault.ok) assert(rDefault.normalized.alwaysOn === false, 'alwaysOn defaults to false');
+
+  const rTrue = validateFleetPolicyInput({ ...BASE_INPUT, alwaysOn: true }, { siblingPolicies: NO_SIBLINGS });
+  assert(rTrue.ok === true, 'alwaysOn=true accepted');
+  if (rTrue.ok) assert(rTrue.normalized.alwaysOn === true, 'alwaysOn preserved');
+
+  // Non-boolean rejected explicitly (no truthy coercion)
+  const rBad = validateFleetPolicyInput(
+    { ...BASE_INPUT, alwaysOn: 'yes' as unknown as boolean },
+    { siblingPolicies: NO_SIBLINGS },
+  );
+  assert(rBad.ok === false, 'non-boolean alwaysOn rejected');
+  if (!rBad.ok) assert(
+    rBad.errors.some(e => e.field === 'alwaysOn' && e.code === 'INVALID_FORMAT'),
+    'alwaysOn INVALID_FORMAT',
+  );
+}
+
+// ─── Test 11: autoStartIdTag format + collision (Phase 3 Slice A) ─────
+console.log('\nTest 11: autoStartIdTag format + site-scoped collision');
+{
+  // Slice A: optional. Absent is OK.
+  const rOmit = validateFleetPolicyInput(BASE_INPUT, { siblingPolicies: NO_SIBLINGS });
+  assert(rOmit.ok === true, 'absent autoStartIdTag accepted in Slice A');
+  if (rOmit.ok) assert(rOmit.normalized.autoStartIdTag === null, 'autoStartIdTag normalizes to null when absent');
+
+  // Empty string treated as not provided in Slice A.
+  const rEmpty = validateFleetPolicyInput(
+    { ...BASE_INPUT, autoStartIdTag: '   ' },
+    { siblingPolicies: NO_SIBLINGS },
+  );
+  assert(rEmpty.ok === true, 'whitespace-only autoStartIdTag accepted as null');
+  if (rEmpty.ok) assert(rEmpty.normalized.autoStartIdTag === null, 'whitespace normalizes to null');
+
+  // Valid value preserved.
+  const rGood = validateFleetPolicyInput(
+    { ...BASE_INPUT, autoStartIdTag: 'FLEET-AUTO-001' },
+    { siblingPolicies: NO_SIBLINGS },
+  );
+  assert(rGood.ok === true, 'valid autoStartIdTag accepted');
+  if (rGood.ok) assert(rGood.normalized.autoStartIdTag === 'FLEET-AUTO-001', 'autoStartIdTag preserved');
+
+  // Bad format rejected.
+  const rBadFmt = validateFleetPolicyInput(
+    { ...BASE_INPUT, autoStartIdTag: 'lowercase!' },
+    { siblingPolicies: NO_SIBLINGS },
+  );
+  assert(rBadFmt.ok === false, 'bad-format autoStartIdTag rejected');
+  if (!rBadFmt.ok) assert(
+    rBadFmt.errors.some(e => e.field === 'autoStartIdTag' && e.code === 'INVALID_FORMAT'),
+    'autoStartIdTag INVALID_FORMAT',
+  );
+
+  // Exact-match collision against ENABLED sibling rejected.
+  const sibling: SiblingPolicy = {
+    id: 'sib-1',
+    idTagPrefix: 'FLEET-OTHER-',
+    status: 'ENABLED',
+    autoStartIdTag: 'FLEET-AUTO-DUP',
+  };
+  const rDup = validateFleetPolicyInput(
+    { ...BASE_INPUT, autoStartIdTag: 'FLEET-AUTO-DUP' },
+    { siblingPolicies: [sibling] },
+  );
+  assert(rDup.ok === false, 'duplicate autoStartIdTag rejected');
+  if (!rDup.ok) assert(
+    rDup.errors.some(e => e.field === 'autoStartIdTag' && e.code === 'AUTOSTART_COLLISION'),
+    'autoStartIdTag AUTOSTART_COLLISION',
+  );
+
+  // DISABLED sibling does not collide.
+  const disabledSib: SiblingPolicy = { ...sibling, status: 'DISABLED' };
+  const rDis = validateFleetPolicyInput(
+    { ...BASE_INPUT, autoStartIdTag: 'FLEET-AUTO-DUP' },
+    { siblingPolicies: [disabledSib] },
+  );
+  assert(rDis.ok === true, 'DISABLED sibling does not block reuse');
+
+  // selfId skip allows updating same row.
+  const rSelf = validateFleetPolicyInput(
+    { ...BASE_INPUT, autoStartIdTag: 'FLEET-AUTO-DUP' },
+    { siblingPolicies: [sibling], selfId: 'sib-1' },
+  );
+  assert(rSelf.ok === true, 'selfId skips own row in collision check');
+}
+
+// ─── Test 12: findAutoStartIdTagCollision direct (Phase 3 Slice A) ────
+console.log('\nTest 12: findAutoStartIdTagCollision direct semantics');
+{
+  const siblings: SiblingPolicy[] = [
+    { id: 'a', idTagPrefix: 'A-', status: 'ENABLED', autoStartIdTag: 'TAG1' },
+    { id: 'b', idTagPrefix: 'B-', status: 'DRAFT',   autoStartIdTag: 'TAG2' },
+    { id: 'c', idTagPrefix: 'C-', status: 'DISABLED',autoStartIdTag: 'TAG3' },
+    { id: 'd', idTagPrefix: 'D-', status: 'ENABLED' /* no autoStartIdTag */ },
+  ];
+  assert(findAutoStartIdTagCollision('TAG1', siblings)?.id === 'a', 'ENABLED dup found');
+  assert(findAutoStartIdTagCollision('TAG2', siblings)?.id === 'b', 'DRAFT dup found');
+  assert(findAutoStartIdTagCollision('TAG3', siblings) === null, 'DISABLED ignored');
+  assert(findAutoStartIdTagCollision('TAGX', siblings) === null, 'no match returns null');
+  assert(findAutoStartIdTagCollision('TAG1', siblings, 'a') === null, 'selfId skips own row');
 }
 
 // ─── Summary ──────────────────────────────────────────────────────────
