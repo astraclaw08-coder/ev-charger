@@ -21,7 +21,18 @@ This revision makes the following calls so the next step can be ticket slicing, 
 3. **Mobile visibility:** expose fleet-only connectors as unavailable/informational, not hidden.
    - Drivers understand why a visible physical charger cannot be started from the app.
 4. **Always-on:** model as a first-class policy boolean that bypasses windows but still uses the existing fleet scheduler/profile pathway.
-5. **Kill switch:** keep `FLEET_GATED_SESSIONS_ENABLED` as the global runtime gate. With the flag OFF, Fleet-Auto never sends `RemoteStartTransaction` and never changes live behavior.
+5. **Two-tier rollout control:**
+   - **Emergency global kill switch (env, restart-cost acceptable):** `FLEET_GATED_SESSIONS_ENABLED` stays as a coarse env-var on api + ocpp-server-fresh. Default OFF in prod. Flip only when Fleet-Auto must be globally disabled in an incident. Restarting both services to flip this is acceptable because it is emergency-only, not a normal operating control.
+   - **Pilot rollout flag (DB-backed, no restart, audit-logged):** new `Site.fleetAutoRolloutEnabled` plus optional per-connector override `Connector.fleetAutoRolloutEnabled`. These gate normal pilot enablement and disablement and are flipped via the operator portal or admin SQL — **never via env-var or restart**. Cache TTL ≤30 s on the runtime side; flips take effect within one cache cycle.
+   - **Effective runtime gate:**
+     ```
+     env(FLEET_GATED_SESSIONS_ENABLED) === true            // emergency kill switch ON (i.e. fleet features allowed)
+     AND (connector.fleetAutoRolloutEnabled === true
+          OR site.fleetAutoRolloutEnabled === true)        // pilot rollout enabled for this scope
+     AND connector.chargingMode === FLEET_AUTO             // operator-configured fleet connector
+     AND policy.status === ENABLED                         // assigned policy is enabled
+     ```
+   - Adding or removing a pilot site/connector is a DB row change (operator portal toggle). **No API/OCPP restart is required.** Every flip writes to an audit log.
 6. **Hybrid-B deprecation:** mark prefix/RFID fleet activation as deprecated now. It does not match the required plug-and-charge auto-start UX. Slice G (§8) removes the Authorize-handler prefix branch, rewrites `docs/fleet-policies.md` to describe Fleet-Auto only, and runs a row-classification migration that either ports legacy `idTagPrefix` rows to Fleet-Auto or archives them. Until Slice G ships, prefix matching survives **only** as data-compatibility — no new UX, docs, or deployments built on it.
 
 ---
@@ -59,7 +70,7 @@ Hybrid-B only attaches fleet policy after an idTag prefix match during Authorize
 | Boot + heartbeat gate | Mandatory. No server-initiated OCPP command before readiness. |
 | `Session.fleetPolicyId`, `plugInAt`, `firstEnergyAt`, `lastEnergyAt` | Keep. Fleet-auto sessions populate the same fields. |
 | Billing snapshot fields | Keep. No historical rewrite. |
-| `FLEET_GATED_SESSIONS_ENABLED` | Keep as global OFF switch. |
+| `FLEET_GATED_SESSIONS_ENABLED` | Keep but **scope narrows**: emergency global kill switch only, not the day-to-day rollout control. Normal pilot enable/disable moves to DB-backed `Site.fleetAutoRolloutEnabled` / `Connector.fleetAutoRolloutEnabled`. See §0 #5. |
 | FleetPolicy immutable-while-enabled rule | Keep. Policy value edits still require DISABLED state. Connector assignment changes are separate audited config changes. |
 | Hybrid-B prefix path | **Deprecated as of this revision.** Section 8 Slice G removes the Authorize-handler prefix branch and archives existing rows. Until that slice lands, prefix matching survives only as data-compatibility — no new UX, docs, or deployments built on it. |
 
@@ -77,12 +88,22 @@ enum ChargingMode {
 
 model Connector {
   // existing fields...
-  chargingMode  ChargingMode @default(PUBLIC)
-  fleetPolicyId String?
-  fleetPolicy   FleetPolicy? @relation(fields: [fleetPolicyId], references: [id], onDelete: SetNull)
+  chargingMode               ChargingMode @default(PUBLIC)
+  fleetPolicyId              String?
+  fleetPolicy                FleetPolicy? @relation(fields: [fleetPolicyId], references: [id], onDelete: SetNull)
+  // per-connector rollout override (null = inherit from Site.fleetAutoRolloutEnabled).
+  // DB-backed flip; no restart required.
+  fleetAutoRolloutEnabled    Boolean?
 
   @@index([chargingMode])
   @@index([fleetPolicyId])
+}
+
+model Site {
+  // existing fields...
+  // Pilot rollout flag for Fleet-Auto. DB-backed, no restart, audit-logged.
+  // OFF by default. Set true to enable Fleet-Auto across this site's connectors.
+  fleetAutoRolloutEnabled    Boolean @default(false)
 }
 
 model FleetPolicy {
@@ -100,12 +121,14 @@ model FleetPolicy {
 ### Migration notes
 
 1. Add `ChargingMode` enum.
-2. Add nullable/defaulted connector fields: `Connector.chargingMode`, `Connector.fleetPolicyId`.
-3. Add `FleetPolicy.alwaysOn` default false.
-4. Add nullable `FleetPolicy.autoStartIdTag`, backfill from existing `idTagPrefix` or deterministic `FLEET-AUTO-<shortPolicyId>`, then make non-null.
-5. Make `FleetPolicy.idTagPrefix` nullable only if current validation/API paths are updated in the same PR.
-6. Add validation for active/draft `autoStartIdTag` uniqueness within a site.
-7. Generate and commit a Prisma migration. **No prod `db push`.**
+2. Add nullable/defaulted connector fields: `Connector.chargingMode`, `Connector.fleetPolicyId`, `Connector.fleetAutoRolloutEnabled`.
+3. Add `Site.fleetAutoRolloutEnabled` default false.
+4. Add `FleetPolicy.alwaysOn` default false.
+5. Add nullable `FleetPolicy.autoStartIdTag`, backfill from existing `idTagPrefix` or deterministic `FLEET-AUTO-<shortPolicyId>`, then make non-null.
+6. Make `FleetPolicy.idTagPrefix` nullable only if current validation/API paths are updated in the same PR.
+7. Add validation for active/draft `autoStartIdTag` uniqueness within a site.
+8. Add audit-log table or extend existing audit table to record changes to `Site.fleetAutoRolloutEnabled` and `Connector.fleetAutoRolloutEnabled` — every flip captures `{key, scope, oldValue, newValue, operatorId, ts}`.
+9. Generate and commit a Prisma migration. **No prod `db push`.**
 
 Open implementation detail: Prisma cannot express partial unique indexes portably; enforce site-scoped `autoStartIdTag` uniqueness in API validation and add a DB unique/index only if it does not block legacy/disabled rows.
 
@@ -127,16 +150,21 @@ New module: `packages/ocpp-server/src/fleet/fleetAutoStart.ts`
 
 Auto-start is allowed only when all are true:
 
-1. `FLEET_GATED_SESSIONS_ENABLED === true`
-2. charger connection is ready for server-initiated commands: BootNotification + at least one Heartbeat
-3. connector `chargingMode === FLEET_AUTO`
-4. connector has a non-null `fleetPolicyId`
-5. policy exists and `status === ENABLED`
-6. policy has valid `autoStartIdTag`
-7. no ACTIVE session exists for that connector
-8. no recent pending auto-start attempt exists for that connector/idTag
+1. **Emergency kill switch ON** — `FLEET_GATED_SESSIONS_ENABLED === true` (env var; allows fleet features globally)
+2. **Pilot rollout enabled for scope** — `connector.fleetAutoRolloutEnabled === true` OR (`connector.fleetAutoRolloutEnabled === null` AND `site.fleetAutoRolloutEnabled === true`). DB-backed; no restart required to flip.
+3. Charger connection is ready for server-initiated commands: BootNotification + at least one Heartbeat
+4. Connector `chargingMode === FLEET_AUTO`
+5. Connector has a non-null `fleetPolicyId`
+6. Policy exists and `status === ENABLED`
+7. Policy has valid `autoStartIdTag`
+8. No ACTIVE session exists for that connector
+9. No recent pending auto-start attempt exists for that connector/idTag
 
-If any condition fails, log a structured skip reason. Misconfiguration skips should surface in portal diagnostics; normal PUBLIC skips should be silent/debug only.
+Conditions 1–2 are the **two-tier rollout gate**: env-level emergency kill switch AND DB-level per-site/per-connector pilot enablement. Both must be true. Conditions 3–9 are the per-event/per-connector preconditions.
+
+If any condition fails, log a structured skip reason. Misconfiguration skips (e.g. condition 5 or 6 false on a FLEET_AUTO connector) should surface in portal diagnostics; normal PUBLIC skips (condition 4 false) should be silent/debug only. Rollout-flag skips (condition 2) should log at info level so operators can verify a pilot toggle took effect.
+
+**Cache TTL:** runtime caches `Site.fleetAutoRolloutEnabled` and `Connector.fleetAutoRolloutEnabled` for ≤30 s. A flip via portal/SQL takes effect within one cache cycle. No process restart, no env-var change, no Railway deploy.
 
 ### OCPP flow
 
@@ -213,14 +241,15 @@ If any condition fails, log a structured skip reason. Misconfiguration skips sho
 ## 6. Safety invariants
 
 1. PUBLIC connector never auto-starts.
-2. Flag OFF means zero auto-start behavior, even if connector config exists.
+2. **Either tier OFF means zero auto-start behavior**, even if connector config exists. Specifically: env emergency kill switch OFF → no fleet code path runs anywhere. Env ON but rollout flag OFF for the connector/site → no auto-start for that scope. Both must be ON.
 3. Fleet-Auto without assigned ENABLED policy refuses to auto-start and surfaces operator-visible misconfiguration.
 4. Server-initiated RemoteStart must respect boot+heartbeat readiness.
 5. No command storms: one retry max, no unbounded loops.
 6. Public mobile/RFID sessions cannot accidentally inherit a connector fleet policy unless idTag is the policy `autoStartIdTag`. The deprecated Hybrid-B prefix-matching branch in Authorize is removed in Slice G; until then it must not be used for any new fleet setup.
 7. Policy edits remain blocked while ENABLED.
-8. All prod rollout starts with code + schema deployed while flag OFF.
-9. Every prod test ends by restoring baseline: flag OFF, no ENABLED FleetPolicy unless intentionally continuing pilot, connector mode reset if test-only.
+8. All prod rollout starts with code + schema deployed while **emergency kill switch is OFF and all rollout flags are `false`**. Schema/code is live; behavior is dark.
+9. Every prod test ends by restoring baseline. The default restore path is **flipping rollout flags back to `false` via the operator portal — no restart, no env-var change.** The env kill switch only flips OFF in incident response, not as part of routine test cleanup.
+10. Rollout flag flips are **always audit-logged** with `{operatorId, scope, oldValue, newValue, ts}`. SQL flips that bypass the portal must still write to the audit log.
 
 ---
 
@@ -245,18 +274,23 @@ If any condition fails, log a structured skip reason. Misconfiguration skips sho
 
 ### Slice A — Schema + validation foundation
 
-**Outcome:** Connector-level config and policy fields exist with no runtime behavior change.  
-**Files likely touched:** Prisma schema/migration, shared types, API validators/tests.  
+**Outcome:** Connector-level config, policy fields, **and rollout flags** exist with no runtime behavior change.  
+**Files likely touched:** Prisma schema/migration, shared types, API validators/tests, audit table or extension.  
 **Acceptance:**
 - migration generated and committed
 - existing data backfilled to `PUBLIC`
+- `Site.fleetAutoRolloutEnabled` defaults `false` for all rows
+- `Connector.fleetAutoRolloutEnabled` defaults `null` (inherit from site)
 - `autoStartIdTag` validation added
+- audit-log infrastructure in place to capture flag flips on Site + Connector rollout fields
 - no OCPP auto-start code active
+- no env-var read introduced — runtime gate evaluation lands in Slice C
 
 **Verification:**
 - `prisma migrate dev` or test DB migration
 - API/unit validation tests
 - schema drift check
+- unit test asserting audit log writes when rollout flag fields are toggled via API
 
 ### Slice B — API + portal config UX
 
@@ -274,22 +308,26 @@ If any condition fails, log a structured skip reason. Misconfiguration skips sho
 - portal build/typecheck
 - Storybook or screenshot/manual portal verification
 
-### Slice C — Fleet-Auto runtime behind flag
+### Slice C — Fleet-Auto runtime behind two-tier gate
 
-**Outcome:** OCPP server can auto-start a fleet session on fleet connector plug-in, but only with flag ON.  
-**Files likely touched:** `fleetAutoStart.ts`, status handler, authorize/start transaction handlers, synthetic fleet user helper, tests.  
+**Outcome:** OCPP server can auto-start a fleet session on a fleet connector plug-in, but only when **both** the env emergency kill switch is ON **and** the DB-backed rollout flag is enabled for the connector or its site.  
+**Files likely touched:** `fleetAutoStart.ts`, status handler, authorize/start transaction handlers, synthetic fleet user helper, in-memory rollout-flag cache helper, tests.  
 **Acceptance:**
 - PUBLIC connector ignored
-- FLEET_AUTO connector auto-starts only when flag ON and policy ENABLED
+- FLEET_AUTO connector auto-starts only when **all** of: env kill switch ON, DB rollout flag enabled (connector-override OR site-level), policy ENABLED, readiness gate satisfied
+- DB rollout-flag flip takes effect within ≤30 s cache TTL — **no API or OCPP restart required**
+- env kill switch flip continues to require restart (acceptable, emergency-only)
 - StartTransaction attaches `fleetPolicyId`
 - synthetic fleet user/session persistence works
 - readiness gate enforced
 - retry/idempotency covered
 
 **Verification:**
-- unit decision matrix
-- simulator integration: PUBLIC ignored, FLEET_AUTO starts
+- unit decision matrix exercises every combination of (env, connector-rollout, site-rollout, chargingMode, policy.status)
+- simulator integration: PUBLIC ignored regardless of rollout; FLEET_AUTO + rollout-on auto-starts; FLEET_AUTO + rollout-off does NOT auto-start even with env ON
+- timing test: rollout-flag flip via SQL/API observed by runtime within ≤30 s; no restart performed during the test
 - compatibility regression: deprecated Hybrid-B rows do not break during migration
+- emergency-kill regression: env kill switch OFF zeroes out auto-start regardless of DB flags
 
 ### Slice D — Mobile visibility + API response polish
 
@@ -347,7 +385,7 @@ If any condition fails, log a structured skip reason. Misconfiguration skips sho
 
 **Acceptance:**
 - Authorize handler no longer reads `idTagPrefix` for any decision
-- runtime tests confirm: a session started with an idTag matching a stale prefix is treated as PUBLIC (no fleet attachment)
+- **`idTagPrefix` no longer attaches fleet policy. A stale prefix-only idTag is rejected unless it is independently valid through normal public/RFID authorization** (e.g. registered in `Charger.allowedIdTags`, in the public driver Authorize path, or otherwise an existing valid public credential). Retired fleet RFID credentials must NOT silently become public charging credentials.
 - portal no longer offers prefix as a configuration field for new or edited policies
 - `docs/fleet-policies.md` rewritten to describe Fleet-Auto only; Hybrid-B section moved to a "Historical / removed" appendix
 - admin script idempotently sets `idTagPrefix = NULL` on all archived rows (or sets `status=DISABLED` + a `notes` archive marker if the row also lacks `autoStartIdTag`)
@@ -356,7 +394,7 @@ If any condition fails, log a structured skip reason. Misconfiguration skips sho
 
 **Verification:**
 - `select count(*) from "FleetPolicy" where "idTagPrefix" is not null` returns 0 in dev/staging/prod before column drop
-- Authorize handler unit tests: prefix match no longer triggers fleet attachment
+- Authorize handler unit tests: prefix match no longer triggers fleet attachment AND a prefix-only idTag (no other validity path) is **rejected**, not silently accepted as public
 - regression: existing Fleet-Auto sessions unaffected
 - `prisma migrate status` clean; no drift introduced
 
@@ -364,16 +402,19 @@ If any condition fails, log a structured skip reason. Misconfiguration skips sho
 
 ## 9. Rollout strategy
 
-1. Land slices A–D on `dev` with runtime flag OFF.
-2. Run Slice E in local/dev/staging.
+1. Land slices A–D on `dev` with **emergency kill switch OFF in dev**, all `fleetAutoRolloutEnabled` flags `false`. Zero runtime behavior change.
+2. Run Slice E in local/dev/staging. Enable env kill switch in dev/staging only. Toggle DB rollout flags via the operator portal — no restart per toggle.
 3. Promote through normal `dev → main` PR process.
-4. Deploy prod schema/code while flag OFF.
-5. Configure one pilot connector.
-6. Flip flag for planned window only.
-7. Run pilot and restore baseline.
-8. If pilot passes, keep one connector active for monitored soak only with Son approval.
-9. Expand connector-by-connector; do not site-wide flip until at least one soak passes.
-10. **Hybrid-B retirement (Slice G):** once Fleet-Auto is in soak and any prior Hybrid-B operator setup is migrated or archived, land Slice G to remove the Authorize-handler prefix branch and rewrite `docs/fleet-policies.md`. Run the row-migration/archival script in dev/staging first, then prod. Final cleanup migration drops `FleetPolicy.idTagPrefix` after the column is empty in all environments.
+4. **Deploy prod schema + code while emergency kill switch is OFF in prod** and all rollout flags `false`. The prod release is dark — no Fleet-Auto behavior possible.
+5. **Enable emergency kill switch in prod** (one-time env-var flip + restart, planned maintenance window). After this, prod is "fleet-features allowed" but with zero connectors actually rolled out — still no behavior change because all `fleetAutoRolloutEnabled` flags are `false`.
+6. **Configure one pilot connector** (`Connector.chargingMode = FLEET_AUTO`, assign FleetPolicy, set `Connector.fleetAutoRolloutEnabled = true` OR `Site.fleetAutoRolloutEnabled = true`) via the operator portal. **No restart.** Cache TTL ≤30 s; auto-start becomes possible for that connector within one cache cycle.
+7. Real plug-in test: validate auto-start, gating, energy flow, billing.
+8. Restore baseline by setting the rollout flag back to `false` via the portal — **no restart**, no env-var change. The connector's `chargingMode = FLEET_AUTO` config can stay; it's the rollout flag that controls live behavior.
+9. If pilot passes, keep one connector active for monitored soak with Son approval (rollout flag stays `true` for that connector only).
+10. Expand connector-by-connector or site-by-site by flipping `fleetAutoRolloutEnabled` flags. Each flip is a portal action with audit trail; no restart per expansion step.
+11. **Hybrid-B retirement (Slice G):** once Fleet-Auto is in soak and any prior Hybrid-B operator setup is migrated or archived, land Slice G to remove the Authorize-handler prefix branch and rewrite `docs/fleet-policies.md`. Run the row-migration/archival script in dev/staging first, then prod. Final cleanup migration drops `FleetPolicy.idTagPrefix` after the column is empty in all environments.
+
+**Operational note on the env kill switch:** after step 5 above, the env var stays ON in prod indefinitely. Day-to-day pilot enable/disable, expansion, and rollback all happen via DB-backed rollout flags. The env var only flips back to OFF in an emergency where Fleet-Auto must be globally disabled across all sites/connectors at once — and that is the only time we accept the restart cost.
 
 ---
 
@@ -383,6 +424,7 @@ If any condition fails, log a structured skip reason. Misconfiguration skips sho
 - [x] `autoStartIdTag` semantics decided: policy-owned, site-unique for DRAFT/ENABLED, backed by synthetic fleet user for required `Session.userId`.
 - [x] Mobile behavior decided: show fleet-only unavailable, no Start button.
 - [x] Hybrid-B fate decided: deprecated now; Slice G removes the Authorize prefix branch and archives existing rows. No new UX, docs, or deployments built on Hybrid-B.
+- [x] Two-tier rollout control decided: env `FLEET_GATED_SESSIONS_ENABLED` is emergency-only (restart acceptable); day-to-day pilot enable/disable uses DB-backed `Site.fleetAutoRolloutEnabled` + `Connector.fleetAutoRolloutEnabled` (no restart, audit-logged, ≤30 s cache TTL).
 - [ ] Migration reviewed by second agent/human before implementation.
 - [ ] Fleet customer/operator UX reviewed if available.
 - [ ] Slice A ticket created with exact files/tests.
