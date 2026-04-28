@@ -3,6 +3,7 @@ import { enqueueOcppEvent } from '../outbox';
 import type { StartTransactionRequest, StartTransactionResponse } from '@ev-charger/shared';
 import { consumeFleetAuthorize } from '../fleet/authorizeCache';
 import { onSessionStart as fleetSchedulerOnSessionStart } from '../fleet/fleetScheduler';
+import { consumeFleetAutoStartPending } from '../fleet/fleetAutoStart';
 
 function fleetFlagEnabled(): boolean {
   return process.env.FLEET_GATED_SESSIONS_ENABLED === 'true';
@@ -146,12 +147,88 @@ export async function handleStartTransaction(
     }
   }
 
-  // ── Fleet-policy linkage consume (TASK-0208 Phase 2) ─────────────────
+  // ── Fleet-policy linkage consume (TASK-0208 Phase 2 — Hybrid-B) ──────
   // Flag-off, no-match, or expired → returns null; fall back to non-fleet.
   // Consume-on-read: the entry is deleted whether or not the session row
   // ends up being created (failures below produce at most one orphaned
   // cache miss on a retry, which is safe — retry will simply be non-fleet).
-  const fleetLinkage = consumeFleetAuthorize({ chargerId, idTag });
+  let fleetLinkage = consumeFleetAuthorize({ chargerId, idTag });
+
+  // ── Fleet-Auto direct attachment (TASK-0208 Phase 3 Slice C) ─────────
+  // The direct-FK path attaches a fleet policy ONLY when this
+  // StartTransaction is the result of a Slice C server-initiated
+  // auto-start. We prove that by consuming a fresh pending entry that
+  // `maybeAutoStartFleet()` wrote AFTER passing the full two-tier
+  // rollout gate (env + DB).
+  //
+  // Why not just check (chargingMode + idTag match + flag)?
+  //   That would let a manual operator RemoteStart with the fleet
+  //   idTag — or a stale RFID swipe of `autoStartIdTag` — silently
+  //   attach a fleet session even when the rollout flag is OFF for
+  //   the site/connector. The pending-entry check is precise: if
+  //   there's no fresh pending entry for this exact (chargerId,
+  //   connectorId, fleetPolicyId, idTag), it isn't a Slice C session.
+  //
+  // Order matters: we only consult the direct-FK path when the
+  // Hybrid-B cache returned null, so there's no chance of
+  // double-attachment.
+  if (!fleetLinkage && fleetFlagEnabled()) {
+    try {
+      const fleetConnector = await prisma.connector.findUnique({
+        where: { chargerId_connectorId: { chargerId, connectorId } },
+        select: {
+          chargingMode: true,
+          fleetPolicyId: true,
+          fleetPolicy: {
+            select: { id: true, status: true, autoStartIdTag: true },
+          },
+        },
+      });
+      if (
+        fleetConnector?.chargingMode === 'FLEET_AUTO' &&
+        fleetConnector.fleetPolicyId &&
+        fleetConnector.fleetPolicy?.status === 'ENABLED' &&
+        fleetConnector.fleetPolicy.autoStartIdTag === idTag
+      ) {
+        // Verify-and-consume the pending Fleet-Auto attempt. Returns
+        // false (and leaves the entry in place if any) when the
+        // pending entry is missing, stale, or doesn't match — meaning
+        // this StartTransaction was NOT initiated through the gated
+        // auto-start path and should NOT receive fleet attachment.
+        const consumed = consumeFleetAutoStartPending({
+          chargerId,
+          connectorId,
+          fleetPolicyId: fleetConnector.fleetPolicyId,
+          idTag,
+        });
+        if (consumed) {
+          fleetLinkage = {
+            fleetPolicyId: fleetConnector.fleetPolicyId,
+            plugInAt: new Date(timestamp),
+            expiresAt: new Date(Date.now() + 60_000),
+          };
+          console.log(
+            `[StartTransaction] fleet-auto direct attachment (verified pending): chargerId=${chargerId} connectorId=${connectorId} policyId=${fleetConnector.fleetPolicyId} idTag=${idTag}`,
+          );
+        } else {
+          // Likely a manual operator start with the fleet idTag — fall
+          // through to non-fleet attachment. Log at info so ops can
+          // see it; not an error.
+          console.log(
+            `[StartTransaction] fleet-auto direct path skipped (no fresh pending attempt): chargerId=${chargerId} connectorId=${connectorId} policyId=${fleetConnector.fleetPolicyId} idTag=${idTag}`,
+          );
+        }
+      }
+    } catch (err) {
+      // Non-fatal — fall back to non-fleet session attachment if the
+      // lookup hiccups. Slice C's design contract is that auto-start
+      // never blocks a StartTransaction from being accepted.
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(
+        `[StartTransaction] fleet-auto direct lookup failed (non-fatal): chargerId=${chargerId} connectorId=${connectorId} err=${msg}`,
+      );
+    }
+  }
 
   let session = null as Awaited<ReturnType<typeof prisma.session.create>> | null;
   let transactionId = 0;

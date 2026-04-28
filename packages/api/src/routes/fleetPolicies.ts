@@ -77,6 +77,39 @@ async function loadSiblings(siteId: string): Promise<SiblingPolicy[]> {
   }));
 }
 
+/**
+ * Reject an `autoStartIdTag` if it collides with an existing real-driver
+ * `User.idTag`. Defense-in-depth alongside the OCPP-server-side hijack
+ * guard in `getOrCreateSyntheticFleetUser()` — failing here means
+ * operators get the validation error at policy-edit time instead of
+ * silently disabling auto-start at runtime.
+ *
+ * Returns null on no-collision, or a structured error on collision.
+ * The check is opt-out — pass null/undefined autoStartIdTag and we
+ * skip (PATCH paths that don't change the field).
+ */
+async function findUserIdTagCollision(
+  autoStartIdTag: string | null | undefined,
+): Promise<{ field: 'autoStartIdTag'; code: string; message: string } | null> {
+  if (!autoStartIdTag) return null;
+  const colliding = await db.user.findUnique({
+    where: { idTag: autoStartIdTag },
+    select: { id: true, clerkId: true },
+  }) as { id: string; clerkId: string } | null;
+  if (!colliding) return null;
+  // If the existing row is a synthetic-fleet-* user we still reject from
+  // this path because the same idTag mapping to a different policy's
+  // synthetic is still a misconfiguration. The synthetic clerkId encodes
+  // the policy id, so cross-policy reuse will not match.
+  return {
+    field: 'autoStartIdTag',
+    code: 'USER_IDTAG_COLLISION',
+    message:
+      `autoStartIdTag is already in use by an existing user (idTag is unique on User). ` +
+      `Pick a different value to avoid attaching fleet sessions to a non-fleet account.`,
+  };
+}
+
 export async function fleetPolicyRoutes(app: FastifyInstance) {
   // ─── GET /sites/:siteId/fleet-policies ──────────────────────────────
   app.get<{ Params: { siteId: string } }>('/sites/:siteId/fleet-policies', {
@@ -159,6 +192,13 @@ export async function fleetPolicyRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: 'ValidationError', errors: validation.errors });
     }
     const n = validation.normalized;
+
+    // Hijack guard: refuse to assign an autoStartIdTag that already names a
+    // real (or otherwise foreign) User row. See findUserIdTagCollision().
+    const userCollision = await findUserIdTagCollision(n.autoStartIdTag);
+    if (userCollision) {
+      return reply.status(400).send({ error: 'ValidationError', errors: [userCollision] });
+    }
 
     try {
       const created = await db.fleetPolicy.create({
@@ -264,6 +304,16 @@ export async function fleetPolicyRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: 'ValidationError', errors: validation.errors });
     }
     const n = validation.normalized;
+
+    // Hijack guard on update: only check when the autoStartIdTag is
+    // actually changing relative to the existing row. Re-saving the same
+    // value should be a no-op.
+    if (n.autoStartIdTag && n.autoStartIdTag !== existing.autoStartIdTag) {
+      const userCollision = await findUserIdTagCollision(n.autoStartIdTag);
+      if (userCollision) {
+        return reply.status(400).send({ error: 'ValidationError', errors: [userCollision] });
+      }
+    }
 
     try {
       const updated = await db.fleetPolicy.update({
