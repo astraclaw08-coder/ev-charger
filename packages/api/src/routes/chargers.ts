@@ -7,7 +7,7 @@ import { remoteReset, remoteStart, triggerHeartbeat, getConfiguration } from '..
 import { getChargerUptime } from '../lib/uptime';
 import { computeSessionAmounts } from '../lib/sessionBilling';
 import { assessChargerHealth } from '../lib/chargerHealthAgent';
-import { writeFleetRolloutAudit } from '../lib/fleetRolloutAudit';
+import { writeFleetRolloutAudit, writeFleetConnectorConfigAudit } from '../lib/fleetRolloutAudit';
 
 function hasSiteAccess(siteId: string | null, siteIds: string[] | undefined) {
   if (!siteIds || siteIds.length === 0) return true;
@@ -168,11 +168,66 @@ export async function chargerRoutes(app: FastifyInstance) {
     const { password: _pw, ...safeCharger } = charger;
     return {
       ...safeCharger,
-      connectors: safeCharger.connectors.map((c: any) => ({
-        ...c,
-        lastPlugOutAt: plugOutMap.get(c.connectorId)?.toISOString() ?? null,
-        activeReservation: c.reservations?.[0] ?? null,
-      })),
+      connectors: safeCharger.connectors.map((c: any) => {
+        // GET /chargers/:id is mobile-facing / unauthenticated. Strip fleet
+        // configuration fields so we don't leak operator-only state to
+        // drivers (chargingMode, fleetPolicyId, fleetAutoRolloutEnabled).
+        // Operator portal must use the protected endpoint
+        // GET /chargers/:id/fleet-config below for these.
+        const {
+          chargingMode: _cm,
+          fleetPolicyId: _fp,
+          fleetAutoRolloutEnabled: _frol,
+          ...publicConnector
+        } = c;
+        return {
+          ...publicConnector,
+          lastPlugOutAt: plugOutMap.get(c.connectorId)?.toISOString() ?? null,
+          activeReservation: c.reservations?.[0] ?? null,
+        };
+      }),
+    };
+  });
+
+  // ─── GET /chargers/:id/fleet-config ──────────────────────────────────
+  // TASK-0208 Phase 3 Slice B (operator-only). Returns Fleet-Auto config
+  // for every connector on the charger. Used by the operator portal's
+  // ChargerFleetConfig panel. NEVER call this from mobile or unauthenticated
+  // contexts — fleet policy assignment is operator-internal information.
+  app.get<{ Params: { id: string } }>('/chargers/:id/fleet-config', {
+    preHandler: [requireOperator, requirePolicy('fleet.policy.read')],
+  }, async (req, reply) => {
+    const charger = await prisma.charger.findUnique({
+      where: { id: req.params.id },
+      include: {
+        connectors: {
+          select: {
+            id: true,
+            connectorId: true,
+            chargingMode: true,
+            fleetPolicyId: true,
+            fleetAutoRolloutEnabled: true,
+          },
+          orderBy: { connectorId: 'asc' },
+        },
+      },
+    });
+    if (!charger) return reply.status(404).send({ error: 'Charger not found' });
+    if (!hasSiteAccess(charger.siteId, req.currentOperator?.claims?.siteIds)) {
+      return reply.status(403).send({
+        error: 'Forbidden',
+        denyReason: {
+          code: 'SITE_OUT_OF_SCOPE',
+          reason: `Site ${charger.siteId} is not in granted siteIds`,
+          policy: 'fleet.policy.read',
+        },
+      });
+    }
+    return {
+      chargerId: charger.id,
+      ocppId: charger.ocppId,
+      siteId: charger.siteId,
+      connectors: charger.connectors,
     };
   });
 
@@ -763,13 +818,11 @@ export async function chargerRoutes(app: FastifyInstance) {
       },
     });
 
-    // Audit-log a rollout-flag flip when the value actually changed. We
-    // compare the previous (loaded above) and new explicitly so an operator
-    // re-saving the same value doesn't pollute the log. chargingMode and
-    // policy assignment changes are noteworthy too but those are handled
-    // by the existing AdminAuditEvent surface in the operator portal —
-    // here we focus on the rollout flag because that is the one with
-    // direct runtime kill-switch semantics in Slice C.
+    // Audit channel 1: rollout-flag flip (kill-switch semantics).
+    // Audit channel 2: chargingMode / fleetPolicyId config diff.
+    // Both are conditional on actual value changes (re-saving the same
+    // value does not pollute the log). Both swallow failures so audit
+    // infra hiccups don't fail the operator's config write.
     if (body.fleetAutoRolloutEnabled !== undefined
         && body.fleetAutoRolloutEnabled !== connector.fleetAutoRolloutEnabled) {
       try {
@@ -783,10 +836,40 @@ export async function chargerRoutes(app: FastifyInstance) {
           newValue: body.fleetAutoRolloutEnabled,
         });
       } catch (auditErr) {
-        // Audit failure must not block a config change — log and move on.
-        // Operator already saw success; we add a sentinel to logs for ops.
         req.log.error({ auditErr, scope: 'connector', scopeId: connector.id },
           'fleet rollout audit write failed (connector)');
+      }
+    }
+
+    // Connector config audit: chargingMode + fleetPolicyId diff. Only
+    // emit when at least one of the two actually changed.
+    const configChanges: Parameters<typeof writeFleetConnectorConfigAudit>[0]['changes'] = {};
+    if (body.chargingMode !== undefined
+        && body.chargingMode !== connector.chargingMode) {
+      configChanges.chargingMode = {
+        old: connector.chargingMode as 'PUBLIC' | 'FLEET_AUTO',
+        new: body.chargingMode,
+      };
+    }
+    if (body.fleetPolicyId !== undefined
+        && (body.fleetPolicyId ?? null) !== (connector.fleetPolicyId ?? null)) {
+      configChanges.fleetPolicyId = {
+        old: connector.fleetPolicyId ?? null,
+        new: body.fleetPolicyId ?? null,
+      };
+    }
+    if (configChanges.chargingMode || configChanges.fleetPolicyId) {
+      try {
+        await writeFleetConnectorConfigAudit({
+          operatorId: operator.id,
+          connectorId: connector.id,
+          chargerId: charger.id,
+          siteId: charger.siteId ?? undefined,
+          changes: configChanges,
+        });
+      } catch (auditErr) {
+        req.log.error({ auditErr, scope: 'connector', scopeId: connector.id },
+          'fleet connector config audit write failed');
       }
     }
 

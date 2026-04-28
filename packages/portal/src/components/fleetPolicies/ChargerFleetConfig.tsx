@@ -27,7 +27,7 @@ import { useToken } from '../../auth/TokenContext';
 import {
   createApiClient,
   type ChargingMode,
-  type ConnectorInfo,
+  type ConnectorFleetConfig as ConnectorFleetRow,
   type FleetPolicy,
 } from '../../api/client';
 
@@ -51,10 +51,10 @@ type RowState = {
   rollout: RolloutChoice;
 };
 
-function rowFromConnector(c: ConnectorInfo): RowState {
+function rowFromConnector(c: ConnectorFleetRow): RowState {
   return {
-    chargingMode: c.chargingMode ?? 'PUBLIC',
-    fleetPolicyId: c.fleetPolicyId ?? null,
+    chargingMode: c.chargingMode,
+    fleetPolicyId: c.fleetPolicyId,
     rollout: toRolloutChoice(c.fleetAutoRolloutEnabled),
   };
 }
@@ -62,7 +62,7 @@ function rowFromConnector(c: ConnectorInfo): RowState {
 export interface ChargerFleetConfigProps {
   chargerId: string;
   siteId: string | null;
-  connectors: ConnectorInfo[];
+  connectors: ConnectorFleetRow[];
   /** Called after a successful save so the parent can re-fetch. */
   onSaved?: () => void;
 }
@@ -113,9 +113,25 @@ export default function ChargerFleetConfig(props: ChargerFleetConfigProps) {
     setRows((prev) => ({ ...prev, [connectorRowId]: { ...prev[connectorRowId], ...patch } }));
   };
 
-  const save = async (c: ConnectorInfo) => {
+  const save = async (c: ConnectorFleetRow) => {
     const row = rows[c.id];
     if (!row) return;
+
+    // Confirmation gate when the operator is enabling rollout for this
+    // connector (false/inherit → true). Once Slice C ships and the
+    // global env kill switch is ON, this flips runtime behavior — make
+    // sure it isn't an accidental click.
+    const enablingRollout =
+      row.rollout === 'enabled' && c.fleetAutoRolloutEnabled !== true;
+    if (enablingRollout) {
+      const confirmed = window.confirm(
+        'Enabling this rollout flag may allow Fleet-Auto sessions to auto-start ' +
+        'on this connector when the global kill switch is ON.\n\n' +
+        'Continue?',
+      );
+      if (!confirmed) return;
+    }
+
     setSavingId(c.id);
     setRowError((prev) => {
       const next = { ...prev };
@@ -131,16 +147,14 @@ export default function ChargerFleetConfig(props: ChargerFleetConfigProps) {
         fleetPolicyId?: string | null;
         fleetAutoRolloutEnabled?: boolean | null;
       } = {};
-      if (row.chargingMode !== (c.chargingMode ?? 'PUBLIC')) {
+      if (row.chargingMode !== c.chargingMode) {
         body.chargingMode = row.chargingMode;
       }
-      const currentPolicyId = c.fleetPolicyId ?? null;
-      if (row.fleetPolicyId !== currentPolicyId) {
+      if (row.fleetPolicyId !== c.fleetPolicyId) {
         body.fleetPolicyId = row.fleetPolicyId;
       }
-      const currentRollout = c.fleetAutoRolloutEnabled ?? null;
       const desiredRollout = fromRolloutChoice(row.rollout);
-      if (currentRollout !== desiredRollout) {
+      if (c.fleetAutoRolloutEnabled !== desiredRollout) {
         body.fleetAutoRolloutEnabled = desiredRollout;
       }
       if (Object.keys(body).length === 0) {

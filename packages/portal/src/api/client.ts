@@ -898,13 +898,28 @@ export function createApiClient(token: string | null | undefined) {
     getChargers: () => request<ChargerListItem[]>('/chargers', token),
 
     /**
-     * Single-charger detail. Returns full Charger row including connectors
-     * with Phase 3 Slice A/B Fleet-Auto fields (chargingMode, fleetPolicyId,
-     * fleetAutoRolloutEnabled). Used by ChargerDetail's Fleet-Auto config
-     * panel.
+     * Single-charger detail (mobile-safe). NOTE: connector fleet-config
+     * fields (chargingMode, fleetPolicyId, fleetAutoRolloutEnabled) are
+     * intentionally stripped from this response — the API treats this
+     * route as unauthenticated/mobile-facing and never leaks operator-only
+     * fleet state. The portal must call `getChargerFleetConfig()` instead
+     * for those fields.
      */
     getCharger: (id: string) =>
       request<ChargerInfo & { connectors: ConnectorInfo[] }>(`/chargers/${id}`, token),
+
+    /**
+     * Operator-only Fleet-Auto config for every connector on a charger.
+     * Backed by `GET /chargers/:id/fleet-config` which gates on
+     * `fleet.policy.read`. Used by the ChargerFleetConfig panel.
+     */
+    getChargerFleetConfig: (id: string) =>
+      request<{
+        chargerId: string;
+        ocppId: string;
+        siteId: string | null;
+        connectors: ConnectorFleetConfig[];
+      }>(`/chargers/${id}/fleet-config`, token),
     getAnalytics: (siteId: string, params?: { periodDays?: number; startDate?: string; endDate?: string }) => {
       const query = new URLSearchParams();
       if (params?.periodDays) query.set('periodDays', String(params.periodDays));

@@ -154,7 +154,14 @@ export async function siteRoutes(app: FastifyInstance) {
       reservationMaxDurationMin: site.reservationMaxDurationMin,
       reservationFeeUsd: site.reservationFeeUsd,
       reservationCancelGraceMin: site.reservationCancelGraceMin,
+      // Phase 3 Slice B — site-level Fleet-Auto rollout flag. Operator UI
+      // (SiteFleetPolicies → site rollout toggle) reads this on reload.
+      fleetAutoRolloutEnabled: (site as any).fleetAutoRolloutEnabled ?? false,
       createdAt: site.createdAt,
+      // The connector rows on these chargers also carry chargingMode /
+      // fleetPolicyId / fleetAutoRolloutEnabled — but this route is
+      // operator-only (site.read), so leaking them here is acceptable for
+      // the portal's site detail page. Mobile must NOT use this endpoint.
       chargers: site.chargers.map(({ password: _pw, ...c }: { password: string; [k: string]: unknown }) => c),
     };
   });

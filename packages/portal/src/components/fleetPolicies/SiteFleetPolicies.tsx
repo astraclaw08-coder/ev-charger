@@ -306,8 +306,24 @@ export default function SiteFleetPolicies({ siteId }: { siteId: string }) {
   // payload containing only the fields needed (the API requires name/
   // address/lat/lng so we re-send the loaded values). Audit-log on the
   // server records the flip.
+  //
+  // Site-level enable is the broader of the two scopes (it defaults
+  // every connector at the site to fleet-rollout=on unless the
+  // connector has an explicit override). We require an extra
+  // confirmation step on the false → true transition.
   const flipSiteRollout = async (next: boolean) => {
     if (!siteData) return;
+    if (next === true && (siteData.fleetAutoRolloutEnabled ?? false) !== true) {
+      const confirmed = window.confirm(
+        'Enabling site-level Fleet-Auto rollout means every connector at this ' +
+        'site that is configured for FLEET_AUTO and assigned an ENABLED policy ' +
+        'may auto-start fleet sessions when the global kill switch is ON.\n\n' +
+        'Per-connector rollout overrides on the charger detail page take ' +
+        'precedence over this site default.\n\n' +
+        'Continue?',
+      );
+      if (!confirmed) return;
+    }
     setRolloutSaving(true);
     setRolloutError(null);
     try {
