@@ -179,6 +179,11 @@ export interface Connector {
   sessions?: ActiveSession[];
   lastPlugOutAt?: string | null;
   activeReservation?: ConnectorActiveReservation | null;
+  // TASK-0208 Phase 3 Slice D — Fleet-Auto connectors are informational
+  // in the driver app: visible but not reservable / not start-able.
+  // PUBLIC connectors behave exactly as before (treat absent as PUBLIC for
+  // backward-compat with older API responses that didn't carry this field).
+  chargingMode?: 'PUBLIC' | 'FLEET_AUTO';
 }
 
 export interface Charger {

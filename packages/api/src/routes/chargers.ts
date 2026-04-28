@@ -197,13 +197,15 @@ export async function chargerRoutes(app: FastifyInstance) {
     return {
       ...safeCharger,
       connectors: safeCharger.connectors.map((c: any) => {
-        // GET /chargers/:id is mobile-facing / unauthenticated. Strip fleet
-        // configuration fields so we don't leak operator-only state to
-        // drivers (chargingMode, fleetPolicyId, fleetAutoRolloutEnabled).
-        // Operator portal must use the protected endpoint
-        // GET /chargers/:id/fleet-config below for these.
+        // GET /chargers/:id is mobile-facing / unauthenticated. Phase 3
+        // Slice D needs `chargingMode` exposed (driver mobile app shows
+        // FLEET_AUTO connectors as informational/unavailable, no Start
+        // button, not reservable). The other two fleet fields stay stripped:
+        //   - fleetPolicyId         (operator-internal: which policy is bound)
+        //   - fleetAutoRolloutEnabled (operator pilot rollout flag)
+        // Operator portal uses the protected GET /chargers/:id/fleet-config
+        // below for the full set.
         const {
-          chargingMode: _cm,
           fleetPolicyId: _fp,
           fleetAutoRolloutEnabled: _frol,
           ...publicConnector
