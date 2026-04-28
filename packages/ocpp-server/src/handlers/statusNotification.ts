@@ -4,6 +4,7 @@ import { enqueueOcppEvent } from '../outbox';
 import type { StatusNotificationRequest, ChargerStatus, ConnectorStatus } from '@ev-charger/shared';
 import { clearPriorEnergy } from '../fleet/priorEnergyState';
 import { onSessionEnd as fleetSchedulerOnSessionEnd } from '../fleet/fleetScheduler';
+import { maybeAutoStartFleet } from '../fleet/fleetAutoStart';
 
 function fleetFlagEnabled(): boolean {
   return process.env.FLEET_GATED_SESSIONS_ENABLED === 'true';
@@ -32,6 +33,25 @@ function toChargerStatus(ocppStatus: string): ChargerStatus {
   return 'ONLINE';
 }
 
+// Reverse map from Prisma ConnectorStatus enum back to the OCPP wire string.
+// Used by the Phase 3 fleet auto-start trigger which expects OCPP-shape
+// status strings ('Available', 'Preparing', …) rather than DB enum values.
+function toOcppStatusString(s: ConnectorStatus | null | undefined): string | null {
+  if (!s) return null;
+  switch (s) {
+    case 'AVAILABLE': return 'Available';
+    case 'PREPARING': return 'Preparing';
+    case 'CHARGING': return 'Charging';
+    case 'SUSPENDED_EVSE': return 'SuspendedEVSE';
+    case 'SUSPENDED_EV': return 'SuspendedEV';
+    case 'FINISHING': return 'Finishing';
+    case 'RESERVED': return 'Reserved';
+    case 'UNAVAILABLE': return 'Unavailable';
+    case 'FAULTED': return 'Faulted';
+    default: return null;
+  }
+}
+
 export async function handleStatusNotification(
   _client: any,
   chargerId: string,
@@ -41,6 +61,10 @@ export async function handleStatusNotification(
   console.log(`[StatusNotification] chargerId=${chargerId} connector=${connectorId} status=${status} error=${errorCode}`);
 
   let orphanSessionIdToSnapshot: string | null = null;
+  // Captured for the Phase 3 fleet auto-start trigger fired after the
+  // transaction commits. Null if connectorId === 0 or the connector row
+  // didn't exist before this notification (cold-start case).
+  let prevConnectorStatusForFleet: ConnectorStatus | null = null;
 
   await prisma.$transaction(async (tx: any) => {
     if (connectorId === 0) {
@@ -56,6 +80,7 @@ export async function handleStatusNotification(
         where: { chargerId_connectorId: { chargerId, connectorId } },
         select: { id: true, status: true },
       });
+      prevConnectorStatusForFleet = previous?.status ?? null;
 
       const connector = await tx.connector.upsert({
         where: {
@@ -188,6 +213,28 @@ export async function handleStatusNotification(
       idempotencyKey: `${chargerId}:StatusNotification:${connectorId}:${status}:${params.timestamp ?? 'na'}`,
     });
   });
+
+  // ── Phase 3 Slice C: fleet auto-start trigger ────────────────────────
+  // Fire-and-forget. The fleet auto-start decision matrix is fully
+  // gated and self-skips when any of: env flag off, rollout disabled,
+  // mode != FLEET_AUTO, no policy assigned, etc. We deliberately do
+  // NOT await — the OCPP `StatusNotificationResponse` should not be
+  // blocked by a RemoteStartTransaction round-trip. Errors surface in
+  // the auto-start module's own logs.
+  if (connectorId !== 0 && _client?.session?.ocppId) {
+    void maybeAutoStartFleet({
+      chargerId,
+      ocppId: _client.session.ocppId,
+      connectorId,
+      newStatus: status,
+      prevStatus: toOcppStatusString(prevConnectorStatusForFleet),
+    }).catch((err) => {
+      // Should already be caught inside maybeAutoStartFleet; defensive.
+      console.error(
+        `[StatusNotification] fleet auto-start threw out-of-band (non-fatal): chargerId=${chargerId} connectorId=${connectorId} err=${err instanceof Error ? err.message : String(err)}`,
+      );
+    });
+  }
 
   // Capture billing snapshot for auto-closed orphan session (non-blocking, outside tx)
   if (orphanSessionIdToSnapshot) {

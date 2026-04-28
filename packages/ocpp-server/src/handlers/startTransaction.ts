@@ -3,6 +3,7 @@ import { enqueueOcppEvent } from '../outbox';
 import type { StartTransactionRequest, StartTransactionResponse } from '@ev-charger/shared';
 import { consumeFleetAuthorize } from '../fleet/authorizeCache';
 import { onSessionStart as fleetSchedulerOnSessionStart } from '../fleet/fleetScheduler';
+import { markFleetAutoStartResolved } from '../fleet/fleetAutoStart';
 
 function fleetFlagEnabled(): boolean {
   return process.env.FLEET_GATED_SESSIONS_ENABLED === 'true';
@@ -146,12 +147,73 @@ export async function handleStartTransaction(
     }
   }
 
-  // ── Fleet-policy linkage consume (TASK-0208 Phase 2) ─────────────────
+  // ── Fleet-policy linkage consume (TASK-0208 Phase 2 — Hybrid-B) ──────
   // Flag-off, no-match, or expired → returns null; fall back to non-fleet.
   // Consume-on-read: the entry is deleted whether or not the session row
   // ends up being created (failures below produce at most one orphaned
   // cache miss on a retry, which is safe — retry will simply be non-fleet).
-  const fleetLinkage = consumeFleetAuthorize({ chargerId, idTag });
+  let fleetLinkage = consumeFleetAuthorize({ chargerId, idTag });
+
+  // ── Fleet-Auto direct attachment (TASK-0208 Phase 3 Slice C) ─────────
+  // If the connector is configured for FLEET_AUTO and the incoming idTag
+  // matches the policy's autoStartIdTag, attach the policy by direct FK
+  // (no Authorize-cache round trip needed). This is the path triggered
+  // by `maybeAutoStartFleet()` in StatusNotification — the cache was
+  // never written for it.
+  //
+  // Order matters: we only consult the direct-FK path when the Hybrid-B
+  // cache returned null. A connector that is FLEET_AUTO + matches an
+  // operator-defined autoStartIdTag is unambiguously a Fleet-Auto session;
+  // no chance of double-attachment.
+  if (!fleetLinkage && fleetFlagEnabled()) {
+    try {
+      const fleetConnector = await prisma.connector.findUnique({
+        where: { chargerId_connectorId: { chargerId, connectorId } },
+        select: {
+          chargingMode: true,
+          fleetPolicyId: true,
+          fleetPolicy: {
+            select: { id: true, status: true, autoStartIdTag: true },
+          },
+        },
+      });
+      if (
+        fleetConnector?.chargingMode === 'FLEET_AUTO' &&
+        fleetConnector.fleetPolicyId &&
+        fleetConnector.fleetPolicy?.status === 'ENABLED' &&
+        fleetConnector.fleetPolicy.autoStartIdTag === idTag
+      ) {
+        // Synthesize the linkage shape consumed below. plugInAt comes from
+        // the OCPP `timestamp` (vehicle plug-in is what the charger reports).
+        // expiresAt is set well in the future — this is a synthetic
+        // record that bypasses TTL semantics; it will not be retained
+        // anywhere after this code path consumes it.
+        fleetLinkage = {
+          fleetPolicyId: fleetConnector.fleetPolicyId,
+          plugInAt: new Date(timestamp),
+          expiresAt: new Date(Date.now() + 60_000),
+        };
+        console.log(
+          `[StartTransaction] fleet-auto direct attachment: chargerId=${chargerId} connectorId=${connectorId} policyId=${fleetConnector.fleetPolicyId} idTag=${idTag}`,
+        );
+        // Mark the prior auto-start attempt resolved so a duplicate
+        // plug-in transition for the same connector doesn't re-fire.
+        try {
+          markFleetAutoStartResolved({ chargerId, connectorId });
+        } catch {
+          /* defensive: never fail StartTransaction on bookkeeping */
+        }
+      }
+    } catch (err) {
+      // Non-fatal — fall back to non-fleet session attachment if the
+      // lookup hiccups. Slice C's design contract is that auto-start
+      // never blocks a StartTransaction from being accepted.
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(
+        `[StartTransaction] fleet-auto direct lookup failed (non-fatal): chargerId=${chargerId} connectorId=${connectorId} err=${msg}`,
+      );
+    }
+  }
 
   let session = null as Awaited<ReturnType<typeof prisma.session.create>> | null;
   let transactionId = 0;
