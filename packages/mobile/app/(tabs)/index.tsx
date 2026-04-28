@@ -75,6 +75,26 @@ function statusLabelFromStatuses(statuses: string[], chargerStatuses: string[]):
   return 'Unknown';
 }
 
+/**
+ * TASK-0208 Phase 3 Slice D — driver-facing status that respects Fleet-Auto.
+ * If every connector at the site is FLEET_AUTO, return "Fleet only" so the
+ * driver knows the location exists but isn't bookable from the app.
+ * Otherwise pass the public-only connector statuses through to the existing
+ * label function (so a site with mixed connectors still shows "Available"
+ * when there's a public connector ready).
+ */
+function publicStatusLabel(
+  publicStatuses: string[],
+  chargerStatuses: string[],
+  totalConnectors: number,
+  fleetConnectorCount: number,
+): string {
+  if (totalConnectors > 0 && fleetConnectorCount === totalConnectors) {
+    return 'Fleet only';
+  }
+  return statusLabelFromStatuses(publicStatuses, chargerStatuses);
+}
+
 
 const CLEAN_BASE_STYLES = [
   { featureType: 'poi', stylers: [{ visibility: 'off' }] },
@@ -205,6 +225,12 @@ export default function MapScreen() {
       const key = site.id || `${site.name}|${site.address}`;
       const existing = bySite.get(key);
       const cType = deriveChargerType(charger.model ?? '', charger.vendor ?? '');
+      // Phase 3 Slice D: only count public AVAILABLE ports. Fleet-Auto
+      // connectors are server-initiated and not bookable from the driver
+      // app, so they shouldn't inflate the "X/Y available" badge.
+      const publicAvailable = connectors.filter(
+        (c) => c.status === 'AVAILABLE' && c.chargingMode !== 'FLEET_AUTO',
+      ).length;
       if (!existing) {
         bySite.set(key, {
           siteId: key,
@@ -215,13 +241,13 @@ export default function MapScreen() {
           chargers: [charger],
           primaryChargerId: charger.id,
           totalPorts: connectors.length,
-          availablePorts: connectors.filter((c) => c.status === 'AVAILABLE').length,
+          availablePorts: publicAvailable,
           chargerTypes: [cType],
         });
       } else {
         existing.chargers.push(charger);
         existing.totalPorts += connectors.length;
-        existing.availablePorts += connectors.filter((c) => c.status === 'AVAILABLE').length;
+        existing.availablePorts += publicAvailable;
         if (!existing.chargerTypes.includes(cType)) existing.chargerTypes.push(cType);
       }
     }
@@ -501,9 +527,21 @@ export default function MapScreen() {
           }}
         >
           {filteredSites.map((site) => {
-            const allStatuses = site.chargers.flatMap((c) => c.connectors.map((x) => x.status));
+            // Phase 3 Slice D: pin color reflects public-only availability
+            // (Fleet-Auto connectors don't change the driver's color cue).
+            // Sites that are entirely Fleet-Auto get the indigo "Fleet only"
+            // pin so they're visible on the map but distinct from sites
+            // that just happen to be 0-available.
+            const allConnectors = site.chargers.flatMap((c) => c.connectors);
+            const publicStatuses = allConnectors
+              .filter((x) => x.chargingMode !== 'FLEET_AUTO')
+              .map((x) => x.status);
+            const fleetCount = allConnectors.filter((x) => x.chargingMode === 'FLEET_AUTO').length;
             const chargerStatuses = site.chargers.map((c) => String(c.status || '').toUpperCase());
-            const pinColor = statusColorFromStatuses(allStatuses, chargerStatuses);
+            const isFleetOnlySite = allConnectors.length > 0 && fleetCount === allConnectors.length;
+            const pinColor = isFleetOnlySite
+              ? '#6366f1'
+              : statusColorFromStatuses(publicStatuses, chargerStatuses);
             return (
               <Marker
                 key={site.siteId}
@@ -750,17 +788,41 @@ export default function MapScreen() {
 
             {/* Stats row */}
             <View style={mapStyles.sheetStats}>
-              {/* Availability */}
-              <View style={[mapStyles.statChip, { backgroundColor: isDark ? '#064e3b22' : '#d1fae5' }]}>
-                <View style={[mapStyles.statDot, { backgroundColor: (() => {
-                  const all = selectedSite.chargers.flatMap((c) => c.connectors.map((x) => x.status));
-                  const cs = selectedSite.chargers.map((c) => String(c.status || '').toUpperCase());
-                  return statusColorFromStatuses(all, cs);
-                })() }]} />
-                <Text style={[mapStyles.statText, { color: isDark ? '#6ee7b7' : '#065f46' }]}>
-                  {selectedSite.availablePorts}/{selectedSite.totalPorts} available
-                </Text>
-              </View>
+              {/* Availability — Phase 3 Slice D: public-only counts and
+                  "Fleet only" treatment when every connector at the site is
+                  FLEET_AUTO. We compute the breakdown once and reuse it
+                  across the dot color, the visible label, and the chip
+                  background. */}
+              {(() => {
+                const allConnectors = selectedSite.chargers.flatMap((c) => c.connectors);
+                const publicStatuses = allConnectors
+                  .filter((x) => x.chargingMode !== 'FLEET_AUTO')
+                  .map((x) => x.status);
+                const fleetCount = allConnectors.filter((x) => x.chargingMode === 'FLEET_AUTO').length;
+                const cs = selectedSite.chargers.map((c) => String(c.status || '').toUpperCase());
+                const label = publicStatusLabel(publicStatuses, cs, allConnectors.length, fleetCount);
+                const isFleetOnly = label === 'Fleet only';
+                const dotColor = isFleetOnly
+                  ? '#6366f1' // indigo — informational, distinct from offline grey
+                  : statusColorFromStatuses(publicStatuses, cs);
+                const chipBg = isFleetOnly
+                  ? (isDark ? '#312e8133' : '#e0e7ff')
+                  : (isDark ? '#064e3b22' : '#d1fae5');
+                const chipFg = isFleetOnly
+                  ? (isDark ? '#a5b4fc' : '#3730a3')
+                  : (isDark ? '#6ee7b7' : '#065f46');
+                // For fleet-only sites the "X/Y available" count is always
+                // 0/N which is misleading; show the label instead.
+                const text = isFleetOnly
+                  ? 'Fleet only'
+                  : `${selectedSite.availablePorts}/${selectedSite.totalPorts} available`;
+                return (
+                  <View style={[mapStyles.statChip, { backgroundColor: chipBg }]}>
+                    <View style={[mapStyles.statDot, { backgroundColor: dotColor }]} />
+                    <Text style={[mapStyles.statText, { color: chipFg }]}>{text}</Text>
+                  </View>
+                );
+              })()}
 
               {/* Charger types */}
               {selectedSite.chargerTypes.map((t) => (

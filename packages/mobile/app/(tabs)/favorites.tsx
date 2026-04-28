@@ -14,8 +14,23 @@ import { HeartButton } from '@/components/HeartButton';
 import { useAppTheme } from '@/theme';
 import { useAppAuth } from '@/providers/AuthProvider';
 
+// Phase 3 Slice D — favorites status helpers respect Fleet-Auto.
+// FLEET_AUTO connectors are excluded from the public availability label;
+// chargers that are entirely Fleet-Auto are shown as "Fleet only" (visible
+// but informational — driver cannot start or reserve from the app).
+
+function publicConnectorStatuses(c: Charger): string[] {
+  return c.connectors.filter((x) => x.chargingMode !== 'FLEET_AUTO').map((x) => x.status);
+}
+
+function isFleetOnlyCharger(c: Charger): boolean {
+  if (c.connectors.length === 0) return false;
+  return c.connectors.every((x) => x.chargingMode === 'FLEET_AUTO');
+}
+
 function statusColor(c: Charger) {
-  const s = c.connectors.map((x) => x.status);
+  if (isFleetOnlyCharger(c)) return '#6366f1'; // indigo — informational, distinct from offline grey
+  const s = publicConnectorStatuses(c);
   const hasAvailable = s.some((x) => x === 'AVAILABLE');
   const hasInUse = s.some((x) => x === 'CHARGING' || x === 'PREPARING' || x === 'FINISHING' || x === 'SUSPENDED_EV' || x === 'SUSPENDED_EVSE');
   const hasFaulted = s.some((x) => x === 'FAULTED');
@@ -29,7 +44,8 @@ function statusColor(c: Charger) {
 }
 
 function statusLabel(c: Charger) {
-  const s = c.connectors.map((x) => x.status);
+  if (isFleetOnlyCharger(c)) return 'Fleet only';
+  const s = publicConnectorStatuses(c);
   const hasAvailable = s.some((x) => x === 'AVAILABLE');
   const hasInUse = s.some((x) => x === 'CHARGING' || x === 'PREPARING' || x === 'FINISHING' || x === 'SUSPENDED_EV' || x === 'SUSPENDED_EVSE');
   const hasFaulted = s.some((x) => x === 'FAULTED');
