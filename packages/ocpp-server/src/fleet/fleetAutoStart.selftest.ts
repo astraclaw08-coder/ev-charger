@@ -28,7 +28,11 @@ import {
   isPlugInTrigger,
   maybeAutoStartFleet,
   markFleetAutoStartResolved,
+  consumeFleetAutoStartPending,
   __resetFleetAutoStartForTests,
+  __setPendingForTests,
+  type AutoStartConnector,
+  type AutoStartDeps,
 } from './fleetAutoStart';
 
 let passed = 0;
@@ -150,6 +154,254 @@ async function main() {
     __resetFleetAutoStartForTests();
     __resetFleetAutoStartForTests();
     assert(true, 'reset is idempotent');
+  }
+
+  // ─── consumeFleetAutoStartPending ───────────────────────────────────
+  console.log('\n--- consumeFleetAutoStartPending verify-and-consume ---');
+  {
+    __resetFleetAutoStartForTests();
+
+    // No pending entry → returns false (and no harm).
+    const r0 = consumeFleetAutoStartPending({
+      chargerId: 'c1', connectorId: 1, fleetPolicyId: 'p1', idTag: 'TAG',
+    });
+    assert(r0 === false, 'no pending entry → false');
+
+    // Seed a fresh entry via the test seam.
+    __setPendingForTests({ chargerId: 'c1', connectorId: 1, fleetPolicyId: 'p1', idTag: 'TAG' });
+
+    // Wrong policy id → false, entry preserved for the legitimate consumer.
+    const rWrongPolicy = consumeFleetAutoStartPending({
+      chargerId: 'c1', connectorId: 1, fleetPolicyId: 'p-OTHER', idTag: 'TAG',
+    });
+    assert(rWrongPolicy === false, 'wrong policyId → false');
+
+    // Wrong idTag → false, entry still preserved.
+    const rWrongTag = consumeFleetAutoStartPending({
+      chargerId: 'c1', connectorId: 1, fleetPolicyId: 'p1', idTag: 'NOT-IT',
+    });
+    assert(rWrongTag === false, 'wrong idTag → false');
+
+    // Correct match → true, entry consumed.
+    const rOk = consumeFleetAutoStartPending({
+      chargerId: 'c1', connectorId: 1, fleetPolicyId: 'p1', idTag: 'TAG',
+    });
+    assert(rOk === true, 'matching args → true');
+
+    // Second call → false (entry was consumed).
+    const rOk2 = consumeFleetAutoStartPending({
+      chargerId: 'c1', connectorId: 1, fleetPolicyId: 'p1', idTag: 'TAG',
+    });
+    assert(rOk2 === false, 'second consume → false');
+
+    // Stale entry (long-ago startedAt) → false even on exact match.
+    __setPendingForTests({
+      chargerId: 'c2', connectorId: 1, fleetPolicyId: 'p2', idTag: 'TAG2',
+      startedAtMs: Date.now() - 10 * 60_000, // 10 min ago, past 2-min TTL
+    });
+    const rStale = consumeFleetAutoStartPending({
+      chargerId: 'c2', connectorId: 1, fleetPolicyId: 'p2', idTag: 'TAG2',
+    });
+    assert(rStale === false, 'stale pending entry → false');
+
+    __resetFleetAutoStartForTests();
+  }
+
+  // ─── deeper decision-matrix coverage via dep injection ──────────────
+  // Build a base "happy path" deps object; each test perturbs one knob.
+  console.log('\n--- decision matrix via DI seams ---');
+  {
+    const enabledPolicy = {
+      id: 'policy-x',
+      name: 'Test Fleet',
+      status: 'ENABLED' as const,
+      autoStartIdTag: 'FLEET-AUTO-X',
+      siteId: 'site-1',
+    };
+    const fleetAutoConnector: AutoStartConnector = {
+      id: 'conn-1',
+      chargingMode: 'FLEET_AUTO',
+      fleetPolicyId: enabledPolicy.id,
+      fleetPolicy: enabledPolicy,
+      charger: { id: 'charger-1', ocppId: 'CP-1', siteId: 'site-1' },
+    };
+    const trigger = {
+      chargerId: 'charger-1',
+      ocppId: 'CP-1',
+      connectorId: 1,
+      newStatus: 'Preparing',
+      prevStatus: 'Available',
+    };
+    const happyDeps: Partial<AutoStartDeps> = {
+      envFlagOn: () => true,
+      loadConnector: async () => fleetAutoConnector,
+      isRolloutEnabled: async () => true,
+      readinessCheck: () => ({ ready: true, reason: 'ok' }),
+      loadActiveSession: async () => null,
+      ensureSyntheticUser: async () => ({ id: 'user-synth' }),
+      remoteStart: async () => 'Accepted',
+      delayMs: async () => undefined,
+      now: () => 1_000_000_000_000,
+    };
+
+    // (a) happy path → started
+    {
+      __resetFleetAutoStartForTests();
+      const r = await maybeAutoStartFleet(trigger, happyDeps);
+      assert(r.ok === true, 'happy path → started');
+    }
+
+    // (b) PUBLIC mode → mode-public
+    {
+      __resetFleetAutoStartForTests();
+      const r = await maybeAutoStartFleet(trigger, {
+        ...happyDeps,
+        loadConnector: async () => ({ ...fleetAutoConnector, chargingMode: 'PUBLIC' }),
+      });
+      assert(r.ok === false && (r as any).reason === 'mode-public', 'PUBLIC mode → mode-public');
+    }
+
+    // (c) rollout disabled → rollout-disabled (and no RemoteStart fired)
+    {
+      __resetFleetAutoStartForTests();
+      let remoteStartCalls = 0;
+      const r = await maybeAutoStartFleet(trigger, {
+        ...happyDeps,
+        isRolloutEnabled: async () => false,
+        remoteStart: async () => { remoteStartCalls++; return 'Accepted'; },
+      });
+      assert(r.ok === false && (r as any).reason === 'rollout-disabled',
+        'rollout disabled → rollout-disabled');
+      assert(remoteStartCalls === 0, 'rollout disabled → remoteStart NOT called');
+    }
+
+    // (d) charger not ready → charger-not-ready (no RemoteStart)
+    {
+      __resetFleetAutoStartForTests();
+      let remoteStartCalls = 0;
+      const r = await maybeAutoStartFleet(trigger, {
+        ...happyDeps,
+        readinessCheck: () => ({ ready: false, reason: 'no-boot' }),
+        remoteStart: async () => { remoteStartCalls++; return 'Accepted'; },
+      });
+      assert(r.ok === false && (r as any).reason === 'charger-not-ready',
+        'no-boot readiness → charger-not-ready');
+      assert(remoteStartCalls === 0, 'not-ready → remoteStart NOT called');
+    }
+
+    // (e) active session → active-session (no RemoteStart)
+    {
+      __resetFleetAutoStartForTests();
+      let remoteStartCalls = 0;
+      const r = await maybeAutoStartFleet(trigger, {
+        ...happyDeps,
+        loadActiveSession: async () => ({ id: 'session-pre-existing' }),
+        remoteStart: async () => { remoteStartCalls++; return 'Accepted'; },
+      });
+      assert(r.ok === false && (r as any).reason === 'active-session',
+        'active session present → active-session');
+      assert(remoteStartCalls === 0, 'active-session → remoteStart NOT called');
+    }
+
+    // (f) policy DRAFT → policy-not-enabled
+    {
+      __resetFleetAutoStartForTests();
+      const r = await maybeAutoStartFleet(trigger, {
+        ...happyDeps,
+        loadConnector: async () => ({
+          ...fleetAutoConnector,
+          fleetPolicy: { ...enabledPolicy, status: 'DRAFT' as const },
+        }),
+      });
+      assert(r.ok === false && (r as any).reason === 'policy-not-enabled',
+        'DRAFT policy → policy-not-enabled');
+    }
+
+    // (g) autoStartIdTag null → autoStartIdTag-null
+    {
+      __resetFleetAutoStartForTests();
+      const r = await maybeAutoStartFleet(trigger, {
+        ...happyDeps,
+        loadConnector: async () => ({
+          ...fleetAutoConnector,
+          fleetPolicy: { ...enabledPolicy, autoStartIdTag: null },
+        }),
+      });
+      assert(r.ok === false && (r as any).reason === 'autoStartIdTag-null',
+        'null autoStartIdTag → autoStartIdTag-null');
+    }
+
+    // (h) no fleetPolicyId on connector → no-policy-assigned
+    {
+      __resetFleetAutoStartForTests();
+      const r = await maybeAutoStartFleet(trigger, {
+        ...happyDeps,
+        loadConnector: async () => ({
+          ...fleetAutoConnector,
+          fleetPolicyId: null,
+          fleetPolicy: null,
+        }),
+      });
+      assert(r.ok === false && (r as any).reason === 'no-policy-assigned',
+        'no policy → no-policy-assigned');
+    }
+
+    // (i) pending duplicate → pending-attempt; second fire is suppressed
+    {
+      __resetFleetAutoStartForTests();
+      __setPendingForTests({
+        chargerId: trigger.chargerId,
+        connectorId: trigger.connectorId,
+        fleetPolicyId: enabledPolicy.id,
+        idTag: enabledPolicy.autoStartIdTag,
+      });
+      let remoteStartCalls = 0;
+      const r = await maybeAutoStartFleet(trigger, {
+        ...happyDeps,
+        remoteStart: async () => { remoteStartCalls++; return 'Accepted'; },
+      });
+      assert(r.ok === false && (r as any).reason === 'pending-attempt',
+        'fresh pending → pending-attempt');
+      assert(remoteStartCalls === 0, 'pending-attempt → remoteStart NOT called');
+    }
+
+    // (j) RemoteStart Rejected on first attempt, Accepted on retry
+    {
+      __resetFleetAutoStartForTests();
+      let calls = 0;
+      let delays = 0;
+      const r = await maybeAutoStartFleet(trigger, {
+        ...happyDeps,
+        delayMs: async () => { delays++; },
+        remoteStart: async () => {
+          calls++;
+          return calls === 1 ? 'Rejected' : 'Accepted';
+        },
+      });
+      assert(r.ok === true, 'retry succeeded → started');
+      assert(calls === 2, 'remoteStart called twice on retry');
+      assert(delays === 1, 'one delay between attempts');
+    }
+
+    // (k) RemoteStart Rejected on both → remote-start-rejected, pending cleared
+    {
+      __resetFleetAutoStartForTests();
+      const r = await maybeAutoStartFleet(trigger, {
+        ...happyDeps,
+        delayMs: async () => undefined,
+        remoteStart: async () => 'Rejected',
+      });
+      assert(r.ok === false && (r as any).reason === 'remote-start-rejected',
+        'both rejects → remote-start-rejected');
+      // Pending should be cleared so a re-fire on next plug-in can retry.
+      const consumed = consumeFleetAutoStartPending({
+        chargerId: trigger.chargerId,
+        connectorId: trigger.connectorId,
+        fleetPolicyId: enabledPolicy.id,
+        idTag: enabledPolicy.autoStartIdTag,
+      });
+      assert(consumed === false, 'pending cleared after both retries fail');
+    }
   }
 
   console.log(`\n\n${passed} passed, ${failed} failed`);

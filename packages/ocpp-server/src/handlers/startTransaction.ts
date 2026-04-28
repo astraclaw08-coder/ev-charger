@@ -3,7 +3,7 @@ import { enqueueOcppEvent } from '../outbox';
 import type { StartTransactionRequest, StartTransactionResponse } from '@ev-charger/shared';
 import { consumeFleetAuthorize } from '../fleet/authorizeCache';
 import { onSessionStart as fleetSchedulerOnSessionStart } from '../fleet/fleetScheduler';
-import { markFleetAutoStartResolved } from '../fleet/fleetAutoStart';
+import { consumeFleetAutoStartPending } from '../fleet/fleetAutoStart';
 
 function fleetFlagEnabled(): boolean {
   return process.env.FLEET_GATED_SESSIONS_ENABLED === 'true';
@@ -155,16 +155,23 @@ export async function handleStartTransaction(
   let fleetLinkage = consumeFleetAuthorize({ chargerId, idTag });
 
   // ── Fleet-Auto direct attachment (TASK-0208 Phase 3 Slice C) ─────────
-  // If the connector is configured for FLEET_AUTO and the incoming idTag
-  // matches the policy's autoStartIdTag, attach the policy by direct FK
-  // (no Authorize-cache round trip needed). This is the path triggered
-  // by `maybeAutoStartFleet()` in StatusNotification — the cache was
-  // never written for it.
+  // The direct-FK path attaches a fleet policy ONLY when this
+  // StartTransaction is the result of a Slice C server-initiated
+  // auto-start. We prove that by consuming a fresh pending entry that
+  // `maybeAutoStartFleet()` wrote AFTER passing the full two-tier
+  // rollout gate (env + DB).
   //
-  // Order matters: we only consult the direct-FK path when the Hybrid-B
-  // cache returned null. A connector that is FLEET_AUTO + matches an
-  // operator-defined autoStartIdTag is unambiguously a Fleet-Auto session;
-  // no chance of double-attachment.
+  // Why not just check (chargingMode + idTag match + flag)?
+  //   That would let a manual operator RemoteStart with the fleet
+  //   idTag — or a stale RFID swipe of `autoStartIdTag` — silently
+  //   attach a fleet session even when the rollout flag is OFF for
+  //   the site/connector. The pending-entry check is precise: if
+  //   there's no fresh pending entry for this exact (chargerId,
+  //   connectorId, fleetPolicyId, idTag), it isn't a Slice C session.
+  //
+  // Order matters: we only consult the direct-FK path when the
+  // Hybrid-B cache returned null, so there's no chance of
+  // double-attachment.
   if (!fleetLinkage && fleetFlagEnabled()) {
     try {
       const fleetConnector = await prisma.connector.findUnique({
@@ -183,25 +190,33 @@ export async function handleStartTransaction(
         fleetConnector.fleetPolicy?.status === 'ENABLED' &&
         fleetConnector.fleetPolicy.autoStartIdTag === idTag
       ) {
-        // Synthesize the linkage shape consumed below. plugInAt comes from
-        // the OCPP `timestamp` (vehicle plug-in is what the charger reports).
-        // expiresAt is set well in the future — this is a synthetic
-        // record that bypasses TTL semantics; it will not be retained
-        // anywhere after this code path consumes it.
-        fleetLinkage = {
+        // Verify-and-consume the pending Fleet-Auto attempt. Returns
+        // false (and leaves the entry in place if any) when the
+        // pending entry is missing, stale, or doesn't match — meaning
+        // this StartTransaction was NOT initiated through the gated
+        // auto-start path and should NOT receive fleet attachment.
+        const consumed = consumeFleetAutoStartPending({
+          chargerId,
+          connectorId,
           fleetPolicyId: fleetConnector.fleetPolicyId,
-          plugInAt: new Date(timestamp),
-          expiresAt: new Date(Date.now() + 60_000),
-        };
-        console.log(
-          `[StartTransaction] fleet-auto direct attachment: chargerId=${chargerId} connectorId=${connectorId} policyId=${fleetConnector.fleetPolicyId} idTag=${idTag}`,
-        );
-        // Mark the prior auto-start attempt resolved so a duplicate
-        // plug-in transition for the same connector doesn't re-fire.
-        try {
-          markFleetAutoStartResolved({ chargerId, connectorId });
-        } catch {
-          /* defensive: never fail StartTransaction on bookkeeping */
+          idTag,
+        });
+        if (consumed) {
+          fleetLinkage = {
+            fleetPolicyId: fleetConnector.fleetPolicyId,
+            plugInAt: new Date(timestamp),
+            expiresAt: new Date(Date.now() + 60_000),
+          };
+          console.log(
+            `[StartTransaction] fleet-auto direct attachment (verified pending): chargerId=${chargerId} connectorId=${connectorId} policyId=${fleetConnector.fleetPolicyId} idTag=${idTag}`,
+          );
+        } else {
+          // Likely a manual operator start with the fleet idTag — fall
+          // through to non-fleet attachment. Log at info so ops can
+          // see it; not an error.
+          console.log(
+            `[StartTransaction] fleet-auto direct path skipped (no fresh pending attempt): chargerId=${chargerId} connectorId=${connectorId} policyId=${fleetConnector.fleetPolicyId} idTag=${idTag}`,
+          );
         }
       }
     } catch (err) {

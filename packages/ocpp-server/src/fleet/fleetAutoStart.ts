@@ -41,9 +41,12 @@
 
 import { prisma } from '@ev-charger/shared';
 import { remoteStartTransaction } from '../remote';
-import { connectionReadyForSmartCharging } from '../smartCharging';
+import { clientRegistry } from '../clientRegistry';
 import { isRolloutEnabled } from './rolloutFlagCache';
-import { getOrCreateSyntheticFleetUser } from './syntheticFleetUser';
+import {
+  getOrCreateSyntheticFleetUser,
+  SyntheticFleetUserCollisionError,
+} from './syntheticFleetUser';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -80,6 +83,37 @@ export type AutoStartSkipReason =
   | 'pending-attempt'
   | 'remote-start-rejected'
   | 'error';
+
+// ─── Strict Fleet-Auto readiness gate ──────────────────────────────────────
+//
+// CLAUDE.md hard rule #1: "Never send server commands until BootNotification
+// + ≥1 Heartbeat confirmed." The shared `connectionReadyForSmartCharging()`
+// helper takes a shortcut on a live WS connection — fine for smart-charging
+// re-application but TOO PERMISSIVE for fleet auto-start, which initiates
+// a RemoteStartTransaction (a much sharper command than re-pushing a
+// charging profile).
+//
+// This helper enforces the strict design contract directly against the
+// in-process clientRegistry. It is purposely narrow:
+//   - live client must be in the registry (covers WS health)
+//   - bootReceived flag must be set (BootNotification handled)
+//   - at least one Heartbeat counted (charger has talked back)
+//
+// Default implementation is exported but the decision-matrix consumes it
+// through the dependency-injection seam below so selftests can stub it.
+
+export type ReadinessCheck = (ocppId: string) => { ready: boolean; reason: string };
+
+export const isReadyForFleetAutoStart: ReadinessCheck = (ocppId) => {
+  const stats = clientRegistry.getStats(ocppId);
+  if (!stats) return { ready: false, reason: 'no-live-ws' };
+  // Defensive: get() also evicts stale entries. If get() returns undefined
+  // but getStats returned a row, treat it as not-ready.
+  if (!clientRegistry.get(ocppId)) return { ready: false, reason: 'ws-stale' };
+  if (!stats.bootReceived) return { ready: false, reason: 'no-boot' };
+  if (stats.heartbeatCount < 1) return { ready: false, reason: 'no-heartbeat' };
+  return { ready: true, reason: 'ok' };
+};
 
 // ─── Trigger filter (pure, testable) ───────────────────────────────────────
 //
@@ -143,6 +177,66 @@ export function markFleetAutoStartResolved(args: { chargerId: string; connectorI
   }
 }
 
+/**
+ * Verify-and-consume a pending Fleet-Auto attempt for the StartTransaction
+ * direct-FK attachment path. Returns true ONLY when there's a fresh,
+ * non-resolved pending entry whose `(chargerId, connectorId, fleetPolicyId,
+ * idTag)` exactly matches the StartTransaction parameters.
+ *
+ * Why this exists (TASK-0208 Phase 3 review fix):
+ *   The direct-FK attachment in startTransaction.ts must NOT attach a
+ *   fleet session for a manually-initiated RemoteStart that happens to
+ *   reuse `policy.autoStartIdTag`. Without this gate, an operator running
+ *   a public diagnostic with the fleet idTag (or a stale RFID swipe)
+ *   would silently get a fleet-attributed session even when site/connector
+ *   rollout is OFF.
+ *
+ *   Pending entries are populated only by `maybeAutoStartFleet()` AFTER
+ *   the full two-tier rollout gate has passed, so a successful
+ *   verify-and-consume here proves the StartTransaction is the result
+ *   of a Slice C server-initiated auto-start.
+ *
+ * Consume-on-success semantics: deleting the entry on a match prevents a
+ * duplicate StartTransaction (or a retry) from re-attaching against the
+ * same pending record. On mismatch we leave the entry in place so the
+ * legitimate StartTransaction can still consume it later if it arrives.
+ */
+export function consumeFleetAutoStartPending(args: {
+  chargerId: string;
+  connectorId: number;
+  fleetPolicyId: string;
+  idTag: string;
+}): boolean {
+  const key = pendingKey(args.chargerId, args.connectorId);
+  const entry = pending.get(key);
+  if (!isPendingFresh(entry)) return false;
+  // Type narrowing: isPendingFresh proves entry exists.
+  const e = entry as PendingEntry;
+  if (e.fleetPolicyId !== args.fleetPolicyId) return false;
+  if (e.idTag !== args.idTag) return false;
+  pending.delete(key);
+  return true;
+}
+
+/**
+ * Test seam — directly seed a pending entry. Production code never calls
+ * this; only `maybeAutoStartFleet()` writes pending state.
+ */
+export function __setPendingForTests(args: {
+  chargerId: string;
+  connectorId: number;
+  fleetPolicyId: string;
+  idTag: string;
+  startedAtMs?: number;
+}): void {
+  pending.set(pendingKey(args.chargerId, args.connectorId), {
+    startedAt: args.startedAtMs ?? Date.now(),
+    fleetPolicyId: args.fleetPolicyId,
+    idTag: args.idTag,
+    resolved: false,
+  });
+}
+
 /** Test seam — clears the pending map. */
 export function __resetFleetAutoStartForTests(): void {
   pending.clear();
@@ -150,18 +244,86 @@ export function __resetFleetAutoStartForTests(): void {
 
 // ─── Main entry point ──────────────────────────────────────────────────────
 
+// ─── Dependency-injection seams (TASK-0208 Phase 3 review fix) ────────────
+//
+// `maybeAutoStartFleet()` reaches into Prisma, the client registry, and
+// the OCPP wire layer. Wiring those concretely makes broader unit-style
+// tests painful. The selftest passes a `deps` override to drive the
+// decision matrix end-to-end without a real DB or charger connection.
+//
+// Production code calls `maybeAutoStartFleet(args)` with no `deps`; the
+// defaults below run against real prisma + remote + clientRegistry.
+
+export type AutoStartConnector = {
+  id: string;
+  chargingMode: 'PUBLIC' | 'FLEET_AUTO';
+  fleetPolicyId: string | null;
+  fleetPolicy: {
+    id: string;
+    name: string;
+    status: 'DRAFT' | 'ENABLED' | 'DISABLED';
+    autoStartIdTag: string | null;
+    siteId: string;
+  } | null;
+  charger: { id: string; ocppId: string; siteId: string | null } | null;
+};
+
+export type AutoStartDeps = {
+  envFlagOn: () => boolean;
+  loadConnector: (chargerId: string, connectorId: number) => Promise<AutoStartConnector | null>;
+  isRolloutEnabled: (args: { connectorId: string; siteId: string | null }) => Promise<boolean>;
+  readinessCheck: ReadinessCheck;
+  loadActiveSession: (chargerId: string, connectorId: number) => Promise<{ id: string } | null>;
+  ensureSyntheticUser: (policy: { id: string; name: string; autoStartIdTag: string }) => Promise<{ id: string }>;
+  remoteStart: (ocppId: string, connectorId: number, idTag: string) => Promise<string>;
+  delayMs: (ms: number) => Promise<void>;
+  now: () => number;
+};
+
+export const defaultDeps: AutoStartDeps = {
+  envFlagOn: () => process.env.FLEET_GATED_SESSIONS_ENABLED === 'true',
+  loadConnector: async (chargerId, connectorId) => {
+    const c = await (prisma as any).connector.findUnique({
+      where: { chargerId_connectorId: { chargerId, connectorId } },
+      include: {
+        charger: { select: { id: true, ocppId: true, siteId: true } },
+        fleetPolicy: {
+          select: { id: true, name: true, status: true, autoStartIdTag: true, siteId: true },
+        },
+      },
+    });
+    return c as AutoStartConnector | null;
+  },
+  isRolloutEnabled: (args) => isRolloutEnabled(args),
+  readinessCheck: isReadyForFleetAutoStart,
+  loadActiveSession: async (chargerId, connectorId) => {
+    return (prisma as any).session.findFirst({
+      where: { connector: { chargerId, connectorId }, status: 'ACTIVE' },
+      select: { id: true },
+    }) as Promise<{ id: string } | null>;
+  },
+  ensureSyntheticUser: (policy) => getOrCreateSyntheticFleetUser(policy),
+  remoteStart: (ocppId, connectorId, idTag) => remoteStartTransaction(ocppId, connectorId, idTag),
+  delayMs: (ms) => new Promise<void>((r) => setTimeout(r, ms)),
+  now: () => Date.now(),
+};
+
 /**
  * Decide-and-act on a connector status transition. Fire-and-forget; the
  * caller MUST NOT await this in any path that needs to return promptly.
  *
  * Returns an `AutoStartDecision` for testability. Production callers
- * ignore the return value.
+ * ignore the return value. Tests can pass a partial `deps` override —
+ * any missing keys fall through to `defaultDeps`.
  */
 export async function maybeAutoStartFleet(
   args: AutoStartTriggerArgs,
+  depsOverride?: Partial<AutoStartDeps>,
 ): Promise<AutoStartDecision> {
+  const deps: AutoStartDeps = depsOverride ? { ...defaultDeps, ...depsOverride } : defaultDeps;
+
   // Tier-1 gate: env emergency kill switch.
-  if (process.env.FLEET_GATED_SESSIONS_ENABLED !== 'true') {
+  if (!deps.envFlagOn()) {
     return logSkip(args, 'flag-off');
   }
 
@@ -179,23 +341,9 @@ export async function maybeAutoStartFleet(
   //   - connector.chargingMode (gate)
   //   - connector.fleetPolicyId + linked policy (gate + autoStartIdTag)
   //   - charger.siteId (for the rollout cache + ready check)
-  let connector: any;
+  let connector: AutoStartConnector | null;
   try {
-    connector = await (prisma as any).connector.findUnique({
-      where: { chargerId_connectorId: { chargerId: args.chargerId, connectorId: args.connectorId } },
-      include: {
-        charger: { select: { id: true, ocppId: true, siteId: true } },
-        fleetPolicy: {
-          select: {
-            id: true,
-            name: true,
-            status: true,
-            autoStartIdTag: true,
-            siteId: true,
-          },
-        },
-      },
-    });
+    connector = await deps.loadConnector(args.chargerId, args.connectorId);
   } catch (err) {
     return logSkip(args, 'error', { err: err instanceof Error ? err.message : String(err) });
   }
@@ -226,7 +374,7 @@ export async function maybeAutoStartFleet(
   }
 
   // Tier-2 gate: per-connector or per-site DB rollout flag.
-  const rolloutOk = await isRolloutEnabled({
+  const rolloutOk = await deps.isRolloutEnabled({
     connectorId: connector.id,
     siteId: connector.charger?.siteId ?? null,
   });
@@ -234,24 +382,18 @@ export async function maybeAutoStartFleet(
     return logSkip(args, 'rollout-disabled');
   }
 
-  // Charger readiness: BootNotification + ≥1 Heartbeat. The smart-charging
-  // helper already encodes the "live WS bypasses DB check" optimization.
-  const readiness = await connectionReadyForSmartCharging(args.chargerId, args.ocppId);
+  // Strict Fleet-Auto readiness: WS up + BootNotification observed +
+  // ≥1 Heartbeat. CLAUDE.md hard rule #1.
+  const readiness = deps.readinessCheck(args.ocppId);
   if (!readiness.ready) {
     return logSkip(args, 'charger-not-ready', { readinessReason: readiness.reason });
   }
 
   // Idempotency: don't auto-start if a session is already ACTIVE on this
   // connector (covers both real-driver and prior-fleet sessions).
-  let activeSession: any;
+  let activeSession: { id: string } | null;
   try {
-    activeSession = await (prisma as any).session.findFirst({
-      where: {
-        connector: { chargerId: args.chargerId, connectorId: args.connectorId },
-        status: 'ACTIVE',
-      },
-      select: { id: true, idTag: true },
-    });
+    activeSession = await deps.loadActiveSession(args.chargerId, args.connectorId);
   } catch (err) {
     return logSkip(args, 'error', { err: err instanceof Error ? err.message : String(err) });
   }
@@ -266,19 +408,27 @@ export async function maybeAutoStartFleet(
   if (isPendingFresh(existingPending)) {
     return logSkip(args, 'pending-attempt', { pendingSince: existingPending!.startedAt });
   }
-  // Clear stale entries (TTL expired) before recording the new attempt.
   if (existingPending) pending.delete(key);
 
-  // Pre-create / resolve the synthetic User so the existing Authorize
-  // handler's `findUnique({ idTag })` succeeds without modifications.
-  // Idempotent.
+  // Pre-create / resolve the synthetic User. Hijack-guarded — if the
+  // requested idTag maps to a non-synthetic user (or a different policy's
+  // synthetic), we get a SyntheticFleetUserCollisionError and treat it as
+  // a hard skip. Better to refuse auto-start than to attribute a fleet
+  // session to a real driver's account.
   try {
-    await getOrCreateSyntheticFleetUser({
+    await deps.ensureSyntheticUser({
       id: connector.fleetPolicy.id,
       name: connector.fleetPolicy.name,
       autoStartIdTag,
     });
   } catch (err) {
+    if (err instanceof SyntheticFleetUserCollisionError) {
+      return logSkip(args, 'error', {
+        stage: 'syntheticUser-collision',
+        policyId: err.policyId,
+        existingClerkId: err.existingClerkId,
+      });
+    }
     return logSkip(args, 'error', {
       stage: 'syntheticUser',
       err: err instanceof Error ? err.message : String(err),
@@ -290,7 +440,7 @@ export async function maybeAutoStartFleet(
   // recovery may silently drop. Two attempts is the design contract;
   // anything beyond invites command storms.
   pending.set(key, {
-    startedAt: Date.now(),
+    startedAt: deps.now(),
     fleetPolicyId: connector.fleetPolicy.id,
     idTag: autoStartIdTag,
     resolved: false,
@@ -303,7 +453,7 @@ export async function maybeAutoStartFleet(
   let lastStatus: string = 'Rejected';
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
-      lastStatus = await remoteStartTransaction(args.ocppId, args.connectorId, autoStartIdTag);
+      lastStatus = await deps.remoteStart(args.ocppId, args.connectorId, autoStartIdTag);
     } catch (err) {
       console.warn(
         `[fleet.auto-start] RemoteStart threw on attempt ${attempt}: ocppId=${args.ocppId} connectorId=${args.connectorId} err=${err instanceof Error ? err.message : String(err)}`,
@@ -317,15 +467,10 @@ export async function maybeAutoStartFleet(
       return { ok: true, reason: 'started', sessionPendingKey: key, idTag: autoStartIdTag };
     }
     if (attempt < 2) {
-      // F5h: 5–8 s buffer for charger to recover from Faulted-blip on first call.
-      await new Promise<void>((r) => setTimeout(r, 6000));
+      await deps.delayMs(6000);
     }
   }
 
-  // Both attempts rejected → clean up pending, log, audit (logging only —
-  // no AdminAuditEvent write because fleet-auto failures aren't operator
-  // actions). Slice C surfaces these in logs; portal diagnostics in a
-  // future slice can read them off the OcppLog if needed.
   pending.delete(key);
   console.warn(
     `[fleet.auto-start] FAILED after retry: ocppId=${args.ocppId} connectorId=${args.connectorId} idTag=${autoStartIdTag} lastStatus=${lastStatus}`,
