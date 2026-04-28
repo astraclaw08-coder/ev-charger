@@ -18,6 +18,7 @@ import {
   type FleetPolicyFieldError,
   type FleetPolicyPreview,
   type FleetWindow,
+  type SiteDetail,
 } from '../../api/client';
 import { useToken } from '../../auth/TokenContext';
 
@@ -30,6 +31,14 @@ type FormState = {
   ocppStackLevel: string;
   windows: FleetWindow[];
   notes: string;
+  // Phase 3 Slice B — Fleet-Auto activation fields exposed on the form.
+  alwaysOn: boolean;
+  /**
+   * idTag the OCPP server will use for server-initiated RemoteStartTransaction
+   * on plug-in. OCPP 1.6 RemoteStartTransaction.idTag is CiString20Type so the
+   * input is capped at 20 chars in the UI as well as the validator.
+   */
+  autoStartIdTag: string;
 };
 
 const EMPTY_FORM: FormState = {
@@ -39,6 +48,8 @@ const EMPTY_FORM: FormState = {
   ocppStackLevel: '90',
   windows: [{ day: 1, start: '09:00', end: '17:00' }],
   notes: '',
+  alwaysOn: false,
+  autoStartIdTag: '',
 };
 
 function policyToForm(p: FleetPolicy): FormState {
@@ -50,6 +61,8 @@ function policyToForm(p: FleetPolicy): FormState {
     ocppStackLevel: String(p.ocppStackLevel),
     windows: raw.length > 0 ? raw : [{ day: 1, start: '09:00', end: '17:00' }],
     notes: p.notes ?? '',
+    alwaysOn: p.alwaysOn ?? false,
+    autoStartIdTag: p.autoStartIdTag ?? '',
   };
 }
 
@@ -91,13 +104,27 @@ export default function SiteFleetPolicies({ siteId }: { siteId: string }) {
   const [deleteTarget, setDeleteTarget] = useState<FleetPolicy | null>(null);
   const [listError, setListError] = useState<string | null>(null);
 
+  // Phase 3 Slice B — Site-level Fleet-Auto rollout flag. DB-backed, no
+  // restart to flip; the underlying PUT /sites/:id audit-logs the change.
+  const [siteData, setSiteData] = useState<SiteDetail | null>(null);
+  const [rolloutSaving, setRolloutSaving] = useState(false);
+  const [rolloutError, setRolloutError] = useState<string | null>(null);
+
   const load = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
     try {
       const token = await getToken();
-      const rows = await createApiClient(token).listFleetPolicies(siteId);
+      const api = createApiClient(token);
+      // Fetch policies + site in parallel; site is needed for the rollout
+      // flag toggle below the header, and the failure modes are independent
+      // (site fetch error shouldn't hide the policy list).
+      const [rows, site] = await Promise.all([
+        api.listFleetPolicies(siteId),
+        api.getSite(siteId).catch(() => null),
+      ]);
       setPolicies(rows);
+      setSiteData(site);
     } catch (e: unknown) {
       setLoadError(e instanceof Error ? e.message : 'Failed to load fleet policies');
     } finally {
@@ -144,6 +171,13 @@ export default function SiteFleetPolicies({ siteId }: { siteId: string }) {
     ocppStackLevel: Number(form.ocppStackLevel),
     windowsJson: { windows: form.windows },
     notes: form.notes.trim() || null,
+    alwaysOn: form.alwaysOn,
+    // Send only when non-empty. The API requires it on create and
+    // accepts it on update; sending '' would trip the validator on
+    // update paths if we ever route empties through.
+    ...(form.autoStartIdTag.trim().length > 0
+      ? { autoStartIdTag: form.autoStartIdTag.trim().toUpperCase() }
+      : {}),
   });
 
   const handleApiErrors = (e: unknown): { fieldErrors: Record<string, string>; blocking: string | null } => {
@@ -268,6 +302,48 @@ export default function SiteFleetPolicies({ siteId }: { siteId: string }) {
 
   const modalOpen = modalMode !== 'closed';
 
+  // Site-level Fleet-Auto rollout toggle handler. Sends a minimal PUT
+  // payload containing only the fields needed (the API requires name/
+  // address/lat/lng so we re-send the loaded values). Audit-log on the
+  // server records the flip.
+  //
+  // Site-level enable is the broader of the two scopes (it defaults
+  // every connector at the site to fleet-rollout=on unless the
+  // connector has an explicit override). We require an extra
+  // confirmation step on the false → true transition.
+  const flipSiteRollout = async (next: boolean) => {
+    if (!siteData) return;
+    if (next === true && (siteData.fleetAutoRolloutEnabled ?? false) !== true) {
+      const confirmed = window.confirm(
+        'Enabling site-level Fleet-Auto rollout means every connector at this ' +
+        'site that is configured for FLEET_AUTO and assigned an ENABLED policy ' +
+        'may auto-start fleet sessions when the global kill switch is ON.\n\n' +
+        'Per-connector rollout overrides on the charger detail page take ' +
+        'precedence over this site default.\n\n' +
+        'Continue?',
+      );
+      if (!confirmed) return;
+    }
+    setRolloutSaving(true);
+    setRolloutError(null);
+    try {
+      const token = await getToken();
+      const updated = await createApiClient(token).updateSite(siteData.id, {
+        name: siteData.name,
+        address: siteData.address,
+        lat: siteData.lat,
+        lng: siteData.lng,
+        fleetAutoRolloutEnabled: next,
+      });
+      setSiteData(updated);
+    } catch (e: unknown) {
+      const err = e as { payload?: { error?: string; message?: string }; message?: string };
+      setRolloutError(err.payload?.message ?? err.payload?.error ?? err.message ?? 'Failed to update rollout flag');
+    } finally {
+      setRolloutSaving(false);
+    }
+  };
+
   const canSave = useMemo(() => {
     if (saving) return false;
     if (!form.name.trim()) return false;
@@ -294,6 +370,40 @@ export default function SiteFleetPolicies({ siteId }: { siteId: string }) {
           + New Policy
         </button>
       </div>
+
+      {/* Site-level Fleet-Auto rollout flag (Phase 3 Slice B). DB-backed,
+          no restart to flip. Server audits every change. */}
+      {siteData && (
+        <div className="rounded-md border border-gray-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium text-gray-800 dark:text-slate-200">
+                Site-level Fleet-Auto rollout
+              </p>
+              <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
+                Default for connectors at this site. Per-connector overrides on the
+                charger detail page take precedence. Slice C reads this at runtime
+                alongside the global emergency kill switch (env var).
+              </p>
+            </div>
+            <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-slate-300">
+              <input
+                type="checkbox"
+                checked={siteData.fleetAutoRolloutEnabled ?? false}
+                onChange={(e) => void flipSiteRollout(e.target.checked)}
+                disabled={rolloutSaving}
+                className="h-4 w-4 rounded border-gray-300 dark:border-slate-700"
+              />
+              <span>{rolloutSaving ? 'Saving…' : 'Enabled'}</span>
+            </label>
+          </div>
+          {rolloutError && (
+            <div className="mt-2 rounded-md border border-red-300 bg-red-50 p-2 text-xs text-red-700 dark:border-red-700 dark:bg-red-950/30 dark:text-red-300">
+              {rolloutError}
+            </div>
+          )}
+        </div>
+      )}
 
       {listError && (
         <div className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">
@@ -450,6 +560,37 @@ export default function SiteFleetPolicies({ siteId }: { siteId: string }) {
                   onChange={(e) => setForm({ ...form, ocppStackLevel: e.target.value })}
                   className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                 />
+              </FormField>
+              <FormField
+                label="autoStartIdTag (Fleet-Auto)"
+                error={fieldErrors.autoStartIdTag}
+                help="Required. Uppercase, ≤20 chars (OCPP CiString20). Server uses this idTag for auto-RemoteStart on plug-in."
+              >
+                <input
+                  type="text"
+                  value={form.autoStartIdTag}
+                  onChange={(e) =>
+                    setForm({ ...form, autoStartIdTag: e.target.value.toUpperCase() })
+                  }
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 font-mono text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                  maxLength={20}
+                  placeholder="FLEET-AUTO-001"
+                />
+              </FormField>
+              <FormField
+                label="Always on (24/7)"
+                error={fieldErrors.alwaysOn}
+                help="When checked, fleet gating is always allowed and the windows below are bypassed."
+              >
+                <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={form.alwaysOn}
+                    onChange={(e) => setForm({ ...form, alwaysOn: e.target.checked })}
+                    className="h-4 w-4 rounded border-gray-300 dark:border-slate-700"
+                  />
+                  <span>Bypass windows — fleet allowed 24/7</span>
+                </label>
               </FormField>
             </div>
 

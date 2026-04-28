@@ -32,6 +32,10 @@ export const FLEET_ROLLOUT_AUDIT_ACTION_SITE =
 export const FLEET_ROLLOUT_AUDIT_ACTION_CONNECTOR =
   'fleet.rollout.connector.update' as const;
 
+/** Connector config audit (chargingMode, fleetPolicyId). Distinct from rollout. */
+export const FLEET_CONFIG_AUDIT_ACTION_CONNECTOR =
+  'fleet.config.connector.update' as const;
+
 export type FleetRolloutScope = 'site' | 'connector';
 
 export type FleetRolloutFlipArgs = {
@@ -85,6 +89,63 @@ export async function writeFleetRolloutAudit(
       siteId: args.siteId ?? null,
       oldValue: args.oldValue,
       newValue: args.newValue,
+      reason: args.reason ?? null,
+    },
+  });
+}
+
+// ─── Connector config audit (chargingMode + fleet policy assignment) ──────
+//
+// Separate audit channel from the rollout-flag flips above. These changes
+// don't directly enable runtime auto-start (the rollout flag does), but
+// changing chargingMode to FLEET_AUTO or reassigning a connector's policy
+// is still operator-sensitive — pilot rollback or post-incident forensics
+// need to know who flipped what when.
+//
+// Action namespace `fleet.config.connector.update` is distinct from the
+// rollout-flag namespace so dashboards can split them and so flipping
+// chargingMode while leaving the rollout flag alone doesn't inflate the
+// rollout-action volume.
+
+export type FleetConnectorConfigChange<T> = { old: T; new: T };
+
+export type FleetConnectorConfigAuditArgs = {
+  operatorId: string;
+  /** Connector.id (DB row id, not the OCPP connectorId integer). */
+  connectorId: string;
+  /** Parent Charger.id, for ops-side queries. */
+  chargerId: string;
+  /** Site.id (charger's site at the time of the change), for ops-side queries. */
+  siteId?: string | null;
+  /**
+   * Field-by-field diff. Only fields that actually changed should be
+   * passed through; callers are expected to no-op when the resulting
+   * `changes` object is empty.
+   */
+  changes: {
+    chargingMode?: FleetConnectorConfigChange<'PUBLIC' | 'FLEET_AUTO'>;
+    fleetPolicyId?: FleetConnectorConfigChange<string | null>;
+  };
+  /** Free-form context. */
+  reason?: string;
+};
+
+export async function writeFleetConnectorConfigAudit(
+  args: FleetConnectorConfigAuditArgs,
+): Promise<void> {
+  // Defensive: skip the audit row entirely if the diff is empty so callers
+  // don't accidentally write no-op rows.
+  if (!args.changes.chargingMode && !args.changes.fleetPolicyId) return;
+
+  await writeAdminAudit({
+    operatorId: args.operatorId,
+    action: FLEET_CONFIG_AUDIT_ACTION_CONNECTOR,
+    metadata: {
+      scope: 'connector',
+      connectorId: args.connectorId,
+      chargerId: args.chargerId,
+      siteId: args.siteId ?? null,
+      changes: args.changes,
       reason: args.reason ?? null,
     },
   });
