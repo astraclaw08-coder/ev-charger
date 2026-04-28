@@ -241,11 +241,20 @@ export default function ChargerFleetConfig(props: ChargerFleetConfigProps) {
                       className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 disabled:opacity-50"
                     >
                       <option value="">(none)</option>
-                      {policies.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.name} · {p.status}
-                        </option>
-                      ))}
+                      {/*
+                        FLEET_AUTO mode requires an ENABLED policy at the API
+                        layer. Filter the dropdown so operators don't see
+                        DRAFT/DISABLED options that would be rejected on save.
+                        When chargingMode is PUBLIC the select is disabled
+                        anyway; we still filter for consistency.
+                      */}
+                      {policies
+                        .filter((p) => p.status === 'ENABLED')
+                        .map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name}
+                          </option>
+                        ))}
                     </select>
                   </label>
                   <label className="block text-xs">
