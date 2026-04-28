@@ -86,6 +86,16 @@ enum SmartChargingScope {
 /// then modulates current via SetChargingProfile — full maxAmps inside window,
 /// 0 A outside. Phase 1 only scaffolds the schema + window math; no runtime
 /// behavior change until FLEET_GATED_SESSIONS_ENABLED feature flag is turned on.
+/// Connector charging mode for TASK-0208 Phase 3 (Fleet-Auto).
+/// PUBLIC = default, driver/operator-triggered start.
+/// FLEET_AUTO = server-initiated RemoteStartTransaction on plug-in
+/// (Preparing) when the two-tier rollout gate is satisfied. See
+/// tasks/task-0208-phase3-fleet-auto-redesign.md.
+enum ChargingMode {
+  PUBLIC
+  FLEET_AUTO
+}
+
 enum FleetPolicyStatus {
   DRAFT     // schema row created, not yet active
   ENABLED   // active — scheduler will modulate current for matching sessions
@@ -126,6 +136,11 @@ model Site {
   reservationMaxDurationMin Int      @default(30)   // max hold window in minutes
   reservationFeeUsd         Float    @default(0)    // 0 = free reservations
   reservationCancelGraceMin Int      @default(5)    // minutes where cancel = full refund
+  // TASK-0208 Phase 3 Slice A — site-level Fleet-Auto pilot rollout flag.
+  // DB-backed; toggled via operator portal (Slice B). Audit-logged on flip
+  // via writeFleetRolloutAudit(). Off by default — schema/code can ship
+  // dark in prod with no behavior change. See §0 #5 of redesign doc.
+  fleetAutoRolloutEnabled   Boolean  @default(false)
   chargers         Charger[]
   chargerGroups    ChargerGroup[]
   chargingProfiles SmartChargingProfile[]
@@ -160,8 +175,20 @@ model FleetPolicy {
   notes           String?
   createdByOperatorId String?
   updatedByOperatorId String?
+  // TASK-0208 Phase 3 Slice A — Fleet-Auto activation fields.
+  // alwaysOn: bypasses windowsJson evaluation (24/7 fleet sites).
+  // autoStartIdTag: idTag the OCPP server uses for server-initiated
+  // RemoteStartTransaction on plug-in. Backfilled by the Slice A
+  // migration; required in API on new/edited policies in Slice B.
+  alwaysOn        Boolean           @default(false)
+  autoStartIdTag  String?
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
+
+  // Direct connector assignments (Phase 3 / Fleet-Auto). Replaces the
+  // legacy idTagPrefix-match path. Hybrid-B prefix matching survives
+  // only as compatibility until Slice G removes the Authorize branch.
+  connectors      Connector[]
 
   @@unique([siteId, idTagPrefix])
   @@index([siteId, status])
@@ -296,6 +323,17 @@ model Connector {
   charger           Charger                    @relation(fields: [chargerId], references: [id], onDelete: Cascade)
   connectorId       Int // OCPP connector number (1-indexed per charger)
   status            ConnectorStatus            @default(UNAVAILABLE)
+  // TASK-0208 Phase 3 Slice A — Fleet-Auto activation config.
+  // chargingMode: PUBLIC (default) or FLEET_AUTO. FLEET_AUTO connectors
+  //   may auto-start sessions on plug-in when the rollout gate allows.
+  // fleetPolicyId: direct FK assignment (not idTag prefix lookup).
+  // fleetAutoRolloutEnabled: per-connector override of the site's
+  //   pilot rollout flag. null = inherit from Site.fleetAutoRolloutEnabled.
+  //   Toggled via operator portal (Slice B); audit-logged.
+  chargingMode      ChargingMode               @default(PUBLIC)
+  fleetPolicyId     String?
+  fleetPolicy       FleetPolicy?               @relation(fields: [fleetPolicyId], references: [id], onDelete: SetNull)
+  fleetAutoRolloutEnabled Boolean?
   sessions          Session[]
   stateTransitions  ConnectorStateTransition[]
   reservations      Reservation[]
@@ -304,6 +342,8 @@ model Connector {
 
   @@unique([chargerId, connectorId])
   @@index([status])
+  @@index([chargingMode])
+  @@index([fleetPolicyId])
 }
 
 model ConnectorStateTransition {
