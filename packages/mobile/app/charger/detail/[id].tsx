@@ -799,6 +799,19 @@ export default function ChargerStartScreen() {
     }
     if (!charger) return;
 
+    // Phase 3 Slice D defensive guard. The UI replaces SlideToStart with an
+    // informational banner when the selected connector is FLEET_AUTO, so
+    // this branch is normally unreachable. Future call paths (deep links,
+    // shortcut handlers, etc.) might still invoke handleStart with a fleet
+    // connector — refuse + show the same explanation as the banner.
+    if (connector.chargingMode === 'FLEET_AUTO') {
+      Alert.alert(
+        'Fleet only',
+        'This connector is reserved for fleet vehicles and starts automatically on plug-in. It can’t be started from the app.',
+      );
+      return;
+    }
+
     if (connector.status === 'RESERVED') {
       // Compare reservation IDs (not user IDs) to avoid Keycloak sub vs DB User.id mismatch
       const myRes = activeReservation?.reservation;

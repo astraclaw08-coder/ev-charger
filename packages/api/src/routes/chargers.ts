@@ -67,7 +67,7 @@ export async function chargerRoutes(app: FastifyInstance) {
       take: limit,
       include: {
         site: { select: { id: true, name: true, address: true } },
-        connectors: { select: { id: true, connectorId: true, status: true } },
+        connectors: { select: { id: true, connectorId: true, status: true, chargingMode: true } },
       },
     });
 
@@ -106,7 +106,7 @@ export async function chargerRoutes(app: FastifyInstance) {
             touWindows: true,
           },
         },
-        connectors: { select: { id: true, connectorId: true, status: true } },
+        connectors: { select: { id: true, connectorId: true, status: true, chargingMode: true } },
       },
     });
 
