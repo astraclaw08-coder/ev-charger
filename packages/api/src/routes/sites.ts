@@ -5,6 +5,7 @@ import { requirePolicy } from '../plugins/authorization';
 import { getChargerUptime } from '../lib/uptime';
 import { validateTouWindows } from '../lib/sitePricing';
 import { computeSessionAmounts } from '../lib/sessionBilling';
+import { writeFleetRolloutAudit } from '../lib/fleetRolloutAudit';
 
 /** Resolve a site by exact id OR by short prefix (first 8 chars of UUID). */
 async function resolveSiteId(param: string): Promise<string | null> {
@@ -275,6 +276,11 @@ export async function siteRoutes(app: FastifyInstance) {
       reservationMaxDurationMin?: number;
       reservationFeeUsd?: number;
       reservationCancelGraceMin?: number;
+      // TASK-0208 Phase 3 Slice B — site-level Fleet-Auto rollout flag.
+      // DB-backed, no restart to flip; toggling writes an AdminAuditEvent
+      // via writeFleetRolloutAudit(). Slice C reads this flag at runtime
+      // alongside the env-var emergency kill switch.
+      fleetAutoRolloutEnabled?: boolean;
     };
   }>('/sites/:id', {
     preHandler: [requireOperator, requirePolicy('site.update', { getResourceSiteId: (req) => req.params.id })],
@@ -284,7 +290,12 @@ export async function siteRoutes(app: FastifyInstance) {
       return reply.status(404).send({ error: 'Site not found' });
     }
 
-    const { name, address, lat, lng, pricingMode, pricePerKwhUsd, idleFeePerMinUsd, activationFeeUsd, gracePeriodMin, softwareVendorFeeMode, softwareVendorFeeValue, softwareFeeIncludesActivation, touWindows, organizationName, portfolioName, organizationId, portfolioId, maxChargeDurationMin, maxIdleDurationMin, maxSessionCostUsd, reservationEnabled, reservationMaxDurationMin, reservationFeeUsd, reservationCancelGraceMin } = req.body;
+    const { name, address, lat, lng, pricingMode, pricePerKwhUsd, idleFeePerMinUsd, activationFeeUsd, gracePeriodMin, softwareVendorFeeMode, softwareVendorFeeValue, softwareFeeIncludesActivation, touWindows, organizationName, portfolioName, organizationId, portfolioId, maxChargeDurationMin, maxIdleDurationMin, maxSessionCostUsd, reservationEnabled, reservationMaxDurationMin, reservationFeeUsd, reservationCancelGraceMin, fleetAutoRolloutEnabled } = req.body;
+
+    // Strict-boolean check on the rollout flag (no truthy coercion).
+    if (fleetAutoRolloutEnabled !== undefined && typeof fleetAutoRolloutEnabled !== 'boolean') {
+      return reply.status(400).send({ error: 'fleetAutoRolloutEnabled must be a boolean' });
+    }
 
     const touValidation = touWindows !== undefined ? validateTouWindows(touWindows) : null;
     if (touValidation && !touValidation.ok) {
@@ -334,6 +345,15 @@ export async function siteRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: 'reservationMaxDurationMin must be a positive integer' });
     }
 
+    // Capture the previous rollout-flag value for audit-log diff before
+    // we issue the update.
+    const previousRolloutFlag = fleetAutoRolloutEnabled !== undefined
+      ? await prisma.site.findUnique({
+          where: { id: resolvedId },
+          select: { fleetAutoRolloutEnabled: true },
+        })
+      : null;
+
     const site = await prisma.site.update({
       where: { id: resolvedId },
       data: {
@@ -361,8 +381,32 @@ export async function siteRoutes(app: FastifyInstance) {
         ...(reservationMaxDurationMin != null ? { reservationMaxDurationMin } : {}),
         ...(reservationFeeUsd != null ? { reservationFeeUsd } : {}),
         ...(reservationCancelGraceMin != null ? { reservationCancelGraceMin } : {}),
+        ...(fleetAutoRolloutEnabled !== undefined ? { fleetAutoRolloutEnabled } : {}),
       },
     });
+
+    // Audit only when the value changed. Audit failure must not fail the
+    // request.
+    if (
+      fleetAutoRolloutEnabled !== undefined
+      && previousRolloutFlag
+      && previousRolloutFlag.fleetAutoRolloutEnabled !== fleetAutoRolloutEnabled
+    ) {
+      const operator = req.currentOperator;
+      try {
+        await writeFleetRolloutAudit({
+          operatorId: operator?.id ?? 'unknown',
+          scope: 'site',
+          scopeId: resolvedId,
+          siteId: resolvedId,
+          oldValue: previousRolloutFlag.fleetAutoRolloutEnabled,
+          newValue: fleetAutoRolloutEnabled,
+        });
+      } catch (auditErr) {
+        req.log.error({ auditErr, scope: 'site', scopeId: resolvedId },
+          'fleet rollout audit write failed (site)');
+      }
+    }
 
     return site;
   });

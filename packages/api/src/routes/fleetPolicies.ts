@@ -51,6 +51,10 @@ function serialize(p: any) {
     ocppStackLevel: p.ocppStackLevel,
     windowsJson: p.windowsJson,
     notes: p.notes,
+    // Phase 3 Slice A/B — Fleet-Auto fields exposed on every response so
+    // operator UI can read/edit them without a separate fetch.
+    alwaysOn: p.alwaysOn ?? false,
+    autoStartIdTag: p.autoStartIdTag ?? null,
     createdByOperatorId: p.createdByOperatorId,
     updatedByOperatorId: p.updatedByOperatorId,
     createdAt: p.createdAt instanceof Date ? p.createdAt.toISOString() : p.createdAt,
@@ -61,12 +65,15 @@ function serialize(p: any) {
 async function loadSiblings(siteId: string): Promise<SiblingPolicy[]> {
   const rows = await db.fleetPolicy.findMany({
     where: { siteId },
-    select: { id: true, idTagPrefix: true, status: true },
+    // autoStartIdTag is required for findAutoStartIdTagCollision() to detect
+    // the new error case (AUTOSTART_COLLISION) at validation time.
+    select: { id: true, idTagPrefix: true, status: true, autoStartIdTag: true },
   });
   return rows.map((r: any) => ({
     id: r.id,
     idTagPrefix: r.idTagPrefix,
     status: r.status as FleetPolicyStatusLiteral,
+    autoStartIdTag: r.autoStartIdTag ?? null,
   }));
 }
 
@@ -99,6 +106,12 @@ export async function fleetPolicyRoutes(app: FastifyInstance) {
       ocppStackLevel?: number;
       windowsJson: unknown;
       notes?: string | null;
+      // Phase 3 Slice B — Fleet-Auto fields. `autoStartIdTag` is REQUIRED at
+      // the API layer for new policies so Slice C can rely on every policy
+      // having a valid value at runtime. The shared validator keeps it
+      // optional to support PATCH paths that don't always re-send it.
+      alwaysOn?: boolean;
+      autoStartIdTag?: string;
     };
   }>('/sites/:siteId/fleet-policies', {
     preHandler: [requireOperator, requirePolicy('fleet.policy.write')],
@@ -111,6 +124,23 @@ export async function fleetPolicyRoutes(app: FastifyInstance) {
     const site = await db.site.findUnique({ where: { id: siteId }, select: { id: true } });
     if (!site) return reply.status(404).send({ error: 'Site not found' });
 
+    // Required-on-create check. Empty/whitespace also rejected — the shared
+    // validator treats whitespace-only as "not provided" which is correct
+    // for PATCH but not what we want here.
+    const rawAutoStart = typeof req.body.autoStartIdTag === 'string'
+      ? req.body.autoStartIdTag.trim()
+      : '';
+    if (rawAutoStart.length === 0) {
+      return reply.status(400).send({
+        error: 'ValidationError',
+        errors: [{
+          field: 'autoStartIdTag',
+          code: 'REQUIRED',
+          message: 'autoStartIdTag is required when creating a fleet policy',
+        }],
+      });
+    }
+
     const siblings = await loadSiblings(siteId);
     const validation = validateFleetPolicyInput(
       {
@@ -120,6 +150,8 @@ export async function fleetPolicyRoutes(app: FastifyInstance) {
         ocppStackLevel: req.body.ocppStackLevel,
         windowsJson: req.body.windowsJson,
         notes: req.body.notes,
+        alwaysOn: req.body.alwaysOn,
+        autoStartIdTag: rawAutoStart,
       },
       { siblingPolicies: siblings, requireWindows: false },
     );
@@ -139,14 +171,31 @@ export async function fleetPolicyRoutes(app: FastifyInstance) {
           ocppStackLevel: n.ocppStackLevel,
           windowsJson: n.windowsJson,
           notes: n.notes,
+          alwaysOn: n.alwaysOn,
+          autoStartIdTag: n.autoStartIdTag,
           createdByOperatorId: operator.id,
           updatedByOperatorId: operator.id,
         },
       });
       return reply.status(201).send(serialize(created));
     } catch (err: any) {
-      // Unique constraint on (siteId, idTagPrefix) — race between two operators
+      // Unique constraint races. P2002 surfaces from either:
+      //   - existing @@unique([siteId, idTagPrefix])
+      //   - partial unique index on (siteId, autoStartIdTag) WHERE active
+      // Use err.meta.target to disambiguate when present.
       if (err?.code === 'P2002') {
+        const target = (err?.meta?.target as string[] | string | undefined);
+        const tStr = Array.isArray(target) ? target.join(',') : (target ?? '');
+        if (tStr.includes('autoStartIdTag')) {
+          return reply.status(409).send({
+            error: 'Conflict',
+            errors: [{
+              field: 'autoStartIdTag',
+              code: 'AUTOSTART_COLLISION',
+              message: `autoStartIdTag "${n.autoStartIdTag}" already exists at this site`,
+            }],
+          });
+        }
         return reply.status(409).send({
           error: 'Conflict',
           errors: [{
@@ -170,6 +219,8 @@ export async function fleetPolicyRoutes(app: FastifyInstance) {
       ocppStackLevel?: number;
       windowsJson?: unknown;
       notes?: string | null;
+      alwaysOn?: boolean;
+      autoStartIdTag?: string;
     };
   }>('/fleet-policies/:id', {
     preHandler: [requireOperator, requirePolicy('fleet.policy.write')],
@@ -198,6 +249,11 @@ export async function fleetPolicyRoutes(app: FastifyInstance) {
       ocppStackLevel: req.body.ocppStackLevel ?? existing.ocppStackLevel,
       windowsJson: req.body.windowsJson === undefined ? existing.windowsJson : req.body.windowsJson,
       notes: req.body.notes === undefined ? existing.notes : req.body.notes,
+      alwaysOn: req.body.alwaysOn === undefined ? (existing.alwaysOn ?? false) : req.body.alwaysOn,
+      autoStartIdTag:
+        req.body.autoStartIdTag === undefined
+          ? (existing.autoStartIdTag ?? undefined)
+          : req.body.autoStartIdTag,
     };
     const validation = validateFleetPolicyInput(merged, {
       siblingPolicies: siblings,
@@ -219,12 +275,31 @@ export async function fleetPolicyRoutes(app: FastifyInstance) {
           ocppStackLevel: n.ocppStackLevel,
           windowsJson: n.windowsJson,
           notes: n.notes,
+          alwaysOn: n.alwaysOn,
+          // PATCH may either set a new value, keep existing (undefined in
+          // input → resolved by merge above), or explicitly null it. The
+          // validator returns null when the caller passed an explicit empty
+          // string; we forward that through so operators can clear the
+          // field on a DRAFT/DISABLED policy.
+          autoStartIdTag: n.autoStartIdTag,
           updatedByOperatorId: operator.id,
         },
       });
       return serialize(updated);
     } catch (err: any) {
       if (err?.code === 'P2002') {
+        const target = (err?.meta?.target as string[] | string | undefined);
+        const tStr = Array.isArray(target) ? target.join(',') : (target ?? '');
+        if (tStr.includes('autoStartIdTag')) {
+          return reply.status(409).send({
+            error: 'Conflict',
+            errors: [{
+              field: 'autoStartIdTag',
+              code: 'AUTOSTART_COLLISION',
+              message: `autoStartIdTag "${n.autoStartIdTag}" already exists at this site`,
+            }],
+          });
+        }
         return reply.status(409).send({
           error: 'Conflict',
           errors: [{

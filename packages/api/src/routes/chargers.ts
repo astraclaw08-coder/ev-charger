@@ -7,6 +7,7 @@ import { remoteReset, remoteStart, triggerHeartbeat, getConfiguration } from '..
 import { getChargerUptime } from '../lib/uptime';
 import { computeSessionAmounts } from '../lib/sessionBilling';
 import { assessChargerHealth } from '../lib/chargerHealthAgent';
+import { writeFleetRolloutAudit } from '../lib/fleetRolloutAudit';
 
 function hasSiteAccess(siteId: string | null, siteIds: string[] | undefined) {
   if (!siteIds || siteIds.length === 0) return true;
@@ -622,5 +623,173 @@ export async function chargerRoutes(app: FastifyInstance) {
 
     const response = await getConfiguration(charger.ocppId);
     return response;
+  });
+
+  // ─── PATCH /chargers/:chargerId/connectors/:connectorId ───────────────────
+  // TASK-0208 Phase 3 Slice B — Fleet-Auto operator config UX.
+  // Lets operators set per-connector chargingMode, assign a FleetPolicy by
+  // direct FK (not idTag prefix), and override the site rollout flag.
+  // No runtime auto-start side-effects from this route — that's Slice C.
+  app.patch<{
+    Params: { chargerId: string; connectorId: string };
+    Body: {
+      chargingMode?: 'PUBLIC' | 'FLEET_AUTO';
+      // null clears assignment; undefined leaves untouched.
+      fleetPolicyId?: string | null;
+      // null = inherit Site.fleetAutoRolloutEnabled; true/false = explicit override.
+      fleetAutoRolloutEnabled?: boolean | null;
+    };
+  }>('/chargers/:chargerId/connectors/:connectorId', {
+    // Reuses fleet.policy.write because every field this route can change
+    // (chargingMode, fleetPolicyId, fleetAutoRolloutEnabled) is fleet-scoped
+    // config, not general charger metadata. Avoids a new policy key.
+    preHandler: [requireOperator, requirePolicy('fleet.policy.write')],
+  }, async (req, reply) => {
+    const operator = req.currentOperator!;
+
+    // Connectors are addressed by `Charger.id` + `Connector.connectorId` (the
+    // OCPP 1-indexed number on the charger), not by `Connector.id`. This is
+    // the same shape the rest of the API uses for charger health / remote-start.
+    const connectorIdInt = Number.parseInt(req.params.connectorId, 10);
+    if (!Number.isInteger(connectorIdInt) || connectorIdInt < 0) {
+      return reply.status(400).send({ error: 'connectorId must be a non-negative integer' });
+    }
+
+    const charger = await prisma.charger.findUnique({
+      where: { id: req.params.chargerId },
+      include: {
+        connectors: {
+          where: { connectorId: connectorIdInt },
+          select: {
+            id: true,
+            connectorId: true,
+            chargingMode: true,
+            fleetPolicyId: true,
+            fleetAutoRolloutEnabled: true,
+          },
+        },
+      },
+    });
+    if (!charger) return reply.status(404).send({ error: 'Charger not found' });
+    if (!hasSiteAccess(charger.siteId, operator.claims?.siteIds)) {
+      return reply.status(403).send({
+        error: 'Forbidden',
+        denyReason: {
+          code: 'SITE_OUT_OF_SCOPE',
+          reason: `Site ${charger.siteId} is not in granted siteIds`,
+          policy: 'charger.update',
+        },
+      });
+    }
+
+    const connector = charger.connectors[0];
+    if (!connector) return reply.status(404).send({ error: 'Connector not found' });
+
+    const body = req.body ?? {};
+    const errors: Array<{ field: string; code: string; message: string }> = [];
+
+    // chargingMode: validate enum literal.
+    if (body.chargingMode !== undefined
+        && body.chargingMode !== 'PUBLIC'
+        && body.chargingMode !== 'FLEET_AUTO') {
+      errors.push({
+        field: 'chargingMode',
+        code: 'INVALID_FORMAT',
+        message: 'chargingMode must be "PUBLIC" or "FLEET_AUTO"',
+      });
+    }
+
+    // fleetPolicyId: validate ownership (same site as charger) when non-null.
+    if (body.fleetPolicyId !== undefined && body.fleetPolicyId !== null) {
+      if (typeof body.fleetPolicyId !== 'string' || body.fleetPolicyId.length === 0) {
+        errors.push({
+          field: 'fleetPolicyId',
+          code: 'INVALID_FORMAT',
+          message: 'fleetPolicyId must be a non-empty string or null',
+        });
+      } else {
+        const policy = await prisma.fleetPolicy.findUnique({
+          where: { id: body.fleetPolicyId },
+          select: { id: true, siteId: true, status: true },
+        });
+        if (!policy) {
+          errors.push({
+            field: 'fleetPolicyId',
+            code: 'NOT_FOUND',
+            message: 'FleetPolicy not found',
+          });
+        } else if (policy.siteId !== charger.siteId) {
+          // Cross-site assignment forbidden; prevents accidental mis-binding.
+          errors.push({
+            field: 'fleetPolicyId',
+            code: 'CROSS_SITE',
+            message: 'FleetPolicy belongs to a different site than this charger',
+          });
+        }
+      }
+    }
+
+    // fleetAutoRolloutEnabled: must be boolean or null.
+    if (body.fleetAutoRolloutEnabled !== undefined
+        && body.fleetAutoRolloutEnabled !== null
+        && typeof body.fleetAutoRolloutEnabled !== 'boolean') {
+      errors.push({
+        field: 'fleetAutoRolloutEnabled',
+        code: 'INVALID_FORMAT',
+        message: 'fleetAutoRolloutEnabled must be true, false, or null',
+      });
+    }
+
+    if (errors.length > 0) {
+      return reply.status(400).send({ error: 'ValidationError', errors });
+    }
+
+    const data: any = {};
+    if (body.chargingMode !== undefined) data.chargingMode = body.chargingMode;
+    if (body.fleetPolicyId !== undefined) data.fleetPolicyId = body.fleetPolicyId;
+    if (body.fleetAutoRolloutEnabled !== undefined) {
+      data.fleetAutoRolloutEnabled = body.fleetAutoRolloutEnabled;
+    }
+
+    const updated = await prisma.connector.update({
+      where: { id: connector.id },
+      data,
+      select: {
+        id: true,
+        connectorId: true,
+        chargingMode: true,
+        fleetPolicyId: true,
+        fleetAutoRolloutEnabled: true,
+      },
+    });
+
+    // Audit-log a rollout-flag flip when the value actually changed. We
+    // compare the previous (loaded above) and new explicitly so an operator
+    // re-saving the same value doesn't pollute the log. chargingMode and
+    // policy assignment changes are noteworthy too but those are handled
+    // by the existing AdminAuditEvent surface in the operator portal —
+    // here we focus on the rollout flag because that is the one with
+    // direct runtime kill-switch semantics in Slice C.
+    if (body.fleetAutoRolloutEnabled !== undefined
+        && body.fleetAutoRolloutEnabled !== connector.fleetAutoRolloutEnabled) {
+      try {
+        await writeFleetRolloutAudit({
+          operatorId: operator.id,
+          scope: 'connector',
+          scopeId: connector.id,
+          chargerId: charger.id,
+          siteId: charger.siteId ?? undefined,
+          oldValue: connector.fleetAutoRolloutEnabled,
+          newValue: body.fleetAutoRolloutEnabled,
+        });
+      } catch (auditErr) {
+        // Audit failure must not block a config change — log and move on.
+        // Operator already saw success; we add a sentinel to logs for ops.
+        req.log.error({ auditErr, scope: 'connector', scopeId: connector.id },
+          'fleet rollout audit write failed (connector)');
+      }
+    }
+
+    return updated;
   });
 }

@@ -102,6 +102,10 @@ export interface ConnectorInfo {
   chargerId: string;
   createdAt: string;
   updatedAt: string;
+  // Phase 3 Slice A/B — Fleet-Auto config (returned by GET /chargers/:id).
+  chargingMode?: ChargingMode;
+  fleetPolicyId?: string | null;
+  fleetAutoRolloutEnabled?: boolean | null;
 }
 
 export interface ChargerInfo {
@@ -150,6 +154,8 @@ export interface SiteDetail {
   reservationMaxDurationMin?: number | null;
   reservationFeeUsd?: number;
   reservationCancelGraceMin?: number;
+  // Phase 3 Slice B — site-level Fleet-Auto rollout flag.
+  fleetAutoRolloutEnabled?: boolean;
   createdAt: string;
   chargers: ChargerInfo[];
 }
@@ -692,6 +698,9 @@ export interface FleetPolicy {
   ocppStackLevel: number;
   windowsJson: { windows: FleetWindow[] } | unknown;
   notes: string | null;
+  // Phase 3 Slice A/B — Fleet-Auto activation fields.
+  alwaysOn: boolean;
+  autoStartIdTag: string | null;
   createdByOperatorId: string | null;
   updatedByOperatorId: string | null;
   createdAt: string;
@@ -705,13 +714,42 @@ export interface FleetPolicyWriteBody {
   ocppStackLevel?: number;
   windowsJson: { windows: FleetWindow[] };
   notes?: string | null;
+  // Phase 3 Slice B — required on create at the API layer; optional on PATCH.
+  alwaysOn?: boolean;
+  autoStartIdTag?: string;
 }
 
 export interface FleetPolicyFieldError {
-  field: 'name' | 'idTagPrefix' | 'maxAmps' | 'ocppStackLevel' | 'windowsJson' | 'notes';
+  field:
+    | 'name'
+    | 'idTagPrefix'
+    | 'maxAmps'
+    | 'ocppStackLevel'
+    | 'windowsJson'
+    | 'notes'
+    | 'alwaysOn'
+    | 'autoStartIdTag';
   code: string;
   message: string;
   detail?: Record<string, unknown>;
+}
+
+// ─── Phase 3 Slice B: connector + site rollout config ────────────────────
+export type ChargingMode = 'PUBLIC' | 'FLEET_AUTO';
+
+export interface ConnectorFleetConfig {
+  id: string;
+  connectorId: number;
+  chargingMode: ChargingMode;
+  fleetPolicyId: string | null;
+  /** null = inherit Site.fleetAutoRolloutEnabled; true/false = explicit override. */
+  fleetAutoRolloutEnabled: boolean | null;
+}
+
+export interface ConnectorPatchBody {
+  chargingMode?: ChargingMode;
+  fleetPolicyId?: string | null;
+  fleetAutoRolloutEnabled?: boolean | null;
 }
 
 export interface FleetPolicyPreview {
@@ -858,6 +896,15 @@ export function createApiClient(token: string | null | undefined) {
     deletePortfolio: (id: string) =>
       request<{ success: boolean }>(`/portfolios/${id}`, token, { method: 'DELETE' }),
     getChargers: () => request<ChargerListItem[]>('/chargers', token),
+
+    /**
+     * Single-charger detail. Returns full Charger row including connectors
+     * with Phase 3 Slice A/B Fleet-Auto fields (chargingMode, fleetPolicyId,
+     * fleetAutoRolloutEnabled). Used by ChargerDetail's Fleet-Auto config
+     * panel.
+     */
+    getCharger: (id: string) =>
+      request<ChargerInfo & { connectors: ConnectorInfo[] }>(`/chargers/${id}`, token),
     getAnalytics: (siteId: string, params?: { periodDays?: number; startDate?: string; endDate?: string }) => {
       const query = new URLSearchParams();
       if (params?.periodDays) query.set('periodDays', String(params.periodDays));
@@ -943,6 +990,8 @@ export function createApiClient(token: string | null | undefined) {
         reservationMaxDurationMin?: number | null;
         reservationFeeUsd?: number;
         reservationCancelGraceMin?: number;
+        // Phase 3 Slice B — site-level Fleet-Auto rollout flag.
+        fleetAutoRolloutEnabled?: boolean;
       },
     ) =>
       request<SiteDetail>(`/sites/${id}`, token, {
@@ -1354,5 +1403,21 @@ export function createApiClient(token: string | null | undefined) {
         method: 'POST',
         body: JSON.stringify(at ? { at } : {}),
       }),
+
+    // ── Phase 3 Slice B: connector fleet config ──────────────────────────
+    /**
+     * Update per-connector Fleet-Auto config. `connectorId` is the OCPP
+     * 1-indexed integer (Connector.connectorId), not the DB row id.
+     */
+    updateConnectorFleetConfig: (
+      chargerId: string,
+      connectorId: number,
+      body: ConnectorPatchBody,
+    ) =>
+      request<ConnectorFleetConfig>(
+        `/chargers/${chargerId}/connectors/${connectorId}`,
+        token,
+        { method: 'PATCH', body: JSON.stringify(body) },
+      ),
   };
 }
