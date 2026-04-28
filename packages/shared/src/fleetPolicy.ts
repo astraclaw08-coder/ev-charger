@@ -123,10 +123,12 @@ export const FLEET_POLICY_NOTES_MAX_LEN = 2000;
 // 2–32 chars, uppercase alnum/underscore/hyphen, must start with alnum.
 export const FLEET_POLICY_PREFIX_RE = /^[A-Z0-9][A-Z0-9_-]{1,31}$/;
 
-// autoStartIdTag (Phase 3 Slice A) — same character class as idTagPrefix
-// because the OCPP idTag wire format is the same string-of-chars space.
-// Length floor is the same (2 chars) so the value is meaningful for audit.
-export const FLEET_POLICY_AUTO_START_ID_TAG_RE = FLEET_POLICY_PREFIX_RE;
+// autoStartIdTag (Phase 3 Slice A): same character class as idTagPrefix BUT
+// capped at 20 chars to fit OCPP 1.6 RemoteStartTransaction.idTag —
+// CiString20Type. A value longer than 20 chars would be rejected by the
+// charger at runtime, so we reject at validation time.
+export const FLEET_POLICY_AUTO_START_ID_TAG_MAX_LEN = 20;
+export const FLEET_POLICY_AUTO_START_ID_TAG_RE = /^[A-Z0-9][A-Z0-9_-]{1,19}$/;
 
 // ─── Public validator ──────────────────────────────────────────────────────
 
@@ -270,8 +272,13 @@ export function validateFleetPolicyInput(
         field: 'autoStartIdTag',
         code: 'INVALID_FORMAT',
         message:
-          'autoStartIdTag must be 2–32 chars, uppercase letters/digits/underscore/hyphen, starting with letter or digit',
-        detail: { pattern: FLEET_POLICY_AUTO_START_ID_TAG_RE.source },
+          `autoStartIdTag must be 2–${FLEET_POLICY_AUTO_START_ID_TAG_MAX_LEN} chars, uppercase letters/digits/underscore/hyphen, starting with letter or digit ` +
+          '(OCPP 1.6 RemoteStartTransaction.idTag is CiString20Type)',
+        detail: {
+          pattern: FLEET_POLICY_AUTO_START_ID_TAG_RE.source,
+          maxLen: FLEET_POLICY_AUTO_START_ID_TAG_MAX_LEN,
+          gotLen: trimmed.length,
+        },
       });
       autoStartIdTag = trimmed;
     } else {

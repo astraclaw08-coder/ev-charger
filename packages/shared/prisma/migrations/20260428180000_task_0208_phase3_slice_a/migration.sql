@@ -59,13 +59,18 @@ ALTER TABLE "FleetPolicy"
 
 -- Backfill autoStartIdTag for existing Hybrid-B rows so Slice C can rely on
 -- a non-null value at runtime. Use the legacy idTagPrefix as the deterministic
--- base when present and non-empty; otherwise generate from the policy id.
+-- base ONLY when it is ≤20 chars (OCPP 1.6 RemoteStartTransaction.idTag is
+-- CiString20Type — anything longer would be rejected by the charger at
+-- runtime). For prefixes longer than 20 chars, or empty/null prefixes, fall
+-- back to a deterministic 'FLEET-AUTO-<8-char-policy-id>' (19 chars total).
 -- Filter ensures idempotency on re-run.
 UPDATE "FleetPolicy"
 SET "autoStartIdTag" =
   CASE
-    WHEN "idTagPrefix" IS NOT NULL AND length(trim("idTagPrefix")) > 0
-      THEN "idTagPrefix"
+    WHEN "idTagPrefix" IS NOT NULL
+         AND length(trim("idTagPrefix")) > 0
+         AND length(trim("idTagPrefix")) <= 20
+      THEN trim("idTagPrefix")
     ELSE 'FLEET-AUTO-' || substr("id", 1, 8)
   END
 WHERE "autoStartIdTag" IS NULL;
@@ -76,11 +81,20 @@ WHERE "autoStartIdTag" IS NULL;
 -- Slice B. A future migration may ALTER ... SET NOT NULL once all
 -- environments confirm the column is fully populated.
 
--- ── Site-scoped uniqueness on autoStartIdTag (advisory) ──────────────────
--- Postgres supports partial unique indexes; we restrict to non-null tags so
--- legacy rows that never got backfilled (shouldn't happen, but defensive)
--- don't block the index. ENABLED + DRAFT scoping is enforced at API layer
--- because Prisma can't model partial-by-status indexes portably.
+-- ── Site-scoped uniqueness on autoStartIdTag (DRAFT/ENABLED only) ────────
+-- Partial unique index restricted to active scopes (DRAFT, ENABLED). The
+-- validator (findAutoStartIdTagCollision in packages/shared/src/fleetPolicy.ts)
+-- explicitly allows reuse of an autoStartIdTag from a DISABLED sibling — a
+-- DB-level uniqueness over ALL non-null rows would contradict that and
+-- surprise operators when retiring/repurposing policies. The DB index
+-- mirrors the validator: only DRAFT + ENABLED rows participate.
+--
+-- Drop-then-create is intentional: any environment that applied an earlier
+-- iteration of this migration (e.g. a developer's local DB) may already
+-- have the over-broad index. DROP IF EXISTS is idempotent for fresh envs
+-- and corrective for upgraded ones.
+DROP INDEX IF EXISTS "FleetPolicy_siteId_autoStartIdTag_key";
 CREATE UNIQUE INDEX IF NOT EXISTS "FleetPolicy_siteId_autoStartIdTag_key"
   ON "FleetPolicy"("siteId", "autoStartIdTag")
-  WHERE "autoStartIdTag" IS NOT NULL;
+  WHERE "autoStartIdTag" IS NOT NULL
+    AND "status" IN ('DRAFT', 'ENABLED');

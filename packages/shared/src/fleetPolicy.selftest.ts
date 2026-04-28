@@ -282,6 +282,28 @@ console.log('\nTest 11: autoStartIdTag format + site-scoped collision');
     'autoStartIdTag INVALID_FORMAT',
   );
 
+  // 20-char boundary: exactly 20 chars accepted (OCPP 1.6 CiString20Type).
+  const exactly20 = 'A' + 'B'.repeat(19); // 20 chars total
+  assert(exactly20.length === 20, 'sanity: 20-char fixture');
+  const r20 = validateFleetPolicyInput(
+    { ...BASE_INPUT, autoStartIdTag: exactly20 },
+    { siblingPolicies: NO_SIBLINGS },
+  );
+  assert(r20.ok === true, '20-char autoStartIdTag accepted');
+
+  // 21 chars rejected — runtime would be rejected by charger anyway.
+  const tooLong = 'A' + 'B'.repeat(20); // 21 chars
+  assert(tooLong.length === 21, 'sanity: 21-char fixture');
+  const r21 = validateFleetPolicyInput(
+    { ...BASE_INPUT, autoStartIdTag: tooLong },
+    { siblingPolicies: NO_SIBLINGS },
+  );
+  assert(r21.ok === false, '21-char autoStartIdTag rejected (CiString20Type)');
+  if (!r21.ok) assert(
+    r21.errors.some(e => e.field === 'autoStartIdTag' && e.code === 'INVALID_FORMAT'),
+    '21-char autoStartIdTag INVALID_FORMAT',
+  );
+
   // Exact-match collision against ENABLED sibling rejected.
   const sibling: SiblingPolicy = {
     id: 'sib-1',
