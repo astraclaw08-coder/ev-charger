@@ -5,6 +5,67 @@
 **Surface:** OCPP runtime (`packages/ocpp-server/src/fleet/fleetScheduler.ts`) + shared window evaluator (`packages/shared/src/fleetWindow.ts`).
 **Code path landed:** Phase 2 PR-d (Hybrid-B fleet scheduler). Slice A/B added the `alwaysOn` column + UI but Slice C did not touch the scheduler/window evaluator → column is unread at runtime.
 
+> **Scope clarification (READ FIRST).** This document describes a narrow engine bug — once a fleet session is attached, the gate decision misreads `alwaysOn=true`. It is **not** the same scope as the broader product UX described in §0 below. The engine fix is necessary for any Fleet-Auto session to deliver energy with `alwaysOn=true`, but it is **not by itself sufficient** to prove the no-driver-activation product requirement. See §4.6 Tier 4 for the validation that does close the UX.
+
+---
+
+## 0. Desired Fleet Auto UX (product requirement)
+
+### Product statement
+
+When **Fleet Auto is enabled in the portal** for a site, charger, or specific connector, the driver should not need to activate charging manually. During an allowed charging window, the driver should be able to **plug in** and charging should start automatically — **no mobile app start, no RFID tap, no operator Remote Start.**
+
+### Acceptance criterion
+
+> Given Fleet Auto is enabled for the connector via site/charger/connector portal controls, and the current policy window is allowed, when a vehicle is plugged in, then the OCPP server issues `RemoteStartTransaction` automatically and the resulting `Session` has `fleetPolicyId` attached, `GATE_RELEASED` profile is pushed, and energy flows — without app / RFID / operator activation.
+
+### Connector-level safety nuance
+
+Internally, runtime control remains **connector-level**. Multi-port chargers may need mixed modes (one connector public, one fleet). The portal may expose site-level and charger-level bulk controls, but those resolve into per-connector assignments and rollout flags. The runtime never reads "site is fleet" — it reads `Connector.chargingMode`, `Connector.fleetPolicyId`, and the effective rollout flag (`Connector.fleetAutoRolloutEnabled` ?? `Site.fleetAutoRolloutEnabled`).
+
+### Full enablement preconditions for the UX
+
+For auto-start to fire on plug-in, ALL of the following must hold (this is the existing two-tier gate from the redesign doc §0 #5 + Slice C decision matrix):
+
+1. `FLEET_GATED_SESSIONS_ENABLED=true` (env, emergency kill switch on)
+2. Effective rollout for this connector is `true` (per-connector override OR site flag)
+3. `Connector.chargingMode === 'FLEET_AUTO'`
+4. `Connector.fleetPolicyId` resolves to a `FleetPolicy` with `status='ENABLED'`
+5. `policy.autoStartIdTag` is set
+6. Charger online + readiness gate satisfied (boot + heartbeat per Slice C strict gate)
+7. No active session already running on the connector
+8. No fresh pending auto-start attempt in flight
+
+The acceptance criterion above is observable end-to-end **only after all 8 are true**. None is optional.
+
+### Out-of-window behavior (intended product behavior)
+
+Per the redesign doc §7 edge-cases table:
+
+> **Plug-in before allow window**: Auto-start creates fleet session; profile applies 0 A; scheduler releases at window open.
+> **Plug-in while `alwaysOn=true`**: Auto-start creates fleet session; profile applies `maxAmps` immediately.
+
+So when a vehicle plugs in **outside** the allowed window:
+
+1. `RemoteStartTransaction` still fires (auto-start does not gate on window state).
+2. `Session` is created with `fleetPolicyId` attached and `plugInAt` populated.
+3. The fleet engine pushes a profile at `sL=90 limit=0` (GATE_ACTIVE) — vehicle holds in `SuspendedEVSE`.
+4. When the window opens, the scheduler's edge timer fires and demotes via same-id replacement (id=90001, sL=1, limit=`maxAmps`) — vehicle resumes.
+5. `BillingSnapshot.preDeliveryGatedMinutes` captures the time the vehicle waited in the deny period.
+6. `gatedPricingMode` reflects the policy's gating-mode contract.
+
+This is the design intent recorded in the original redesign doc and is the behavior the next Slice C end-to-end UX test (§4.6 Tier 4) must validate alongside the in-window case.
+
+### Bug vs UX (the distinction this document maintains)
+
+| Concern | Scope | Status |
+|---|---|---|
+| **Engine bug** | `alwaysOn=true` pushes 0 A after a fleet session is attached, regardless of how the session got attached | covered by §1–§4 of this doc; fix is engine-only |
+| **Product UX** | Vehicle plug-in alone (no app, no RFID, no operator click) starts charging when Fleet Auto is enabled | the engine fix is necessary but **not sufficient**; needs the full Slice C activation chain to fire |
+| **Validation** | Tier 1/2/3 in §4.6 prove the engine fix in isolation. **Tier 4 (new) proves the actual UX.** Tier 4 is the gating criterion for declaring Fleet Auto pilot-ready. |
+
+The §4.6 validation tiers are deliberately staged. **Do not** treat a green Tier 2 or Tier 3 as proof of the Fleet Auto UX — they are engine-isolation evidence only.
+
 ---
 
 ## 1. Reproduction (live evidence from 1A32 prod pilot)
@@ -206,11 +267,17 @@ The cheap option closes this exact regression class. Add to a follow-up PR after
 
 ### 4.6 Validation strategy — does NOT depend on Slice C auto-RemoteStart
 
-The `alwaysOn` bug is in the gating engine (`fleetScheduler.intendedModeAt` + `fleetWindow.evaluateFleetWindowAt`). The engine runs **after** a fleet session is attached to a Connector — regardless of HOW the attachment happened. This means the fix can be validated through any path that produces a fleet-attributed `Session`. We deliberately exclude the Slice C auto-RemoteStart path from validation because:
+The `alwaysOn` bug is in the gating engine (`fleetScheduler.intendedModeAt` + `fleetWindow.evaluateFleetWindowAt`). The engine runs **after** a fleet session is attached to a Connector — regardless of HOW the attachment happened. This means the fix can be validated through any path that produces a fleet-attributed `Session`. We deliberately exclude the Slice C auto-RemoteStart path from **engine-isolation** validation because:
 
 - Auto-start surfaced two real-world friction points in Gate 4 (post-redeploy heartbeat wait + readiness gate timing); revalidating both during the same pilot adds variables that aren't relevant to the engine fix.
 - The engine fix should be provable in isolation from the activation layer.
-- Slice C will be re-tested separately once the engine is known correct — see §5 below.
+- Slice C will be re-tested separately once the engine is known correct — see Tier 4 below and §5.
+
+> **Important — scope of Tier 1, Tier 2, and Tier 3 (read this before reading the tiers):**
+>
+> Tiers 1–3 prove **the engine pushes the correct profile shape when a fleet session is attached**. They do NOT prove the desired Fleet Auto UX from §0 (no-driver-activation auto-start with `fleetPolicyId` attached, GATE_RELEASED, energy flowing). In every Tier 1–3 path, attachment is performed by something OTHER than Slice C auto-RemoteStart (unit test inputs, Hybrid-B Authorize prefix match, or operator-issued RemoteStart). Tiers 1–3 passing is a **necessary but not sufficient** condition for pilot-readiness — they validate the engine, not the UX.
+>
+> **Tier 4 (Slice C end-to-end UX validation) is the only tier that proves §0's acceptance criterion.** A green Tier 1–3 with a red or skipped Tier 4 means the engine bug is fixed but the product UX is unverified — do not declare the pilot done in that state.
 
 #### Tier 1 — unit tests (deterministic, fastest)
 
@@ -278,7 +345,47 @@ Two backup options if the precondition fails and can't be remediated:
 - **Use Slice C auto-RemoteStart for the re-pilot** (relaxing the "without auto-RemoteStart" constraint). Re-enable connector rollout override, plug in, let `maybeAutoStartFleet` write the pending entry, StartTransaction consumes via `consumeFleetAutoStartPending`. Adds the heartbeat-after-redeploy variable but is the only other way to definitively attach a fleet policy on this charger.
 - **Skip Tier 3 entirely.** If Tier 1 and Tier 2 pass cleanly, that's strong evidence. Treat Tier 3 as nice-to-have, not gating, for this fix.
 
-After Tier 3 succeeds, **then** separately re-test Slice C auto-RemoteStart end-to-end with the heartbeat-pre-warm precaution noted in §5.
+After Tier 3 succeeds, **then** separately run Tier 4 below — that is the gate for declaring the pilot ready.
+
+#### Tier 4 — Slice C end-to-end UX validation (gates pilot-readiness)
+
+This tier exists to prove the §0 acceptance criterion verbatim. It is the only tier that exercises the full Fleet Auto UX (server-initiated RemoteStart on plug-in, no driver action). **Tier 4 must pass before the pilot is declared ready** — Tiers 1–3 are engine-isolation only and do not substitute for it.
+
+**Pre-flight state (same as Tier 3, plus rollout enabled):**
+- Engine fix deployed to prod ocpp-server-fresh (Tier 1+2 green, Tier 3 green).
+- 1A32 ONLINE, heartbeat pre-warmed (`TriggerMessage(Heartbeat)` immediately after redeploy SUCCESS — see §5).
+- Pilot policy `fleet-policy-pilot-1a32-2026-04-29` ENABLED, `alwaysOn=true`, `autoStartIdTag=PILOT-1A32-001`, `maxAmps=16`, prefix `PILOT-1A32-`.
+- Connector still `chargingMode=FLEET_AUTO` + `fleetPolicyId` set.
+- `FLEET_GATED_SESSIONS_ENABLED=true` on prod ocpp-server.
+- `Connector.fleetAutoRolloutEnabled=true` (or `Site.fleetAutoRolloutEnabled=true`) — **this is the bit Tier 3 left off; Tier 4 turns it back on.**
+
+**Steps:**
+
+1. Operator: enable connector rollout override on the pilot connector (portal → 1A32 → connector 1 → toggle Fleet Auto rollout ON).
+2. Operator: confirm 1A32 readiness gate is satisfied (live WS + heartbeatCount≥1 + bootReceived). If unsure, fire `TriggerMessage(Heartbeat)` from the portal.
+3. **Plug in the vehicle. No app action. No RFID swipe. No operator-issued RemoteStart.** This is the UX under test.
+4. Verify within ~15 seconds of `StatusNotification(Preparing)`:
+   - Server log emits `[fleet.auto-start] Decision: ACCEPTED` for charger 1A32 connector 1, idTag `PILOT-1A32-001`.
+   - Server log emits `RemoteStartTransaction` Accepted on attempt 1 (or attempt 2 with the LOOP retry-after-Faulted-blip fallback).
+5. Verify the resulting `Session` row:
+   - `fleetPolicyId = fleet-policy-pilot-1a32-2026-04-29` (NON-NULL — this is the §0 acceptance criterion).
+   - `idTag = PILOT-1A32-001`.
+   - `userId` = synthetic fleet user (`clerkId=synthetic-fleet-fleet-policy-pilot-1a32-2026-04-29`).
+   - `plugInAt` set, `firstEnergyAt` populated within ~30 s.
+6. Verify the engine pushed the correct profile shape:
+   - **NO** `SetChargingProfile` with `stackLevel=90 limit=0`.
+   - **YES** `SetChargingProfile` with `stackLevel=1 limit=16` (GATE_RELEASED at `maxAmps`).
+   - Charger acks Accepted.
+7. Verify real-world charging:
+   - `Power.Active.Import > 0` from MeterValues within ~30 s.
+   - Vehicle visibly charging.
+8. Operator: RemoteStop or driver unplugs.
+9. Verify Session COMPLETED with `kwhDelivered > 0`.
+10. Verify `BillingSnapshot` written with `gatedPricingMode='gated'` and `kwhDelivered > 0`. (`preDeliveryGatedMinutes` should be small since alwaysOn means no real deny dwell.)
+
+**Pass criteria:** every assertion above holds. Any single failure = Tier 4 not passed = pilot NOT ready.
+
+**Why this tier is mandatory:** Tier 3 deliberately leaves rollout OFF and uses operator-issued RemoteStart, so it never exercises `maybeAutoStartFleet`, the readiness gate, the synthetic-user-creation path on plug-in, or the `consumeFleetAutoStartPending` direct-FK attachment. Those are exactly the components that make the §0 UX work. The Gate 4 incident on 2026-04-29 demonstrated that those pieces can each look correct in isolation while the end-to-end UX is broken (in that case by the alwaysOn engine bug). Tier 4 is the only test that catches that class of regression.
 
 ---
 
