@@ -19,9 +19,13 @@
  *
  * Same-id replacement is the whole point — field-validated on LOOP firmware
  * in F5h (2026-04-24): pushing the same chargingProfileId replaces the prior
- * profile in charger RAM, regardless of stackLevel change. This lets us
- * demote the fleet profile (stackLevel 90 → 1) to release the gate without
- * ever issuing ClearChargingProfile.
+ * profile in charger RAM. The fleet engine uses this to switch the gate
+ * between deny (limit=0) and release (limit=maxAmps) at a fixed stackLevel
+ * (=90 for both modes — see applyFleetPolicyProfile.ts), without ever
+ * issuing ClearChargingProfile. The 2026-04-29 Tier 4-Windowed run showed
+ * that "demoting" to a lower stackLevel for release loses to the charger's
+ * built-in CPMax baseline (sL=60 limit=25 A on 1A32 LOOP firmware) — fleet
+ * must own a single high stackLevel for both modes.
  */
 
 const FLEET_PROFILE_ID_MIN = 0x40000000; // 1_073_741_824

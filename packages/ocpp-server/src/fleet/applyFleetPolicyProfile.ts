@@ -5,9 +5,19 @@
  * Called by the fleet scheduler (PR-c) and by the BootNotification re-apply
  * path (Phase 2.5). NOT called by handlers directly.
  *
- * Two modes:
- *   GATE_ACTIVE   → force 0 A by pushing CPMaxProfile stackLevel=90 limit=0
- *   GATE_RELEASED → demote by pushing same profileId at stackLevel=1 limit=maxAmps
+ * Two modes (both push at stackLevel=90 — fleet profile owns sL=90 on the
+ * charger, varying only the limit):
+ *   GATE_ACTIVE   → force 0 A:    stackLevel=90, limit=0
+ *   GATE_RELEASED → cap at policy: stackLevel=90, limit=maxAmps
+ *
+ * Why same stackLevel for both modes? OCPP 1.6 ChargePointMaxProfile
+ * resolution picks the HIGHEST stackLevel when multiple CPMax profiles are
+ * installed. LOOP firmware ships with a built-in CPMax baseline at sL=60
+ * limit=25 A on 1A32 (F5h, 2026-04-24). A release push at sL=1 loses to
+ * that baseline — `FleetPolicy.maxAmps` would be silently a no-op. Pushing
+ * release at the same sL=90 the deny used means same-id replacement
+ * REPLACES the prior fleet entry, and the fleet entry continues to dominate
+ * any baseline at sL ≤ 89 (Tier 4-Windowed evidence 2026-04-29).
  *
  * Removal mechanism is SAME-ID REPLACEMENT, never ClearChargingProfile. The
  * reconciler at /reconcile-smart-charging is not a reliable override-removal
@@ -41,7 +51,8 @@ export interface FleetProfileRamState {
   chargerId: string;
   profileId: number;
   mode: FleetGateMode;
-  stackLevel: 1 | 90;
+  /** Always STACK_LEVEL_FLEET (=90). Field is preserved for diagnostics + RAM-state idempotency. */
+  stackLevel: number;
   limitAmps: number;
   lastAttemptAt: Date;
   lastAppliedAt: Date | null;
@@ -58,11 +69,12 @@ export type ApplyResult =
 const MIN_MAX_AMPS = 6;  // OCPP spec floor for usable AC charging
 const MAX_MAX_AMPS = 80; // CCS1/J1772 theoretical; practical chargers cap lower
 
-// Stack levels (field-validated 2026-04-24):
-//   90 = dominates operator CPMax profiles (typically sL=60)
-//    1 = dominated by operator CPMax profiles (releases gate)
-const STACK_LEVEL_ACTIVE = 90;
-const STACK_LEVEL_RELEASED = 1;
+// Single stackLevel for both deny + release. Field-validated 2026-04-29
+// (Tier 4-Windowed): the charger's underlying CPMax baseline at sL=60
+// limit=25 A overrode our prior sL=1 release push, so FleetPolicy.maxAmps
+// was silently a no-op. Owning sL=90 for the fleet profile and rewriting
+// limit (0 vs maxAmps) keeps fleet dominant for both modes.
+const STACK_LEVEL_FLEET = 90;
 
 // Module-level RAM state. Keyed by chargerId (not ocppId) because FleetPolicy
 // + Session relations are all on chargerId.
@@ -79,7 +91,7 @@ function clampAmps(raw: number): number {
 
 function buildProfilePayload(
   profileId: number,
-  stackLevel: 1 | 90,
+  stackLevel: number,
   limitAmps: number,
 ): Record<string, unknown> {
   return {
@@ -103,7 +115,7 @@ function buildProfilePayload(
  */
 function ramStateMatches(
   existing: FleetProfileRamState | undefined,
-  desired: { mode: FleetGateMode; stackLevel: 1 | 90; limitAmps: number; policyId: string },
+  desired: { mode: FleetGateMode; stackLevel: number; limitAmps: number; policyId: string },
 ): boolean {
   if (!existing) return false;
   return (
@@ -152,7 +164,8 @@ export async function applyFleetPolicyProfile(
 
   const maxAmps = clampAmps(policy.maxAmps);
   const profileId = fleetProfileIdFor(chargerId);
-  const stackLevel: 1 | 90 = mode === 'GATE_ACTIVE' ? STACK_LEVEL_ACTIVE : STACK_LEVEL_RELEASED;
+  // Both modes push at the same stackLevel; only `limitAmps` differs.
+  const stackLevel = STACK_LEVEL_FLEET;
   const limitAmps = mode === 'GATE_ACTIVE' ? 0 : maxAmps;
 
   const existing = ramState.get(chargerId);
