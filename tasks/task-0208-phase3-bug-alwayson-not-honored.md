@@ -159,16 +159,29 @@ const evalResult = evaluateFleetWindowAt({
 
 Option B keeps `intendedModeAt`'s signature clean (single source of truth lives in shared) and means the existing fleetScheduler.selftest framework that exercises window evaluation also exercises the alwaysOn override.
 
-### 4.2 Other call sites that need `alwaysOn`
+### 4.2 Full set of code touchpoints — Option B is bigger than just `evaluateFleetWindowAt`
 
-Any place that passes `windowsJson` into `evaluateFleetWindowAt` or computes a "next transition" needs the `alwaysOn` value. From a quick grep:
+Picking Option B means the new `alwaysOn?` parameter on `evaluateFleetWindowAt` is the *destination* — but the value has to be plumbed there from the policy row. Without the plumbing, the param goes unused and the bug stays. Concrete touchpoints in `packages/ocpp-server/src/fleet/fleetScheduler.ts`:
 
-- `fleetScheduler.ts` `intendedModeAt` — direct caller
-- `fleetScheduler.ts` edge-timer scheduling — uses `nextTransitionAt`. With `alwaysOn=true` the result is `null` → no edge timer needed. The reconcile-tick fallback still runs every 5 min as a backstop.
-- `packages/shared/src/fleetWindow.selftest.ts` — extend with alwaysOn cases.
-- Anywhere else in `fleetScheduler.ts` that loads policies needs to also `select: { alwaysOn: true }` from Prisma.
+| Line / symbol | Change |
+|---|---|
+| `interface SessionForSchedule` (line ~46) | Add field `alwaysOn: boolean;` |
+| `hydrateSessions()` Prisma select (line ~129) | Change `select: { id: true, maxAmps: true, windowsJson: true, site: ... }` → add `alwaysOn: true` |
+| `hydrateSessions()` `out.push({...})` (line ~143) | Include `alwaysOn: pol.alwaysOn` in the synthesized session row |
+| `driveCharger()` `intendedModeAt(...)` call (line ~358) | Pass `session.alwaysOn` |
+| `intendedModeAt()` signature (line ~234) | Either add `alwaysOn: boolean` arg, OR change signature to take a partial policy object `{windowsJson, timeZone, alwaysOn}` |
+| `packages/shared/src/fleetWindow.ts` `evaluateFleetWindowAt()` | Add `alwaysOn?: boolean` and short-circuit to `active=true` |
 
-### 4.3 Schema
+If we miss any of those steps, `alwaysOn` reaches `evaluateFleetWindowAt` as `undefined` and the bug is unchanged. The fix MUST land all six together or none — partial landings are observably broken.
+
+Also worth noting: the **edge-timer scheduling** path also calls into the window evaluator to compute `nextTransitionAt`. With `alwaysOn=true` the natural result is `null` (no transitions ever). That's correct — the 5-min reconcile tick still runs as a backstop, so even if state somehow drifted (operator flips `alwaysOn=false` mid-session), the next tick would notice. No additional change needed in the edge-timer code, but it's worth a regression test to confirm.
+
+### 4.3a Other Phase 2 selftests to extend
+
+- `packages/shared/src/fleetWindow.selftest.ts` — alwaysOn override cases (see §4.4 below).
+- `packages/ocpp-server/src/fleet/fleetScheduler.selftest.ts` — `intendedModeAt` with the new arg, plus a hydrateSessions test that asserts `SessionForSchedule.alwaysOn` is populated correctly when fetched.
+
+### 4.3b Schema
 
 No migration needed. `FleetPolicy.alwaysOn` already exists (Slice A migration `20260428180000_task_0208_phase3_slice_a`). The fix is code-only.
 
@@ -177,7 +190,7 @@ No migration needed. `FleetPolicy.alwaysOn` already exists (Slice A migration `2
 | Test file | Additions |
 |---|---|
 | `packages/shared/src/fleetWindow.selftest.ts` | 3 new cases: alwaysOn=true → active=true regardless of `at`/`windows`/`timeZone`; alwaysOn=true with empty windows → active=true; alwaysOn=true with windowed days → still active=true |
-| `packages/ocpp-server/src/fleet/fleetScheduler.selftest.ts` | 1 new case for `intendedModeAt`: policy.alwaysOn=true with empty windowsJson at any time → `mode='GATE_RELEASED'`, `nextTransitionAt=null` |
+| `packages/ocpp-server/src/fleet/fleetScheduler.selftest.ts` | (a) `intendedModeAt(..., alwaysOn=true)` → `mode='GATE_RELEASED'`, `nextTransitionAt=null`. (b) hydrateSessions assertion that `SessionForSchedule.alwaysOn` is populated from the policy row. (c) regression: `intendedModeAt(..., alwaysOn=false)` with empty windows still returns `GATE_ACTIVE` (existing behavior preserved). |
 | `packages/ocpp-server/src/fleet/applyFleetPolicyProfile.selftest.ts` | (optional) verify the profile push for GATE_RELEASED carries `stackLevel=1` + `limit=maxAmps`, not the 0 A deny shape |
 
 No new selftest file needed — extend the existing ones.
@@ -231,23 +244,39 @@ This addresses the "Slice E sim caveat" that hid the bug originally: the sim ack
 
 #### Tier 3 — prod re-pilot on 1A32 (without auto-RemoteStart)
 
+> **PRECONDITION caveat (added 2026-04-29 per reviewer):** the Hybrid-B fleet attachment fires only when the charger sends `Authorize` BEFORE `StartTransaction`. Whether that happens depends on the charger's `AuthorizeRemoteTxRequests` configuration value:
+>
+> - `AuthorizeRemoteTxRequests=true` → charger sends Authorize on RemoteStart → Hybrid-B prefix-match cache populates → StartTransaction handler `consumeFleetAuthorize()` returns the cached entry → fleet attached.
+> - `AuthorizeRemoteTxRequests=false` → charger goes straight to StartTransaction → Authorize cache empty → `consumeFleetAuthorize()` returns null → handler falls through to `consumeFleetAutoStartPending()` which is also null (rollout disabled, Slice C never wrote one) → `Session.fleetPolicyId` stays NULL → engine never runs → Tier 3 doesn't actually exercise the fix.
+>
+> LOOP firmware default for this key on 1A32 is unknown without checking. **Step 1 of the re-pilot must verify it.**
+
 After Tier 1+2 land in dev and the fix reaches prod (dev → main release + ocpp-server-fresh redeploy):
 
-1. Pre-flight: env flag still ON, all rollout flags `false`, no ENABLED policies global except the pilot, 1A32 ONLINE
-2. **Re-enable** the pilot policy if it was disabled during teardown (it's currently `ENABLED` from Gate 2 — confirm)
-3. **Re-enable** connector chargingMode=FLEET_AUTO + fleetPolicyId assignment if those were cleared during teardown (currently still set from Gate 2 — confirm)
-4. **Do NOT enable connector rollout override.** With rollout=false, Slice C auto-start cannot fire.
-5. Operator: portal → 1A32 → **Remote Start** with idTag `PILOT-1A32-001` (manually invokes the `POST /chargers/:id/remote-start` operator endpoint with the policy's autoStartIdTag — Authorize will fire Hybrid-B prefix match and attach the policy to the session)
-6. Vehicle plugged in (or already in)
-7. Verify in OcppLog and on the meter:
+1. **Pre-flight precondition check.** Operator: portal → 1A32 → Get Configuration. Confirm `AuthorizeRemoteTxRequests=true`. If it's `false` (or unset, depending on firmware default), the operator must `ChangeConfiguration` to set it `true` and reboot the charger if required. Without this, Tier 3 is invalid.
+2. Pre-flight state: env flag still ON, all rollout flags `false`, no ENABLED policies global except the pilot, 1A32 ONLINE.
+3. Confirm pilot policy still ENABLED (currently is, from Gate 2).
+4. Confirm connector still `chargingMode=FLEET_AUTO` + `fleetPolicyId` set (currently is).
+5. **Do NOT enable connector rollout override.** With rollout=false, Slice C auto-start cannot fire — the fleet attachment we want comes purely from the Hybrid-B Authorize prefix match.
+6. Operator: portal → 1A32 → **Remote Start** with idTag `PILOT-1A32-001` (the policy's autoStartIdTag — matches prefix `PILOT-1A32-`).
+7. Vehicle plugged in (or already in).
+8. **Mandatory verification before drawing any conclusions about the engine fix:** query the `Session` row created from this StartTransaction. **`Session.fleetPolicyId` MUST be non-null** (= the pilot policy id). If it's null, the Hybrid-B path didn't fire, the engine never ran, and any conclusions about "no 0 A push" are meaningless. Stop the test, investigate `AuthorizeRemoteTxRequests`, retry.
+9. With fleet attachment confirmed, verify in OcppLog and on the meter:
    - **NO** profile push with `sL=90 limit=0`
    - **YES** profile push with `sL=1 limit=16`
    - `Power.Active.Import > 0` within ~30 seconds
    - Vehicle actually charges
-8. Operator: RemoteStop or unplug
-9. Verify Session COMPLETED, kWh > 0, BillingSnapshot reflects real energy
+10. Operator: RemoteStop or unplug.
+11. Verify Session COMPLETED, kWh > 0, BillingSnapshot reflects real energy + correct gating-mode classification.
 
-This path exercises the bug-fix code (the engine's gate decision) on the real charger without depending on Slice C auto-start working post-redeploy. Pilot wall-clock: ~10 min including reconnect-after-redeploy.
+This path exercises the bug-fix code (the engine's gate decision) on the real charger **once step 8 confirms the fleet attachment actually happened**. Without step 8, the test silently degrades into a non-fleet session with no engine activity and no signal value. Pilot wall-clock: ~10–15 min including reconnect-after-redeploy and the precondition check.
+
+#### Fallback if `AuthorizeRemoteTxRequests` can't be set true on this charger
+
+Two backup options if the precondition fails and can't be remediated:
+
+- **Use Slice C auto-RemoteStart for the re-pilot** (relaxing the "without auto-RemoteStart" constraint). Re-enable connector rollout override, plug in, let `maybeAutoStartFleet` write the pending entry, StartTransaction consumes via `consumeFleetAutoStartPending`. Adds the heartbeat-after-redeploy variable but is the only other way to definitively attach a fleet policy on this charger.
+- **Skip Tier 3 entirely.** If Tier 1 and Tier 2 pass cleanly, that's strong evidence. Treat Tier 3 as nice-to-have, not gating, for this fix.
 
 After Tier 3 succeeds, **then** separately re-test Slice C auto-RemoteStart end-to-end with the heartbeat-pre-warm precaution noted in §5.
 
@@ -279,7 +308,7 @@ Final prod state: identical-effect to Gate 1 dark deploy. Two-tier rollout gate 
 
 ---
 
-## 6. Cross-references
+## 7. Cross-references
 
 - Design source: `tasks/task-0208-phase3-fleet-auto-redesign.md` (PR #71)
 - Slice A schema: PR #72
