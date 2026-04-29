@@ -118,38 +118,74 @@ export type ReadinessCheck = (
   chargerId: string,
 ) => Promise<{ ready: boolean; reason: string }>;
 
+/**
+ * Pure decision function for the readiness gate. Takes already-resolved
+ * inputs (registry stats, live-WS flag, historical-boot result) and
+ * returns the gate verdict. Extracted as a pure function so unit tests
+ * can exercise every decision branch without stubbing prisma / the
+ * client registry. The async wrapper below performs the IO.
+ *
+ * Branch order matters — earlier conditions short-circuit later ones.
+ * In particular: `no-heartbeat` MUST be checked before falling back to
+ * the historical-boot path so that a brand-new connection (heartbeatCount=0)
+ * isn't accepted on the strength of a historical Boot alone.
+ */
+export type ReadinessInputs = {
+  /** clientRegistry.getStats(ocppId) result. null when no entry. */
+  stats: { bootReceived: boolean; heartbeatCount: number } | null;
+  /** !!clientRegistry.get(ocppId) — accounts for the stale-eviction path. */
+  hasLiveClient: boolean;
+  /**
+   * Whether a historical BootNotification row exists for this charger
+   * in OcppEventOutbox. `false` is also the correct value to pass when
+   * the DB lookup wasn't performed (e.g. early-return on missing
+   * heartbeat) — the wrapper short-circuits before consulting this
+   * field in those branches.
+   */
+  hasHistoricalBoot: boolean;
+};
+
+export function evaluateFleetAutoStartReadiness(
+  inputs: ReadinessInputs,
+): { ready: boolean; reason: string } {
+  if (!inputs.stats) return { ready: false, reason: 'no-live-ws' };
+  if (!inputs.hasLiveClient) return { ready: false, reason: 'ws-stale' };
+  if (inputs.stats.heartbeatCount < 1) return { ready: false, reason: 'no-heartbeat' };
+  if (inputs.stats.bootReceived) return { ready: true, reason: 'ok' };
+  if (inputs.hasHistoricalBoot) return { ready: true, reason: 'ok-via-historical-boot' };
+  return { ready: false, reason: 'no-boot' };
+}
+
 export const isReadyForFleetAutoStart: ReadinessCheck = async (ocppId, chargerId) => {
   const stats = clientRegistry.getStats(ocppId);
-  if (!stats) return { ready: false, reason: 'no-live-ws' };
-  // Defensive: get() also evicts stale entries. If get() returns undefined
-  // but getStats returned a row, treat it as not-ready.
-  if (!clientRegistry.get(ocppId)) return { ready: false, reason: 'ws-stale' };
-  if (stats.heartbeatCount < 1) return { ready: false, reason: 'no-heartbeat' };
-  if (stats.bootReceived) return { ready: true, reason: 'ok' };
+  const hasLiveClient = !!clientRegistry.get(ocppId);
 
-  // Fallback: in-memory `bootReceived` is reset whenever the OCPP process
-  // restarts. After a redeploy, a charger that never re-emitted
-  // BootNotification on WS reconnect (firmware-dependent — LOOP does not)
-  // would otherwise look unready forever. Accept a historical
-  // BootNotification on file as proof the charger has booted at least once
-  // in its lifetime; the fresh heartbeat above proves it is currently
-  // alive on this process.
-  try {
-    const historicalBoot = await (prisma as any).ocppEventOutbox.findFirst({
-      where: { chargerId, eventType: 'BootNotification' },
-      select: { id: true },
-    });
-    if (historicalBoot) {
-      return { ready: true, reason: 'ok-via-historical-boot' };
+  // Only consult the DB for historical-boot when we'd actually need it.
+  // Avoids a DB hit on the hot happy path where the in-memory bootReceived
+  // is already true, and on the early-rejection paths.
+  let hasHistoricalBoot = false;
+  const wouldNeedFallback =
+    stats !== null
+    && hasLiveClient
+    && stats.heartbeatCount >= 1
+    && !stats.bootReceived;
+  if (wouldNeedFallback) {
+    try {
+      const row = await (prisma as any).ocppEventOutbox.findFirst({
+        where: { chargerId, eventType: 'BootNotification' },
+        select: { id: true },
+      });
+      hasHistoricalBoot = !!row;
+    } catch (err) {
+      // Fail closed if the DB lookup itself errors. The pure evaluator
+      // will return `no-boot` since hasHistoricalBoot stays false.
+      console.warn(
+        `[fleet.auto-start] readiness DB lookup failed (fail-closed): chargerId=${chargerId} err=${err instanceof Error ? err.message : String(err)}`,
+      );
     }
-  } catch (err) {
-    // Fail closed if the DB lookup itself errors.
-    console.warn(
-      `[fleet.auto-start] readiness DB lookup failed (fail-closed): chargerId=${chargerId} err=${err instanceof Error ? err.message : String(err)}`,
-    );
-    return { ready: false, reason: 'no-boot' };
   }
-  return { ready: false, reason: 'no-boot' };
+
+  return evaluateFleetAutoStartReadiness({ stats, hasLiveClient, hasHistoricalBoot });
 };
 
 // ─── Trigger filter (pure, testable) ───────────────────────────────────────

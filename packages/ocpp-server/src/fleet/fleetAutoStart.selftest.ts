@@ -29,6 +29,7 @@ import {
   maybeAutoStartFleet,
   markFleetAutoStartResolved,
   consumeFleetAutoStartPending,
+  evaluateFleetAutoStartReadiness,
   __resetFleetAutoStartForTests,
   __setPendingForTests,
   type AutoStartConnector,
@@ -422,6 +423,86 @@ async function main() {
         idTag: enabledPolicy.autoStartIdTag,
       });
       assert(consumed === false, 'pending cleared after both retries fail');
+    }
+  }
+
+  // ─── evaluateFleetAutoStartReadiness — pure decision branches ──────
+  // Tests the actual readiness logic, NOT just the DI plumbing above.
+  // Covers every branch the post-redeploy historical-boot fallback adds.
+  console.log('\n--- evaluateFleetAutoStartReadiness pure decision branches ---');
+  {
+    // Required user-listed cases:
+
+    // (1) active WS + current heartbeat + historical BootNotification → ready
+    {
+      const r = evaluateFleetAutoStartReadiness({
+        stats: { bootReceived: false, heartbeatCount: 1 },
+        hasLiveClient: true,
+        hasHistoricalBoot: true,
+      });
+      assert(r.ready === true, '(1) WS + heartbeat + historical Boot → ready');
+      assert(r.reason === 'ok-via-historical-boot', '(1) reason=ok-via-historical-boot');
+    }
+
+    // (2) active WS + current heartbeat + NO historical BootNotification → no-boot
+    {
+      const r = evaluateFleetAutoStartReadiness({
+        stats: { bootReceived: false, heartbeatCount: 1 },
+        hasLiveClient: true,
+        hasHistoricalBoot: false,
+      });
+      assert(r.ready === false, '(2) WS + heartbeat + no historical Boot → not ready');
+      assert(r.reason === 'no-boot', '(2) reason=no-boot');
+    }
+
+    // (3) active WS + historical BootNotification + heartbeatCount=0 → no-heartbeat
+    //     CRITICAL: historical Boot alone must NOT bypass the heartbeat
+    //     gate. Heartbeat proves "currently alive on this process",
+    //     historical Boot only proves "has booted before in lifetime".
+    //     Both are required.
+    {
+      const r = evaluateFleetAutoStartReadiness({
+        stats: { bootReceived: false, heartbeatCount: 0 },
+        hasLiveClient: true,
+        hasHistoricalBoot: true,
+      });
+      assert(r.ready === false, '(3) WS + historical Boot + heartbeatCount=0 → not ready');
+      assert(r.reason === 'no-heartbeat', '(3) reason=no-heartbeat (historical Boot does NOT bypass heartbeat)');
+    }
+
+    // Sanity coverage of the other early-exit branches so they don't
+    // regress while we tinker with the historical-boot logic.
+
+    // null stats → no-live-ws
+    {
+      const r = evaluateFleetAutoStartReadiness({
+        stats: null,
+        hasLiveClient: false,
+        hasHistoricalBoot: true,
+      });
+      assert(!r.ready && r.reason === 'no-live-ws', 'null stats → no-live-ws');
+    }
+
+    // stats present but client evicted by registry stale check → ws-stale
+    {
+      const r = evaluateFleetAutoStartReadiness({
+        stats: { bootReceived: true, heartbeatCount: 5 },
+        hasLiveClient: false,
+        hasHistoricalBoot: true,
+      });
+      assert(!r.ready && r.reason === 'ws-stale', 'stats but no live client → ws-stale');
+    }
+
+    // In-process bootReceived true short-circuits to ok (no DB lookup
+    // needed at runtime — pure function path doesn't even consult
+    // hasHistoricalBoot in this branch).
+    {
+      const r = evaluateFleetAutoStartReadiness({
+        stats: { bootReceived: true, heartbeatCount: 1 },
+        hasLiveClient: true,
+        hasHistoricalBoot: false,
+      });
+      assert(r.ready && r.reason === 'ok', 'in-memory bootReceived → ok');
     }
   }
 
