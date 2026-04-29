@@ -84,15 +84,21 @@ function makeApplyProfileRecorder(result: ApplyResult = { ok: true, action: 'pus
 // so use 10:00–12:00 Mon for deterministic eval.
 const MON_10_TO_12: unknown = { windows: [{ day: 1, start: '10:00', end: '12:00' }] };
 
-function sess(id: string, chargerId: string, policyId = 'p1'): SessionForSchedule {
+function sess(
+  id: string,
+  chargerId: string,
+  policyId = 'p1',
+  opts: { alwaysOn?: boolean; windowsJson?: unknown } = {},
+): SessionForSchedule {
   return {
     sessionId: id,
     chargerId,
     ocppId: `ocpp-${chargerId}`,
     fleetPolicyId: policyId,
     maxAmps: 32,
-    windowsJson: MON_10_TO_12,
+    windowsJson: opts.windowsJson ?? MON_10_TO_12,
     siteTimeZone: 'America/Los_Angeles',
+    alwaysOn: opts.alwaysOn ?? false,
   };
 }
 
@@ -126,6 +132,28 @@ console.log('\n--- intendedModeAt: active=window open ⇒ GATE_RELEASED ---');
   const at = new Date('2026-04-27T17:30:00.000Z');
   const r = intendedModeAt({ windows: [] }, 'America/Los_Angeles', at);
   assert(r.mode === 'GATE_ACTIVE', 'empty windows ⇒ GATE_ACTIVE');
+}
+// ─── intendedModeAt + alwaysOn (TASK-0208 Phase 3 fix) ────────────────
+console.log('\n--- intendedModeAt: alwaysOn=true ⇒ GATE_RELEASED, nextTransitionAt=null ---');
+{
+  // Empty windows + alwaysOn=true → GATE_RELEASED (this is the bug fix path)
+  const at = new Date('2026-04-27T17:30:00.000Z');
+  const r = intendedModeAt({ windows: [] }, 'America/Los_Angeles', at, /* alwaysOn */ true);
+  assert(r.mode === 'GATE_RELEASED', `alwaysOn=true + empty windows ⇒ GATE_RELEASED (got ${r.mode})`);
+  assert(r.nextTransitionAt === null, `alwaysOn=true ⇒ no transition (got ${r.nextTransitionAt})`);
+}
+{
+  // Windowed config OUTSIDE window + alwaysOn=true → still GATE_RELEASED
+  const at = new Date('2026-04-27T16:30:00.000Z'); // 09:30 PT, before 10:00 window
+  const r = intendedModeAt(MON_10_TO_12, 'America/Los_Angeles', at, /* alwaysOn */ true);
+  assert(r.mode === 'GATE_RELEASED', 'alwaysOn overrides windows even when outside');
+  assert(r.nextTransitionAt === null, 'alwaysOn ⇒ no transition');
+}
+{
+  // Regression guard: alwaysOn=false (or omitted) preserves existing behavior.
+  const at = new Date('2026-04-27T17:30:00.000Z');
+  const r = intendedModeAt({ windows: [] }, 'America/Los_Angeles', at, /* alwaysOn */ false);
+  assert(r.mode === 'GATE_ACTIVE', 'alwaysOn=false + empty windows ⇒ GATE_ACTIVE (regression guard)');
 }
 
 // ─── start/stop idempotency ──────────────────────────────────────────
@@ -199,6 +227,33 @@ console.log('\n--- outside window ⇒ GATE_ACTIVE ---');
   });
   await reconcileCharger('C1');
   assert(ap.calls[0].mode === 'GATE_ACTIVE', 'before window ⇒ GATE_ACTIVE');
+  stopFleetScheduler();
+}
+
+// ─── alwaysOn=true session ⇒ GATE_RELEASED even outside windows ────────
+console.log('\n--- alwaysOn=true session ⇒ GATE_RELEASED through driveCharger ---');
+{
+  __resetFleetSchedulerForTests();
+  const timers = makeFakeTimers();
+  const ap = makeApplyProfileRecorder();
+  // Outside window: 09:30 PT, MON_10_TO_12 not yet open. Without alwaysOn this
+  // would yield GATE_ACTIVE (see test above). With alwaysOn=true the engine
+  // must still push GATE_RELEASED — this is the fix the bug doc tracks.
+  const now = () => new Date('2026-04-27T16:30:00.000Z');
+  const session = sess('s-always', 'C-always', 'p-always', { alwaysOn: true });
+  startFleetScheduler({
+    timers, now, flagEnabled: () => true,
+    applyProfile: ap.fn,
+    fetchAll: async () => [session],
+    fetchForCharger: async () => [session],
+  });
+  await reconcileCharger('C-always');
+  assert(ap.calls.length === 1, 'applyProfile called once');
+  assert(ap.calls[0].mode === 'GATE_RELEASED', `alwaysOn=true outside window ⇒ GATE_RELEASED (got ${ap.calls[0].mode})`);
+  // No edge transition expected when alwaysOn (next reconcile tick is the only
+  // cadence). Verify no edge timer was set.
+  const st = __getFleetSchedulerStateForTests();
+  assert(st.edgeTimerKeys.length === 0, 'no edge timer when alwaysOn (nextTransitionAt=null)');
   stopFleetScheduler();
 }
 

@@ -51,6 +51,12 @@ export interface SessionForSchedule {
   maxAmps: number;
   windowsJson: unknown;
   siteTimeZone: string | null;
+  /**
+   * Mirrors `FleetPolicy.alwaysOn`. When true the engine treats the policy as
+   * permanently in-window — gate is GATE_RELEASED at all times regardless of
+   * `windowsJson`. (TASK-0208 Phase 3 alwaysOn engine fix.)
+   */
+  alwaysOn: boolean;
 }
 
 export type FetchActiveFleetSessions = () => Promise<SessionForSchedule[]>;
@@ -126,7 +132,7 @@ async function hydrateSessions(
   if (policyIds.length === 0) return [];
   const policies = await prisma.fleetPolicy.findMany({
     where: { id: { in: policyIds } },
-    select: { id: true, maxAmps: true, windowsJson: true, site: { select: { timeZone: true } } },
+    select: { id: true, maxAmps: true, windowsJson: true, alwaysOn: true, site: { select: { timeZone: true } } },
   });
   const byId = new Map<string, (typeof policies)[number]>(policies.map((p: any) => [p.id as string, p]));
   const out: SessionForSchedule[] = [];
@@ -147,6 +153,7 @@ async function hydrateSessions(
       maxAmps: pol.maxAmps,
       windowsJson: pol.windowsJson,
       siteTimeZone: (pol.site?.timeZone as string | null) ?? null,
+      alwaysOn: Boolean((pol as any).alwaysOn),
     });
   }
   return out;
@@ -235,8 +242,9 @@ export function intendedModeAt(
   windowsJson: unknown,
   timeZone: string | null,
   at: Date,
+  alwaysOn: boolean = false,
 ): { mode: FleetGateMode; nextTransitionAt: Date | null } {
-  const evalResult = evaluateFleetWindowAt({ at, windows: windowsJson, timeZone });
+  const evalResult = evaluateFleetWindowAt({ at, windows: windowsJson, timeZone, alwaysOn });
   return {
     mode: evalResult.active ? 'GATE_RELEASED' : 'GATE_ACTIVE',
     nextTransitionAt: evalResult.nextTransitionAt,
@@ -352,7 +360,7 @@ async function driveCharger(
   }
 
   const session = sessions[0];
-  const intent = intendedModeAt(session.windowsJson, session.siteTimeZone, now);
+  const intent = intendedModeAt(session.windowsJson, session.siteTimeZone, now, session.alwaysOn);
 
   const result = await applyProfile({
     chargerId: session.chargerId,
