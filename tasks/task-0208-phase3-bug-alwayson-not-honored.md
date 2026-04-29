@@ -28,7 +28,7 @@ Internally, runtime control remains **connector-level**. Multi-port chargers may
 For auto-start to fire on plug-in, ALL of the following must hold (this is the existing two-tier gate from the redesign doc §0 #5 + Slice C decision matrix):
 
 1. `FLEET_GATED_SESSIONS_ENABLED=true` (env, emergency kill switch on)
-2. Effective rollout for this connector is `true` (per-connector override OR site flag)
+2. Effective rollout for this connector is `true` — resolved as: `Connector.fleetAutoRolloutEnabled` if non-null wins (so a connector `false` overrides a site `true`); a connector `null` inherits `Site.fleetAutoRolloutEnabled`
 3. `Connector.chargingMode === 'FLEET_AUTO'`
 4. `Connector.fleetPolicyId` resolves to a `FleetPolicy` with `status='ENABLED'`
 5. `policy.autoStartIdTag` is set
@@ -50,7 +50,7 @@ So when a vehicle plugs in **outside** the allowed window:
 1. `RemoteStartTransaction` still fires (auto-start does not gate on window state).
 2. `Session` is created with `fleetPolicyId` attached and `plugInAt` populated.
 3. The fleet engine pushes a profile at `sL=90 limit=0` (GATE_ACTIVE) — vehicle holds in `SuspendedEVSE`.
-4. When the window opens, the scheduler's edge timer fires and demotes via same-id replacement (id=90001, sL=1, limit=`maxAmps`) — vehicle resumes.
+4. When the window opens, the scheduler's edge timer fires and demotes via same-id replacement (same fleet `chargingProfileId` from `fleetProfileIdFor(chargerId)`, sL=1, limit=`maxAmps`) — vehicle resumes.
 5. `BillingSnapshot.preDeliveryGatedMinutes` captures the time the vehicle waited in the deny period.
 6. `gatedPricingMode` reflects the policy's gating-mode contract.
 
@@ -345,14 +345,16 @@ Two backup options if the precondition fails and can't be remediated:
 - **Use Slice C auto-RemoteStart for the re-pilot** (relaxing the "without auto-RemoteStart" constraint). Re-enable connector rollout override, plug in, let `maybeAutoStartFleet` write the pending entry, StartTransaction consumes via `consumeFleetAutoStartPending`. Adds the heartbeat-after-redeploy variable but is the only other way to definitively attach a fleet policy on this charger.
 - **Skip Tier 3 entirely.** If Tier 1 and Tier 2 pass cleanly, that's strong evidence. Treat Tier 3 as nice-to-have, not gating, for this fix.
 
-After Tier 3 succeeds, **then** separately run Tier 4 below — that is the gate for declaring the pilot ready.
+Whether Tier 3 ran or was skipped per its fallback, **Tier 4 below is the mandatory gate for declaring the pilot ready.**
 
 #### Tier 4 — Slice C end-to-end UX validation (gates pilot-readiness)
 
 This tier exists to prove the §0 acceptance criterion verbatim. It is the only tier that exercises the full Fleet Auto UX (server-initiated RemoteStart on plug-in, no driver action). **Tier 4 must pass before the pilot is declared ready** — Tiers 1–3 are engine-isolation only and do not substitute for it.
 
-**Pre-flight state (same as Tier 3, plus rollout enabled):**
-- Engine fix deployed to prod ocpp-server-fresh (Tier 1+2 green, Tier 3 green).
+**Pre-flight state (rollout enabled, engine fix deployed):**
+- Tier 1 + Tier 2 green.
+- Engine fix deployed to prod ocpp-server-fresh.
+- Tier 3 is **optional** — if it ran, it should be green; if it was skipped per the Tier 3 fallback, that does not block Tier 4.
 - 1A32 ONLINE, heartbeat pre-warmed (`TriggerMessage(Heartbeat)` immediately after redeploy SUCCESS — see §5).
 - Pilot policy `fleet-policy-pilot-1a32-2026-04-29` ENABLED, `alwaysOn=true`, `autoStartIdTag=PILOT-1A32-001`, `maxAmps=16`, prefix `PILOT-1A32-`.
 - Connector still `chargingMode=FLEET_AUTO` + `fleetPolicyId` set.
