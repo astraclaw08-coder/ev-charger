@@ -50,7 +50,7 @@ So when a vehicle plugs in **outside** the allowed window:
 1. `RemoteStartTransaction` still fires (auto-start does not gate on window state).
 2. `Session` is created with `fleetPolicyId` attached and `plugInAt` populated.
 3. The fleet engine pushes a profile at `sL=90 limit=0` (GATE_ACTIVE) — vehicle holds in `SuspendedEVSE`.
-4. When the window opens, the scheduler's edge timer fires and demotes via same-id replacement (same fleet `chargingProfileId` from `fleetProfileIdFor(chargerId)`, sL=90, limit=`maxAmps`) — vehicle resumes.
+4. When the window opens, the scheduler's edge timer fires and rewrites via same-id replacement (same fleet `chargingProfileId` from `fleetProfileIdFor(chargerId)`, sL=90, limit=`maxAmps`) — vehicle resumes.
 5. `BillingSnapshot.preDeliveryGatedMinutes` captures the time the vehicle waited in the deny period.
 6. `gatedPricingMode` reflects the policy's gating-mode contract.
 
@@ -302,7 +302,7 @@ Modify `packages/ocpp-server/src/scripts/sim-fleet-auto.ts` (or write a sibling 
 3. **Sim sends `Authorize` with idTag `PILOT-1A32-001`** (matches policy prefix `PILOT-1A32-`)
 4. Sim sends `StartTransaction` with that idTag
 5. Sim **captures** the inbound `SetChargingProfile` payload from the server
-6. **Assert** `csChargingProfiles.stackLevel === 1` AND `csChargingProfiles.chargingSchedule.chargingSchedulePeriod[0].limit === 16` (`alwaysOn=true` → GATE_RELEASED → maxAmps=16)
+6. **Assert** `csChargingProfiles.stackLevel === 90` AND `csChargingProfiles.chargingSchedule.chargingSchedulePeriod[0].limit === 16` (`alwaysOn=true` → GATE_RELEASED → maxAmps=16)
 7. Sim continues with MeterValues / StopTransaction so the BillingSnapshot path runs
 
 The Authorize prefix-match path is the legacy Hybrid-B route that Slice G is going to retire — it is still functional today and is the cleanest non-auto-RemoteStart path to attach a fleet policy to a session. The sim assertion fails before the fix (server pushes sL=90 limit=0) and passes after (sL=90 limit=16).
