@@ -191,32 +191,91 @@ No new selftest file needed — extend the existing ones.
 
 The cheap option closes this exact regression class. Add to a follow-up PR after the fix lands.
 
-### 4.6 Re-pilot plan
+### 4.6 Validation strategy — does NOT depend on Slice C auto-RemoteStart
 
-After the patch lands and reaches prod via dev → main release + ocpp-server-fresh redeploy:
+The `alwaysOn` bug is in the gating engine (`fleetScheduler.intendedModeAt` + `fleetWindow.evaluateFleetWindowAt`). The engine runs **after** a fleet session is attached to a Connector — regardless of HOW the attachment happened. This means the fix can be validated through any path that produces a fleet-attributed `Session`. We deliberately exclude the Slice C auto-RemoteStart path from validation because:
 
-1. Pre-flight identical to Gate 1 final state — env still ON (don't roll), connector rollout disabled, pilot policy can stay `alwaysOn=true` (its definition is correct; only the runtime was misreading)
-2. Operator: re-enable rollout override on 1A32 connector 1
-3. Operator: plug in
-4. Verify sL=90 limit=0 push **does NOT happen**; sL=1 limit=16 push **does** happen
-5. Verify `Power.Active.Import > 0` within ~30 seconds of session start
-6. Stop, restore, write Gate 4 evidence
+- Auto-start surfaced two real-world friction points in Gate 4 (post-redeploy heartbeat wait + readiness gate timing); revalidating both during the same pilot adds variables that aren't relevant to the engine fix.
+- The engine fix should be provable in isolation from the activation layer.
+- Slice C will be re-tested separately once the engine is known correct — see §5 below.
 
-Total wall-clock estimated: ~30 minutes including operator coordination, assuming readiness gate (heartbeat post-redeploy) is met before plug-in.
+#### Tier 1 — unit tests (deterministic, fastest)
+
+Add to `packages/shared/src/fleetWindow.selftest.ts`:
+- `alwaysOn=true + windows=[]` at any `at`/`timeZone` → `{active: true, matchedWindow: null, nextTransitionAt: null}`
+- `alwaysOn=true + windows=[some-day-mon-9-17]` at Sunday midnight → still `active: true` (alwaysOn overrides windows)
+- `alwaysOn=false + windows=[]` at any `at` → `{active: false}` (existing behavior preserved)
+
+Add to `packages/ocpp-server/src/fleet/fleetScheduler.selftest.ts`:
+- `intendedModeAt(windows=[], timeZone, at, alwaysOn=true)` → `mode='GATE_RELEASED'`, `nextTransitionAt=null`
+- `intendedModeAt(windows=[mon-9-17], timeZone, sundayMidnight, alwaysOn=true)` → `mode='GATE_RELEASED'`
+- `intendedModeAt(windows=[], timeZone, at, alwaysOn=false)` → `mode='GATE_ACTIVE'` (regression guard)
+
+These tests fail before the fix and pass after. They do not require any prod resource.
+
+#### Tier 2 — local OCPP sim with profile-shape assertion (no auto-start)
+
+Modify `packages/ocpp-server/src/scripts/sim-fleet-auto.ts` (or write a sibling `sim-hybrid-b.ts`) to drive a session via the **Hybrid-B Authorize prefix path** instead of waiting for a server-initiated RemoteStart:
+
+1. Connect, BootNotification, Heartbeat
+2. `StatusNotification(Available) → (Preparing)` (just like before)
+3. **Sim sends `Authorize` with idTag `PILOT-1A32-001`** (matches policy prefix `PILOT-1A32-`)
+4. Sim sends `StartTransaction` with that idTag
+5. Sim **captures** the inbound `SetChargingProfile` payload from the server
+6. **Assert** `csChargingProfiles.stackLevel === 1` AND `csChargingProfiles.chargingSchedule.chargingSchedulePeriod[0].limit === 16` (`alwaysOn=true` → GATE_RELEASED → maxAmps=16)
+7. Sim continues with MeterValues / StopTransaction so the BillingSnapshot path runs
+
+The Authorize prefix-match path is the legacy Hybrid-B route that Slice G is going to retire — it is still functional today and is the cleanest non-auto-RemoteStart path to attach a fleet policy to a session. The sim assertion fails before the fix (server pushes sL=90 limit=0) and passes after (sL=1 limit=16).
+
+This addresses the "Slice E sim caveat" that hid the bug originally: the sim ack'd `SetChargingProfile` without checking the payload. Adding the assertion above closes that exact gap permanently.
+
+#### Tier 3 — prod re-pilot on 1A32 (without auto-RemoteStart)
+
+After Tier 1+2 land in dev and the fix reaches prod (dev → main release + ocpp-server-fresh redeploy):
+
+1. Pre-flight: env flag still ON, all rollout flags `false`, no ENABLED policies global except the pilot, 1A32 ONLINE
+2. **Re-enable** the pilot policy if it was disabled during teardown (it's currently `ENABLED` from Gate 2 — confirm)
+3. **Re-enable** connector chargingMode=FLEET_AUTO + fleetPolicyId assignment if those were cleared during teardown (currently still set from Gate 2 — confirm)
+4. **Do NOT enable connector rollout override.** With rollout=false, Slice C auto-start cannot fire.
+5. Operator: portal → 1A32 → **Remote Start** with idTag `PILOT-1A32-001` (manually invokes the `POST /chargers/:id/remote-start` operator endpoint with the policy's autoStartIdTag — Authorize will fire Hybrid-B prefix match and attach the policy to the session)
+6. Vehicle plugged in (or already in)
+7. Verify in OcppLog and on the meter:
+   - **NO** profile push with `sL=90 limit=0`
+   - **YES** profile push with `sL=1 limit=16`
+   - `Power.Active.Import > 0` within ~30 seconds
+   - Vehicle actually charges
+8. Operator: RemoteStop or unplug
+9. Verify Session COMPLETED, kWh > 0, BillingSnapshot reflects real energy
+
+This path exercises the bug-fix code (the engine's gate decision) on the real charger without depending on Slice C auto-start working post-redeploy. Pilot wall-clock: ~10 min including reconnect-after-redeploy.
+
+After Tier 3 succeeds, **then** separately re-test Slice C auto-RemoteStart end-to-end with the heartbeat-pre-warm precaution noted in §5.
 
 ---
 
-## 5. Cleanup status (this pilot)
+## 5. Operational notes for the next prod pilot
 
-To be filled in by the cleanup pass currently in operator's hands at time of writing:
+- **Pre-warm heartbeat after any OCPP redeploy.** The patched OCPP process starts with an empty `clientRegistry`. 1A32's natural heartbeat cadence (~15 min) caused a 7-min wait between operator plug-in and the first auto-start eligible moment. Operator can fire `TriggerMessage(Heartbeat)` from the portal immediately after the deploy SUCCESS to set `heartbeatCount=1` and unblock the readiness gate without waiting for nature.
+- **Tier 2 sim assertion catches this regression class.** If the alwaysOn fix lands without the sim assertion upgrade, future similar bugs (engine pushes wrong profile shape) will not be caught in CI. Worth the small extra effort.
+- **`Session.kwhDelivered=0` is a useful red-flag signal.** Any fleet session that completes with zero energy AND non-zero `preDeliveryGatedMinutes` is a strong candidate for "engine pushed deny when it shouldn't have." Could be a future ops-dashboard alert.
 
-- [ ] Connector 1 rollout override disabled via portal
-- [ ] Active session `991396a8-…` RemoteStop fired
-- [ ] Session COMPLETED in DB
-- [ ] BillingSnapshot row written (will reflect 0 kWh delivered — expected given the bug)
-- [ ] Vehicle unplugged
-- [ ] Connector returned to AVAILABLE
-- [ ] No further auto-start firing (rollout disabled prevents)
+---
+
+## 6. Cleanup status (this pilot) — completed 2026-04-29
+
+| Step | Status | Evidence |
+|---|---|---|
+| Connector 1 rollout override disabled via portal | ✅ | AdminAuditEvent `d7debf0e-…` `fleet.rollout.connector.update` old=`true` new=`false` at 05:56:49Z |
+| Vehicle unplugged | ✅ | StopTransaction received from charger 15:12:42Z |
+| Session COMPLETED | ✅ | `991396a8-…` status `COMPLETED` at 15:12:34.58Z |
+| BillingSnapshot row written | ✅ | kwhDelivered=`0`, grossAmountUsd=`0`, preDeliveryGatedMinutes=`0.323`, gatedPricingMode=`gated` (zero energy as predicted by the bug) |
+| Connector returned to AVAILABLE | ✅ |
+| No further auto-start firing | ✅ rollout disabled |
+| Env flag (`FLEET_GATED_SESSIONS_ENABLED`) | retained ON in prod (deliberate per Gate 3 decision — emergency-only kill switch) |
+| Pilot policy `fleet-policy-pilot-1a32-2026-04-29` | retained ENABLED (no harm — runtime gate still closed via rollout flag) |
+| Connector chargingMode | retained FLEET_AUTO + fleetPolicyId assignment (no harm — runtime gate still closed) |
+
+Final prod state: identical-effect to Gate 1 dark deploy. Two-tier rollout gate is closed at the rollout-flag tier; engine code can still be deployed/replaced without affecting runtime behavior.
 
 ---
 
