@@ -162,6 +162,47 @@ console.log('\nTest 11: nextTransitionAt aligned to minute boundary');
     'seconds/ms zeroed');
 }
 
+// ─── Test 12: alwaysOn=true short-circuits to permanently active ──────
+console.log('\nTest 12: alwaysOn=true → active regardless of windows');
+{
+  const r1 = evaluateFleetWindowAt({
+    at: utc(2026, 4, 23, 10, 0),
+    windows: [],
+    timeZone: 'America/Los_Angeles',
+    alwaysOn: true,
+  });
+  assert(r1.active === true, 'alwaysOn + empty windows → active');
+  assert(r1.matchedWindow === null, 'matchedWindow is null when alwaysOn (no window matched)');
+  assert(r1.nextTransitionAt === null, 'nextTransitionAt is null when alwaysOn');
+
+  // Outside the windowed config (Sunday 00:00 LA, windowed Mon 09–17)
+  const r2 = evaluateFleetWindowAt({
+    at: utc(2026, 4, 26, 7, 0), // Sunday 00:00 LA
+    windows: [{ day: 1, start: '09:00', end: '17:00' }],
+    timeZone: 'America/Los_Angeles',
+    alwaysOn: true,
+  });
+  assert(r2.active === true, 'alwaysOn + windowed config outside window → still active');
+  assert(r2.nextTransitionAt === null, 'no transition when alwaysOn');
+
+  // Regression guard: alwaysOn=false + empty windows → inactive (existing behavior)
+  const r3 = evaluateFleetWindowAt({
+    at: utc(2026, 4, 23, 10, 0),
+    windows: [],
+    timeZone: 'America/Los_Angeles',
+    alwaysOn: false,
+  });
+  assert(r3.active === false, 'alwaysOn=false + empty windows → inactive');
+
+  // Regression guard: alwaysOn omitted defaults to off
+  const r4 = evaluateFleetWindowAt({
+    at: utc(2026, 4, 23, 10, 0),
+    windows: [],
+    timeZone: 'America/Los_Angeles',
+  });
+  assert(r4.active === false, 'alwaysOn omitted defaults off (existing callers unaffected)');
+}
+
 // ─── Summary ──────────────────────────────────────────────────────────
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);
