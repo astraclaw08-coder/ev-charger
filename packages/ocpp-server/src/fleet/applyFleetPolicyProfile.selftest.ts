@@ -138,7 +138,7 @@ console.log('\n--- GATE_ACTIVE pushes sL=90 limit=0 CPMaxProfile ---');
 
 // ───────────── GATE_RELEASED push shape ───────────────────────────────
 
-console.log('\n--- GATE_RELEASED pushes same-id sL=1 limit=maxAmps ---');
+console.log('\n--- GATE_RELEASED pushes same-id sL=90 limit=maxAmps ---');
 
 {
   __resetFleetRamStateForTests();
@@ -149,9 +149,53 @@ console.log('\n--- GATE_RELEASED pushes same-id sL=1 limit=maxAmps ---');
   });
   assert(res.ok === true, 'ok=true');
   const p = send.calls[0].payload as any;
-  assert(p.csChargingProfiles.chargingProfileId === fleetProfileIdFor(CHARGER), 'SAME profileId as GATE_ACTIVE (same-id demote)');
-  assert(p.csChargingProfiles.stackLevel === 1, 'stackLevel=1 (below operator sL=60)');
-  assert(deepEq(p.csChargingProfiles.chargingSchedule.chargingSchedulePeriod, [{ startPeriod: 0, limit: 32 }]), 'schedule = maxAmps');
+  assert(p.csChargingProfiles.chargingProfileId === fleetProfileIdFor(CHARGER), 'SAME profileId as GATE_ACTIVE (same-id replace)');
+  assert(p.csChargingProfiles.stackLevel === 90, 'stackLevel=90 (dominates charger CPMax baseline at sL=60)');
+  assert(p.csChargingProfiles.chargingProfilePurpose === 'ChargePointMaxProfile', 'purpose=ChargePointMaxProfile (same as deny)');
+  assert(p.csChargingProfiles.chargingProfileKind === 'Absolute', 'kind=Absolute');
+  assert(deepEq(p.csChargingProfiles.chargingSchedule.chargingSchedulePeriod, [{ startPeriod: 0, limit: 32 }]), 'schedule = maxAmps (32)');
+  const state = getFleetRamState(CHARGER);
+  assert(state !== null && state.mode === 'GATE_RELEASED', 'RAM state records GATE_RELEASED');
+  assert(state !== null && state.stackLevel === 90, 'RAM state stackLevel=90');
+  assert(state !== null && state.limitAmps === 32, 'RAM state limitAmps=maxAmps');
+}
+
+// ───────────── stackLevel symmetry between modes (regression guard for
+// 2026-04-29 baseline-loses bug) ──────────────────────────────────────
+
+console.log('\n--- deny + release push at the SAME stackLevel (sL=90) ---');
+
+{
+  __resetFleetRamStateForTests();
+  const sendDeny = makeSendStub('Accepted');
+  await applyFleetPolicyProfile({
+    chargerId: CHARGER, ocppId: OCPP, policy: POLICY, mode: 'GATE_ACTIVE',
+    sendProfile: sendDeny.fn, readiness: readyStub(true), flagEnabled: ON,
+  });
+  const denyPayload = sendDeny.calls[0].payload as any;
+
+  __resetFleetRamStateForTests();
+  const sendRelease = makeSendStub('Accepted');
+  await applyFleetPolicyProfile({
+    chargerId: CHARGER, ocppId: OCPP, policy: POLICY, mode: 'GATE_RELEASED',
+    sendProfile: sendRelease.fn, readiness: readyStub(true), flagEnabled: ON,
+  });
+  const releasePayload = sendRelease.calls[0].payload as any;
+
+  assert(
+    denyPayload.csChargingProfiles.stackLevel === releasePayload.csChargingProfiles.stackLevel,
+    `deny stackLevel === release stackLevel (deny=${denyPayload.csChargingProfiles.stackLevel}, release=${releasePayload.csChargingProfiles.stackLevel})`,
+  );
+  assert(denyPayload.csChargingProfiles.stackLevel === 90, 'both modes use sL=90');
+  assert(
+    denyPayload.csChargingProfiles.chargingProfileId === releasePayload.csChargingProfiles.chargingProfileId,
+    'deny + release share the same chargingProfileId',
+  );
+  // The whole point of the fix: same sL, different limit.
+  const denyLimit = denyPayload.csChargingProfiles.chargingSchedule.chargingSchedulePeriod[0].limit;
+  const releaseLimit = releasePayload.csChargingProfiles.chargingSchedule.chargingSchedulePeriod[0].limit;
+  assert(denyLimit === 0, 'deny limit=0');
+  assert(releaseLimit === 32, 'release limit=maxAmps (32)');
 }
 
 // ───────────── idempotency — skip re-push of identical state ──────────

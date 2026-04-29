@@ -50,7 +50,7 @@ So when a vehicle plugs in **outside** the allowed window:
 1. `RemoteStartTransaction` still fires (auto-start does not gate on window state).
 2. `Session` is created with `fleetPolicyId` attached and `plugInAt` populated.
 3. The fleet engine pushes a profile at `sL=90 limit=0` (GATE_ACTIVE) — vehicle holds in `SuspendedEVSE`.
-4. When the window opens, the scheduler's edge timer fires and demotes via same-id replacement (same fleet `chargingProfileId` from `fleetProfileIdFor(chargerId)`, sL=1, limit=`maxAmps`) — vehicle resumes.
+4. When the window opens, the scheduler's edge timer fires and demotes via same-id replacement (same fleet `chargingProfileId` from `fleetProfileIdFor(chargerId)`, sL=90, limit=`maxAmps`) — vehicle resumes.
 5. `BillingSnapshot.preDeliveryGatedMinutes` captures the time the vehicle waited in the deny period.
 6. `gatedPricingMode` reflects the policy's gating-mode contract.
 
@@ -252,7 +252,7 @@ No migration needed. `FleetPolicy.alwaysOn` already exists (Slice A migration `2
 |---|---|
 | `packages/shared/src/fleetWindow.selftest.ts` | 3 new cases: alwaysOn=true → active=true regardless of `at`/`windows`/`timeZone`; alwaysOn=true with empty windows → active=true; alwaysOn=true with windowed days → still active=true |
 | `packages/ocpp-server/src/fleet/fleetScheduler.selftest.ts` | (a) `intendedModeAt(..., alwaysOn=true)` → `mode='GATE_RELEASED'`, `nextTransitionAt=null`. (b) hydrateSessions assertion that `SessionForSchedule.alwaysOn` is populated from the policy row. (c) regression: `intendedModeAt(..., alwaysOn=false)` with empty windows still returns `GATE_ACTIVE` (existing behavior preserved). |
-| `packages/ocpp-server/src/fleet/applyFleetPolicyProfile.selftest.ts` | (optional) verify the profile push for GATE_RELEASED carries `stackLevel=1` + `limit=maxAmps`, not the 0 A deny shape |
+| `packages/ocpp-server/src/fleet/applyFleetPolicyProfile.selftest.ts` | (optional) verify the profile push for GATE_RELEASED carries `stackLevel=90` + `limit=maxAmps`, not the 0 A deny shape |
 
 No new selftest file needed — extend the existing ones.
 
@@ -260,7 +260,7 @@ No new selftest file needed — extend the existing ones.
 
 `sim-fleet-auto.ts` from Slice E acks `SetChargingProfile` without enforcing 0 A. That's why Slice E rehearsal greenlit a policy that would deliver 0 W in real life. Two options:
 
-- **Cheap**: add a profile assertion to the sim — capture the inbound `SetChargingProfile` payload and **fail** the sim if the resulting `mode` doesn't match expectation (alwaysOn → expect sL=1 limit=maxAmps).
+- **Cheap**: add a profile assertion to the sim — capture the inbound `SetChargingProfile` payload and **fail** the sim if the resulting `mode` doesn't match expectation (alwaysOn → expect sL=90 limit=maxAmps).
 - **Expensive**: build a more faithful charger sim that tracks current-offered as a function of pushed profiles.
 
 The cheap option closes this exact regression class. Add to a follow-up PR after the fix lands.
@@ -305,7 +305,7 @@ Modify `packages/ocpp-server/src/scripts/sim-fleet-auto.ts` (or write a sibling 
 6. **Assert** `csChargingProfiles.stackLevel === 1` AND `csChargingProfiles.chargingSchedule.chargingSchedulePeriod[0].limit === 16` (`alwaysOn=true` → GATE_RELEASED → maxAmps=16)
 7. Sim continues with MeterValues / StopTransaction so the BillingSnapshot path runs
 
-The Authorize prefix-match path is the legacy Hybrid-B route that Slice G is going to retire — it is still functional today and is the cleanest non-auto-RemoteStart path to attach a fleet policy to a session. The sim assertion fails before the fix (server pushes sL=90 limit=0) and passes after (sL=1 limit=16).
+The Authorize prefix-match path is the legacy Hybrid-B route that Slice G is going to retire — it is still functional today and is the cleanest non-auto-RemoteStart path to attach a fleet policy to a session. The sim assertion fails before the fix (server pushes sL=90 limit=0) and passes after (sL=90 limit=16).
 
 This addresses the "Slice E sim caveat" that hid the bug originally: the sim ack'd `SetChargingProfile` without checking the payload. Adding the assertion above closes that exact gap permanently.
 
@@ -330,7 +330,7 @@ After Tier 1+2 land in dev and the fix reaches prod (dev → main release + ocpp
 8. **Mandatory verification before drawing any conclusions about the engine fix:** query the `Session` row created from this StartTransaction. **`Session.fleetPolicyId` MUST be non-null** (= the pilot policy id). If it's null, the Hybrid-B path didn't fire, the engine never ran, and any conclusions about "no 0 A push" are meaningless. Stop the test, investigate `AuthorizeRemoteTxRequests`, retry.
 9. With fleet attachment confirmed, verify in OcppLog and on the meter:
    - **NO** profile push with `sL=90 limit=0`
-   - **YES** profile push with `sL=1 limit=16`
+   - **YES** profile push with `sL=90 limit=16`
    - `Power.Active.Import > 0` within ~30 seconds
    - Vehicle actually charges
 10. Operator: RemoteStop or unplug.
@@ -376,7 +376,7 @@ This tier exists to prove the §0 acceptance criterion verbatim. It is the only 
    - `plugInAt` set, `firstEnergyAt` populated within ~30 s.
 6. Verify the engine pushed the correct profile shape:
    - **NO** `SetChargingProfile` with `stackLevel=90 limit=0`.
-   - **YES** `SetChargingProfile` with `stackLevel=1 limit=16` (GATE_RELEASED at `maxAmps`).
+   - **YES** `SetChargingProfile` with `stackLevel=90 limit=16` (GATE_RELEASED at `maxAmps`).
    - Charger acks Accepted.
 7. Verify real-world charging:
    - `Power.Active.Import > 0` from MeterValues within ~30 s.
