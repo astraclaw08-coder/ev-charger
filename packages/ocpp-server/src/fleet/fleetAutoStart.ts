@@ -89,30 +89,103 @@ export type AutoStartSkipReason =
 // CLAUDE.md hard rule #1: "Never send server commands until BootNotification
 // + ≥1 Heartbeat confirmed." The shared `connectionReadyForSmartCharging()`
 // helper takes a shortcut on a live WS connection — fine for smart-charging
-// re-application but TOO PERMISSIVE for fleet auto-start, which initiates
-// a RemoteStartTransaction (a much sharper command than re-pushing a
-// charging profile).
+// re-application but too permissive for fleet auto-start, which initiates a
+// RemoteStartTransaction (a much sharper command than re-pushing a charging
+// profile).
 //
-// This helper enforces the strict design contract directly against the
-// in-process clientRegistry. It is purposely narrow:
-//   - live client must be in the registry (covers WS health)
-//   - bootReceived flag must be set (BootNotification handled)
-//   - at least one Heartbeat counted (charger has talked back)
+// This helper checks four conditions:
+//   1. live client in the registry (covers WS health)
+//   2. registry not stale (defensive against eviction races)
+//   3. registry.heartbeatCount >= 1 (charger has talked to *this* OCPP
+//      process at least once — proves it's currently alive, not just
+//      historically known)
+//   4. BootNotification confirmed — either in-memory `bootReceived` (set
+//      when the current process saw a Boot during this session) OR a
+//      historical BootNotification row for this charger in
+//      OcppEventOutbox. The historical fallback exists because LOOP-class
+//      firmware does NOT auto-resend BootNotification on a simple WS
+//      reconnect (e.g. after an OCPP server redeploy). Combined with the
+//      heartbeat check above, the historical-boot fallback still satisfies
+//      hard rule #1 — the boot is just historically confirmed rather than
+//      fresh — without forcing the operator to manually
+//      TriggerMessage(BootNotification) after every server release.
 //
-// Default implementation is exported but the decision-matrix consumes it
+// Default implementation is exported; the decision-matrix consumes it
 // through the dependency-injection seam below so selftests can stub it.
 
-export type ReadinessCheck = (ocppId: string) => { ready: boolean; reason: string };
+export type ReadinessCheck = (
+  ocppId: string,
+  chargerId: string,
+) => Promise<{ ready: boolean; reason: string }>;
 
-export const isReadyForFleetAutoStart: ReadinessCheck = (ocppId) => {
+/**
+ * Pure decision function for the readiness gate. Takes already-resolved
+ * inputs (registry stats, live-WS flag, historical-boot result) and
+ * returns the gate verdict. Extracted as a pure function so unit tests
+ * can exercise every decision branch without stubbing prisma / the
+ * client registry. The async wrapper below performs the IO.
+ *
+ * Branch order matters — earlier conditions short-circuit later ones.
+ * In particular: `no-heartbeat` MUST be checked before falling back to
+ * the historical-boot path so that a brand-new connection (heartbeatCount=0)
+ * isn't accepted on the strength of a historical Boot alone.
+ */
+export type ReadinessInputs = {
+  /** clientRegistry.getStats(ocppId) result. null when no entry. */
+  stats: { bootReceived: boolean; heartbeatCount: number } | null;
+  /** !!clientRegistry.get(ocppId) — accounts for the stale-eviction path. */
+  hasLiveClient: boolean;
+  /**
+   * Whether a historical BootNotification row exists for this charger
+   * in OcppEventOutbox. `false` is also the correct value to pass when
+   * the DB lookup wasn't performed (e.g. early-return on missing
+   * heartbeat) — the wrapper short-circuits before consulting this
+   * field in those branches.
+   */
+  hasHistoricalBoot: boolean;
+};
+
+export function evaluateFleetAutoStartReadiness(
+  inputs: ReadinessInputs,
+): { ready: boolean; reason: string } {
+  if (!inputs.stats) return { ready: false, reason: 'no-live-ws' };
+  if (!inputs.hasLiveClient) return { ready: false, reason: 'ws-stale' };
+  if (inputs.stats.heartbeatCount < 1) return { ready: false, reason: 'no-heartbeat' };
+  if (inputs.stats.bootReceived) return { ready: true, reason: 'ok' };
+  if (inputs.hasHistoricalBoot) return { ready: true, reason: 'ok-via-historical-boot' };
+  return { ready: false, reason: 'no-boot' };
+}
+
+export const isReadyForFleetAutoStart: ReadinessCheck = async (ocppId, chargerId) => {
   const stats = clientRegistry.getStats(ocppId);
-  if (!stats) return { ready: false, reason: 'no-live-ws' };
-  // Defensive: get() also evicts stale entries. If get() returns undefined
-  // but getStats returned a row, treat it as not-ready.
-  if (!clientRegistry.get(ocppId)) return { ready: false, reason: 'ws-stale' };
-  if (!stats.bootReceived) return { ready: false, reason: 'no-boot' };
-  if (stats.heartbeatCount < 1) return { ready: false, reason: 'no-heartbeat' };
-  return { ready: true, reason: 'ok' };
+  const hasLiveClient = !!clientRegistry.get(ocppId);
+
+  // Only consult the DB for historical-boot when we'd actually need it.
+  // Avoids a DB hit on the hot happy path where the in-memory bootReceived
+  // is already true, and on the early-rejection paths.
+  let hasHistoricalBoot = false;
+  const wouldNeedFallback =
+    stats !== null
+    && hasLiveClient
+    && stats.heartbeatCount >= 1
+    && !stats.bootReceived;
+  if (wouldNeedFallback) {
+    try {
+      const row = await (prisma as any).ocppEventOutbox.findFirst({
+        where: { chargerId, eventType: 'BootNotification' },
+        select: { id: true },
+      });
+      hasHistoricalBoot = !!row;
+    } catch (err) {
+      // Fail closed if the DB lookup itself errors. The pure evaluator
+      // will return `no-boot` since hasHistoricalBoot stays false.
+      console.warn(
+        `[fleet.auto-start] readiness DB lookup failed (fail-closed): chargerId=${chargerId} err=${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  return evaluateFleetAutoStartReadiness({ stats, hasLiveClient, hasHistoricalBoot });
 };
 
 // ─── Trigger filter (pure, testable) ───────────────────────────────────────
@@ -382,9 +455,10 @@ export async function maybeAutoStartFleet(
     return logSkip(args, 'rollout-disabled');
   }
 
-  // Strict Fleet-Auto readiness: WS up + BootNotification observed +
-  // ≥1 Heartbeat. CLAUDE.md hard rule #1.
-  const readiness = deps.readinessCheck(args.ocppId);
+  // Strict Fleet-Auto readiness: WS up + ≥1 Heartbeat in current process +
+  // BootNotification confirmed (in-memory or historically in DB).
+  // CLAUDE.md hard rule #1.
+  const readiness = await deps.readinessCheck(args.ocppId, args.chargerId);
   if (!readiness.ready) {
     return logSkip(args, 'charger-not-ready', { readinessReason: readiness.reason });
   }
