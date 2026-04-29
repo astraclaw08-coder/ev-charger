@@ -236,7 +236,7 @@ async function main() {
       envFlagOn: () => true,
       loadConnector: async () => fleetAutoConnector,
       isRolloutEnabled: async () => true,
-      readinessCheck: () => ({ ready: true, reason: 'ok' }),
+      readinessCheck: async () => ({ ready: true, reason: 'ok' }),
       loadActiveSession: async () => null,
       ensureSyntheticUser: async () => ({ id: 'user-synth' }),
       remoteStart: async () => 'Accepted',
@@ -281,12 +281,33 @@ async function main() {
       let remoteStartCalls = 0;
       const r = await maybeAutoStartFleet(trigger, {
         ...happyDeps,
-        readinessCheck: () => ({ ready: false, reason: 'no-boot' }),
+        readinessCheck: async () => ({ ready: false, reason: 'no-boot' }),
         remoteStart: async () => { remoteStartCalls++; return 'Accepted'; },
       });
       assert(r.ok === false && (r as any).reason === 'charger-not-ready',
         'no-boot readiness → charger-not-ready');
       assert(remoteStartCalls === 0, 'not-ready → remoteStart NOT called');
+    }
+
+    // (d.2) readiness via historical-boot fallback → ready (proves the new
+    //       async signature + chargerId arg flow through correctly and
+    //       that 'ok-via-historical-boot' is treated as ready by the
+    //       decision matrix).
+    {
+      __resetFleetAutoStartForTests();
+      let receivedOcppId: string | null = null;
+      let receivedChargerId: string | null = null;
+      const r = await maybeAutoStartFleet(trigger, {
+        ...happyDeps,
+        readinessCheck: async (ocppId, chargerId) => {
+          receivedOcppId = ocppId;
+          receivedChargerId = chargerId;
+          return { ready: true, reason: 'ok-via-historical-boot' };
+        },
+      });
+      assert(r.ok === true, 'historical-boot fallback → ready');
+      assert(receivedOcppId === trigger.ocppId, 'readinessCheck received ocppId arg');
+      assert(receivedChargerId === trigger.chargerId, 'readinessCheck received chargerId arg');
     }
 
     // (e) active session → active-session (no RemoteStart)
