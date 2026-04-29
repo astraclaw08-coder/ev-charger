@@ -184,7 +184,17 @@ export function evaluateFleetWindowAt(input: {
   at: Date;
   windows: unknown;
   timeZone?: string | null;
+  /**
+   * If true, short-circuits to permanently-active and ignores `windows`.
+   * Mirrors `FleetPolicy.alwaysOn`. The engine's gating decision (release vs.
+   * deny) is the single source of truth for whether windows or alwaysOn wins,
+   * and alwaysOn always wins.
+   */
+  alwaysOn?: boolean;
 }): FleetWindowEval {
+  if (input.alwaysOn) {
+    return { active: true, matchedWindow: null, nextTransitionAt: null };
+  }
   const normalized = normalizeFleetWindows(input.windows);
   if (normalized.length === 0) {
     return { active: false, matchedWindow: null, nextTransitionAt: null };

@@ -489,6 +489,7 @@ export async function fleetPolicyRoutes(app: FastifyInstance) {
       at,
       windows: existing.windowsJson,
       timeZone: existing.site?.timeZone ?? null,
+      alwaysOn: existing.alwaysOn,
     });
 
     return {
