@@ -511,9 +511,17 @@ export default function ChargerStartScreen() {
     setAwaitingPlugIn(false);
   }, [isFlowing]);
 
-  // Reset activation state when charger returns to Available with no active session
+  // Reset activation state when charger returns to Available with no active session.
+  // TASK-0208 Phase 3 Slice D: prefer non-FLEET_AUTO connectors. Fleet-Auto
+  // connectors are server-initiated and should never be auto-selected as
+  // the driver's start target.
   const preferredConnector = useMemo(
-    () => charger?.connectors.find((c) => c.status === 'AVAILABLE' || c.status === 'PREPARING' || c.status === 'SUSPENDED_EV') ?? null,
+    () =>
+      charger?.connectors.find(
+        (c) =>
+          c.chargingMode !== 'FLEET_AUTO' &&
+          (c.status === 'AVAILABLE' || c.status === 'PREPARING' || c.status === 'SUSPENDED_EV'),
+      ) ?? null,
     [charger],
   );
 
@@ -533,6 +541,15 @@ export default function ChargerStartScreen() {
     if (charger.connectors.length === 1) return charger.connectors[0] ?? null;
     return charger.connectors.find((c) => c.connectorId === selectedConnectorId) ?? preferredConnector;
   }, [charger, preferredConnector, selectedConnectorId]);
+
+  // TASK-0208 Phase 3 Slice D — Fleet-Auto detection on the selected
+  // connector. Drives:
+  //   - Start button disabled state
+  //   - Reserve button visibility
+  //   - "Fleet only — server-managed" pill on the connector tile
+  // Defensive default: missing/unknown chargingMode treated as PUBLIC so
+  // older API responses without the field still allow start/reserve.
+  const isSelectedFleetAuto = selectedConnector?.chargingMode === 'FLEET_AUTO';
 
   // Reservation: derived from selected connector
   const connectorReservation = selectedConnector?.activeReservation ?? null;
@@ -782,6 +799,19 @@ export default function ChargerStartScreen() {
     }
     if (!charger) return;
 
+    // Phase 3 Slice D defensive guard. The UI replaces SlideToStart with an
+    // informational banner when the selected connector is FLEET_AUTO, so
+    // this branch is normally unreachable. Future call paths (deep links,
+    // shortcut handlers, etc.) might still invoke handleStart with a fleet
+    // connector — refuse + show the same explanation as the banner.
+    if (connector.chargingMode === 'FLEET_AUTO') {
+      Alert.alert(
+        'Fleet only',
+        'This connector is reserved for fleet vehicles and starts automatically on plug-in. It can’t be started from the app.',
+      );
+      return;
+    }
+
     if (connector.status === 'RESERVED') {
       // Compare reservation IDs (not user IDs) to avoid Keycloak sub vs DB User.id mismatch
       const myRes = activeReservation?.reservation;
@@ -1004,25 +1034,52 @@ export default function ChargerStartScreen() {
           </View>
 
           <View style={[styles.startCard, { backgroundColor: isDark ? '#111827' : '#ffffff' }]}>
-            <SlideToStart
-              isDark={isDark}
-              disabled={activeSession ? stopMutation.isPending : (starting != null || !selectedConnector)}
-              onInteractionChange={setSliderInteracting}
-              label={sliderLabel}
-              onComplete={() => {
-                if (activeSession) {
-                  confirmStop();
-                  return;
-                }
-                if (!selectedConnector) {
-                  setStartError('No ready connector is available right now.');
-                  return;
-                }
-                handleStart(selectedConnector);
-              }}
-            />
+            {/*
+              Phase 3 Slice D — Fleet-Auto connectors are server-initiated
+              and never start-able from the driver app. Replace the slider
+              with an informational banner so the driver knows the connector
+              is intentionally unavailable to them, not broken.
+            */}
+            {isSelectedFleetAuto ? (
+              <View
+                style={[
+                  styles.reservationBanner,
+                  { backgroundColor: isDark ? '#1e293b' : '#e2e8f0' },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.reservationBannerText,
+                    { color: isDark ? '#cbd5e1' : '#334155' },
+                  ]}
+                >
+                  Fleet only — server-managed
+                </Text>
+                <Text style={[styles.subText, { color: isDark ? '#94a3b8' : '#64748b', marginTop: 4 }]}>
+                  This connector is reserved for fleet vehicles and starts automatically on plug-in. It can&apos;t be started or reserved from the app.
+                </Text>
+              </View>
+            ) : (
+              <SlideToStart
+                isDark={isDark}
+                disabled={activeSession ? stopMutation.isPending : (starting != null || !selectedConnector)}
+                onInteractionChange={setSliderInteracting}
+                label={sliderLabel}
+                onComplete={() => {
+                  if (activeSession) {
+                    confirmStop();
+                    return;
+                  }
+                  if (!selectedConnector) {
+                    setStartError('No ready connector is available right now.');
+                    return;
+                  }
+                  handleStart(selectedConnector);
+                }}
+              />
+            )}
 
-            {!activeSession && !selectedConnector ? (
+            {!activeSession && !isSelectedFleetAuto && !selectedConnector ? (
               <Text style={[styles.subText, { color: isDark ? '#fca5a5' : '#b91c1c' }]}>No connector is ready yet. Pull to refresh and try again.</Text>
             ) : null}
 
@@ -1062,8 +1119,10 @@ export default function ChargerStartScreen() {
               </TouchableOpacity>
             ) : null}
 
-            {/* Reserve button: show when connector is available, no session, no existing reservation, site supports it, not guest */}
-            {!activeSession && !isMyReservation && !isOtherReservation && reservationEnabled && selectedConnector?.status === 'AVAILABLE' && !isGuest ? (
+            {/* Reserve button: show when connector is available, no session, no existing reservation,
+                site supports it, not guest. Phase 3 Slice D: FLEET_AUTO connectors are NOT
+                reservable — the gate enforces that the connector is public-driver-bookable. */}
+            {!activeSession && !isMyReservation && !isOtherReservation && reservationEnabled && selectedConnector?.status === 'AVAILABLE' && !isSelectedFleetAuto && !isGuest ? (
               <View style={{ marginTop: 14, alignItems: 'center', gap: 6 }}>
                 <TouchableOpacity
                   style={[styles.reserveBtn, {

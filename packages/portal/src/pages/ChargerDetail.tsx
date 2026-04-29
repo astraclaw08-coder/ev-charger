@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { buildChargerQrRedirectUrl, createApiClient, type ChargerStatus, type SessionRecord, type ChargerUptime, type AdminReservation } from '../api/client';
+import { buildChargerQrRedirectUrl, createApiClient, type ChargerStatus, type SessionRecord, type ChargerUptime, type AdminReservation, type ConnectorFleetConfig } from '../api/client';
+import ChargerFleetConfig from '../components/fleetPolicies/ChargerFleetConfig';
 import { useToken } from '../auth/TokenContext';
 import StatusBadge from '../components/StatusBadge';
 import { PageHeader, ErrorState } from '../components/ui';
@@ -62,6 +63,11 @@ export default function ChargerDetail() {
   const [showReservations, setShowReservations] = useState(false);
   const [reservationsLoading, setReservationsLoading] = useState(false);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
+  // Phase 3 Slice B — Fleet-Auto per-connector config. Loaded from the
+  // operator-only `GET /chargers/:id/fleet-config` endpoint, NOT the
+  // public `GET /chargers/:id` (which strips these fields by design so
+  // mobile/unauthenticated callers can't read fleet policy assignment).
+  const [fleetConnectors, setFleetConnectors] = useState<ConnectorFleetConfig[]>([]);
 
   const load = useCallback(async () => {
     try {
@@ -72,10 +78,14 @@ export default function ChargerDetail() {
       const foundByRoute = chargers.find((c) => c.id === id || c.id.startsWith(id ?? '') || c.ocppId === id);
       const targetId = foundByRoute?.id ?? id;
 
-      const [chargerStatus, recentSessions, uptimeData] = await Promise.all([
+      const [chargerStatus, recentSessions, uptimeData, fleetConfig] = await Promise.all([
         client.getChargerStatus(targetId!),
         client.getChargerSessions(targetId!),
         client.getChargerUptime(targetId!).catch(() => null),
+        // Operator-only fleet config. Tolerate failure (e.g. operator
+        // lacks fleet.policy.read) so the rest of the page still renders;
+        // the panel will simply not appear.
+        client.getChargerFleetConfig(targetId!).catch(() => null),
       ]);
 
       setStatus(chargerStatus);
@@ -85,6 +95,7 @@ export default function ChargerDetail() {
       setChargerMeta(found ? { serialNumber: found.serialNumber, model: found.model, vendor: found.vendor } : null);
       setSessions(recentSessions);
       setUptime(uptimeData);
+      setFleetConnectors(fleetConfig?.connectors ?? []);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to load charger');
     } finally {
@@ -421,6 +432,20 @@ export default function ChargerDetail() {
                   {heartbeatMsg && <p><span className="font-medium">Trigger Heartbeat:</span> {heartbeatMsg}</p>}
                   {configMsg && <p><span className="font-medium">Get Configuration:</span> {configMsg}</p>}
                 </div>
+              </div>
+            )}
+
+            {/* Phase 3 Slice B — Fleet-Auto config panel. Renders only when
+                we have connector config data and a resolved charger id; the
+                panel writes via PATCH /chargers/:id/connectors/:n. */}
+            {resolvedChargerId && fleetConnectors.length > 0 && (
+              <div className="mt-4 border-t border-gray-100 dark:border-slate-800 pt-3">
+                <ChargerFleetConfig
+                  chargerId={resolvedChargerId}
+                  siteId={chargerSite?.id ?? null}
+                  connectors={fleetConnectors}
+                  onSaved={() => void load()}
+                />
               </div>
             )}
 
