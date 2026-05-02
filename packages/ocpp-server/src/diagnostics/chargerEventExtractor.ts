@@ -27,9 +27,15 @@
  */
 
 export type ChargerEventKind =
+  // Per-message extractor (this file)
   | 'STATUS_FAULT'
   | 'REMOTE_START_FAILED'
-  | 'REMOTE_STOP_FAILED';
+  | 'REMOTE_STOP_FAILED'
+  // Cross-message window detectors (chargerWindowDetectors.ts)
+  | 'HEARTBEAT_GAP'
+  | 'FAULT_LOOP'
+  | 'METER_ANOMALY'
+  | 'SESSION_STATE_MISMATCH';
 
 export type ChargerEventSeverity = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 
