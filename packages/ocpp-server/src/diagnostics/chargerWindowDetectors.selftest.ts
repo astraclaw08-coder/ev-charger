@@ -11,6 +11,7 @@ import {
   detectFaultLoops,
   detectMeterAnomalies,
   detectSessionStateMismatches,
+  segmentFramesByChargingStatus,
   HEARTBEAT_GAP_WARN_MS,
   HEARTBEAT_GAP_HIGH_MS,
   FAULT_LOOP_MIN_COUNT,
@@ -21,6 +22,7 @@ import {
   type FaultEventTick,
   type MeterFrame,
   type StatusTick,
+  type SessionInterval,
 } from './chargerWindowDetectors';
 
 let passed = 0;
@@ -245,7 +247,8 @@ console.log('\n--- SESSION_STATE_MISMATCH: Charging + metering present → no ev
     registerWh: 1000 + i * 100,
     currentImportA: 16, currentOfferedA: 16, powerActiveImportW: 3840,
   }));
-  const events = detectSessionStateMismatches({ statuses, meterFrames, hasActiveSession: true });
+  const oneOpen: SessionInterval[] = [{ startedAt: at(0), stoppedAt: null }];
+  const events = detectSessionStateMismatches({ statuses, meterFrames, activeSessionIntervals: oneOpen });
   assert(events.length === 0, 'metering present → no charging-without-metering event');
 }
 
@@ -253,8 +256,8 @@ console.log('\n--- SESSION_STATE_MISMATCH: Charging + no metering for ≥ thresh
 {
   const statuses: StatusTick[] = [{ ts: at(0), connectorId: 1, status: 'Charging' }];
   const meterFrames: MeterFrame[] = []; // none
-  // The window threshold is 3 min; provide nothing.
-  const events = detectSessionStateMismatches({ statuses, meterFrames, hasActiveSession: true });
+  const oneOpen: SessionInterval[] = [{ startedAt: at(0), stoppedAt: null }];
+  const events = detectSessionStateMismatches({ statuses, meterFrames, activeSessionIntervals: oneOpen });
   const mismatch = events.find((e) => (e.payloadSummary as any).subtype === 'charging-without-metering');
   assert(!!mismatch, 'charging-without-metering event emitted');
   assert(mismatch?.connectorId === 1, 'connectorId carried');
@@ -267,27 +270,154 @@ console.log('\n--- SESSION_STATE_MISMATCH: Charging followed by Suspended within
     { ts: at(0), connectorId: 1, status: 'Charging' },
     { ts: at(min(1)), connectorId: 1, status: 'SuspendedEVSE' }, // status changed before threshold
   ];
-  const meterFrames: MeterFrame[] = [];
-  const events = detectSessionStateMismatches({ statuses, meterFrames, hasActiveSession: true });
-  // The window between Charging and the next status is only 1 min < 3 min threshold.
+  const events = detectSessionStateMismatches({
+    statuses, meterFrames: [], activeSessionIntervals: [{ startedAt: at(0), stoppedAt: null }],
+  });
   assert(events.length === 0, 'short Charging window → no mismatch event');
 }
 
-console.log('\n--- SESSION_STATE_MISMATCH: Available with active session → event ---');
+console.log('\n--- SESSION_STATE_MISMATCH: Available WITHIN active session interval → event ---');
 {
-  const statuses: StatusTick[] = [{ ts: at(0), connectorId: 1, status: 'Available' }];
-  const meterFrames: MeterFrame[] = [];
-  const events = detectSessionStateMismatches({ statuses, meterFrames, hasActiveSession: true });
+  const statuses: StatusTick[] = [{ ts: at(min(5)), connectorId: 1, status: 'Available' }];
+  const intervals: SessionInterval[] = [{ startedAt: at(0), stoppedAt: at(min(10)) }];
+  const events = detectSessionStateMismatches({ statuses, meterFrames: [], activeSessionIntervals: intervals });
   const mismatch = events.find((e) => (e.payloadSummary as any).subtype === 'available-while-session-active');
-  assert(!!mismatch, 'available-while-session-active event');
-  assert(mismatch?.connectorId === 1, 'connectorId carried');
+  assert(!!mismatch, 'available-while-session-active event when ts inside interval');
+  assert((mismatch?.payloadSummary as any).sessionStartedAt === at(0).toISOString(), 'sessionStartedAt carried');
 }
 
-console.log('\n--- SESSION_STATE_MISMATCH: Available with NO active session → no event ---');
+console.log('\n--- SESSION_STATE_MISMATCH: Available BEFORE the active interval → no event ---');
 {
   const statuses: StatusTick[] = [{ ts: at(0), connectorId: 1, status: 'Available' }];
-  const events = detectSessionStateMismatches({ statuses, meterFrames: [], hasActiveSession: false });
-  assert(events.length === 0, 'no event when session not active');
+  const intervals: SessionInterval[] = [{ startedAt: at(min(5)), stoppedAt: at(min(10)) }];
+  const events = detectSessionStateMismatches({ statuses, meterFrames: [], activeSessionIntervals: intervals });
+  assert(events.length === 0, 'Available preceding the active interval → no false positive');
+}
+
+console.log('\n--- SESSION_STATE_MISMATCH: Available AFTER the active interval ended → no event ---');
+{
+  const statuses: StatusTick[] = [{ ts: at(min(15)), connectorId: 1, status: 'Available' }];
+  const intervals: SessionInterval[] = [{ startedAt: at(0), stoppedAt: at(min(10)) }];
+  const events = detectSessionStateMismatches({ statuses, meterFrames: [], activeSessionIntervals: intervals });
+  assert(events.length === 0, 'Available after stoppedAt → no false positive');
+}
+
+console.log('\n--- SESSION_STATE_MISMATCH: Available exactly AT stoppedAt is treated as outside (half-open) → no event ---');
+{
+  const statuses: StatusTick[] = [{ ts: at(min(10)), connectorId: 1, status: 'Available' }];
+  const intervals: SessionInterval[] = [{ startedAt: at(0), stoppedAt: at(min(10)) }];
+  const events = detectSessionStateMismatches({ statuses, meterFrames: [], activeSessionIntervals: intervals });
+  assert(events.length === 0, 'half-open: ts === stoppedAt is OUTSIDE the interval');
+}
+
+console.log('\n--- SESSION_STATE_MISMATCH: Available with NO active intervals → no event ---');
+{
+  const statuses: StatusTick[] = [{ ts: at(0), connectorId: 1, status: 'Available' }];
+  const events = detectSessionStateMismatches({ statuses, meterFrames: [], activeSessionIntervals: [] });
+  assert(events.length === 0, 'no event when no intervals provided');
+}
+
+console.log('\n--- SESSION_STATE_MISMATCH: multiple Available statuses, only the one inside an interval emits ---');
+{
+  const statuses: StatusTick[] = [
+    { ts: at(0), connectorId: 1, status: 'Available' },          // before interval
+    { ts: at(min(7)), connectorId: 1, status: 'Available' },     // inside interval [5, 10)
+    { ts: at(min(20)), connectorId: 1, status: 'Available' },    // after interval
+  ];
+  const intervals: SessionInterval[] = [{ startedAt: at(min(5)), stoppedAt: at(min(10)) }];
+  const events = detectSessionStateMismatches({ statuses, meterFrames: [], activeSessionIntervals: intervals });
+  const mismatches = events.filter((e) => (e.payloadSummary as any).subtype === 'available-while-session-active');
+  assert(mismatches.length === 1, `exactly one Available-during-active emitted (got ${mismatches.length})`);
+  assert((mismatches[0].payloadSummary as any).availableAt === at(min(7)).toISOString(), 'the one inside the interval');
+}
+
+// ─── segmentFramesByChargingStatus ─────────────────────────────────
+console.log('\n--- segmentFramesByChargingStatus: no Charging in statuses → no segments ---');
+{
+  const statuses: StatusTick[] = [
+    { ts: at(0), connectorId: 1, status: 'Available' },
+    { ts: at(min(5)), connectorId: 1, status: 'Preparing' },
+  ];
+  const frames: MeterFrame[] = Array.from({ length: 3 }, (_, i) => ({
+    ts: at(min(i)), registerWh: 1000, currentImportA: 0, currentOfferedA: 0, powerActiveImportW: 0,
+  }));
+  const segs = segmentFramesByChargingStatus(statuses, frames);
+  assert(segs.length === 0, 'no Charging status → empty segmentation');
+}
+
+console.log('\n--- segmentFramesByChargingStatus: a single Charging window with frames inside ---');
+{
+  const statuses: StatusTick[] = [
+    { ts: at(0), connectorId: 1, status: 'Available' },
+    { ts: at(min(2)), connectorId: 1, status: 'Charging' },
+    { ts: at(min(8)), connectorId: 1, status: 'Finishing' },
+  ];
+  const frames: MeterFrame[] = [
+    { ts: at(min(1)), registerWh: 1000, currentImportA: 0, currentOfferedA: 0, powerActiveImportW: 0 },   // before window
+    { ts: at(min(3)), registerWh: 1100, currentImportA: 16, currentOfferedA: 16, powerActiveImportW: 3840 },
+    { ts: at(min(5)), registerWh: 1200, currentImportA: 16, currentOfferedA: 16, powerActiveImportW: 3840 },
+    { ts: at(min(7)), registerWh: 1300, currentImportA: 16, currentOfferedA: 16, powerActiveImportW: 3840 },
+    { ts: at(min(9)), registerWh: 1300, currentImportA: 0, currentOfferedA: 0, powerActiveImportW: 0 },    // after window
+  ];
+  const segs = segmentFramesByChargingStatus(statuses, frames);
+  assert(segs.length === 1, 'one segment');
+  assert(segs[0].length === 3, 'three frames inside [2, 8) min');
+  assert(segs[0][0].registerWh === 1100, 'first inside-frame is t=3min');
+  assert(segs[0][2].registerWh === 1300, 'last inside-frame is t=7min');
+}
+
+console.log('\n--- segmentFramesByChargingStatus: Charging until end-of-window stays open ---');
+{
+  const statuses: StatusTick[] = [
+    { ts: at(0), connectorId: 1, status: 'Charging' },
+  ];
+  const frames: MeterFrame[] = Array.from({ length: 4 }, (_, i) => ({
+    ts: at(min(i)), registerWh: 1000 + i, currentImportA: 16, currentOfferedA: 16, powerActiveImportW: 3840,
+  }));
+  const segs = segmentFramesByChargingStatus(statuses, frames);
+  assert(segs.length === 1, 'one segment');
+  assert(segs[0].length === 4, 'all 4 frames captured (no closing transition)');
+}
+
+console.log('\n--- segmentFramesByChargingStatus: multiple Charging windows produce separate segments ---');
+{
+  const statuses: StatusTick[] = [
+    { ts: at(0), connectorId: 1, status: 'Charging' },
+    { ts: at(min(3)), connectorId: 1, status: 'Available' },
+    { ts: at(min(10)), connectorId: 1, status: 'Charging' },
+    { ts: at(min(15)), connectorId: 1, status: 'Finishing' },
+  ];
+  const frames: MeterFrame[] = [
+    { ts: at(min(1)), registerWh: 1, currentImportA: 16, currentOfferedA: 16, powerActiveImportW: 3840 },
+    { ts: at(min(2)), registerWh: 2, currentImportA: 16, currentOfferedA: 16, powerActiveImportW: 3840 },
+    { ts: at(min(11)), registerWh: 100, currentImportA: 16, currentOfferedA: 16, powerActiveImportW: 3840 },
+    { ts: at(min(13)), registerWh: 102, currentImportA: 16, currentOfferedA: 16, powerActiveImportW: 3840 },
+  ];
+  const segs = segmentFramesByChargingStatus(statuses, frames);
+  assert(segs.length === 2, 'two segments');
+  assert(segs[0].length === 2 && segs[1].length === 2, 'two frames per segment');
+}
+
+console.log('\n--- segmentFramesByChargingStatus: idle-only meter frames are NEVER seen by the anomaly detector ---');
+{
+  // This is the exact false-positive class the reviewer flagged: a flat
+  // register during Available was being passed to detectMeterAnomalies
+  // and emitted a frozen-register event. With the segmenter in place the
+  // detector simply never sees those frames.
+  const statuses: StatusTick[] = [
+    { ts: at(0), connectorId: 1, status: 'Available' },
+  ];
+  const idleFlatFrames: MeterFrame[] = Array.from({ length: METER_FROZEN_MIN_FRAMES + 2 }, (_, i) => ({
+    ts: at(min(i)), registerWh: 5000, currentImportA: 0, currentOfferedA: 0, powerActiveImportW: 0,
+  }));
+  const segs = segmentFramesByChargingStatus(statuses, idleFlatFrames);
+  // No Charging window → no segments → detector never invoked.
+  assert(segs.length === 0, 'idle frames produce zero segments');
+  // Sanity: if we DID call the detector on these frames directly, it
+  // would falsely flag — confirming the segmenter is what protects us.
+  const wouldFalselyFlag = detectMeterAnomalies(idleFlatFrames);
+  assert(wouldFalselyFlag.some((e) => (e.payloadSummary as any).subtype === 'frozen-register'),
+    'detector alone would false-positive (proves segmenter is necessary)');
 }
 
 // ─── Threshold export sanity ──────────────────────────────────────

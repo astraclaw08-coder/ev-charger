@@ -94,8 +94,20 @@ export interface SessionWindow {
   statuses: StatusTick[];
   /** MeterValues frames in time order. Caller filters to `Sample.Periodic` only. */
   meterFrames: MeterFrame[];
-  /** Whether a Session row exists with status='ACTIVE' over this window. */
-  hasActiveSession: boolean;
+  /**
+   * Half-open intervals during which a Session row was ACTIVE on this
+   * connector. `stoppedAt: null` means the session is still active at
+   * scan time (treat as +∞). Available-while-session-active is detected
+   * by checking whether each Available status timestamp falls inside any
+   * of these intervals — NOT by a coarse "any active session in window"
+   * boolean.
+   */
+  activeSessionIntervals: SessionInterval[];
+}
+
+export interface SessionInterval {
+  startedAt: Date;
+  stoppedAt: Date | null;
 }
 
 // ─── HEARTBEAT_GAP ─────────────────────────────────────────────────────
@@ -340,10 +352,19 @@ export function detectSessionStateMismatches(window: SessionWindow): ExtractedCh
     }
   }
 
-  // (b) Available with active session.
-  if (window.hasActiveSession) {
+  // (b) Available with a Session ACTIVE *at that exact timestamp*.
+  // Coarse boolean checking would falsely flag every Available in a
+  // window that contained any active session anywhere — this iterates
+  // intervals and checks containment per Available tick.
+  if (window.activeSessionIntervals.length > 0) {
     for (const s of statuses) {
       if (s.status !== 'Available') continue;
+      const ts = s.ts.getTime();
+      const overlapping = window.activeSessionIntervals.find((iv) =>
+        iv.startedAt.getTime() <= ts &&
+        (iv.stoppedAt === null || ts < iv.stoppedAt.getTime()),
+      );
+      if (!overlapping) continue;
       out.push({
         kind: 'SESSION_STATE_MISMATCH',
         severity: 'MEDIUM',
@@ -354,12 +375,60 @@ export function detectSessionStateMismatches(window: SessionWindow): ExtractedCh
         payloadSummary: {
           subtype: 'available-while-session-active',
           availableAt: s.ts.toISOString(),
+          sessionStartedAt: overlapping.startedAt.toISOString(),
+          sessionStoppedAt: overlapping.stoppedAt?.toISOString() ?? null,
         },
       });
     }
   }
 
   return out;
+}
+
+// ─── Charging-window segmentation helper ──────────────────────────────
+
+/**
+ * Slice a flat list of MeterValues frames into the time windows during
+ * which the connector status was 'Charging'. A `Charging` status opens a
+ * window; the NEXT status transition closes it. If a charging status is
+ * never followed by another transition, the window stays open through the
+ * latest frame.
+ *
+ * Intent: callers (the backfill script) buffer ALL Sample.Periodic frames
+ * for a connector, then call this helper to produce the "only Charging"
+ * subset(s) that detectMeterAnomalies expects. Without this, idle frames
+ * with a flat register get falsely flagged as frozen-register anomalies.
+ *
+ * Returns one array of frames per Charging window. Empty array if no
+ * Charging status was observed in `statuses` or no frames fall inside
+ * any Charging window.
+ */
+export function segmentFramesByChargingStatus(
+  statuses: StatusTick[],
+  frames: MeterFrame[],
+): MeterFrame[][] {
+  if (statuses.length === 0 || frames.length === 0) return [];
+  const sortedStatuses = [...statuses].sort((a, b) => a.ts.getTime() - b.ts.getTime());
+  const sortedFrames = [...frames].sort((a, b) => a.ts.getTime() - b.ts.getTime());
+
+  const windows: Array<{ from: number; to: number }> = [];
+  for (let i = 0; i < sortedStatuses.length; i++) {
+    if (sortedStatuses[i].status !== 'Charging') continue;
+    const from = sortedStatuses[i].ts.getTime();
+    const next = sortedStatuses.slice(i + 1).find((s) => s.status !== 'Charging');
+    const to = next ? next.ts.getTime() : Number.POSITIVE_INFINITY;
+    windows.push({ from, to });
+  }
+  if (windows.length === 0) return [];
+
+  return windows
+    .map(({ from, to }) =>
+      sortedFrames.filter((f) => {
+        const t = f.ts.getTime();
+        return t >= from && t < to;
+      }),
+    )
+    .filter((arr) => arr.length > 0);
 }
 
 // Re-export the shared types so downstream backfill code can import a

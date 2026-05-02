@@ -43,10 +43,12 @@ import {
   detectHeartbeatGaps,
   detectMeterAnomalies,
   detectSessionStateMismatches,
+  segmentFramesByChargingStatus,
   type ExtractedChargerEvent,
   type FaultEventTick,
   type HeartbeatTick,
   type MeterFrame,
+  type SessionInterval,
   type StatusTick,
 } from '../diagnostics/chargerWindowDetectors';
 
@@ -313,25 +315,29 @@ async function processCharger(
     counts,
   );
 
-  // METER_ANOMALY — per connector
-  for (const frames of meterFramesByConnector.values()) {
-    await emitWindowEvents(
-      chargerId,
-      detectMeterAnomalies(frames),
-      counts,
-    );
+  // METER_ANOMALY — per connector, scoped to Charging-status windows ONLY.
+  // The detector is documented to require Charging-window-only frames;
+  // segmenting here is what enforces that contract. Without this,
+  // idle/Available flat-register frames would falsely emit frozen-register
+  // events.
+  for (const [connId, frames] of meterFramesByConnector.entries()) {
+    const statuses = statusesByConnector.get(connId) ?? [];
+    const chargingSegments = segmentFramesByChargingStatus(statuses, frames);
+    for (const seg of chargingSegments) {
+      await emitWindowEvents(chargerId, detectMeterAnomalies(seg), counts);
+    }
   }
 
-  // SESSION_STATE_MISMATCH — per connector. We need to know whether the
-  // backfill window saw an active session. For backfill purposes, use a
-  // conservative proxy: an ACTIVE Session row at any point with `connectorId`
-  // matching during the run window. Cheaper than per-status correlation.
+  // SESSION_STATE_MISMATCH — per connector. Fetch the actual Session
+  // interval list (startedAt..stoppedAt) overlapping the run window for
+  // this (charger, connector). Detector then checks each Available status
+  // timestamp against actual session containment, not a coarse boolean.
   for (const [connId, statuses] of statusesByConnector.entries()) {
     const meterFrames = meterFramesByConnector.get(connId) ?? [];
-    const hasActiveSession = await chargerHadActiveSessionForConnector(chargerId, connId, from, to);
+    const activeSessionIntervals = await fetchSessionIntervalsForConnector(chargerId, connId, from, to);
     await emitWindowEvents(
       chargerId,
-      detectSessionStateMismatches({ statuses, meterFrames, hasActiveSession }),
+      detectSessionStateMismatches({ statuses, meterFrames, activeSessionIntervals }),
       counts,
     );
   }
@@ -415,24 +421,49 @@ function bufferForWindowDetectors(
   }
 }
 
-async function chargerHadActiveSessionForConnector(
+/**
+ * Fetch every Session for (chargerId, connectorId) whose
+ * [startedAt, stoppedAt|now] interval overlaps the backfill scan
+ * window. We need the list, not just a boolean — the
+ * SESSION_STATE_MISMATCH detector checks containment against each
+ * Available timestamp individually.
+ *
+ * NB: we include sessions of ANY status here, not just status=ACTIVE.
+ * A COMPLETED session whose stoppedAt fell during the scan window is
+ * still relevant for the available-while-session-active check during
+ * the time it was running — what matters is whether the session
+ * interval contained the Available tick.
+ */
+async function fetchSessionIntervalsForConnector(
   chargerId: string,
   connectorId: number,
   from: Date | null,
   to: Date | null,
-): Promise<boolean> {
+): Promise<SessionInterval[]> {
   const where: Record<string, unknown> = {
-    status: 'ACTIVE',
     connector: { chargerId, connectorId },
   };
   if (from || to) {
-    where.OR = [
-      { startedAt: { ...(from ? { gte: from } : {}), ...(to ? { lt: to } : {}) } },
-      { stoppedAt: { ...(from ? { gte: from } : {}), ...(to ? { lt: to } : {}) } },
-    ];
+    // Overlap predicate: session.startedAt < scan.to AND
+    // (session.stoppedAt IS NULL OR session.stoppedAt > scan.from)
+    const ands: Array<Record<string, unknown>> = [];
+    if (to) ands.push({ startedAt: { lt: to } });
+    if (from) {
+      ands.push({
+        OR: [
+          { stoppedAt: null },
+          { stoppedAt: { gt: from } },
+        ],
+      });
+    }
+    if (ands.length > 0) where.AND = ands;
   }
-  const count = await prisma.session.count({ where });
-  return count > 0;
+  const rows = await prisma.session.findMany({
+    where,
+    select: { startedAt: true, stoppedAt: true },
+    orderBy: { startedAt: 'asc' },
+  });
+  return rows.map((r) => ({ startedAt: r.startedAt, stoppedAt: r.stoppedAt ?? null }));
 }
 
 async function emitWindowEvents(
