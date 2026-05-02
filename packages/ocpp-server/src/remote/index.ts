@@ -4,6 +4,14 @@ import { logOcppMessage } from '../ocppLogger';
 /**
  * Send RemoteStartTransaction to a connected charger.
  * Called by the REST API when a driver taps "Start" in the app.
+ *
+ * Logging: OUTBOUND request + INBOUND response are written via
+ * `logOcppMessage` (matching the pattern in `remoteTriggerMessage`,
+ * `remoteSetChargingProfile`, etc.). On exception, a synthetic Rejected
+ * response is logged so the TASK-0198 ChargerEvent extractor surfaces a
+ * REMOTE_START_FAILED row even when the underlying RPC threw. All logging
+ * is non-fatal — wrapped in try/catch so a logging failure can never
+ * disrupt the OCPP control flow or the API response to the caller.
  */
 export async function remoteStartTransaction(
   ocppId: string,
@@ -16,12 +24,28 @@ export async function remoteStartTransaction(
     return 'Rejected';
   }
 
+  const chargerId = client?.session?.chargerId ?? '';
+  const payload = { connectorId, idTag };
+  if (chargerId) {
+    try { await logOcppMessage(chargerId, 'OUTBOUND', 'RemoteStartTransaction', payload); }
+    catch (logErr) { console.error('[RemoteStart] OUTBOUND log failed:', logErr); }
+  }
+
   try {
-    const result = await client.call('RemoteStartTransaction', { connectorId, idTag });
+    const result = await client.call('RemoteStartTransaction', payload);
     console.log(`[RemoteStart] Charger ${ocppId} responded: ${result.status}`);
+    if (chargerId) {
+      try { await logOcppMessage(chargerId, 'INBOUND', 'RemoteStartTransactionResponse', result ?? {}); }
+      catch (logErr) { console.error('[RemoteStart] INBOUND log failed:', logErr); }
+    }
     return result.status as 'Accepted' | 'Rejected';
   } catch (err) {
     console.error(`[RemoteStart] Error calling charger ${ocppId}:`, err);
+    if (chargerId) {
+      const synthetic = { status: 'Rejected', error: err instanceof Error ? err.message : String(err) };
+      try { await logOcppMessage(chargerId, 'INBOUND', 'RemoteStartTransactionResponse', synthetic); }
+      catch (logErr) { console.error('[RemoteStart] INBOUND-on-exception log failed:', logErr); }
+    }
     return 'Rejected';
   }
 }
@@ -29,6 +53,8 @@ export async function remoteStartTransaction(
 /**
  * Send RemoteStopTransaction to a connected charger.
  * Called by the REST API when a driver taps "Stop" in the app.
+ *
+ * Logging mirrors `remoteStartTransaction` — see that function's doc.
  */
 export async function remoteStopTransaction(
   ocppId: string,
@@ -40,12 +66,28 @@ export async function remoteStopTransaction(
     return 'Rejected';
   }
 
+  const chargerId = client?.session?.chargerId ?? '';
+  const payload = { transactionId };
+  if (chargerId) {
+    try { await logOcppMessage(chargerId, 'OUTBOUND', 'RemoteStopTransaction', payload); }
+    catch (logErr) { console.error('[RemoteStop] OUTBOUND log failed:', logErr); }
+  }
+
   try {
-    const result = await client.call('RemoteStopTransaction', { transactionId });
+    const result = await client.call('RemoteStopTransaction', payload);
     console.log(`[RemoteStop] Charger ${ocppId} responded: ${result.status}`);
+    if (chargerId) {
+      try { await logOcppMessage(chargerId, 'INBOUND', 'RemoteStopTransactionResponse', result ?? {}); }
+      catch (logErr) { console.error('[RemoteStop] INBOUND log failed:', logErr); }
+    }
     return result.status as 'Accepted' | 'Rejected';
   } catch (err) {
     console.error(`[RemoteStop] Error calling charger ${ocppId}:`, err);
+    if (chargerId) {
+      const synthetic = { status: 'Rejected', error: err instanceof Error ? err.message : String(err) };
+      try { await logOcppMessage(chargerId, 'INBOUND', 'RemoteStopTransactionResponse', synthetic); }
+      catch (logErr) { console.error('[RemoteStop] INBOUND-on-exception log failed:', logErr); }
+    }
     return 'Rejected';
   }
 }
