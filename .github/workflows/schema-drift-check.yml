@@ -15,8 +15,15 @@ jobs:
       DATABASE_URL: postgresql://ev:ev@localhost:5432/evcharger
       SHADOW_DATABASE_URL: postgresql://ev:ev@localhost:5432/evcharger_shadow
     services:
+      # pgvector/pgvector is a drop-in replacement for the upstream
+      # postgres image with the pgvector extension preinstalled.
+      # Required by the TASK-0198 Phase 1 PR #3 migration which runs
+      # `CREATE EXTENSION IF NOT EXISTS vector`. Stock postgres:15
+      # ships without the extension binary and the migration fails at
+      # extension creation. Use the pinned pg15 tag to match the rest
+      # of this workflow.
       postgres:
-        image: postgres:15
+        image: pgvector/pgvector:pg15
         env:
           POSTGRES_USER: ev
           POSTGRES_PASSWORD: ev

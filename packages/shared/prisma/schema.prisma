@@ -942,17 +942,31 @@ model ChargerEvent {
 /// `slug` is the stable identifier (typically the source file's relative
 /// path); `version` increments on body change; `supersededAt` soft-deletes.
 model DiagKnowledgeDoc {
-  id           String    @id @default(uuid())
-  slug         String // stable identifier (e.g. "tasks/task-0208-phase3-bug-alwayson-not-honored")
-  title        String
-  body         String // markdown content
-  bodyHash     String // SHA-256 of body for change detection / dedup
-  tags         String[]  @default([]) // for filtered retrieval
-  source       String    @default("repo") // repo | manual | imported
-  version      Int       @default(1)
-  supersededAt DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id                String                       @id @default(uuid())
+  slug              String // stable identifier (e.g. "tasks/task-0208-phase3-bug-alwayson-not-honored")
+  title             String
+  body              String // markdown content
+  bodyHash          String // SHA-256 of body for change detection / dedup
+  tags              String[]                     @default([]) // for filtered retrieval
+  source            String                       @default("repo") // repo | manual | imported
+  version           Int                          @default(1)
+  supersededAt      DateTime?
+  // ── Embedding columns (TASK-0198 Phase 1, PR #3) ───────────────────
+  // `embedding` is a pgvector column — Prisma marks it Unsupported because
+  // the client lib doesn't natively render vector ops. Reads/writes go
+  // through prisma.$queryRaw with a $::vector cast. Default dimensions
+  // are 1536 (OpenAI text-embedding-3-small); migrating to a different
+  // model with different dimensions requires a column-type migration.
+  // The provider/model/version triple is recorded per-row so retrievals
+  // can audit which model produced which embedding (and warn on mixed
+  // sets after a model change).
+  embedding         Unsupported("vector(1536)")?
+  embeddingProvider String?
+  embeddingModel    String?
+  embeddingVersion  String?
+  embeddedAt        DateTime?
+  createdAt         DateTime                     @default(now())
+  updatedAt         DateTime                     @updatedAt
 
   @@unique([slug, version])
   @@index([slug])

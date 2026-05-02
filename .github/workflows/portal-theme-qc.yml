@@ -21,7 +21,7 @@ jobs:
       DATABASE_URL: postgresql://ev:ev@localhost:5432/evcharger
     services:
       postgres:
-        image: postgres:15
+        image: pgvector/pgvector:pg15
         env:
           POSTGRES_USER: ev
           POSTGRES_PASSWORD: ev
