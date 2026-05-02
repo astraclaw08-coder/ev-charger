@@ -66,12 +66,12 @@ enum OcppOutboxStatus {
 }
 
 enum ReservationStatus {
-  PENDING       // Created, awaiting OCPP confirmation or software-only hold
-  CONFIRMED     // OCPP ReserveNow accepted OR software-only confirmed
-  FULFILLED     // Driver started a session against this reservation
-  EXPIRED       // Hold window elapsed without session start
-  CANCELLED     // Driver or operator cancelled
-  REJECTED      // OCPP ReserveNow rejected by charger
+  PENDING // Created, awaiting OCPP confirmation or software-only hold
+  CONFIRMED // OCPP ReserveNow accepted OR software-only confirmed
+  FULFILLED // Driver started a session against this reservation
+  EXPIRED // Hold window elapsed without session start
+  CANCELLED // Driver or operator cancelled
+  REJECTED // OCPP ReserveNow rejected by charger
 }
 
 enum SmartChargingScope {
@@ -97,60 +97,62 @@ enum ChargingMode {
 }
 
 enum FleetPolicyStatus {
-  DRAFT     // schema row created, not yet active
-  ENABLED   // active — scheduler will modulate current for matching sessions
-  DISABLED  // temporarily paused (server falls back to legacy allow/deny)
+  DRAFT // schema row created, not yet active
+  ENABLED // active — scheduler will modulate current for matching sessions
+  DISABLED // temporarily paused (server falls back to legacy allow/deny)
 }
 
 // ─── Models ───────────────────────────────────────────────────────────────────
 
 model Site {
-  id               String              @id @default(uuid())
-  name             String
-  address          String
-  lat              Float
-  lng              Float
-  operatorId       String
-  pricingMode      String              @default("flat") // flat | tou
-  pricePerKwhUsd   Float               @default(0.35)
-  idleFeePerMinUsd Float               @default(0.08)
-  activationFeeUsd Float               @default(0)
-  gracePeriodMin   Int                 @default(10)
-  softwareVendorFeeMode  String        @default("none") // none | percentage_total | fixed_per_kwh | fixed_per_minute
-  softwareVendorFeeValue Float         @default(0)
-  softwareFeeIncludesActivation Boolean @default(false)
-  touWindows       Json?
-  timeZone         String              @default("America/Los_Angeles") // IANA timezone for TOU pricing + smart charging
-  organizationName String?             // @deprecated — use organizationId relation
-  portfolioName    String?             // @deprecated — use portfolioId relation
-  organizationId   String?
-  organization     Organization?       @relation(fields: [organizationId], references: [id], onDelete: SetNull)
-  portfolioId      String?
-  portfolio        Portfolio?          @relation(fields: [portfolioId], references: [id], onDelete: SetNull)
+  id                            String                 @id @default(uuid())
+  name                          String
+  address                       String
+  lat                           Float
+  lng                           Float
+  operatorId                    String
+  pricingMode                   String                 @default("flat") // flat | tou
+  pricePerKwhUsd                Float                  @default(0.35)
+  idleFeePerMinUsd              Float                  @default(0.08)
+  activationFeeUsd              Float                  @default(0)
+  gracePeriodMin                Int                    @default(10)
+  softwareVendorFeeMode         String                 @default("none") // none | percentage_total | fixed_per_kwh | fixed_per_minute
+  softwareVendorFeeValue        Float                  @default(0)
+  softwareFeeIncludesActivation Boolean                @default(false)
+  touWindows                    Json?
+  timeZone                      String                 @default("America/Los_Angeles") // IANA timezone for TOU pricing + smart charging
+  organizationName              String? // @deprecated — use organizationId relation
+  portfolioName                 String? // @deprecated — use portfolioId relation
+  organizationId                String?
+  organization                  Organization?          @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  portfolioId                   String?
+  portfolio                     Portfolio?             @relation(fields: [portfolioId], references: [id], onDelete: SetNull)
   // Session safety limits (null = no limit)
-  maxChargeDurationMin  Int?    // Auto-stop active charging after N minutes
-  maxIdleDurationMin    Int?    // Auto-stop/disconnect after N minutes idle post-charge
-  maxSessionCostUsd     Float?  // Auto-stop when estimated session cost reaches this cap (USD)
+  maxChargeDurationMin          Int? // Auto-stop active charging after N minutes
+  maxIdleDurationMin            Int? // Auto-stop/disconnect after N minutes idle post-charge
+  maxSessionCostUsd             Float? // Auto-stop when estimated session cost reaches this cap (USD)
   // Reservation settings
-  reservationEnabled        Boolean  @default(false)
-  reservationMaxDurationMin Int      @default(30)   // max hold window in minutes
-  reservationFeeUsd         Float    @default(0)    // 0 = free reservations
-  reservationCancelGraceMin Int      @default(5)    // minutes where cancel = full refund
+  reservationEnabled            Boolean                @default(false)
+  reservationMaxDurationMin     Int                    @default(30) // max hold window in minutes
+  reservationFeeUsd             Float                  @default(0) // 0 = free reservations
+  reservationCancelGraceMin     Int                    @default(5) // minutes where cancel = full refund
   // TASK-0208 Phase 3 Slice A — site-level Fleet-Auto pilot rollout flag.
   // DB-backed; toggled via operator portal (Slice B). Audit-logged on flip
   // via writeFleetRolloutAudit(). Off by default — schema/code can ship
   // dark in prod with no behavior change. See §0 #5 of redesign doc.
-  fleetAutoRolloutEnabled   Boolean  @default(false)
-  chargers         Charger[]
-  chargerGroups    ChargerGroup[]
-  chargingProfiles SmartChargingProfile[]
-  sessionFacts     SessionFact[]
-  rebateIntervals  RebateInterval15m[]
-  siteDailyFacts   SiteDailyFact[]
-  reservations     Reservation[]
-  fleetPolicies    FleetPolicy[]
-  createdAt        DateTime            @default(now())
-  updatedAt        DateTime            @updatedAt
+  fleetAutoRolloutEnabled       Boolean                @default(false)
+  chargers                      Charger[]
+  chargerGroups                 ChargerGroup[]
+  chargingProfiles              SmartChargingProfile[]
+  sessionFacts                  SessionFact[]
+  rebateIntervals               RebateInterval15m[]
+  siteDailyFacts                SiteDailyFact[]
+  reservations                  Reservation[]
+  fleetPolicies                 FleetPolicy[]
+  siteHealthReports             SiteHealthReport[]
+  diagConversations             DiagConversation[]
+  createdAt                     DateTime               @default(now())
+  updatedAt                     DateTime               @updatedAt
 
   @@index([operatorId])
   @@index([organizationId])
@@ -163,16 +165,16 @@ model Site {
 /// Windows use the same {day, start HH:mm, end HH:mm} shape as TouWindow, in
 /// the site's local timezone. JSON shape: { windows: FleetWindow[] }.
 model FleetPolicy {
-  id              String            @id @default(uuid())
-  siteId          String
-  site            Site              @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  name            String
-  status          FleetPolicyStatus @default(DRAFT)
-  idTagPrefix     String            // e.g. "FLEET-" — matched at Authorize/StartTransaction
-  maxAmps         Int               @default(32)
-  ocppStackLevel  Int               @default(90) // above CHARGER=50 + priority; below emergency=99
-  windowsJson     Json              // { windows: [{ day, start, end }] } — see FleetWindow type
-  notes           String?
+  id                  String            @id @default(uuid())
+  siteId              String
+  site                Site              @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  name                String
+  status              FleetPolicyStatus @default(DRAFT)
+  idTagPrefix         String // e.g. "FLEET-" — matched at Authorize/StartTransaction
+  maxAmps             Int               @default(32)
+  ocppStackLevel      Int               @default(90) // above CHARGER=50 + priority; below emergency=99
+  windowsJson         Json // { windows: [{ day, start, end }] } — see FleetWindow type
+  notes               String?
   createdByOperatorId String?
   updatedByOperatorId String?
   // TASK-0208 Phase 3 Slice A — Fleet-Auto activation fields.
@@ -180,15 +182,15 @@ model FleetPolicy {
   // autoStartIdTag: idTag the OCPP server uses for server-initiated
   // RemoteStartTransaction on plug-in. Backfilled by the Slice A
   // migration; required in API on new/edited policies in Slice B.
-  alwaysOn        Boolean           @default(false)
-  autoStartIdTag  String?
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
+  alwaysOn            Boolean           @default(false)
+  autoStartIdTag      String?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
 
   // Direct connector assignments (Phase 3 / Fleet-Auto). Replaces the
   // legacy idTagPrefix-match path. Hybrid-B prefix matching survives
   // only as compatibility until Slice G removes the Authorize branch.
-  connectors      Connector[]
+  connectors Connector[]
 
   @@unique([siteId, idTagPrefix])
   @@index([siteId, status])
@@ -196,32 +198,34 @@ model FleetPolicy {
 }
 
 model Charger {
-  id              String              @id @default(uuid())
-  siteId          String?
-  site            Site?               @relation(fields: [siteId], references: [id], onDelete: SetNull)
-  groupId         String?
-  group           ChargerGroup?       @relation(fields: [groupId], references: [id], onDelete: SetNull)
-  ocppId          String              @unique // used in OCPP WebSocket path: /ocpp/{ocppId}
-  serialNumber    String              @unique
-  model           String
-  vendor          String
-  password        String // OCPP basic auth password (hashed)
-  status          ChargerStatus       @default(OFFLINE)
-  lastHeartbeat   DateTime?
-  connectors      Connector[]
-  stateTransitions ConnectorStateTransition[]
-  ocppLogs        OcppLog[]
-  uptimeEvents    UptimeEvent[]
-  connectionEvents ChargerConnectionEvent[]
-  uptimeDaily     UptimeDaily[]
-  outboxEvents    OcppEventOutbox[]
-  chargingProfiles SmartChargingProfile[]
+  id                  String                     @id @default(uuid())
+  siteId              String?
+  site                Site?                      @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  groupId             String?
+  group               ChargerGroup?              @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  ocppId              String                     @unique // used in OCPP WebSocket path: /ocpp/{ocppId}
+  serialNumber        String                     @unique
+  model               String
+  vendor              String
+  password            String // OCPP basic auth password (hashed)
+  status              ChargerStatus              @default(OFFLINE)
+  lastHeartbeat       DateTime?
+  connectors          Connector[]
+  stateTransitions    ConnectorStateTransition[]
+  ocppLogs            OcppLog[]
+  uptimeEvents        UptimeEvent[]
+  connectionEvents    ChargerConnectionEvent[]
+  uptimeDaily         UptimeDaily[]
+  outboxEvents        OcppEventOutbox[]
+  chargingProfiles    SmartChargingProfile[]
   smartChargingStates SmartChargingState[]
-  sessionFacts    SessionFact[]
-  rebateIntervals RebateInterval15m[]
-  favoritedBy     UserFavoriteCharger[]
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt
+  sessionFacts        SessionFact[]
+  rebateIntervals     RebateInterval15m[]
+  favoritedBy         UserFavoriteCharger[]
+  chargerEvents       ChargerEvent[]
+  diagConversations   DiagConversation[]
+  createdAt           DateTime                   @default(now())
+  updatedAt           DateTime                   @updatedAt
 
   healthAssessments ChargerHealthAssessment[]
 
@@ -231,56 +235,56 @@ model Charger {
 }
 
 model ChargerHealthAssessment {
-  id             String   @id @default(uuid())
-  chargerId      String
-  charger        Charger  @relation(fields: [chargerId], references: [id], onDelete: Cascade)
-  connectorId    Int?
-  overallScore   Int
-  overallStatus  String   // healthy | degraded | critical | offline
-  reportJson     Json
-  requestedBy    String   // operator ID
-  createdAt      DateTime @default(now())
+  id            String   @id @default(uuid())
+  chargerId     String
+  charger       Charger  @relation(fields: [chargerId], references: [id], onDelete: Cascade)
+  connectorId   Int?
+  overallScore  Int
+  overallStatus String // healthy | degraded | critical | offline
+  reportJson    Json
+  requestedBy   String // operator ID
+  createdAt     DateTime @default(now())
 
   @@index([chargerId, createdAt])
 }
 
 model ChargerGroup {
-  id          String                @id @default(uuid())
+  id          String                 @id @default(uuid())
   name        String
   description String?
   siteId      String?
-  site        Site?                 @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  site        Site?                  @relation(fields: [siteId], references: [id], onDelete: SetNull)
   chargers    Charger[]
   profiles    SmartChargingProfile[]
-  createdAt   DateTime              @default(now())
-  updatedAt   DateTime              @updatedAt
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
 
   @@index([siteId])
   @@index([name])
 }
 
 model SmartChargingProfile {
-  id                  String             @id @default(uuid())
+  id                  String               @id @default(uuid())
   name                String
   scope               SmartChargingScope
-  enabled             Boolean            @default(true)
-  priority            Int                @default(0)
+  enabled             Boolean              @default(true)
+  priority            Int                  @default(0)
   defaultLimitKw      Float?
   schedule            Json?
   validFrom           DateTime?
   validTo             DateTime?
   siteId              String?
-  site                Site?              @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  site                Site?                @relation(fields: [siteId], references: [id], onDelete: Cascade)
   chargerGroupId      String?
-  chargerGroup        ChargerGroup?      @relation(fields: [chargerGroupId], references: [id], onDelete: Cascade)
+  chargerGroup        ChargerGroup?        @relation(fields: [chargerGroupId], references: [id], onDelete: Cascade)
   chargerId           String?
-  charger             Charger?           @relation(fields: [chargerId], references: [id], onDelete: Cascade)
+  charger             Charger?             @relation(fields: [chargerId], references: [id], onDelete: Cascade)
   createdByOperatorId String?
   updatedByOperatorId String?
-  ocppStackLevelBase  Int                @default(50)
+  ocppStackLevelBase  Int                  @default(50)
   states              SmartChargingState[]
-  createdAt           DateTime           @default(now())
-  updatedAt           DateTime           @updatedAt
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
 
   @@index([scope, enabled, priority])
   @@index([siteId, scope, enabled])
@@ -289,27 +293,27 @@ model SmartChargingProfile {
 }
 
 model SmartChargingState {
-  id              String              @id @default(uuid())
-  chargerId       String
-  charger         Charger             @relation(fields: [chargerId], references: [id], onDelete: Cascade)
-  effectiveLimitKw Float
-  fallbackApplied Boolean             @default(false)
-  sourceScope     SmartChargingScope?
-  sourceProfileId String?
-  sourceProfile   SmartChargingProfile? @relation(fields: [sourceProfileId], references: [id], onDelete: SetNull)
-  sourceWindowId  String?
-  sourceReason    String
-  status          String
-  lastAttemptAt   DateTime
-  lastAppliedAt   DateTime?
-  lastError       String?
-  ocppChargingProfileId Int?
-  ocppStackLevel        Int?
-  compositeScheduleVerified   Boolean   @default(false)
+  id                          String                @id @default(uuid())
+  chargerId                   String
+  charger                     Charger               @relation(fields: [chargerId], references: [id], onDelete: Cascade)
+  effectiveLimitKw            Float
+  fallbackApplied             Boolean               @default(false)
+  sourceScope                 SmartChargingScope?
+  sourceProfileId             String?
+  sourceProfile               SmartChargingProfile? @relation(fields: [sourceProfileId], references: [id], onDelete: SetNull)
+  sourceWindowId              String?
+  sourceReason                String
+  status                      String
+  lastAttemptAt               DateTime
+  lastAppliedAt               DateTime?
+  lastError                   String?
+  ocppChargingProfileId       Int?
+  ocppStackLevel              Int?
+  compositeScheduleVerified   Boolean               @default(false)
   compositeScheduleVerifiedAt DateTime?
-  profileFingerprint String?  // SHA-256 hash of profile definition; detects server-side changes
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt
+  profileFingerprint          String? // SHA-256 hash of profile definition; detects server-side changes
+  createdAt                   DateTime              @default(now())
+  updatedAt                   DateTime              @updatedAt
 
   @@unique([chargerId, sourceProfileId])
   @@index([chargerId])
@@ -318,11 +322,11 @@ model SmartChargingState {
 }
 
 model Connector {
-  id                String                     @id @default(uuid())
-  chargerId         String
-  charger           Charger                    @relation(fields: [chargerId], references: [id], onDelete: Cascade)
-  connectorId       Int // OCPP connector number (1-indexed per charger)
-  status            ConnectorStatus            @default(UNAVAILABLE)
+  id                      String                     @id @default(uuid())
+  chargerId               String
+  charger                 Charger                    @relation(fields: [chargerId], references: [id], onDelete: Cascade)
+  connectorId             Int // OCPP connector number (1-indexed per charger)
+  status                  ConnectorStatus            @default(UNAVAILABLE)
   // TASK-0208 Phase 3 Slice A — Fleet-Auto activation config.
   // chargingMode: PUBLIC (default) or FLEET_AUTO. FLEET_AUTO connectors
   //   may auto-start sessions on plug-in when the rollout gate allows.
@@ -330,15 +334,15 @@ model Connector {
   // fleetAutoRolloutEnabled: per-connector override of the site's
   //   pilot rollout flag. null = inherit from Site.fleetAutoRolloutEnabled.
   //   Toggled via operator portal (Slice B); audit-logged.
-  chargingMode      ChargingMode               @default(PUBLIC)
-  fleetPolicyId     String?
-  fleetPolicy       FleetPolicy?               @relation(fields: [fleetPolicyId], references: [id], onDelete: SetNull)
+  chargingMode            ChargingMode               @default(PUBLIC)
+  fleetPolicyId           String?
+  fleetPolicy             FleetPolicy?               @relation(fields: [fleetPolicyId], references: [id], onDelete: SetNull)
   fleetAutoRolloutEnabled Boolean?
-  sessions          Session[]
-  stateTransitions  ConnectorStateTransition[]
-  reservations      Reservation[]
-  createdAt         DateTime                   @default(now())
-  updatedAt         DateTime                   @updatedAt
+  sessions                Session[]
+  stateTransitions        ConnectorStateTransition[]
+  reservations            Reservation[]
+  createdAt               DateTime                   @default(now())
+  updatedAt               DateTime                   @updatedAt
 
   @@unique([chargerId, connectorId])
   @@index([status])
@@ -365,33 +369,33 @@ model ConnectorStateTransition {
 }
 
 model Session {
-  id              String              @id @default(uuid())
+  id              String                  @id @default(uuid())
   connectorId     String
-  connector       Connector           @relation(fields: [connectorId], references: [id])
+  connector       Connector               @relation(fields: [connectorId], references: [id])
   userId          String
-  user            User                @relation(fields: [userId], references: [id])
-  transactionId   Int?                @unique // OCPP transactionId assigned by server
+  user            User                    @relation(fields: [userId], references: [id])
+  transactionId   Int?                    @unique // OCPP transactionId assigned by server
   idTag           String // OCPP idTag used to start session
-  startedAt       DateTime            @default(now())
+  startedAt       DateTime                @default(now())
   stoppedAt       DateTime?
   meterStart      Float? // Wh at session start
   meterStop       Float? // Wh at session end
   kwhDelivered    Float? // computed: (meterStop - meterStart) / 1000
   ratePerKwh      Float? // price locked at session start (USD)
-  status          SessionStatus       @default(ACTIVE)
+  status          SessionStatus           @default(ACTIVE)
   payment         Payment?
   // ── Hybrid-B fleet gating timeline (TASK-0208, Phase 1 scaffold) ─────────
   // Distinguishes "plugged but gated at 0 A" from "delivering energy" from "idle post-charge".
   // Populated only for fleet-gated sessions; null for legacy sessions.
-  plugInAt        DateTime?           // first Preparing/SuspendedEV after plug-in
-  firstEnergyAt   DateTime?           // first MeterValues sample with non-zero power
-  lastEnergyAt    DateTime?           // last MeterValues sample with non-zero power
-  fleetPolicyId   String?             // set when session matched a FleetPolicy at Authorize
+  plugInAt        DateTime? // first Preparing/SuspendedEV after plug-in
+  firstEnergyAt   DateTime? // first MeterValues sample with non-zero power
+  lastEnergyAt    DateTime? // last MeterValues sample with non-zero power
+  fleetPolicyId   String? // set when session matched a FleetPolicy at Authorize
   sessionFact     SessionFact?
   billingSnapshot SessionBillingSnapshot?
   rebateIntervals RebateInterval15m[]
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
 
   @@index([userId])
   @@index([connectorId])
@@ -399,32 +403,32 @@ model Session {
 }
 
 model User {
-  id              String    @id @default(uuid())
-  clerkId         String    @unique
-  email           String    @unique
-  name            String?
-  phone           String?
-  homeAddress     String?
-  homeSiteAddress String?
-  homeCity        String?
-  homeState       String?
-  homeZipCode     String?
-  paymentProfile    String?
-  stripeCustomerId       String?   @unique // Stripe customer ID for payment methods
-  defaultPaymentMethodId String?          // Stripe payment method ID used for charges
-  vehicleName       String?   // Custom nickname (e.g. "My Daily Driver")
-  vehicleMake     String?   // e.g. "Tesla"
-  vehicleModel    String?   // e.g. "Model 3"
-  vehicleYear     String?   // e.g. "2023"
-  idTag           String    @unique // OCPP idTag for this driver (max 20 chars)
-  sessions        Session[]
-  payments        Payment[]
-  reservations    Reservation[]
-  favoriteChargers UserFavoriteCharger[]
+  id                          String                      @id @default(uuid())
+  clerkId                     String                      @unique
+  email                       String                      @unique
+  name                        String?
+  phone                       String?
+  homeAddress                 String?
+  homeSiteAddress             String?
+  homeCity                    String?
+  homeState                   String?
+  homeZipCode                 String?
+  paymentProfile              String?
+  stripeCustomerId            String?                     @unique // Stripe customer ID for payment methods
+  defaultPaymentMethodId      String? // Stripe payment method ID used for charges
+  vehicleName                 String? // Custom nickname (e.g. "My Daily Driver")
+  vehicleMake                 String? // e.g. "Tesla"
+  vehicleModel                String? // e.g. "Model 3"
+  vehicleYear                 String? // e.g. "2023"
+  idTag                       String                      @unique // OCPP idTag for this driver (max 20 chars)
+  sessions                    Session[]
+  payments                    Payment[]
+  reservations                Reservation[]
+  favoriteChargers            UserFavoriteCharger[]
   inAppNotificationDeliveries InAppNotificationDelivery[]
-  authSessions    AuthSession[]
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  authSessions                AuthSession[]
+  createdAt                   DateTime                    @default(now())
+  updatedAt                   DateTime                    @updatedAt
 }
 
 model UserFavoriteCharger {
@@ -462,18 +466,18 @@ model Payment {
 /// Exception: may be overwritten programmatically for error corrections,
 /// but NEVER when payment status is CAPTURED or REFUNDED.
 model SessionBillingSnapshot {
-  id                   String    @id @default(uuid())
-  sessionId            String    @unique
-  session              Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  id        String  @id @default(uuid())
+  sessionId String  @unique
+  session   Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   // ── Pricing inputs locked at capture time ──────────────────────────────
-  pricingMode          String                    // 'flat' | 'tou'
-  pricePerKwhUsd       Float
-  idleFeePerMinUsd     Float
-  activationFeeUsd     Float
-  gracePeriodMin       Int
-  touWindowsJson       Json?                     // exact touWindows array used for billing
-  siteTimeZone         String?                   // IANA tz string, null = America/Los_Angeles default
+  pricingMode      String // 'flat' | 'tou'
+  pricePerKwhUsd   Float
+  idleFeePerMinUsd Float
+  activationFeeUsd Float
+  gracePeriodMin   Int
+  touWindowsJson   Json? // exact touWindows array used for billing
+  siteTimeZone     String? // IANA tz string, null = America/Los_Angeles default
 
   // ── Billing outputs ─────────────────────────────────────────────────────
   kwhDelivered         Float?
@@ -484,28 +488,28 @@ model SessionBillingSnapshot {
   grossAmountUsd       Float?
   vendorFeeUsd         Float?
   netAmountUsd         Float?
-  billingBreakdownJson Json?                     // full BillingBreakdown from computeSessionAmounts
+  billingBreakdownJson Json? // full BillingBreakdown from computeSessionAmounts
 
   // ── Timing locked at capture time ───────────────────────────────────────
-  chargingStartedAt    DateTime?                 // session.startedAt
-  chargingStoppedAt    DateTime?                 // idleStartedAt if idle present, else plugOutAt
-  idleStartedAt        DateTime?
-  idleStoppedAt        DateTime?
-  plugOutAt            DateTime?
+  chargingStartedAt DateTime? // session.startedAt
+  chargingStoppedAt DateTime? // idleStartedAt if idle present, else plugOutAt
+  idleStartedAt     DateTime?
+  idleStoppedAt     DateTime?
+  plugOutAt         DateTime?
 
   // ── Receipt delivery ────────────────────────────────────────────────────
-  receiptSentAt        DateTime?                 // set when receipt email sent successfully
+  receiptSentAt DateTime? // set when receipt email sent successfully
 
   // ── Hybrid-B fleet receipts (TASK-0208, Phase 1 scaffold) ──────────────
   // Captures how much wall-clock time the vehicle was plugged in but held at
   // 0 A waiting for the allowed window (driver pays $0 for this interval by
   // default — pricing policy TBD).
   preDeliveryGatedMinutes Float?
-  gatedPricingMode        String?   // 'free' | 'flat' | 'tou' — for future use
+  gatedPricingMode        String? // 'free' | 'flat' | 'tou' — for future use
 
-  snapshotVersion      String    @default("v1")
-  capturedAt           DateTime  @default(now())
-  updatedAt            DateTime  @updatedAt
+  snapshotVersion String   @default("v1")
+  capturedAt      DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   @@index([sessionId])
 }
@@ -631,23 +635,23 @@ model UptimeEvent {
 }
 
 model ChargerConnectionEvent {
-  id              String   @id @default(uuid())
-  chargerId        String
-  charger          Charger  @relation(fields: [chargerId], references: [id], onDelete: Cascade)
-  ocppId           String
-  event            String   // CONNECTED | DISCONNECTED
-  sessionId        String?
-  connectedAt      DateTime?
-  disconnectedAt   DateTime?
-  durationMs       Int?
-  closeCode        Int?
-  closeReason      String?
-  remoteAddress    String?
-  host             String?
-  path             String?
-  userAgent        String?
-  transportMeta    Json?
-  createdAt        DateTime @default(now())
+  id             String    @id @default(uuid())
+  chargerId      String
+  charger        Charger   @relation(fields: [chargerId], references: [id], onDelete: Cascade)
+  ocppId         String
+  event          String // CONNECTED | DISCONNECTED
+  sessionId      String?
+  connectedAt    DateTime?
+  disconnectedAt DateTime?
+  durationMs     Int?
+  closeCode      Int?
+  closeReason    String?
+  remoteAddress  String?
+  host           String?
+  path           String?
+  userAgent      String?
+  transportMeta  Json?
+  createdAt      DateTime  @default(now())
 
   @@index([chargerId, createdAt])
   @@index([ocppId, createdAt])
@@ -688,32 +692,32 @@ model AdminAuditEvent {
 }
 
 model InAppNotificationCampaign {
-  id               String   @id @default(uuid())
+  id                  String                      @id @default(uuid())
   createdByOperatorId String
-  targetMode       String
-  targetUserIds    String[]
-  targetEmails     String[]
-  title            String
-  message          String
-  actionLabel      String?
-  actionUrl        String?
-  deepLink         String?
-  sentAt           DateTime @default(now())
-  createdAt        DateTime @default(now())
-  deliveries       InAppNotificationDelivery[]
+  targetMode          String
+  targetUserIds       String[]
+  targetEmails        String[]
+  title               String
+  message             String
+  actionLabel         String?
+  actionUrl           String?
+  deepLink            String?
+  sentAt              DateTime                    @default(now())
+  createdAt           DateTime                    @default(now())
+  deliveries          InAppNotificationDelivery[]
 
   @@index([createdByOperatorId, sentAt])
   @@index([sentAt])
 }
 
 model InAppNotificationDelivery {
-  id          String   @id @default(uuid())
-  campaignId  String
-  campaign    InAppNotificationCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  readAt      DateTime?
-  createdAt   DateTime @default(now())
+  id         String                    @id @default(uuid())
+  campaignId String
+  campaign   InAppNotificationCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  readAt     DateTime?
+  createdAt  DateTime                  @default(now())
 
   @@unique([campaignId, userId])
   @@index([userId, createdAt])
@@ -721,8 +725,8 @@ model InAppNotificationDelivery {
 }
 
 model PortalSettings {
-  id                         String   @id @default(uuid())
-  scopeKey                   String   @unique
+  id                         String    @id @default(uuid())
+  scopeKey                   String    @unique
   organizationName           String?
   organizationDefaultSite    String?
   organizationPortfolio      String?
@@ -737,14 +741,14 @@ model PortalSettings {
   routingNumber              String?
   accountNumber              String?
   // AI Assistant — OpenAI OAuth
-  openaiAccessToken    String?   @db.Text
-  openaiRefreshToken   String?   @db.Text
-  openaiTokenExpiresAt DateTime?
-  openaiConnectedEmail String?
-  openaiConnectedAt    DateTime?
+  openaiAccessToken          String?   @db.Text
+  openaiRefreshToken         String?   @db.Text
+  openaiTokenExpiresAt       DateTime?
+  openaiConnectedEmail       String?
+  openaiConnectedAt          DateTime?
   updatedByOperatorId        String
-  createdAt                  DateTime @default(now())
-  updatedAt                  DateTime @updatedAt
+  createdAt                  DateTime  @default(now())
+  updatedAt                  DateTime  @updatedAt
 
   @@index([scopeKey])
 }
@@ -779,31 +783,31 @@ model ChargerModelCatalog {
 }
 
 model AuthOtpChallenge {
-  id            String    @id @default(uuid())
-  channel       String    // EMAIL or SMS
-  identifier    String    // normalized email or E.164 phone
-  codeHash      String
-  maxAttempts   Int       @default(5)
-  attemptCount  Int       @default(0)
-  issuedIp      String?
-  lastSentAt    DateTime  @default(now())
-  expiresAt     DateTime
-  consumedAt    DateTime?
-  createdAt     DateTime  @default(now())
+  id           String    @id @default(uuid())
+  channel      String // EMAIL or SMS
+  identifier   String // normalized email or E.164 phone
+  codeHash     String
+  maxAttempts  Int       @default(5)
+  attemptCount Int       @default(0)
+  issuedIp     String?
+  lastSentAt   DateTime  @default(now())
+  expiresAt    DateTime
+  consumedAt   DateTime?
+  createdAt    DateTime  @default(now())
 
   @@index([identifier, channel])
 }
 
 model AuthSession {
-  id          String    @id @default(uuid())
-  userId      String
-  tokenHash   String    @unique
-  provider    String    // otp-email, otp-sms, keycloak-password
-  issuedIp    String?
-  userAgent   String?
-  expiresAt   DateTime
-  revokedAt   DateTime?
-  createdAt   DateTime  @default(now())
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String    @unique
+  provider  String // otp-email, otp-sms, keycloak-password
+  issuedIp  String?
+  userAgent String?
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id])
 
@@ -845,13 +849,13 @@ model Portfolio {
 // ─── Reports ─────────────────────────────────────────────────────────────────
 
 model SavedReport {
-  id          String   @id @default(uuid())
-  operatorId  String
-  name        String
-  reportType  String   @default("interval_usage") // extensible for future report types
-  config      Json     // filter criteria: siteId, chargerIds, dateRange, intervalMinutes, etc.
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id         String   @id @default(uuid())
+  operatorId String
+  name       String
+  reportType String   @default("interval_usage") // extensible for future report types
+  config     Json // filter criteria: siteId, chargerIds, dateRange, intervalMinutes, etc.
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   @@unique([operatorId, name])
   @@index([operatorId, reportType])
@@ -860,33 +864,169 @@ model SavedReport {
 // ─── Reservations ────────────────────────────────────────────────────────────
 
 model Reservation {
-  id                 String            @id @default(uuid())
-  reservationId      Int               @unique @default(autoincrement()) // OCPP-compatible integer ID
-  userId             String
-  user               User              @relation(fields: [userId], references: [id])
-  connectorRefId     String            // FK to Connector.id (the Prisma UUID)
-  connector          Connector         @relation(fields: [connectorRefId], references: [id])
-  siteId             String
-  site               Site              @relation(fields: [siteId], references: [id])
-  status             ReservationStatus @default(PENDING)
-  holdStartsAt       DateTime          @default(now())
-  holdExpiresAt      DateTime          // When the reservation auto-expires
-  ocppSent           Boolean           @default(false)  // Was ReserveNow sent to charger?
-  ocppAccepted       Boolean?          // null = not sent, true/false = charger response
-  fulfilledSessionId String?           @unique // Set when session starts against this reservation
-  cancelledBy        String?           // 'driver' | 'operator' | 'system'
-  cancelReason       String?
+  id                       String            @id @default(uuid())
+  reservationId            Int               @unique @default(autoincrement()) // OCPP-compatible integer ID
+  userId                   String
+  user                     User              @relation(fields: [userId], references: [id])
+  connectorRefId           String // FK to Connector.id (the Prisma UUID)
+  connector                Connector         @relation(fields: [connectorRefId], references: [id])
+  siteId                   String
+  site                     Site              @relation(fields: [siteId], references: [id])
+  status                   ReservationStatus @default(PENDING)
+  holdStartsAt             DateTime          @default(now())
+  holdExpiresAt            DateTime // When the reservation auto-expires
+  ocppSent                 Boolean           @default(false) // Was ReserveNow sent to charger?
+  ocppAccepted             Boolean? // null = not sent, true/false = charger response
+  fulfilledSessionId       String?           @unique // Set when session starts against this reservation
+  cancelledBy              String? // 'driver' | 'operator' | 'system'
+  cancelReason             String?
   // Reservation fee tracking
-  feeAmountCents            Int?      // fee charged at creation (null = no fee)
-  feeStripePaymentIntentId  String?   // Stripe PaymentIntent id (manual capture)
-  feeStatus                 String?   // PENDING | CAPTURED | REFUNDED | VOIDED | FAILED
-  feeCancelGraceExpiresAt   DateTime? // when grace period ends (after this, fee is non-refundable)
-  feeRefundedAt             DateTime? // when refund/void was issued
-  createdAt          DateTime          @default(now())
-  updatedAt          DateTime          @updatedAt
+  feeAmountCents           Int? // fee charged at creation (null = no fee)
+  feeStripePaymentIntentId String? // Stripe PaymentIntent id (manual capture)
+  feeStatus                String? // PENDING | CAPTURED | REFUNDED | VOIDED | FAILED
+  feeCancelGraceExpiresAt  DateTime? // when grace period ends (after this, fee is non-refundable)
+  feeRefundedAt            DateTime? // when refund/void was issued
+  createdAt                DateTime          @default(now())
+  updatedAt                DateTime          @updatedAt
 
   @@index([userId, status])
   @@index([connectorRefId, status])
   @@index([siteId, status])
   @@index([holdExpiresAt, status])
+}
+
+// ── TASK-0198 Phase 1 — Diagnostics platform data model ────────────────
+//
+// Five tables form the durable foundation for the AI diagnostics platform:
+//   - ChargerEvent       — structured maintenance events extracted from OCPP traffic
+//   - DiagKnowledgeDoc   — versioned, retrievable knowledge-base documents
+//   - DiagConversation   — operator-scoped diagnostics chat threads
+//   - DiagMessage        — individual turns within a conversation
+//   - SiteHealthReport   — nightly per-site rollup
+//
+// Schema accommodates RAG additions in PR #3 (pgvector extension + embedding
+// columns on DiagKnowledgeDoc) and Phase 2 audit linkage in PR #7
+// (RemediationRecommendation FKs into DiagConversation/ChargerEvent).
+// All AI-touched rows persist provider/model/version for auditability.
+
+/// Structured maintenance event extracted from OCPP traffic. The extractor
+/// runs alongside OcppLog writes (see chargerEventExtractor.ts) and the
+/// PR #2 backfill script projects historical events from existing OcppLog
+/// rows. Events are append-only; consumers (timeline view, RAG context
+/// builder, nightly report, Phase 2 playbook evaluator) read this table
+/// rather than re-parsing OcppLog payloads.
+model ChargerEvent {
+  id              String   @id @default(uuid())
+  chargerId       String
+  charger         Charger  @relation(fields: [chargerId], references: [id], onDelete: Cascade)
+  connectorId     Int? // null = charge-point-wide (BootNotification, charger-level fault)
+  kind            String // STATUS_FAULT | REMOTE_START_FAILED | REMOTE_STOP_FAILED | HEARTBEAT_GAP | METER_ANOMALY | SESSION_STATE_MISMATCH | ...
+  severity        String   @default("MEDIUM") // LOW | MEDIUM | HIGH | CRITICAL
+  errorCode       String? // OCPP errorCode (e.g. NoError, PowerSwitchFailure)
+  vendorErrorCode String? // vendor-specific code from StatusNotification
+  vendorId        String?
+  payloadSummary  Json // small structured summary; never the raw OCPP message (use sourceOcppLogId for that)
+  sourceOcppLogId String? // when extracted from a single OcppLog row
+  detectedBy      String   @default("live") // live | backfill
+  detectedAt      DateTime @default(now())
+
+  @@index([chargerId, detectedAt])
+  @@index([kind, detectedAt])
+  @@index([severity, detectedAt])
+  @@index([sourceOcppLogId])
+}
+
+/// Versioned, retrievable knowledge-base document. PR #1 ships the table
+/// without the pgvector embedding column — embedding fields are added in
+/// PR #3 alongside the pgvector extension migration. Body is markdown.
+/// `slug` is the stable identifier (typically the source file's relative
+/// path); `version` increments on body change; `supersededAt` soft-deletes.
+model DiagKnowledgeDoc {
+  id           String    @id @default(uuid())
+  slug         String // stable identifier (e.g. "tasks/task-0208-phase3-bug-alwayson-not-honored")
+  title        String
+  body         String // markdown content
+  bodyHash     String // SHA-256 of body for change detection / dedup
+  tags         String[]  @default([]) // for filtered retrieval
+  source       String    @default("repo") // repo | manual | imported
+  version      Int       @default(1)
+  supersededAt DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@unique([slug, version])
+  @@index([slug])
+  @@index([supersededAt])
+}
+
+/// Operator-scoped diagnostics chat thread. Stores enough provenance
+/// (modelProvider, model) to audit which LLM produced each conversation.
+model DiagConversation {
+  id            String        @id @default(uuid())
+  operatorId    String // claims.sub or operator id
+  orgId         String? // optional org scope
+  siteId        String?
+  site          Site?         @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  chargerId     String?
+  charger       Charger?      @relation(fields: [chargerId], references: [id], onDelete: SetNull)
+  title         String // auto-generated from first user message; operator can rename
+  modelProvider String // e.g. "openrouter"
+  model         String // e.g. "anthropic/claude-3.5-sonnet"
+  closedAt      DateTime?
+  messages      DiagMessage[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([operatorId, createdAt])
+  @@index([orgId, createdAt])
+  @@index([siteId, createdAt])
+  @@index([chargerId, createdAt])
+}
+
+/// Individual turn within a DiagConversation. Per-message provider/model
+/// fields cover cases where a thread is later resumed against a different
+/// model — auditability is preserved per turn, not just per conversation.
+/// citedEvidenceJson holds typed references emitted by the evidence builder
+/// (PR #3): {kind: 'ChargerEvent'|'DiagKnowledgeDoc'|'Session'|..., id, ...}.
+/// redactionsAppliedJson records what was redacted from upstream context
+/// before the LLM saw it (VINs, emails, Stripe IDs, etc.).
+model DiagMessage {
+  id                    String           @id @default(uuid())
+  conversationId        String
+  conversation          DiagConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role                  String // user | assistant | tool | system
+  content               String
+  toolCallsJson         Json? // assistant tool invocations
+  toolName              String? // for role='tool' messages
+  toolResultJson        Json? // for role='tool' messages
+  modelProvider         String? // recorded per assistant message
+  model                 String? // recorded per assistant message
+  promptTokens          Int?
+  completionTokens      Int?
+  citedEvidenceJson     Json? // structured references to ChargerEvent/DiagKnowledgeDoc/etc.
+  redactionsAppliedJson Json? // {fields: ["email","vin"], counts: {...}}
+  createdAt             DateTime         @default(now())
+
+  @@index([conversationId, createdAt])
+}
+
+/// Nightly per-site rollup. Cron writes one row per site per UTC day window.
+/// `summaryJson` carries the structured numbers; `markdown` carries the
+/// rendered human-readable body. AI-augmentation provenance is captured in
+/// modelProvider/model when the report includes LLM-generated narrative.
+model SiteHealthReport {
+  id              String   @id @default(uuid())
+  siteId          String
+  site            Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  windowStartAt   DateTime
+  windowEndAt     DateTime
+  summaryJson     Json // {chargerCount, sessionCount, successRate, totalKwh, faults: {byCode}, riskBand, ...}
+  markdown        String // rendered report body
+  modelProvider   String? // null when report is purely deterministic
+  model           String?
+  deliveredAtJson Json? // {email: ISOts, slack: ISOts, ...}
+  generatedAt     DateTime @default(now())
+
+  @@index([siteId, generatedAt])
+  @@index([windowStartAt, windowEndAt])
 }
